@@ -118,4 +118,18 @@ class FeatureRunReaderTest {
         assertThatThrownBy(() -> FeatureRunReader.labels(repeat)).isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("null entry or repeats");
     }
+
+    @Test
+    void keysAreTheSideAndTheOffsetsOfEachKindInFileOrderWithoutParsingTheFeatures() throws IOException {
+        String test = FeatureRows.row(3, null, Side.TEST, "coarse", 0, "film", TrainFixtures.plate(1, 0));
+        Path file = Files.writeString(temp.resolve("features.csv"), FeatureRows.header() + dev(1, 2, "coarse", 0)
+            + dev(1, 2, "coarse", 5) + dev(1, 2, "dense", 1) + dev(2, 4, "coarse", 7) + test);
+
+        List<FeatureRunReader.FilmKeys> films = FeatureRunReader.keys(file, true);
+
+        assertThat(films).containsExactly(
+            new FeatureRunReader.FilmKeys(1, Side.DEV, List.of(0L, 5L), List.of(1L)),
+            new FeatureRunReader.FilmKeys(2, Side.DEV, List.of(7L), List.of()),
+            new FeatureRunReader.FilmKeys(3, Side.TEST, List.of(0L), List.of()));
+    }
 }
