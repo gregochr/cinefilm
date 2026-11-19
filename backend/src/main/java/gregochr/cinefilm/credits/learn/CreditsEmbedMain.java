@@ -67,7 +67,7 @@ public final class CreditsEmbedMain {
             job.run(CreditsEmbedOptions.parse(args)).forEach(path -> out.println("wrote " + path));
             return 0;
         } catch (IllegalArgumentException | IllegalStateException | IOException | UncheckedIOException
-                 | JacksonException e) {
+                 | JacksonException | LinkageError e) {
             err.println("embed: " + e.getClass().getSimpleName() + ": " + oneLine(e.getMessage()));
             return 1;
         }

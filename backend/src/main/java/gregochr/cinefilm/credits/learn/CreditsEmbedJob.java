@@ -101,6 +101,15 @@ final class CreditsEmbedJob {
         Path out = options.out().toAbsolutePath().normalize();
         Plan plan = check(data, features, encoderDir, out, options.look());
 
+        // Opened before the run's directory exists, so a failure to open (even a native library that will not load)
+        // leaves nothing to discard.
+        try (ImageEncoder encoder = factory.open(plan.spec(), encoderDir)) {
+            return write(plan, encoder, features, out, options.look(), cpuStart);
+        }
+    }
+
+    private List<Path> write(Plan plan, ImageEncoder encoder, Path features, Path out, boolean look, long cpuStart)
+            throws IOException {
         Instant now = clock.instant();
         Files.createDirectories(out);
         Path runDir = out.resolve("embed-" + STAMP.format(now));
@@ -111,16 +120,16 @@ final class CreditsEmbedJob {
         }
         try {
             Path bin = runDir.resolve("embeddings.bin");
-            Counts counts = embed(plan, encoderDir, runDir.resolve("embeddings.bin.partial"), bin);
+            Counts counts = embed(plan, encoder, runDir.resolve("embeddings.bin.partial"), bin);
             Path json = runDir.resolve("embeddings.json");
             Files.write(json, MAPPER.writeValueAsBytes(describe(plan, features, counts, now,
                 (probe.cpuNanos().getAsLong() - cpuStart) / NANOS_PER_SECOND)));
             List<Path> written = new ArrayList<>(List.of(runDir, bin, json));
-            if (options.look()) {
-                Path look = runDir.resolve("look.json");
-                Files.write(look, MAPPER.writeValueAsBytes(new CreditsFeaturesJob.LookLog("L5", now.toString(),
+            if (look) {
+                Path lookJson = runDir.resolve("look.json");
+                Files.write(lookJson, MAPPER.writeValueAsBytes(new CreditsFeaturesJob.LookLog("L5", now.toString(),
                     gitCommit.commit(), (int) counts.testFilms())));
-                written.add(look);
+                written.add(lookJson);
             }
             return written;
         } catch (IOException | RuntimeException e) {
@@ -203,15 +212,14 @@ final class CreditsEmbedJob {
         }
     }
 
-    private Counts embed(Plan plan, Path encoderDir, Path partial, Path bin) throws IOException {
+    private Counts embed(Plan plan, ImageEncoder encoder, Path partial, Path bin) throws IOException {
         EncoderSpec spec = plan.spec();
         MessageDigest dev = digest();
         long devFilms = 0;
         long testFilms = 0;
         long devRows = 0;
         long testRows = 0;
-        try (ImageEncoder encoder = factory.open(spec, encoderDir);
-             EmbeddingFile.Writer writer = EmbeddingFile.create(partial, spec.dimension())) {
+        try (EmbeddingFile.Writer writer = EmbeddingFile.create(partial, spec.dimension())) {
             for (FilmKeys film : plan.films()) {
                 boolean development = film.side() == Side.DEV;
                 Path dir = plan.framesRoot().resolve(Long.toString(film.id()));

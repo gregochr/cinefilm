@@ -83,13 +83,14 @@ class CreditsEmbedMainTest {
     @Test
     void aFailureInTheEncoderExitsOneWithOneLine() {
         CreditsEmbedJob failing = new CreditsEmbedJob(TestData.CLOCK, mock(GitCommit.class), (spec, dir) -> {
-            throw new IllegalStateException("cannot open\ntiny.onnx");
+            throw new UnsatisfiedLinkError("no\nnatives");
         }, new BenchProbe(() -> 1L, () -> 1L, () -> 1L, () -> "9.9.9"), FrameSource.disk());
 
         int code = run(failing, args());
 
         assertThat(code).isEqualTo(1);
-        assertThat(err()).isEqualTo("embed: IllegalStateException: cannot open tiny.onnx\n");
+        assertThat(err()).isEqualTo("embed: UnsatisfiedLinkError: no natives\n");
+        assertThat(out).doesNotExist();
     }
 
     @Test

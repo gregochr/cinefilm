@@ -407,13 +407,13 @@ class CreditsEmbedJobTest {
     @Test
     void anEncoderThatCannotBeOpenedLeavesNothing() throws IOException {
         EncoderFactory failing = (spec, dir) -> {
-            throw new IllegalStateException("cannot open tiny.onnx");
+            throw new UnsatisfiedLinkError("no natives");
         };
 
         assertThatThrownBy(() -> job(failing).run(options(devRun, false)))
-            .isInstanceOf(IllegalStateException.class).hasMessage("cannot open tiny.onnx");
+            .isInstanceOf(UnsatisfiedLinkError.class).hasMessage("no natives");
 
-        assertLeftNothing();
+        assertThat(out).doesNotExist();
     }
 
     @Test
