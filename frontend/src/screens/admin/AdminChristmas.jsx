@@ -47,7 +47,8 @@ function EmptyPanel({ kind, keywords }) {
   return (
     <section className="xmas-empty" aria-label="No Christmas films">
       <h2 className="xmas-empty__title">No Christmas films yet</h2>
-      <p>{emptyPendingText(keywords)}</p>
+      {/* Polite: the 30-second polls change these numbers as keywords arrive. */}
+      <p role="status">{emptyPendingText(keywords)}</p>
       <div className="xmas-empty__progress">
         <span className="xmas-progress" aria-hidden="true">
           <span className="xmas-progress__fill" style={{ width: `${keywordPercent(keywords)}%` }} />

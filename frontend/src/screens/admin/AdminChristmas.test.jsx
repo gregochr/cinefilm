@@ -1,7 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SIGNED_IN_EVENT } from '../../api/client.js';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
 
 afterEach(() => {
@@ -212,6 +211,8 @@ describe('Christmas films: states', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('212 / 1,412')).toBeInTheDocument();
+    // One polite status only: the keyword strip lives in the status card, which this state replaces.
+    expect(screen.getByText(/212 of 1,412 films so far/)).toHaveAttribute('role', 'status');
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
   });
 
@@ -257,18 +258,27 @@ describe('Christmas films: states', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === URL_BASE)).toHaveLength(2);
   });
 
-  it('reads again by itself once the owner has signed in after a 401', async () => {
-    let status = 401;
-    const fetchMock = serve({ get: () => (status === 401 ? respond(null, 401) : fresh()) });
-    renderApp('/admin/christmas');
-    await screen.findByRole('alert');
-
-    status = 200;
-    act(() => {
-      window.dispatchEvent(new CustomEvent(SIGNED_IN_EVENT));
+  it('after a 401, signing in through the sign-in card shows the list without pressing Try again', async () => {
+    let signedIn = false;
+    const fetchMock = installFetch((method, url, init) => {
+      if (method === 'POST' && url === '/api/session') {
+        signedIn = JSON.parse(init.body).password === 'right';
+        return respond(signedIn ? { authenticated: true } : null, signedIn ? 200 : 401);
+      }
+      if (url === URL_BASE) return signedIn ? respond(fresh()) : respond(null, 401);
+      return null;
     });
+    renderApp('/admin/christmas');
+    // The 401 shows the error under the sign-in card, which is over the page.
+    await screen.findByText(/Couldn’t load Christmas films/);
+    const card = await screen.findByRole('dialog', { name: 'Signed out' });
+
+    await userEvent.type(within(card).getByLabelText('Password'), 'right');
+    await userEvent.click(within(card).getByRole('button', { name: 'Sign in' }));
+
     expect(await screen.findByRole('tablist', { name: 'Christmas lists' })).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Signed out' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Couldn’t load Christmas films/)).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === URL_BASE)).toHaveLength(2);
   });
 
