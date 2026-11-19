@@ -173,3 +173,293 @@ describe('useChristmas: polling', () => {
     expect(result.current.error).toBeNull();
   });
 });
+
+describe('useChristmas: changes', () => {
+  const rowOf = (data, tmdbId) => data.inWeek.find((r) => r.tmdbId === tmdbId);
+
+  /** Serves GET with `body` and PUT with `put(tmdbId, choice)`. */
+  function serve(put, body = christmasFixture()) {
+    const fetchMock = vi.fn(async (url, init) => {
+      if (init.method === 'GET') return reply(200, typeof body === 'function' ? body() : body);
+      return put(Number(url.split('/').pop()), JSON.parse(init.body).choice);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+  const puts = (fetchMock) => fetchMock.mock.calls.filter(([, init]) => init.method === 'PUT');
+  const gets = (fetchMock) => fetchMock.mock.calls.filter(([, init]) => init.method === 'GET');
+
+  async function ready() {
+    const hook = renderHook(() => useChristmas());
+    await waitFor(() => expect(hook.result.current.data).not.toBeNull());
+    return hook;
+  }
+
+  it('leaves a film out: sends EXCLUDE, takes the answer, toasts with an Undo, asks for no row focus', async () => {
+    const out = christmasFixture();
+    out.inWeek = out.inWeek.filter((r) => r.tmdbId !== 106);
+    const fetchMock = serve(() => reply(200, out));
+    const { result } = await ready();
+
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+
+    const [url, init] = puts(fetchMock)[0];
+    expect(url).toBe('/api/admin/christmas/106');
+    expect(init.headers['X-CineFilm']).toBe('1');
+    expect(JSON.parse(init.body)).toEqual({ choice: 'EXCLUDE' });
+    expect(result.current.data.inWeek).toHaveLength(13);
+    expect(result.current.toast).toMatchObject({
+      message: "Left out Die Hard. It won't show at Christmas.",
+      undo: { tmdbId: 106, title: 'Die Hard', choice: null, kind: 'leave' },
+    });
+    expect(result.current.focusRequest).toMatchObject({ filmId: null, undo: true });
+    expect(result.current.busy.size).toBe(0);
+  });
+
+  it('removes an added film and puts back a left-out one, each with the right previous choice', async () => {
+    const fetchMock = serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+
+    await act(async () => result.current.change(rowOf(result.current.data, 104)));
+    expect(JSON.parse(puts(fetchMock)[0][1].body)).toEqual({ choice: null });
+    expect(result.current.toast.message).toBe('Removed Trading Places.');
+    expect(result.current.toast.undo.choice).toBe('INCLUDE');
+
+    await act(async () => result.current.change(result.current.data.leftOut[0]));
+    expect(result.current.toast.message).toBe("Put back Iron Man 3. It'll show at Christmas.");
+    expect(result.current.toast.undo.choice).toBe('EXCLUDE');
+  });
+
+  it('undoes a Leave out with INCLUDE when a film sharing the TMDB id was included by the owner', async () => {
+    const body = christmasFixture();
+    // A tagged film with the same TMDB id as the owner's included Trading Places (104).
+    const tagged = {
+      filmId: 99,
+      tmdbId: 104,
+      title: 'Trading Places (TV)',
+      year: 1983,
+      reason: 'KEYWORD',
+    };
+    body.inWeek.push(tagged);
+    const fetchMock = serve(() => reply(200, body), body);
+    const { result } = await ready();
+
+    await act(async () => result.current.change(tagged));
+    expect(result.current.toast.undo).toMatchObject({ tmdbId: 104, filmId: 99, choice: 'INCLUDE' });
+
+    await act(async () => result.current.undo(result.current.toast.undo));
+    expect(JSON.parse(puts(fetchMock)[1][1].body)).toEqual({ choice: 'INCLUDE' });
+    // Focus goes back to the clicked film, not to the sibling that shares its TMDB id.
+    expect(result.current.focusRequest).toMatchObject({ filmId: 99, undo: false });
+  });
+
+  it('undoes with the previous choice, says the opposite without an Undo, and asks for that row focus', async () => {
+    const fetchMock = serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+
+    await act(async () => result.current.undo(result.current.toast.undo));
+
+    expect(JSON.parse(puts(fetchMock)[1][1].body)).toEqual({ choice: null });
+    expect(result.current.toast).toMatchObject({
+      message: "Put back Die Hard. It'll show at Christmas.",
+      undo: null,
+    });
+    expect(result.current.focusRequest).toMatchObject({ filmId: 6, undo: false });
+  });
+
+  it('holds a row while its request is in flight: a second change sends nothing', async () => {
+    const gate = deferred();
+    const fetchMock = serve(() => gate.promise);
+    const { result } = await ready();
+    const row = rowOf(result.current.data, 106);
+
+    act(() => {
+      result.current.change(row);
+    });
+    await waitFor(() => expect(result.current.busy.has(106)).toBe(true));
+    await act(async () => result.current.change(row));
+    expect(puts(fetchMock)).toHaveLength(1);
+
+    await act(async () => gate.resolve(reply(200, christmasFixture())));
+    expect(result.current.busy.size).toBe(0);
+  });
+
+  it('shows the server words for a refusal and changes nothing', async () => {
+    serve(() => reply(409, { error: 'A scan is running — try again when it finishes' }));
+    const { result } = await ready();
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    expect(result.current.toast).toMatchObject({
+      message: 'A scan is running — try again when it finishes',
+      undo: null,
+    });
+    expect(result.current.data.inWeek).toHaveLength(14);
+    expect(result.current.busy.size).toBe(0);
+    // A failed Undo replaces the toast its button was in, so the screen is asked to settle focus.
+    expect(result.current.focusRequest).toEqual({ filmId: null, undo: false, n: 1 });
+  });
+
+  it('says the scan is running for a bare 409, and a plain failure for anything else', async () => {
+    let status = 409;
+    serve(() => reply(status, null));
+    const { result } = await ready();
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    expect(result.current.toast.message).toBe('A scan is running — try again when it finishes');
+    status = 500;
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    expect(result.current.toast.message).toBe("Couldn't save that change. Nothing was changed.");
+  });
+
+  it('says a plain failure when the request never reaches the server', async () => {
+    serve(() => Promise.reject(new TypeError('Failed to fetch')));
+    const { result } = await ready();
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    expect(result.current.toast.message).toBe("Couldn't save that change. Nothing was changed.");
+  });
+
+  it('drops the older of two answers, then reads again so a change the newest answer lacks comes back', async () => {
+    const slow = deferred();
+    const base = christmasFixture();
+    const without = (data, ...ids) => ({
+      ...data,
+      inWeek: data.inWeek.filter((r) => !ids.includes(r.tmdbId)),
+    });
+    let truth = base;
+    const fetchMock = serve(
+      (id) => (id === 106 ? slow.promise : reply(200, without(base, 105))),
+      () => truth,
+    );
+    const { result } = await ready();
+    const data = result.current.data;
+
+    act(() => {
+      result.current.change(rowOf(data, 106));
+    });
+    await act(async () => result.current.change(rowOf(data, 105)));
+    // The server handled Gremlins first: its answer lacks Die Hard's change.
+    expect(rowOf(result.current.data, 106)).toBeDefined();
+
+    truth = without(base, 105, 106);
+    await act(async () => slow.resolve(reply(200, without(base, 106))));
+    await waitFor(() => expect(result.current.data.inWeek).toHaveLength(12));
+    expect(rowOf(result.current.data, 106)).toBeUndefined();
+    expect(rowOf(result.current.data, 105)).toBeUndefined();
+    expect(result.current.toast.message).toMatch(/^Left out Die Hard/);
+    expect(result.current.busy.size).toBe(0);
+    expect(gets(fetchMock)).toHaveLength(2);
+  });
+
+  it('waits for the last write before reading again: no read while one is still in flight, then exactly one', async () => {
+    const first = deferred();
+    const second = deferred();
+    const base = christmasFixture();
+    const without = (data, ...ids) => ({
+      ...data,
+      inWeek: data.inWeek.filter((r) => !ids.includes(r.tmdbId)),
+    });
+    let truth = base;
+    const fetchMock = serve(
+      (id) => (id === 106 ? first.promise : second.promise),
+      () => truth,
+    );
+    const { result } = await ready();
+    const data = result.current.data;
+
+    act(() => {
+      result.current.change(rowOf(data, 106));
+    });
+    act(() => {
+      result.current.change(rowOf(data, 105));
+    });
+    await waitFor(() => expect(result.current.busy.size).toBe(2));
+
+    // The older write answers first and is dropped as stale; the newer one is still pending: no read yet.
+    await act(async () => first.resolve(reply(200, without(base, 106))));
+    await waitFor(() => expect(result.current.busy.has(106)).toBe(false));
+    expect(gets(fetchMock)).toHaveLength(1);
+
+    truth = without(base, 105, 106);
+    await act(async () => second.resolve(reply(200, without(base, 105, 106))));
+    await waitFor(() => expect(gets(fetchMock)).toHaveLength(2));
+    expect(rowOf(result.current.data, 105)).toBeUndefined();
+    expect(rowOf(result.current.data, 106)).toBeUndefined();
+    expect(result.current.busy.size).toBe(0);
+  });
+
+  it('does not read again after two changes whose answers landed in order', async () => {
+    const fetchMock = serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    const data = result.current.data;
+    await act(async () => result.current.change(rowOf(data, 106)));
+    await act(async () => result.current.change(rowOf(data, 105)));
+    expect(gets(fetchMock)).toHaveLength(1);
+  });
+
+  it('holds the toast while it is held and restarts the 8 seconds on release', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    await act(async () => vi.advanceTimersByTime(5000));
+    act(() => result.current.holdToast());
+    await act(async () => vi.advanceTimersByTime(60000));
+    expect(result.current.toast).not.toBeNull();
+    act(() => result.current.releaseToast());
+    await act(async () => vi.advanceTimersByTime(7900));
+    expect(result.current.toast).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(200));
+    expect(result.current.toast).toBeNull();
+  });
+
+  it('clears the toast after 8 seconds, and a newer one restarts the wait', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    await act(async () => vi.advanceTimersByTime(5000));
+    await act(async () => result.current.change(rowOf(result.current.data, 105)));
+    expect(result.current.toast.message).toMatch(/^Left out Gremlins/);
+    await act(async () => vi.advanceTimersByTime(7900));
+    expect(result.current.toast).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(200));
+    expect(result.current.toast).toBeNull();
+  });
+
+  it('does not poll while a change is in flight', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const gate = deferred();
+    const body = christmasFixture();
+    body.keywords = { fetched: 1, total: 1412, running: true };
+    const fetchMock = serve(() => gate.promise, body);
+    const { result } = await ready();
+    act(() => {
+      result.current.change(rowOf(result.current.data, 106));
+    });
+    await act(async () => vi.advanceTimersByTime(65000));
+    expect(gets(fetchMock)).toHaveLength(1);
+    await act(async () => gate.resolve(reply(200, body)));
+  });
+
+  it('arms no toast timer when a change answers, or fails, after unmount', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const gate = deferred();
+    serve(() => gate.promise);
+    const first = await ready();
+    act(() => {
+      first.result.current.change(rowOf(first.result.current.data, 106));
+    });
+    first.unmount();
+    await act(async () => gate.resolve(reply(200, christmasFixture())));
+    expect(vi.getTimerCount()).toBe(0);
+
+    const failing = deferred();
+    serve(() => failing.promise);
+    const second = await ready();
+    act(() => {
+      second.result.current.change(rowOf(second.result.current.data, 106));
+    });
+    second.unmount();
+    await act(async () => failing.resolve(reply(500, null)));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});

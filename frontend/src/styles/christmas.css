@@ -1,6 +1,5 @@
 /* Admin: Christmas films (docs/design/christmas-films/). Amber only on the eyebrow, the meter fills and the keyword
-   progress fill; no amber buttons. Every target is at least 44px. The row, toast and action styles of the changes
-   (Leave out, Put back, Remove, Undo) arrive with them. */
+   progress fill; no amber buttons. Every target is at least 44px. */
 .xmas-head {
   display: flex;
   flex-direction: column;
@@ -143,7 +142,8 @@
 }
 
 /* List */
-.xmas-panel:focus-visible {
+.xmas-panel:focus-visible,
+.xmas-empty:focus-visible {
   outline: none;
   box-shadow: var(--cf-focus-ring);
 }
@@ -163,7 +163,7 @@
 }
 .xmas-row {
   display: grid;
-  grid-template-columns: 28px 40px minmax(0, 1fr) auto;
+  grid-template-columns: 28px 40px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 16px;
   min-height: 76px;
@@ -171,7 +171,7 @@
   border-top: 1px solid var(--cf-line);
 }
 .xmas-row--plain {
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
 }
 .xmas-row:first-child {
   border-top: 0;
@@ -199,6 +199,13 @@
   margin: 4px 0 0;
   font-size: 13px;
   color: var(--cf-text-muted);
+}
+.xmas-row__action {
+  min-width: 104px;
+}
+.xmas-row__action:focus-visible,
+.xmas-toast__undo:focus-visible {
+  box-shadow: var(--cf-focus-ring);
 }
 .xmas-chip {
   display: inline-flex;
@@ -302,6 +309,43 @@
   color: #f7cabb;
 }
 
+/* Toast */
+.xmas-toast-region {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.xmas-toast {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 22px;
+  min-height: 56px;
+  border: 1px solid var(--cf-line-strong);
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-overlay);
+  color: var(--cf-text);
+  font-size: 15px;
+  box-shadow: var(--cf-shadow-panel);
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .xmas-toast {
+    animation: xmas-toast-in 150ms ease-out;
+  }
+}
+@keyframes xmas-toast-in {
+  from {
+    opacity: 0;
+  }
+}
+
 @media (max-width: 600px) {
   .xmas-head .admin__section-title {
     font-size: 32px;
@@ -334,10 +378,10 @@
     display: inline;
   }
   .xmas-row {
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: 40px minmax(0, 1fr) auto;
     grid-template-areas:
-      'poster text'
-      'poster chip';
+      'poster text action'
+      'poster chip action';
     gap: 4px 12px;
     padding: 12px;
   }
@@ -353,5 +397,17 @@
   .xmas-chip {
     grid-area: chip;
     justify-self: start;
+  }
+  .xmas-row__action {
+    grid-area: action;
+    min-width: 88px;
+  }
+  .xmas-toast-region {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    padding: 0 16px;
+  }
+  .xmas-toast {
+    width: 100%;
+    justify-content: space-between;
   }
 }
