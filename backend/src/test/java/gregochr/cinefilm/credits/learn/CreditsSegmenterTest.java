@@ -459,6 +459,21 @@ class CreditsSegmenterTest {
     }
 
     @Test
+    void aLambdaThatIsNotFiniteOrIsNegativeIsRefusedBeforeAnyEarlyReturn() {
+        double[] p = seq(A, 8);
+        for (double bad : new double[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, -1}) {
+            String message = "lambda must be finite and at least 0: " + bad;
+            assertThatThrownBy(() -> CreditsSegmenter.bestStretch(p, 8, 0, bad))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage(message);
+            assertThatThrownBy(() -> CreditsSegmenter.bestStretch(p, 3, 0, bad))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage(message);
+            assertThatThrownBy(() -> CreditsSegmenter.bestStretch(p, 9, 0, bad))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage(message);
+        }
+        assertThat(CreditsSegmenter.bestStretch(p, 8, 0, 0)).isCloseTo(32, within(TOLERANCE));
+    }
+
+    @Test
     void offsetsAndProbabilitiesMustBeTheSameLength() {
         assertThatThrownBy(() -> CreditsSegmenter.coarse(new long[6], new double[7], 0, PARAMS))
             .isInstanceOf(IllegalArgumentException.class).hasMessage("offsets and p differ in length: 6, 7");

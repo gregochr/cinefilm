@@ -178,11 +178,15 @@ final class CreditsSegmenter {
      * @param lambda the per-frame penalty
      * @return the largest {@code S(a, b)} with {@code b - a >= 6} and {@code b <= end}, or negative infinity when
      *     {@code end < 6}
-     * @throws IllegalArgumentException when {@code logitPi} is not finite, {@code end} is above the length of
+     * @throws IllegalArgumentException when {@code logitPi} is not finite, {@code lambda} is not finite or is below 0,
+     *     {@code end} is above the length of
      *     {@code p}, or a {@code p} in range is NaN
      */
     static double bestStretch(double[] p, int end, double logitPi, double lambda) {
         checkFinite(logitPi);
+        if (!(Double.isFinite(lambda) && lambda >= 0)) {
+            throw new IllegalArgumentException("lambda must be finite and at least 0: " + lambda);
+        }
         if (end > p.length) {
             throw new IllegalArgumentException("end is past the last frame: " + end + " of " + p.length);
         }
