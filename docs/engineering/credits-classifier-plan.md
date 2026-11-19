@@ -267,6 +267,10 @@ path:
   The calibration ranks this margin first (L3c's ranking, levels 1–2), so it always makes a choice. A choice that
   misses the margin on any development film is not shipped without the owner's decision: it is reported with the
   L5 report.
+- **Held-out early films** (added 2026-11-19, for the owner to decide at L5). The margin rule above covers a
+  choice's own counts, not the nested evaluation's held-out rows (each film scored with its fold's choice). Held-out
+  films early by more than 5 s or 15 s are reported to the owner with the L5 comparison, and nothing ships at L6a
+  with a held-out film early by more than 15 s without the owner's decision.
 
 ## Frames: the dataset job (L2)
 
@@ -413,7 +417,7 @@ through **offline evaluation**: the shipping model and segmenter code, run on th
 
 ### B. Pretrained image embedding plus logistic regression
 
-- **The encoder** is chosen by the planner in L4a. That happens after L4b is released (L4b ships the benchmark
+- **The encoder** is chosen by the planner in L4a. That happens after the L4b-2 release (L4b-2 ships the benchmark
   `main`) and before any product change. Candidates, in order:
   1. CLIP ViT-B/32's image tower, quantised, from the `Xenova/clip-vit-base-patch32` ONNX export (MIT, about
      90 MB, outputs `image_embeds`);
@@ -430,7 +434,9 @@ through **offline evaluation**: the shipping model and segmenter code, run on th
 - **The cost limit:** a candidate is rejected if a film's 520 frames take more than 2 minutes, or if RSS would push
   the server past `mem_limit: 2g` alongside a transcode.
 - **Embeddings are computed in a throwaway container from the stored JPEGs**, and logistic regression is trained
-  there. **The production image and server change only if B wins** (L6).
+  there. **The encoder file reaches the production image and the server only if B wins** (L6). The ONNX Runtime
+  library itself is in every image built after L4b-1 merges, because tool runs use the released image; the server
+  never loads it before L6a (owner, 2026-11-19: no separate tools image).
 - **In the product:**
   - the encoder file sits outside the jar, fetched in the Dockerfile's runtime stage with
     `ADD --checksum=sha256:… <url>`;
@@ -450,7 +456,10 @@ through **offline evaluation**: the shipping model and segmenter code, run on th
   - each out-of-fold ensemble's models are trained on 3 of 5 folds, while the product's are trained on 4, so the
     tuned thresholds are slightly conservative for the product;
   - the nested loop trains models without three folds as well, which is cheap for both model types.
-- **A tie goes to A**, which needs no dependency and no download.
+- **One evaluation per model type.** L5 runs `CreditsEvaluateMain` once over model A's runs and once over model B's,
+  and compares the two held-out summaries (each film scored with its fold's choice) by this ranking. One mixed
+  selection would let the type come from the final choice, which is not nested, and mix types across outer folds.
+- **A tie goes to A**, which needs no encoder file in the image and no download.
 - The loser's code is deleted in L6b.
 
 ## Finding the start (`CreditsSegmenter`, L3c)
@@ -539,7 +548,8 @@ frame are looked at as stills and reported.
   - The image runs as uid 1001. The output directory `credits-dataset-out` is created by the server (uid 1001)
     beside the dataset, and the planner copies results from it into `~/cinefilm-labels`.
   - **Every tool run needs a released image with that phase's code**, and only the owner tags releases. The owner
-    releases after L1, L2b, L3b-look (the features tool and training), L3c and L4b.
+    releases after L1, L2b, L3b-look (the features tool and training), L3c, L4b-2 (the benchmark, for L4a) and
+    L4b-6b (owner, 2026-11-19).
 
   - It has its own memory limit, separate from the server's, and one CPU at the lowest priority.
   - It reads only local files, never the share.
@@ -683,16 +693,16 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
 
     Its tests include a film whose opening type at `t` differs from the one at Plex's start.
   - Its run with `--look` is the one that counts as a look.
-- **L4a — the encoder check (planner, no PR, after L4b is released):** CPU and RSS for each candidate, measured with
+- **L4a — the encoder check (planner, no PR, after the L4b-2 release):** CPU and RSS for each candidate, measured with
   L4b's benchmark in a tool run.
 - **L4b — model B's tool code:** ONNX Runtime, the embeddings, logistic regression and the benchmark `main` (CPU
   time and peak RSS), with a tiny ONNX fixture. No product wiring.
   - Its `main`s that read stored frames refuse test films unless `--look=L5` is passed, and write `look.json`,
     as in L3b-look.
-  - **Specified in full in "L4b specification"** (2026-11-19), in six PRs, L4b-1 to L4b-6. The release after L4b-6
-    is the "L4b" release.
+  - **Specified in full in "L4b specification"** (2026-11-19), in nine PRs, L3c-grid and L4b-1 to L4b-6b. The
+    owner releases after L4b-2 (L4a runs on it) and after L4b-6b.
 - **L5 — the comparison (planner).** Tool runs, nested cross-validation, the choice, then the first look at the test
-  split. The results go into this file as "L5: what the models showed".
+  split. One evaluation per model type, compared on their held-out summaries ("Choosing"). The results go into this file as "L5: what the models showed".
 - **L6a — the model in the product.**
   - The winner and the segmenter go in `CreditsDetectionService`.
   - The dense reader becomes 50 s, and the cue check moves.
@@ -1312,13 +1322,22 @@ with no look.
 
 What it shows:
 
-- **The selection is conservative, and sits at the top of the `λ` and `δ` ranges.** The best choice may lie beyond
-  the grid, so L5 widens both upward before the comparison.
-- **Lit and plate openings are the weak spot.** They are almost never within ±10 s. That is the gap model B is meant
-  to close.
-- **The held-out early count differs from the selection's.** Two films are early by more than 5 s held out, against
-  none in the final choice's own counts. By the margin rule ("The split"), that is put to the owner at L5 and L6a,
-  not decided now.
+- **Dark openings fall well short of the goals.** 56.5% within ±10 s against the goal of 90%, and 87.2% within
+  ±60 s or not found against 97%. Plate openings: none of 17 within ±10 s, and 47.1% against 97%.
+- **One held-out film is early by more than 15 s.** It opens dark, in the high margin band: the gate's
+  zero-tolerance failure, in the band `AUTO` depends on most. A second film, also dark and high, is early by more
+  than 5 s. The final choice's own counts show none, because a choice's own counts are scored with the films it was
+  chosen on.
+- **No rule covered held-out early films until now.** The margin rule ("The split") covers a choice's own counts.
+  Added for the owner to decide at L5 (see "The split"): held-out early films are reported with the L5 comparison,
+  and nothing ships at L6a with a held-out film early by more than 15 s without the owner's decision.
+- **`λ` and `δ` sit at the top of their grids, which is weak evidence on its own.** Ranking level 6 prefers the
+  larger `λ` and `δ` on a tie, so a top value can be a tie broken upward rather than a better point. The grid is
+  widened upward anyway (L3c-grid, in "L4b specification") and model A's runs are evaluated again on it before L5.
+- **Lit openings are late by design, and model B is not expected to change that.** "Labels" leaves lit credits
+  frames out of training, and model B trains on the same rows, so neither model learns where a lit opening starts.
+  Only `--lit-text-variant` touches it (fold 1 chose it). Plate openings keep their credits frames in training
+  ("Labels"), so they, and the dark shortfall, are where a different model can help.
 
 ## L3c specification (written 2026-11-19)
 
@@ -1399,7 +1418,8 @@ well before the target, where the stored frames alone would give an `f` the prod
 **This phase owns both.** Hyperparameters and variants are separate training runs; the calibration picks a run and
 a grid point together, so both are chosen by the nested rule.
 
-- **The grid** (20,000 points; steps 1–3 depend only on `λ`, `δ`, `G`, so they run 80 times per film):
+- **The grid** (20,000 points; steps 1–3 depend only on `λ`, `δ`, `G`, so they run 80 times per film). L3c-grid
+  widens `λ` and `δ` to 42,000 points ("L4b specification"):
   - `λ` ∈ {0, 0.5, 1, 2, 3}; `δ` ∈ {0, 2, 5, 10}; `G` ∈ {10, 15, 20, 30} s (2, 3, 4, 6 frames);
   - `θ` ∈ {0.5, 0.7, 0.8, 0.9, 0.95}; `σ` ∈ {5, 10, 15, 20, 30, 40, 60, 80, 120, 160};
     `θ_d` ∈ {0.5, 0.7, 0.8, 0.9, 0.95}.
@@ -1473,20 +1493,39 @@ a grid point together, so both are chosen by the nested rule.
 ## L4b specification (written 2026-11-19)
 
 Model B's tool code: the ONNX encoder, the benchmark, the embeddings run, logistic regression, its training `main`,
-and the evaluation reading model B's runs beside model A's. No product wiring (L6a), and no encoder file in the
-image or the repository. All code is in `credits/learn/`, under L3a's conventions. Six PRs, each at most 1,500
-changed lines including tests, merged in this order:
+and the evaluation of model B's runs. No product wiring (L6a), and no encoder file in the image or the repository.
+All code is in `credits/learn/`, under L3a's conventions. Nine PRs, each at most 1,500 changed lines including
+tests, merged in this order (the sizes are estimates, including tests):
 
-1. **L4b-1:** the ONNX Runtime dependency, `EncoderSpec`, `EncoderInput`, `ImageEncoder`, `OnnxImageEncoder` and the
-   tiny ONNX fixture.
-2. **L4b-2:** `EmbeddingFile` and the benchmark, `CreditsEncoderBenchMain`.
-3. **L4b-3:** the embeddings run, `CreditsEmbedMain`.
-4. **L4b-4:** `LogisticRegression` (pure), and the training scaffold extracted from `CreditsTrainJob` with no change
-   to its output.
-5. **L4b-5:** model B's training run, `CreditsTrainLrMain`.
-6. **L4b-6:** `CreditsEvaluateMain` reads model B's runs (`--embeddings`).
+1. **L3c-grid** (about 100 lines): the calibration grid widened upward, so model A's runs are evaluated again on
+   it before L5.
+2. **L4b-1** (about 800): the ONNX Runtime dependency, `EncoderSpec`, `EncoderInput`, `ImageEncoder`,
+   `OnnxImageEncoder` and the tiny ONNX fixture.
+3. **L4b-2** (about 1,000): `EmbeddingFile` and the benchmark, `CreditsEncoderBenchMain`.
+4. **L4b-3** (about 1,300): the embeddings run, `CreditsEmbedMain`.
+5. **L4b-4a** (about 700): the training scaffold, `TrainRows` and `FoldModels`, extracted from `CreditsTrainJob`
+   with no change to its output.
+6. **L4b-4b** (about 900): `LogisticRegression` and `LrParams`, pure.
+7. **L4b-5** (about 900): model B's training run, `CreditsTrainLrMain`.
+8. **L4b-6a** (about 700): the evaluation reads films one at a time, and reads model B's model files.
+9. **L4b-6b** (about 900): the evaluation scores model B's runs (`--embeddings`).
 
-The release after L4b-6 is the "L4b" release. Each PR adds its own `changelog.d/` entry.
+**Releases** (owner, 2026-11-19): after L4b-2, so L4a can run while the rest is built (L3c-grid merges before it),
+and after L4b-6b. Each PR adds its own `changelog.d/` entry. A PR that grows past 1,500 lines is split again before
+review.
+
+### The grid, widened (L3c-grid)
+
+- **Why.** In `eval-20261119T151319Z`, `λ` and `δ` were chosen at the top of their ranges ("L3c's development
+  evaluation"). That is weak evidence on its own: ranking level 6 prefers the larger `λ` and `δ` on a tie. Widening
+  costs little and settles it.
+- **The change**, in `CreditsCalibration`: `LAMBDAS` becomes {0, 0.5, 1, 2, 3, 4, 5} and `DELTAS` {0, 2, 5, 10, 15,
+  20}. `G`, `θ`, `σ` and `θ_d` are unchanged. `POINTS` becomes 7 × 6 × 4 × 5 × 10 × 5 = 42,000, and steps 1–3 run
+  168 times per film instead of 80, so an evaluation takes a little over twice as long. The grid under "Calibration
+  and nested selection" is superseded by this one.
+- **Tests:** the index-to-point round trip at the new first and last points, and `POINTS`.
+- **Done when** merged before the L4b-2 release. The planner then evaluates model A's three runs again on the new
+  grid, and records the result beside "L3c's development evaluation".
 
 ### ONNX Runtime and the encoder (L4b-1)
 
@@ -1498,6 +1537,9 @@ The release after L4b-6 is the "L4b" release. Each PR adds its own `changelog.d/
   size.
   - `linux-x64` must be there: the image is `linux/amd64` on Ubuntu (`eclipse-temurin:25-jre`, glibc). Without it the
     builder stops and tells the planner.
+  - **The library is in every image built after L4b-1 merges** (owner, 2026-11-19: accepted, no separate tools
+    image), because tool runs use the released image. The server never loads it before L6a. The encoder file is
+    added to the image only if B wins (L6a).
   - **If `osx-x64` is there:** `OnnxImageEncoder` is tested on the Mac as normal, under the usual floors.
   - **If it isn't:** `OnnxImageEncoder` stays a thin class behind `ImageEncoder`, holding nothing else. Everything
     else is tested on the Mac against a pure-Java stub encoder. The adapter's own tests run in CI only (enabled on
@@ -1516,6 +1558,8 @@ The release after L4b-6 is the "L4b" release. Each PR adds its own `changelog.d/
   - The planner writes `encoder.json` for each candidate at L4a, in `~/cinefilm-labels/encoders/<name>/` beside the
     ONNX file. The names, `mean`, `std` and `dimension` are copied from the export's own files (for CLIP, its
     `preprocessor_config.json`; the input is `pixel_values` and the output `image_embeds`).
+  - **Fetching the files** (owner, 2026-11-19: yes). The planner writes the download command, with each file's
+    published SHA-256; the owner runs it on the server, and the command checks the SHA-256 before keeping the file.
 - **`EncoderInput`** (pure): `float[] tensor(List<RgbFrame> frames, EncoderSpec spec)`. NCHW, frames in list order,
   channels R, G, B. Each value is `(float) ((v / 255.0 − mean[c]) / std[c])`, computed in `double`. A frame that is
   not `size × size` is an `IllegalArgumentException`.
@@ -1530,8 +1574,12 @@ The release after L4b-6 is the "L4b" release. Each PR adds its own `changelog.d/
     or with a NaN or infinite value, is an `IllegalStateException`.
 - **The tiny ONNX fixture** sits in `backend/src/test/resources/credits/learn/encoder-tiny/` (`tiny.onnx` and its
   `encoder.json`, `size` 224, `dimension` 3).
-  - It is one `ReduceMean` node (opset 13, `axes = [2, 3]`, `keepdims = 0`) from `pixel_values` `[N, 3, H, W]` to
-    `image_embeds` `[N, 3]`: the mean of each normalised channel, so its output can be checked by hand.
+  - It is one `ReduceMean` node (`axes = [2, 3]`, `keepdims = 0`) from `pixel_values` to `image_embeds`: the mean of
+    each normalised channel, so its output can be checked by hand. `ModelProto.ir_version` is 7 and the one
+    `opset_import` is the default domain at version 13 (where `ReduceMean`'s `axes` is an attribute).
+  - The input's dims are `["N", 3, 224, 224]` and the output's `["N", 3]`, all `float`. Only the batch is symbolic,
+    because callers send batches of 1 to 16 frames (a test sends two); the rest are fixed, as the real encoders'
+    are.
   - It is written by a test-source class, `TinyOnnx`, which writes the protobuf wire format directly, with no new
     dependency. A test proves the committed bytes equal what `TinyOnnx` writes, so the fixture's origin is in the
     repository.
@@ -1629,8 +1677,16 @@ L4a's measurement ("B. Pretrained image embedding…"), on released code.
 - **Where it lives and how long it takes.** `embeddings.bin` is library data (it holds media file ids), never
   committed. It stays in `credits-dataset-out` and later tools read it from `/out`; the planner copies only
   `embeddings.json` into `~/cinefilm-labels`. There are about 320,000 development rows (253,159 coarse frames, plus
-  the dense ones), so about 660 MB at 512 dimensions. At 0.1 s a frame, the development run takes about 9 hours on
-  one CPU; L4a's measured time replaces that estimate.
+  the dense ones), so about 660 MB at 512 dimensions. L4a's measured time replaces these estimates:
+  - **the development run:** about 9 hours at 0.1 s a frame, about 20 hours at the cost limit's 0.23 s;
+  - **L5's run with `--look=L5`** embeds every row again, development and test, about 440,000: about 12 hours at
+    0.1 s a frame and about 28 hours at 0.23 s.
+  - Long runs are fine (owner, 2026-11-19): any time of day, at niceness 19 on one CPU, with no overnight-only
+    scheduling.
+- **No reuse of an earlier run's records, decided.** An option to embed only the rows missing from a prior run
+  would cut L5's run to the test rows (about 3.5 hours at 0.1 s), but then `devSha256` would be equal by
+  construction. Embedding the development rows again is what checks that the encoder is deterministic on the host,
+  which model B's evaluation (L4b-6b) and the product (L6a) rely on; and the owner accepts long runs.
 - **Tests:**
   - a smoke test on a fixture dataset and features run, with a pure-Java stub encoder (each frame's mean R, G, B),
     checking every output file and each record's key against its `features.csv` row;
@@ -1643,7 +1699,30 @@ L4a's measurement ("B. Pretrained image embedding…"), on released code.
     the same fixture;
   - determinism: two runs give byte-identical `embeddings.bin`, with the stub and with the tiny ONNX fixture.
 
-### `LogisticRegression` (pure, L4b-4)
+### The training scaffold (L4b-4a)
+
+Model B trains on exactly model A's rows and folds, so `CreditsTrainJob`'s reading and fold structure are extracted
+first, in their own PR, with no change to its output:
+
+- **`TrainRows.read(Path features, boolean withDense, boolean litTextVariant)`** reads `features.csv` with the
+  existing checks (the header, the order, the first row that is not a development row with a fold stops the run),
+  applies `--lit-text-variant`, then drops `left_out` rows, rows without time features and, without `--with-dense`,
+  dense rows. It returns a record with:
+  - `kept`: each kept row's index among `features.csv`'s data rows (0-based, blank lines not counted), its fold,
+    whether it is coarse, its label and its features;
+  - `keys`: **every** data row's key in file order, kept or dropped, as three parallel arrays (`long[]
+    mediaFileIds`, `byte[] kinds` with 0 coarse and 1 dense, `long[] offsetsMs`), whose length is the data row
+    count. About 440,000 rows at most, 17 bytes each. Model B checks its embeddings against these (L4b-5).
+- **`FoldModels<M>`:** given the kept rows' folds and a function that fits a model without a set of folds, it builds
+  the five shipping, ten pair (`"k,j"`) and ten triple (`"k,j,m"`) models in the existing order and keys, and the
+  out-of-fold log loss (`oof-logloss.json`'s shape) from a function that predicts a kept row.
+- **`CreditsTrainJob`** uses both. Its tests pass unchanged. A new test runs it on the existing training fixture and
+  compares each of its four files' SHA-256 with a constant recorded from the code before the change; the files
+  themselves are not committed.
+- **Tests:** `keys` holds dropped rows too, in order, with the right count; `kept`'s indices on a fixture with a
+  blank line; the SHA-256 test.
+
+### `LogisticRegression` (pure, L4b-4b)
 
 - **Input.** A `float[][]` of rows (each `dimension` long) and an `int[]` of labels, in the order given. A NaN or
   infinite value, a label other than 0 or 1, a row of the wrong length, no rows, or a single class is an
@@ -1672,44 +1751,32 @@ L4a's measurement ("B. Pretrained image embedding…"), on released code.
 - **JSON.** `{"dimension", "base", "params", "mean", "scale", "weights", "bias", "iterations", "stopped"}`, doubles
   written by Jackson. Reading refuses (`IllegalArgumentException`) a missing field, a wrong type, an array whose
   length is not `dimension`, a non-finite number, and an unknown `stopped`.
+- **Cost, estimated.** One evaluation of `J` and its gradient is about 2 × rows × `dimension` multiply-adds: about
+  250 million for 243,000 rows at 512, well under a second. At up to 300 iterations, a fit takes a few minutes, so a
+  training run's 25 fits take about an hour on one CPU. The first run's time is recorded and replaces this.
 - **Tests:** exact standardisation, including a constant column; `J` and the gradient on a 3-row, 2-dimension set;
   the gradient against central finite differences; a 1-dimension, 4-row set whose optimum the test finds by
   Newton's method, matched to 1e-6; each stop reason; each refusal; the JSON round trip (the read model predicts
   identically); determinism (two fits of the same rows give byte-identical JSON).
-
-### The training scaffold (L4b-4)
-
-Model B trains on exactly model A's rows and folds, so `CreditsTrainJob`'s reading and fold structure are extracted,
-with no change to its output:
-
-- **`TrainRows`:** reads `features.csv` with the existing checks (the header, the order, the first row that is not a
-  development row with a fold stops the run), applies `--lit-text-variant`, then drops `left_out` rows, rows without
-  time features and, without `--with-dense`, dense rows. Each kept row carries its index among `features.csv`'s data
-  rows (0-based, blank lines not counted), its fold, whether it is coarse, its label and its features.
-- **`FoldModels<M>`:** given the kept rows' folds and a function that fits a model without a set of folds, it builds
-  the five shipping, ten pair (`"k,j"`) and ten triple (`"k,j,m"`) models in the existing order and keys, and the
-  out-of-fold log loss (`oof-logloss.json`'s shape) from a function that predicts a kept row.
-- **`CreditsTrainJob`** uses both. Its tests pass unchanged, and a new test proves a fixture run's four files are
-  byte-identical to ones recorded from the code before the change, committed as test resources in this PR.
 
 ### `CreditsTrainLrMain` (L4b-5)
 
 - **Arguments:** `--features <run>/features.csv --summary <run>/summary.json --manifest <split manifest>
   --embeddings <embeddings run> --out /out [--l2 X] [--max-iterations N] [--tolerance T] [--with-dense]
   [--lit-text-variant]`. There is no `--look`: it is an unknown flag (exit 1).
-- **Rows:** `TrainRows`, exactly as model A, with the same refusals. A test row or an empty fold stops the run: exit
-  1, no model written.
-- **Embeddings:** `embeddings.bin` is read in step with `features.csv`, data row `i` with record `i`.
-  - Refused (exit 1, nothing written): a record whose key differs from its row; a record count other than the row
-    count; `embeddings.json`'s `featuresCsvSha256` not the SHA-256 of the given `features.csv`; its `datasetSha256`,
-    `labelsSha256` or `featureVersion` not `summary.json`'s.
-  - Only the kept rows' embeddings are held, as `float[]`.
+- **Rows:** `TrainRows.read`, exactly as model A, with the same refusals. A test row or an empty fold stops the run:
+  exit 1, no model written.
+- **Embeddings:** `embeddings.bin` is read in step with `TrainRows`'s `keys`, record `i` with data row `i`.
+  - Refused (exit 1, nothing written): a record whose key differs from `keys` at its index; a record count other
+    than the length of `keys`; `embeddings.json`'s `featuresCsvSha256` not the SHA-256 of the given `features.csv`;
+    its `datasetSha256`, `labelsSha256` or `featureVersion` not `summary.json`'s.
+  - Only the kept rows' embeddings are held, as `float[]`; the others are checked and skipped.
   - **Memory:** before any float is held, kept rows × `dimension` × 4 bytes must be at most 70% of
     `Runtime.maxMemory()`, or the run is refused with the bytes it needs. The base run at 512 dimensions needs about
     500 MB, within `-Xmx2g`.
 - **Models:** `FoldModels` with `LogisticRegression.fit` and `LrParams`.
 - **Outputs**, in a fresh `<out>/train-lr-<stamp>/`, the same four files as model A's run, so `CreditsEvaluateMain`
-  takes a model-B run with `--train` beside A's:
+  takes a model-B run with `--train`:
   - `model.json`: `type` `"logreg"`, `featureVersion`, `encoder` (`name`, `sha256`, `dimension`), `params`,
     `withDense`, `litTextVariant`, `models` (the five shipping models), `toolGitCommit`, `datasetSha256`,
     `labelsSha256`, `manifestSha256`, `embeddingsRun` (the run's directory name) and `embeddingsDevSha256` (its
@@ -1718,81 +1785,93 @@ with no change to its output:
 - **Determinism:** the same inputs give byte-identical files apart from the stamp.
 - **Tests:** a fixture features run and embeddings run (written with `EmbeddingFile`): each drop rule and variant
   keeps the same row indices as `CreditsTrainJob` on the same CSV; each refusal above with nothing written,
-  including the memory cap (with the maximum memory injected); `--look` refused; a recording fitter that proves no
-  model used for fold `k`'s predictions saw a row of fold `k`, and no triple model saw a row of its folds; the log
-  loss on a hand-checked case.
+  including a key that differs on a dropped row and the memory cap (with the maximum memory injected); `--look`
+  refused; a recording fitter that proves no model used for fold `k`'s predictions saw a row of fold `k`, and no
+  triple model saw a row of its folds; the log loss on a hand-checked case.
 
-### `CreditsEvaluateMain` reads model B (L4b-6)
+### `CreditsEvaluateMain` reads model B (L4b-6a, L4b-6b)
 
-The segmenter, `FilmScore`, `CreditsCalibration`, `EvaluationReport` and the output files are unchanged. The nested
-selection already ranks training runs, so model B's runs join it as more runs, scored by the same segmenter and
-calibrated over the same grid.
+The segmenter, `FilmScore`, `CreditsCalibration`, `EvaluationReport` and the output files are unchanged. **One
+evaluation holds runs of one model type** ("Choosing"): L5 evaluates model A's runs and model B's runs separately,
+each with its own nested selection over the same grid and segmenter, and compares the two held-out summaries.
 
+**L4b-6a: films one at a time, and model B's model files.** No behaviour change for model A.
+
+- **`FeatureRunReader.forEachFilm(Path features, boolean look, FilmSink sink)`**, where `FilmSink.accept(FilmRows
+  film)` may throw `IOException`, hands each film over as soon as its last row is read, with the same checks as
+  `read`. `read` stays, as `forEachFilm` collecting into a list, for its existing tests.
+- **`CreditsEvaluateJob`** uses `forEachFilm`. A development film's predictions are computed as it arrives (as
+  `devFilm` does now). **The test path moves:** a test film's `Scene` keeps, for each run, the mean of its five
+  shipping models' predictions, computed as it arrives; after `chooseFinal`, the final run's entry is scored.
+  Neither path keeps a film's rows past its scoring inputs. The output is byte-identical to before on the existing
+  fixtures (the existing tests pass unchanged).
 - **`FrameModel`:** a sealed interface that `GradientBoostedTrees` and `LogisticRegression` implement, with
   `double base()`.
 - **`TrainedRun.load`** reads `model.json`'s `type`: `"gbt"` as now, `"logreg"` through `LogisticRegression.fromJson`,
-  anything else refused. For a `"logreg"` run it also keeps the encoder's `sha256` and `dimension` and
+  anything else refused. It keeps the type and, for `"logreg"`, the encoder's `sha256` and `dimension` and
   `embeddingsDevSha256`.
+- **Refused** (exit 1, nothing written): training runs of more than one type in one evaluation; any `"logreg"` run
+  (until L4b-6b adds `--embeddings`).
+- **Tests:** the existing evaluation tests unchanged; test films scored after `chooseFinal` by the final run's
+  shipping models, through the moved path; a sink that records films proves each arrives once, in order, as its last
+  row is read; `TrainedRun.load` on a hand-made `"logreg"` run and on an unknown type; mixed types refused.
+
+**L4b-6b: scoring model B.**
+
 - **`--embeddings <embeddings run>`** is a new single flag.
+- **`EmbeddingCursor`** reads `embeddings.bin` in step with `forEachFilm`: for each film it returns that film's
+  coarse and dense embeddings, checking each record's key against the film's rows. Only one film's embeddings is
+  held at a time; all films' would take about 900 MB with the test films.
 - **Refused** (exit 1, nothing written), beside L3c's refusals:
-  - a `"logreg"` run without `--embeddings`, and `--embeddings` with no `"logreg"` run;
+  - `"logreg"` runs without `--embeddings`, and `--embeddings` with `"gbt"` runs;
   - `embeddings.json`'s `featuresCsvSha256` not the SHA-256 of the features run's `features.csv`; its
     `datasetSha256`, `labelsSha256` or `featureVersion` not the features run's;
-  - its encoder `sha256` or its `devSha256` not those of every `"logreg"` run (so model B is scored on the
-    embeddings it was trained on);
+  - its encoder `sha256` or its `devSha256` not those of every run (so model B is scored on the embeddings it was
+    trained on);
   - `--look=L5` with an embeddings run that has no `look.json`;
   - a record whose key differs from its `features.csv` row, or a record count other than the row count.
-- **A frame's `p`:** NaN when its `features.csv` row has no time features, for both types ("Finding the start", step
-  5); otherwise `GradientBoostedTrees` on the row's features, or `LogisticRegression` on its embedding.
-- **One film's embeddings at a time.** All films' embeddings would take about 900 MB with the test films.
-  `FeatureRunReader` hands films over one at a time, with their records read in step. As each film completes, its
-  predictions are computed and its embeddings dropped: for a development film, every set a choice may ask for (as
-  `devFilm` does now); for a test film, under `--look=L5`, each run's mean of its five shipping models, so that the
-  final choice's run can be picked afterwards.
-- **Ties.** Ranking level 7 is "the run given first on the command line", so "a tie goes to A" ("Choosing") holds
-  when model A's runs are given first. L5's command gives them first.
-- **Tests:**
-  - with only `"gbt"` runs, the existing evaluation tests pass unchanged;
-  - a mixed run on fixture films, with a fixture A run and a fixture B run (hand-made models as JSON) where B wins
-    one outer fold and A another: `calibration.json` names each;
-  - a dense row with no time features gets no `p` under B, although it has an embedding;
-  - each refusal above, with nothing written;
-  - under `--look=L5`, test films are scored by the final B run's shipping models;
-  - a reader seam that counts films held proves at most one film's embeddings is held;
-  - a model-B run written by `CreditsTrainLrMain` on a fixture is read back by `TrainedRun.load`.
+- **A frame's `p`:** NaN when its `features.csv` row has no time features, as for model A ("Finding the start",
+  step 5); otherwise `LogisticRegression` on its embedding.
+- **Tests:** a B-only evaluation on fixture films with hand-made `"logreg"` runs, checking every output file; a dense
+  row with no time features gets no `p` although it has an embedding; each refusal above, with nothing written;
+  under `--look=L5`, test films scored by the final B run's shipping models; a cursor seam that proves at most one
+  film's embeddings is held; a model-B run written by `CreditsTrainLrMain` on a fixture, read back and evaluated.
 
 ### The PRs, and when each is done
 
+- **L3c-grid** is done when the grid tests pass, merged before the L4b-2 release.
 - **L4b-1** is done when the natives check is recorded in the PR, and the `EncoderSpec`, `EncoderInput`,
   `OnnxImageEncoder` and `TinyOnnx` tests pass (on the Mac or in CI, by the branch).
 - **L4b-2** is done when the `EmbeddingFile` and benchmark tests pass, and a benchmark run on the tiny fixture writes
-  `bench.json`.
+  `bench.json`. The owner releases after it.
 - **L4b-3** is done when the embeddings smoke test, every refusal and the determinism test pass.
-- **L4b-4** is done when the `LogisticRegression` tests pass, and `CreditsTrainJob`'s output is byte-identical to
-  before.
-- **L4b-5** is done when a fixture model-B run writes its four files, and the row-identity and fold tests pass.
-- **L4b-6** is done when the mixed evaluation, the refusals and the one-film memory test pass, with the existing
-  evaluation tests unchanged.
-- **After the L4b release:** L4a (the benchmark on each candidate), then the planner's embeddings run on the chosen
-  encoder, model-B training runs over a few `l2` values and both variants, and one evaluation of A's and B's runs
-  together. Its choices and figures are recorded here before L5's look.
+- **L4b-4a** is done when `CreditsTrainJob`'s four files match the recorded SHA-256 values and the `TrainRows` tests
+  pass.
+- **L4b-4b** is done when the `LogisticRegression` tests pass.
+- **L4b-5** is done when a fixture model-B run writes its four files, and the row-identity, key and fold tests pass.
+- **L4b-6a** is done when the existing evaluation tests pass unchanged on `forEachFilm` and the moved test path, and
+  the `"logreg"` model files load.
+- **L4b-6b** is done when a B-only evaluation, the refusals and the one-film test pass. The owner releases after it.
 
-### Owner questions
+### The planner's runs
 
-- **The image grows from the L4b release.** Tool runs use the released image, so the ONNX Runtime jar (its size is
-  in L4b-1's PR) ships in the image from L4b until L6b removes it, if A wins. This plan said the production image
-  changes only if B wins. The server never loads the library, and no encoder file is in the image. The alternative,
-  a separate tools image, needs its own build workflow. Accept the larger image?
-- **Fetching the encoder files.** At L4a the planner downloads the candidates onto the server (the CLIP export, about
-  90 MB, from Hugging Face; a MobileNet-class model from the ONNX Model Zoo) and checks their published SHA-256.
-  May it?
-- **A long tool run.** The development embeddings run is estimated at about 9 hours on one CPU at niceness 19 (L4a
-  gives the real figure), and the test films add about 120,000 rows at L5. Is a run of up to a day acceptable on the
-  server, or should it be timed (overnight, say)?
-- **An earlier release.** L4a needs only L4b-1 and L4b-2. A release after L4b-2 would let L4a run while L4b-3 to
-  L4b-6 are built. Release then, or once after L4b-6?
-- **Only if the jar has no `osx-x64` natives:** approve `OnnxImageEncoder`'s exception to the local coverage floor,
-  its tests running in CI only (already in "B. Pretrained image embedding…").
+- **After the L4b-2 release:** model A's three runs evaluated again on the widened grid; then L4a, the benchmark on
+  each candidate (the owner runs the planner's download command first).
+- **After the L4b-6b release:** the embeddings run on the chosen encoder, then **at most seven model-B training
+  runs**: `l2` ∈ {0.1, 1, 10} on the base rows and with `--with-dense`, and `--lit-text-variant` at `l2` 1. At about
+  an hour each, about seven hours in all. Then one B-only evaluation over them (estimated at under an hour: the grid
+  doubled, and there are more runs). Its choices and figures are recorded here before L5's look, beside model A's.
+
+### Settled by the owner (2026-11-19)
+
+- **ONNX Runtime in the image:** accepted. It is in every image built after L4b-1 merges, with no separate tools
+  image. The encoder file is added only if B wins (L6a).
+- **Encoder files:** fetched onto the server at L4a. The planner writes the download command, and the owner runs it;
+  it checks each file's SHA-256.
+- **Long tool runs:** any time, at niceness 19 on one CPU, with no overnight-only scheduling.
+- **Releases:** after L4b-2 (for L4a), and again after L4b-6b.
+- **Still open, only if the jar has no `osx-x64` natives:** approve `OnnxImageEncoder`'s exception to the local
+  coverage floor, its tests running in CI only (already in "B. Pretrained image embedding…").
 
 ## Settled for later phases (from review round 4)
 
