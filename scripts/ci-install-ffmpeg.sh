@@ -5,7 +5,7 @@
 # Usage: ci-install-ffmpeg.sh
 #   FFMPEG_INSTALL_LIMIT   overall budget in seconds, default 720
 #   FFMPEG_UPDATE_LIMIT    cap for `apt-get update` alone, default 300
-#   FFMPEG_ATTEMPT_LIMIT   cap for the first `apt-get install`, default 240 (the retry gets what is left)
+#   FFMPEG_ATTEMPT_LIMIT   cap for the first download, default 240 (the retry gets what is left)
 #   FFMPEG_DEB_DIR         apt's archive dir, default $RUNNER_TEMP/ffmpeg-debs (cached between runs by ci.yml)
 #   FFMPEG_CACHE_MATCHED   the restored cache key, for the notice (empty = cache miss)
 #
@@ -23,11 +23,14 @@
 # timeout-minutes (a backstop set above this budget) can kill it silently.
 #
 # On 2026-11-19 the opposite happened: DNS was fine and `apt-get update` worked, but one slow mirror stalled
-# single packages of the 66 MB install until the budget ran out, four runs in a row. So the downloaded .debs
-# live in a user-owned dir (FFMPEG_DEB_DIR) that the workflow caches between runs, and a first install that
-# times out or fails to fetch (exit 100) is retried once with the rest of the budget: apt keeps every
-# completed .deb, so the retry only fetches what is missing. `update` is still capped on its own, so the
-# DNS outage still fails fast with the same message.
+# single packages of the 66 MB install until the budget ran out, four runs in a row. So the install is split:
+#   1. `apt-get install --download-only` fills a user-owned dir (FFMPEG_DEB_DIR) that the workflow caches
+#      between runs. Only this phase has the cap, and it is retried once with the rest of the budget on a
+#      timeout or an apt error (exit 100, e.g. a fetch failure): apt keeps every completed .deb, so the retry
+#      only fetches what is missing. A kill here cannot corrupt anything, nothing is unpacked yet.
+#   2. `apt-get install` runs ONCE against the complete dir with the remaining budget. It is never retried
+#      and never killed for the download cap, so TERM or KILL does not land mid-dpkg and leave a broken lock.
+# `update` is still capped on its own, so the DNS outage still fails fast with the same message.
 # ============================================================================
 set -uo pipefail
 
@@ -39,26 +42,41 @@ if [[ "$update_limit" -gt "$limit" ]]; then
 fi
 deb_dir="${FFMPEG_DEB_DIR:-${RUNNER_TEMP:-/tmp}/ffmpeg-debs}"
 opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
-      -o "Dir::Cache::archives=${deb_dir}")
+      -o DPkg::Lock::Timeout=60 -o "Dir::Cache::archives=${deb_dir}")
 
 # The dir and its partial/ must exist and belong to the runner user (no sudo), so actions/cache can read it.
 mkdir -p "${deb_dir}/partial"
 
-count_debs() {
-    find "${deb_dir}" -maxdepth 1 -name '*.deb' | wc -l | tr -d ' '
+list_debs() {
+    find "${deb_dir}" -maxdepth 1 -name '*.deb' | sort
 }
 
-before=$(count_debs)
+before=$(list_debs)
 
-# On every exit, including the error ones, say how many .debs are new so the workflow can save a partial
-# download: completed .debs only ever sit in the dir itself (in-flight ones stay in partial/).
+# On every exit, including the error ones, say whether the set of .debs changed (new, or removed by autoclean)
+# so the workflow can save the cache: completed .debs only ever sit in the dir itself (in-flight ones stay in
+# partial/).
 # shellcheck disable=SC2329  # invoked by the EXIT trap below
 write_output() {
+    local after changed=false
+    after=$(list_debs)
+    if [[ "$after" != "$before" ]]; then
+        changed=true
+    fi
     if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-        echo "new_debs=$(( $(count_debs) - before ))" >> "$GITHUB_OUTPUT"
+        echo "debs_changed=${changed}" >> "$GITHUB_OUTPUT"
     fi
 }
 trap write_output EXIT
+
+# count LIST: the number of lines in LIST (empty = 0).
+count() {
+    if [[ -z "$1" ]]; then
+        echo 0
+    else
+        printf '%s\n' "$1" | wc -l | tr -d ' '
+    fi
+}
 
 timeout_error() {
     echo "::error::Installing ffmpeg from the Ubuntu apt mirrors took longer than ${1}s (mirror or DNS outage on the runner?). Re-run the job once archive.ubuntu.com resolves."
@@ -94,26 +112,40 @@ fail() {
 }
 
 if [[ -n "${FFMPEG_CACHE_MATCHED:-}" ]]; then
-    echo "::notice::ffmpeg deb cache hit (${FFMPEG_CACHE_MATCHED}): ${before} .deb files already present"
+    echo "::notice::ffmpeg deb cache hit (${FFMPEG_CACHE_MATCHED}): $(count "$before") .deb files already present"
 else
-    echo "::notice::ffmpeg deb cache miss: ${before} .deb files already present"
+    echo "::notice::ffmpeg deb cache miss: $(count "$before") .deb files already present"
 fi
 
 run_apt "$update_limit" update
 rc=$?
 [[ "$rc" -eq 0 ]] || fail update "$rc" "$update_limit"
 
-run_apt "$attempt_limit" install -y --no-install-recommends ffmpeg
+run_apt "$attempt_limit" install --download-only -y --no-install-recommends ffmpeg
 rc=$?
-# Retry once after a timeout or apt's fetch-failure exit (100), if enough budget is left to matter.
+# Retry the download once after a timeout or an apt error (exit 100), if enough budget is left to matter.
 if [[ "$rc" -eq 124 || "$rc" -eq 100 ]] && [[ $(( limit - SECONDS )) -gt 30 ]]; then
-    echo "::warning::apt-get install did not finish (exit ${rc}) with $(count_debs) .deb files downloaded; retrying once with the remaining budget"
-    run_apt "$limit" install -y --no-install-recommends ffmpeg
+    echo "::warning::apt-get download did not finish (exit ${rc}) with $(count "$(list_debs)") .deb files downloaded; retrying once with the remaining budget"
+    run_apt "$limit" install --download-only -y --no-install-recommends ffmpeg
     rc=$?
 fi
+[[ "$rc" -eq 0 ]] || fail "install --download-only" "$rc" "$limit"
+
+# Everything is local now. One install, the rest of the budget, no retry.
+run_apt "$limit" install -y --no-install-recommends ffmpeg
+rc=$?
 [[ "$rc" -eq 0 ]] || fail install "$rc" "$limit"
 
-echo "::notice::ffmpeg installed: $(( $(count_debs) - before )) new .deb files downloaded, $(count_debs) in the cache dir"
+# Drop .debs the cache no longer needs (older versions of what was just fetched). Not worth failing for.
+run_apt 60 autoclean
+rc=$?
+if [[ "$rc" -ne 0 ]]; then
+    echo "::warning::apt-get autoclean failed with exit ${rc}; the cache may keep stale .deb files"
+fi
+
+after=$(list_debs)
+new=$(count "$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))")
+echo "::notice::ffmpeg installed: ${new} new .deb files downloaded, $(count "$after") in the cache dir"
 
 ffprobe -version | head -1
 exit 0

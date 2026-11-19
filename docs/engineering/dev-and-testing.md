@@ -567,7 +567,7 @@ cancels superseded runs of the same ref.
 | Job | Name | What it runs |
 |---|---|---|
 | `changes` | `Detect docs-only change` | Classifies the PR diff. |
-| `backend` | `Backend — Build, Test & Coverage` | `./mvnw clean verify` in full (Checkstyle, tests incl. Testcontainers integration, JaCoCo per class and bundle, SpotBugs + FindSecBugs), then the integration test count, then on PRs diff-cover at 90% of changed `backend/src/main` lines (JaCoCo XML). Uploads the JaCoCo and SpotBugs reports. 20 min timeout. |
+| `backend` | `Backend — Build, Test & Coverage` | `./mvnw clean verify` in full (Checkstyle, tests incl. Testcontainers integration, JaCoCo per class and bundle, SpotBugs + FindSecBugs), then the integration test count, then on PRs diff-cover at 90% of changed `backend/src/main` lines (JaCoCo XML). Uploads the JaCoCo and SpotBugs reports. 25 min timeout (was 20 before the ffmpeg retry budget). |
 | `shell` | `Shell — ShellCheck & script tests` | Pinned ShellCheck v0.11.0 (`-o check-unassigned-uppercase`) over `scripts/*.sh`, `scripts/lib/*.sh` and `scripts/test/*.sh`, then `bash scripts/test/run-all.sh`: the tests stub `npx`/`sleep` on PATH to prove `npm-audit.sh` (clean passes, findings fail without retry, transport errors retry with 15s/30s backoff, exhausted retries fail) and run `ci-docs-only.sh` against throwaway git repos. Run both locally the same way. Also runs a pinned actionlint (`rhysd/actionlint:1.7.12`, which shellchecks `run:` blocks too) over `.github/workflows/`: run `actionlint` locally before pushing a workflow change; `.github/actionlint.yaml` lists the self-hosted runner label (`cinefilm-prod`). It first sets up Node 24, because `replay-rig.test.sh` runs the home replay rig's tests with `node --test` (the rig's and the train viewer's: `home-replay.md`, `train-viewer.md`); run locally they need Node 22 or newer. |
 | `frontend` | `Frontend — Lint, Test & Build` | `npm ci`, `npm run lint`, `npm run format:check` (Prettier), `npm run test:coverage` (95/90 per file plus the global floor), on PRs diff-cover at 90% of changed `frontend/src` lines (lcov, with the `SF:` prefix rewrite), `scripts/npm-audit.sh frontend high`, `npm run build`. 20 min timeout. |
 | `docker` | `Docker — image builds` | Builds the production `Dockerfile` (SPA, jar, ffmpeg runtime) without pushing, then checks it runs as uid 1001 with `ffmpeg`, `ffprobe` and `vainfo` present. The Mac has no Docker, so this is the only proof the image builds. 20 min timeout. |
@@ -576,17 +576,24 @@ cancels superseded runs of the same ref.
 **The backend job's ffmpeg install** (`scripts/ci-install-ffmpeg.sh`, tests in `scripts/test/ci-install-ffmpeg.test.sh`).
 `RealToolsTest` needs ffmpeg, and two outages shaped the step. 2026-11-11, DNS: `apt-get update` alone took six minutes,
 so `update` is capped on its own (300 s) and fails fast with an `::error::`. 2026-11-19, a slow mirror: `update`
-worked but single packages of the 66 MB install stalled and four runs in a row timed out. Now apt writes its `.deb`
-files to `$RUNNER_TEMP/ffmpeg-debs` (`Dir::Cache::archives`, no sudo needed for the dir), `actions/cache/restore`
-fills it before the install (key `ffmpeg-debs-<os>-<arch>-<run id>`, `restore-keys` prefix finds the newest earlier
-one; apt re-fetches only what changed) and `actions/cache/save` stores it after, **only** when the script wrote
-`new_debs` other than `0` to its step output, and also when the install failed (completed `.deb` files are whole;
-in-flight ones stay in `partial/`, and the `*.deb` glob leaves out `partial/` and apt's root-owned lock). A first
-install that times out (240 s) or fails to fetch (apt exit 100) is retried once with the rest of the 720 s total;
-the step's `timeout-minutes: 14` is only the backstop. Reading a run: a `::notice::` at the start says "cache hit
-(<key>)" or "cache miss" with how many `.deb` files were already present; a `::warning::` says the first attempt
-did not finish and a retry started; the closing notice says how many new `.deb` files were downloaded. A cache
-miss is not an error (only slower); `::error::` still means the budget ran out or apt failed for another reason.
+worked but single packages of the 66 MB install stalled and four runs in a row timed out. Now the install is split.
+`apt-get install --download-only` writes the `.deb` files to `$RUNNER_TEMP/ffmpeg-debs` (`Dir::Cache::archives`, no
+sudo needed for the dir) under a 240 s cap and is retried once with the rest of the 720 s total after a timeout or
+an apt error (exit 100, e.g. a fetch failure); then the real `apt-get install` runs once, never retried and never
+killed for the download cap, so a kill cannot land mid-dpkg. `DPkg::Lock::Timeout=60` is set, and an `autoclean`
+afterwards (non-fatal, a `::warning::` on failure) drops stale `.deb` versions. `actions/cache/restore@v6` fills the
+dir before the install (3-minute step timeout, `continue-on-error`; key
+`ffmpeg-debs-<os>-<arch>-<run id>-<run attempt>`, because cache keys are immutable and a re-run keeps the run id;
+the `restore-keys` prefix finds the newest earlier one, and apt re-fetches only what changed). `actions/cache/save@v6`
+stores it after, **only** when the script wrote `debs_changed=true` to its step output (the sorted `.deb` list
+differs from the one restored, so a version swap counts), also when the install failed (completed `.deb` files are
+whole; in-flight ones stay in `partial/`, and the `*.deb` glob leaves out `partial/` and apt's root-owned lock),
+and not when the run was cancelled. The step's `timeout-minutes: 14` is only the backstop, and the backend job's
+timeout is 25 minutes (12-minute worst-case install plus the verify). Reading a run: a `::notice::` at the start
+says "cache hit (<key>)" or "cache miss" with how many `.deb` files were already present; a `::warning::` says the
+first download did not finish and a retry started; the closing notice says how many new `.deb` files were
+downloaded. A cache miss is not an error (only slower); `::error::` still means the budget ran out or apt failed
+for another reason.
 
 **SonarQube Cloud** project `gregochr_cinefilm`, organization `gregochr`, Automatic Analysis off. `SONAR_TOKEN` is an
 Actions secret and a Dependabot secret (the owner's personal token; when it expires the job fails at the scan step).
