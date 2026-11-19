@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
 import java.util.Arrays;
 
 /**
@@ -34,6 +35,10 @@ final class EmbeddingFile {
     private static final long ROWS_AT = MAGIC.length + Integer.BYTES;
     private static final int RECORD_FIXED_BYTES = Long.BYTES + 1 + Long.BYTES;
     private static final int BUFFER_BYTES = 1 << 16;
+    /** The largest record a writer will make: about 262,000 floats, far beyond any encoder. */
+    static final int MAX_RECORD_BYTES = 1 << 20;
+    /** The largest dimension whose record fits {@link #MAX_RECORD_BYTES}: (1,048,576 - 17) / 4, rounded down. */
+    static final int MAX_DIMENSION = (MAX_RECORD_BYTES - RECORD_FIXED_BYTES) / Float.BYTES;
 
     private EmbeddingFile() {
     }
@@ -55,13 +60,35 @@ final class EmbeddingFile {
      * @param dimension the length of an embedding, at least 1
      * @return the writer; close it to finish the file
      * @throws IOException when the file cannot be created
-     * @throws IllegalArgumentException when {@code dimension} is below 1
+     * @throws IllegalArgumentException when {@code dimension} is below 1 or makes a record of more than
+     *     {@link #MAX_RECORD_BYTES} (the file is not created)
      */
     static Writer create(Path file, int dimension) throws IOException {
         if (dimension < 1) {
             throw new IllegalArgumentException("dimension must be at least 1: " + dimension);
         }
-        return new Writer(FileChannel.open(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE), dimension);
+        if (dimension > MAX_DIMENSION) {
+            throw new IllegalArgumentException("dimension " + dimension + " makes a record of "
+                + recordBytes(dimension) + " bytes, more than " + MAX_RECORD_BYTES);
+        }
+        return new Writer(file, dimension);
+    }
+
+    /**
+     * Writes one record's bytes, little-endian, at the buffer's position: the one place the record layout lives.
+     * The buffer's byte order is set to little-endian.
+     *
+     * @param mediaFileId the film's media file id
+     * @param kind the kind byte, 0 coarse or 1 dense
+     * @param offsetMs the frame's offset in milliseconds
+     * @param values the embedding
+     * @param into the buffer, with {@code 17 + 4 × values.length} bytes remaining
+     */
+    static void encode(long mediaFileId, byte kind, long offsetMs, float[] values, ByteBuffer into) {
+        into.order(ByteOrder.LITTLE_ENDIAN).putLong(mediaFileId).put(kind).putLong(offsetMs);
+        for (float value : values) {
+            into.putFloat(value);
+        }
     }
 
     /**
@@ -133,12 +160,13 @@ final class EmbeddingFile {
         private long rows;
         private boolean closed;
 
-        private Writer(FileChannel channel, int dimension) {
-            this.channel = channel;
+        /** The channel is opened last, after everything that can fail, so a failure leaves no file and no channel. */
+        private Writer(Path file, int dimension) throws IOException {
             this.dimension = dimension;
-            this.record = Math.toIntExact(recordBytes(dimension));
+            this.record = (int) recordBytes(dimension);
             this.buffer = ByteBuffer.allocate(Math.max(BUFFER_BYTES, record)).order(ByteOrder.LITTLE_ENDIAN);
             buffer.put(MAGIC).putInt(dimension).putLong(0L);
+            this.channel = FileChannel.open(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
         }
 
         /**
@@ -154,6 +182,24 @@ final class EmbeddingFile {
          * @throws IllegalStateException when the writer is closed
          */
         void append(long mediaFileId, int kind, long offsetMs, float[] values) throws IOException {
+            append(mediaFileId, kind, offsetMs, values, null);
+        }
+
+        /**
+         * Appends one record and feeds exactly the bytes written for it to a digest, so a caller can hash the
+         * records as the file holds them.
+         *
+         * @param mediaFileId the film's media file id
+         * @param kind {@link EmbeddingFile#COARSE} or {@link EmbeddingFile#DENSE}
+         * @param offsetMs the frame's offset in milliseconds
+         * @param values the embedding, {@code dimension} finite floats
+         * @param digest updated with the record's bytes once the record is accepted; may be null
+         * @throws IOException when the file cannot be written
+         * @throws IllegalArgumentException as {@link #append(long, int, long, float[])}
+         * @throws IllegalStateException when the writer is closed
+         */
+        void append(long mediaFileId, int kind, long offsetMs, float[] values, MessageDigest digest)
+                throws IOException {
             if (closed) {
                 throw new IllegalStateException("the writer is closed");
             }
@@ -172,9 +218,12 @@ final class EmbeddingFile {
             if (buffer.remaining() < record) {
                 flush();
             }
-            buffer.putLong(mediaFileId).put((byte) kind).putLong(offsetMs);
-            for (float value : values) {
-                buffer.putFloat(value);
+            int start = buffer.position();
+            encode(mediaFileId, (byte) kind, offsetMs, values, buffer);
+            if (digest != null) {
+                ByteBuffer written = buffer.duplicate();
+                written.limit(buffer.position()).position(start);
+                digest.update(written);
             }
             rows++;
         }

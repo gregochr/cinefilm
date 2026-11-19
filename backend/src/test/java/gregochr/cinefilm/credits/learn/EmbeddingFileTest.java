@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -45,39 +47,117 @@ class EmbeddingFileTest {
     private void refused(byte[] bytes, String message) throws IOException {
         Path path = write(bytes);
         assertThatThrownBy(() -> EmbeddingFile.open(path)).isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining(message);
+            .hasMessage(message);
     }
 
     @Test
     void recordsComeBackInOrderWithEveryFieldAndTheHeaderHoldsTheRowCount() throws IOException {
         Path path = temp.resolve("embeddings.bin");
         try (EmbeddingFile.Writer writer = EmbeddingFile.create(path, 3)) {
-            writer.append(7L, EmbeddingFile.COARSE, 5_000L, new float[] {1.5f, -2f, 0f});
-            writer.append(Long.MAX_VALUE, EmbeddingFile.DENSE, 1_234_567_890_123L, new float[] {0.25f, 3f, -0.5f});
+            writer.append(7L, EmbeddingFile.DENSE, 5_000L, new float[] {1.5f, -2f, 0f});
+            writer.append(Long.MAX_VALUE, EmbeddingFile.COARSE, 1_234_567_890_123L, new float[] {0.25f, 3f, -0.5f});
             assertThat(writer.rows()).isEqualTo(2);
         }
 
-        assertThat(Files.size(path)).isEqualTo(20 + 2 * 29);
-        ByteBuffer raw = ByteBuffer.wrap(Files.readAllBytes(path)).order(ByteOrder.LITTLE_ENDIAN);
-        assertThat(new String(raw.array(), 0, 8, StandardCharsets.US_ASCII)).isEqualTo("CFEMB001");
+        byte[] bytes = Files.readAllBytes(path);
+        assertThat(bytes).hasSize(20 + 2 * 29);
+        ByteBuffer raw = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        assertThat(new String(bytes, 0, 8, StandardCharsets.US_ASCII)).isEqualTo("CFEMB001");
         assertThat(raw.getInt(8)).isEqualTo(3);
         assertThat(raw.getLong(12)).isEqualTo(2);
+        assertThat(Arrays.copyOfRange(bytes, 20, 49)).containsExactly(record(7L, 1, 5_000L, 1.5f, -2f, 0f));
+        assertThat(Arrays.copyOfRange(bytes, 49, 78))
+            .containsExactly(record(Long.MAX_VALUE, 0, 1_234_567_890_123L, 0.25f, 3f, -0.5f));
         try (EmbeddingFile.Reader reader = EmbeddingFile.open(path)) {
             assertThat(reader.dimension()).isEqualTo(3);
             assertThat(reader.rows()).isEqualTo(2);
             assertThat(reader.next()).isTrue();
             assertThat(reader.mediaFileId()).isEqualTo(7L);
-            assertThat(reader.kind()).isEqualTo(EmbeddingFile.COARSE);
+            assertThat(reader.kind()).isEqualTo(EmbeddingFile.DENSE);
             assertThat(reader.offsetMs()).isEqualTo(5_000L);
             assertThat(reader.vector()).containsExactly(1.5f, -2f, 0f);
             assertThat(reader.next()).isTrue();
             assertThat(reader.mediaFileId()).isEqualTo(Long.MAX_VALUE);
-            assertThat(reader.kind()).isEqualTo(EmbeddingFile.DENSE);
+            assertThat(reader.kind()).isEqualTo(EmbeddingFile.COARSE);
             assertThat(reader.offsetMs()).isEqualTo(1_234_567_890_123L);
             assertThat(reader.vector()).containsExactly(0.25f, 3f, -0.5f);
             assertThat(reader.next()).isFalse();
             assertThat(reader.next()).isFalse();
         }
+    }
+
+    @Test
+    void aHandMadeRecordIsReadWithItsIdAndOffsetNotSwappedAndLittleEndian() throws IOException {
+        Path path = write(file("CFEMB001", 2, 1, record(0x0102030405060708L, 1, 5_000L, 1.5f, -2f)));
+
+        try (EmbeddingFile.Reader reader = EmbeddingFile.open(path)) {
+            assertThat(reader.next()).isTrue();
+            assertThat(reader.mediaFileId()).isEqualTo(0x0102030405060708L);
+            assertThat(reader.offsetMs()).isEqualTo(5_000L);
+            assertThat(reader.kind()).isEqualTo(1);
+            assertThat(reader.vector()).containsExactly(1.5f, -2f);
+        }
+    }
+
+    @Test
+    void theEncodeSeamWritesLittleEndianWhateverTheBuffersOrderAndAdvancesIt() {
+        ByteBuffer into = ByteBuffer.allocate(29).order(ByteOrder.BIG_ENDIAN);
+
+        EmbeddingFile.encode(7L, (byte) 1, 5_000L, new float[] {1.5f, -2f, 0f}, into);
+
+        assertThat(into.position()).isEqualTo(29);
+        assertThat(into.array()).containsExactly(record(7L, 1, 5_000L, 1.5f, -2f, 0f));
+    }
+
+    @Test
+    void aDigestFedThroughAppendIsTheSha256OfTheRecordBytesInTheFile() throws Exception {
+        Path path = temp.resolve("digest.bin");
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (EmbeddingFile.Writer writer = EmbeddingFile.create(path, 2)) {
+            writer.append(1L, EmbeddingFile.COARSE, 0L, new float[] {1f, 2f}, digest);
+            writer.append(2L, EmbeddingFile.DENSE, 5_000L, new float[] {3f, 4f}, null);
+            writer.append(3L, EmbeddingFile.DENSE, 10_000L, new float[] {5f, 6f}, digest);
+            assertThatThrownBy(() -> writer.append(4L, 9, 0L, new float[] {1f, 1f}, digest))
+                .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        byte[] bytes = Files.readAllBytes(path);
+        MessageDigest expected = MessageDigest.getInstance("SHA-256");
+        expected.update(bytes, 20, 25);
+        expected.update(bytes, 70, 25);
+        assertThat(digest.digest()).isEqualTo(expected.digest());
+    }
+
+    @Test
+    void aDigestSeesTheBytesAcrossAWriteBufferFlush() throws Exception {
+        Path path = temp.resolve("digest-big.bin");
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (EmbeddingFile.Writer writer = EmbeddingFile.create(path, 512)) {
+            for (int r = 0; r < 100; r++) {
+                float[] values = new float[512];
+                values[r] = r;
+                writer.append(r, 0, r, values, digest);
+            }
+        }
+
+        byte[] bytes = Files.readAllBytes(path);
+        MessageDigest expected = MessageDigest.getInstance("SHA-256");
+        expected.update(bytes, 20, bytes.length - 20);
+        assertThat(digest.digest()).isEqualTo(expected.digest());
+    }
+
+    @Test
+    void aDimensionWhoseRecordIsTooBigIsRefusedBeforeTheFileIsCreated() throws IOException {
+        Path path = temp.resolve("huge.bin");
+
+        assertThatThrownBy(() -> EmbeddingFile.create(path, 262_140)).isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("dimension 262140 makes a record of 1048577 bytes, more than 1048576");
+        assertThatThrownBy(() -> EmbeddingFile.create(path, Integer.MAX_VALUE))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("dimension 2147483647 makes a record of 8589934605 bytes, more than 1048576");
+        assertThat(path).doesNotExist();
+        EmbeddingFile.create(path, 262_139).close();
+        assertThat(Files.size(path)).isEqualTo(20);
     }
 
     @Test
@@ -184,12 +264,12 @@ class EmbeddingFileTest {
 
     @Test
     void aWrongMagicIsRefused() throws IOException {
-        refused(file("CFEMB002", 1, 0, new byte[0]), "does not start with CFEMB001");
+        refused(file("CFEMB002", 1, 0, new byte[0]), "the file does not start with CFEMB001");
     }
 
     @Test
     void aFileShorterThanTheHeaderIsRefused() throws IOException {
-        refused(new byte[] {'C', 'F', 'E'}, "too short for a header: 3 bytes");
+        refused(new byte[] {'C', 'F', 'E'}, "the file is too short for a header: 3 bytes");
     }
 
     @Test
@@ -223,13 +303,16 @@ class EmbeddingFileTest {
 
     @Test
     void aRowCountLargerThanTheFileIsRefused() throws IOException {
-        refused(file("CFEMB001", 1, 2, record(1, 0, 0, 1f)), "rows 2) needs 62");
+        refused(file("CFEMB001", 1, 2, record(1, 0, 0, 1f)),
+            "the file is 41 bytes, the header (dimension 1, rows 2) needs 62");
     }
 
     @Test
     void aHeaderWhoseSizesOverflowIsRefusedNotWrappedAround() throws IOException {
-        refused(file("CFEMB001", 1, Long.MAX_VALUE, new byte[0]), "are larger than any file");
-        refused(file("CFEMB001", Integer.MAX_VALUE, 1, new byte[0]), "are larger than any file");
+        refused(file("CFEMB001", 1, Long.MAX_VALUE, new byte[0]),
+            "the header's dimension 1 and rows 9223372036854775807 are larger than any file");
+        refused(file("CFEMB001", Integer.MAX_VALUE, 1, new byte[0]),
+            "the header's dimension 2147483647 and rows 1 are larger than any file");
     }
 
     @Test
