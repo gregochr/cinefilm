@@ -1,0 +1,156 @@
+{
+  "week": { "start": "2026-12-14", "end": "2026-12-20" },
+  "limits": { "max": 12, "min": 5 },
+  "keywords": { "fetched": 1374, "total": 1412, "running": false },
+  "inWeek": [
+    {
+      "filmId": 1,
+      "tmdbId": 101,
+      "title": "It's a Wonderful Life",
+      "year": 1946,
+      "posterUrl": "/abc.jpg",
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 2,
+      "tmdbId": 102,
+      "title": "Miracle on 34th Street",
+      "year": 1947,
+      "posterUrl": "/api/art/abc123.jpg",
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 3,
+      "tmdbId": 103,
+      "title": "White Christmas",
+      "year": 1954,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 4,
+      "tmdbId": 104,
+      "title": "Trading Places",
+      "year": 1983,
+      "posterUrl": null,
+      "reason": "ADDED"
+    },
+    {
+      "filmId": 5,
+      "tmdbId": 105,
+      "title": "Gremlins",
+      "year": 1984,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 6,
+      "tmdbId": 106,
+      "title": "Die Hard",
+      "year": 1988,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 7,
+      "tmdbId": 107,
+      "title": "Scrooged",
+      "year": 1988,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 8,
+      "tmdbId": 108,
+      "title": "National Lampoon's Christmas Vacation",
+      "year": 1989,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 9,
+      "tmdbId": 109,
+      "title": "Home Alone",
+      "year": 1990,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 10,
+      "tmdbId": 110,
+      "title": "The Muppet Christmas Carol",
+      "year": 1992,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 11,
+      "tmdbId": 111,
+      "title": "The Nightmare Before Christmas",
+      "year": 1993,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 12,
+      "tmdbId": 112,
+      "title": "Elf",
+      "year": 2003,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 13,
+      "tmdbId": 113,
+      "title": "Love Actually",
+      "year": 2003,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    },
+    {
+      "filmId": 14,
+      "tmdbId": 114,
+      "title": "Arthur Christmas",
+      "year": 2011,
+      "posterUrl": null,
+      "reason": "KEYWORD"
+    }
+  ],
+  "added": [
+    {
+      "filmId": 4,
+      "tmdbId": 104,
+      "title": "Trading Places",
+      "year": 1983,
+      "posterUrl": null,
+      "reason": "ADDED"
+    }
+  ],
+  "leftOut": [
+    {
+      "filmId": 20,
+      "tmdbId": 120,
+      "title": "Iron Man 3",
+      "year": 2013,
+      "posterUrl": null,
+      "taggedByTmdb": true
+    },
+    {
+      "filmId": 21,
+      "tmdbId": 121,
+      "title": "Batman Returns",
+      "year": 1992,
+      "posterUrl": null,
+      "taggedByTmdb": true
+    },
+    {
+      "filmId": 22,
+      "tmdbId": 122,
+      "title": "Rare Exports",
+      "year": 2010,
+      "posterUrl": null,
+      "taggedByTmdb": false
+    }
+  ],
+  "fallsBack": false
+}

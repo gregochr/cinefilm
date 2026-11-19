@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Christmas films — Left out by me</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0E0C0A}
+*{box-sizing:border-box}
+a{color:#EDE6DA;text-decoration:none}
+.pg{background:#0E0C0A;color:#EDE6DA;font-family:Inter,system-ui,sans-serif;min-height:100vh;padding-bottom:64px}
+.hd{max-width:1360px;margin:0 auto;padding:24px 40px;display:flex;align-items:center;gap:32px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo span{font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:30px}
+.topnav{display:flex;gap:24px;font-size:14px;font-weight:500}
+.topnav a{color:#A39A8B;padding-bottom:4px}
+.gear{margin-left:auto;width:40px;height:40px;border-radius:999px;display:grid;place-items:center;border:1px solid #2A251F;color:#EDE6DA}
+.wrap{max-width:1360px;margin:0 auto;padding:8px 40px 0;display:grid;grid-template-columns:220px minmax(0,1fr);gap:48px}
+.rail{display:flex;flex-direction:column;gap:2px;position:sticky;top:24px;align-self:start}
+.rail h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:40px;margin:0 0 20px}
+.rail a{display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 14px;border-radius:8px;color:#A39A8B;font-size:15px;font-weight:500;border-left:2px solid transparent}
+.rail a[aria-current]{color:#EDE6DA;background:#15120F;border-left-color:#E8B25A;border-radius:0 8px 8px 0}
+.cnt{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#A39A8B;border:1px solid #2A251F;border-radius:999px;padding:1px 8px}
+.cnt.live{color:#EDE6DA}
+.rail .sub{font-size:12px;color:#6F675B;margin:18px 14px 0;line-height:1.5}
+.main{display:flex;flex-direction:column;gap:28px;min-width:0}
+.ttl{display:flex;align-items:baseline;gap:16px}
+.ttl h2{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:40px;margin:0}
+.muted{color:#A39A8B}
+.dim{color:#6F675B}
+.lead{font-size:15px;color:#D5CCBE;margin:-14px 0 0;max-width:720px;line-height:1.5}
+.card{background:#15120F;border:1px solid #2A251F;border-radius:12px}
+.ch{display:flex;align-items:center;gap:14px;padding:18px 22px;border-bottom:1px solid #2A251F}
+.ch h3{margin:0;font-size:17px;font-weight:600}
+.ch .why{font-size:13px;color:#A39A8B}
+.ch .sp{flex:1}
+.row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:16px;align-items:center;padding:14px 22px;border-top:1px solid #211D18}
+.row:first-of-type{border-top:0}
+.pst{width:44px;height:66px;border-radius:4px}
+.rt{font-size:15px;font-weight:500}
+.rt .y{color:#A39A8B;font-weight:400}
+.rm{font-size:13px;color:#A39A8B;margin-top:4px;line-height:1.45}
+.mono{font-family:'IBM Plex Mono',monospace}
+.acts{display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:480px}
+.btns{display:flex;gap:8px;flex-wrap:nowrap;justify-content:flex-end}
+.b{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border-radius:999px;border:1px solid #4A4339;background:#1A1713;color:#EDE6DA;font-size:14px;font-weight:500;white-space:nowrap;font-family:inherit}
+.b.q{border-color:transparent;background:transparent;color:#D5CCBE;padding:0 10px}
+.b.p{background:#E8B25A;border-color:#E8B25A;color:#1A1206;font-weight:600}
+.b.lg{height:44px;padding:0 20px;font-size:15px}
+.hint{font-size:12px;color:#8A8173;text-align:right;line-height:1.4}
+.foc{box-shadow:0 0 0 2px #0E0C0A,0 0 0 4px #EDE6DA}
+.more{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;border-top:1px solid #2A251F;font-size:14px}
+.more a{color:#D5CCBE}
+.pill{font-size:11px;letter-spacing:.1em;text-transform:uppercase;border:1px solid #4A4339;border-radius:999px;padding:2px 8px;color:#A39A8B}
+.ok{color:#9DBF8E}
+.err{color:#F0876A}
+.strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.st{padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.st .k{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#A39A8B}
+.st .v{font-size:15px}
+.st a.l{font-size:13px;color:#D5CCBE;margin-top:2px}
+.body{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
+.kv{display:grid;grid-template-columns:200px minmax(0,1fr);gap:8px 20px;font-size:14px}
+.kv dt{color:#A39A8B}.kv dd{margin:0}
+.tiles{display:flex;gap:28px;flex-wrap:wrap}
+.tile .n{font-family:'IBM Plex Mono',monospace;font-size:22px}
+.tile .t{font-size:12px;color:#A39A8B;margin-top:2px}
+.actline{display:flex;align-items:center;gap:16px;padding:16px 22px;border-top:1px solid #2A251F}
+.actline .hint{text-align:left}
+.tabs{display:flex;gap:8px;border-bottom:1px solid #2A251F}
+.tabs a{padding:12px 4px;margin-right:20px;font-size:15px;color:#A39A8B;font-weight:500;display:flex;gap:10px;align-items:center}
+.tabs a[aria-current]{color:#EDE6DA;border-bottom:1px solid #E8B25A}
+.note{font-size:13px;color:#A39A8B;line-height:1.5;padding:14px 22px;border-top:1px solid #2A251F}
+.seg{display:inline-flex;border:1px solid #2A251F;border-radius:999px;padding:3px}
+.seg a{font-size:13px;padding:5px 12px;border-radius:999px;color:#A39A8B}
+.seg a[aria-current]{background:#2A251F;color:#EDE6DA}
+.sw{width:40px;height:24px;border-radius:999px;background:#EDE6DA;position:relative;flex:none}
+.sw::after{content:'';position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#0E0C0A}
+.sw.off{background:#2A251F}.sw.off::after{left:3px;right:auto;background:#6F675B}
+.set{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:18px 22px;border-top:1px solid #211D18}
+.set:first-of-type{border-top:0}
+.set .lbl{font-size:15px;font-weight:500}
+.set .d{font-size:13px;color:#A39A8B;margin-top:4px;line-height:1.45;max-width:620px}
+.inp{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border:1px solid #4A4339;border-radius:8px;background:#1A1713;font-family:'IBM Plex Mono',monospace;font-size:14px}
+table.g{width:100%;border-collapse:collapse;font-size:14px}
+table.g th{text-align:left;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#A39A8B;font-weight:500;padding:12px 16px;border-bottom:1px solid #2A251F}
+table.g td{padding:12px 16px;border-top:1px solid #211D18;vertical-align:middle;line-height:1.45}
+table.g td.old{font-family:'IBM Plex Mono',monospace;color:#A39A8B;white-space:nowrap}
+table.g td.new{font-weight:500;white-space:nowrap}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#A39A8B}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#E8B25A;font-weight:600}
+.hgrp{display:flex;flex-direction:column;gap:6px}
+.hgrp h2{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:44px;margin:0;line-height:1}
+.rule{font-size:15px;color:#D5CCBE;margin:4px 0 0;line-height:1.5;max-width:760px}
+.status{padding:20px 22px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:28px;align-items:center}
+.status .big{font-size:18px;line-height:1.45}
+.status .sm{font-size:14px;color:#A39A8B;margin-top:6px;line-height:1.5}
+.slots{display:flex;flex-direction:column;gap:8px}
+.slotbar{display:grid;grid-template-columns:repeat(14,1fr);gap:3px}
+.slotbar i{height:8px;border-radius:2px;background:#E8B25A}
+.slotbar i.over{background:transparent;border:1px solid #4A4339}
+.slotbar i.empty{background:#2A251F}
+.slots .cap{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#A39A8B;display:flex;justify-content:space-between}
+.fetch{font-size:13px;color:#A39A8B;padding:12px 22px;border-top:1px solid #2A251F;display:flex;align-items:center;gap:10px}
+.fetch .bar{width:120px;height:4px;background:#2A251F;border-radius:2px;overflow:hidden}
+.fetch .bar i{display:block;height:100%;background:#E8B25A}
+.prev{padding:18px 22px 22px;display:flex;flex-direction:column;gap:14px;background:#0E0C0A;border-top:1px solid #2A251F;border-radius:0 0 12px 12px}
+.prev h4{margin:0;font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:28px}
+.prow{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px}
+.pp{aspect-ratio:2/3;border-radius:6px;position:relative;overflow:hidden;display:flex;align-items:flex-end;padding:6px}
+.pp span{font-size:10px;line-height:1.2;color:rgba(237,230,218,.86);font-weight:500}
+.ctl{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.segc{display:inline-flex;border:1px solid #2A251F;border-radius:999px;padding:3px;background:#15120F}
+.segc a{height:40px;display:flex;align-items:center;gap:8px;padding:0 16px;border-radius:999px;color:#A39A8B;font-size:14px;font-weight:500}
+.segc a[aria-current]{background:#2A251F;color:#EDE6DA}
+.segc .n{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#A39A8B}
+.search{margin-left:auto;position:relative;width:340px}
+.field{height:44px;border:1px solid #4A4339;border-radius:999px;background:#1A1713;display:flex;align-items:center;gap:10px;padding:0 16px;color:#A39A8B;font-size:14px}
+.field.on{color:#EDE6DA}
+.drop{position:absolute;right:0;top:52px;width:440px;background:#1A1713;border:1px solid #2A251F;border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.55);z-index:5;overflow:hidden}
+.drop .dh{font-size:12px;color:#A39A8B;padding:12px 16px;border-bottom:1px solid #2A251F}
+.dr{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid #211D18;min-height:64px}
+.dr:first-of-type{border-top:0}
+.dr .pst{width:36px;height:54px}
+.xr{display:grid;grid-template-columns:28px 40px minmax(0,1fr) auto auto;gap:16px;align-items:center;padding:10px 22px;border-top:1px solid #211D18;min-height:76px}
+.xr:first-of-type{border-top:0}
+.xr .num{font-family:'IBM Plex Mono',monospace;font-size:13px;color:#A39A8B;text-align:right}
+.xr .pst{width:40px;height:60px}
+.xr.cut{background:#120F0C}
+.xr.cut .num,.xr.cut .rt{color:#8A8173}
+.chip{font-size:12px;height:24px;display:inline-flex;align-items:center;padding:0 10px;border-radius:999px;border:1px solid #4A4339;color:#A39A8B;white-space:nowrap}
+.chip.me{border-color:rgba(237,230,218,.45);color:#EDE6DA}
+.chip.out{border-style:dashed}
+.chip.wait{border-color:transparent;background:#211C16;color:#A39A8B}
+.b.s{height:44px;min-width:104px;justify-content:center}
+.cutline{display:flex;align-items:center;gap:12px;padding:14px 22px;border-top:1px solid #2A251F;font-size:13px;color:#A39A8B;background:#120F0C}
+.cutline::before{content:'';flex:none;width:28px;height:1px;background:#4A4339}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:18px;padding:6px 6px 6px 20px;background:#1A1713;border:1px solid #4A4339;border-radius:999px;box-shadow:0 18px 40px rgba(0,0,0,.5);font-size:14px;z-index:9}
+.sk{background:#1A1713;border-radius:6px}
+.panel{min-height:520px;display:flex;flex-direction:column}
+.empty{padding:48px 40px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;max-width:560px}
+.empty h3{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:30px;margin:0}
+.empty p{margin:0;font-size:15px;color:#D5CCBE;line-height:1.55}
+.errb{background:#2A1712;border:1px solid #5A2A1E;border-radius:10px;padding:16px 18px;color:#F3B4A2;font-size:14px;line-height:1.5}
+.errb b{color:#F7CABB}
+.lbl2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#6F675B;margin-bottom:10px}
+</style>
+</helmet>
+<div class="pg" style="position:relative">
+  <header class="hd">
+    <a href="#" class="logo" aria-label="CineFilm — Home"><svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><path d="M50 14 H20 A10 10 0 0 0 10 24 V40 A10 10 0 0 0 20 50 H50" fill="none" stroke="#E8B25A" stroke-width="6.5" stroke-linecap="round"></path><circle cx="38" cy="32" r="6.5" fill="#E8B25A"></circle></svg><span>CineFilm</span></a>
+    <nav class="topnav"><a href="#">Home</a><a href="#">Library</a></nav>
+    <a href="#" class="gear" aria-label="Admin" aria-current="page"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
+  </header>
+  <div class="wrap">
+    <nav class="rail" aria-label="Admin sections" style="padding-top:28px"><a href="#">To do<span class="cnt">9</span></a><a href="#">Subtitles<span class="cnt">6</span></a><a href="#">Library</a><a href="#" aria-current="page">Christmas films</a><a href="#">Playback</a><a href="#">Settings</a></nav>
+    <main class="main"><div class="hgrp"><div class="eyebrow">Admin</div><h2>Christmas films</h2>
+<p class="rule">A film counts if TMDB tags it with the “christmas” keyword, unless you leave it out. You can also add any film yourself.</p></div><section class="card"><div class="status"><div><div class="big"><b>14 films</b> will show in Christmas week (Mon 14 Dec to Sun 20 Dec).</div>
+<div class="sm">Home shows up to 12, oldest first. Under 5 and it falls back to the usual weekly theme.</div></div>
+<div class="slots"><div class="slotbar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="over"></i><i class="over"></i></div><div class="cap"><span>12 places on Home</span><span>2 over</span></div></div></div><div class="fetch"><div class="bar"><i style="width:97%"></i></div>Keywords fetched for 1,374 of 1,412 films. The other 38 are on their way, so this list may still grow.</div></section><div class="ctl"><nav class="segc" aria-label="Show"><a href="#">In Christmas week <span class="n">14</span></a><a href="#">Added by me <span class="n">1</span></a><a href="#" aria-current="page">Left out by me <span class="n">3</span></a></nav><div class="search"><div class="field"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Add a film</div></div></div><section class="card"><div class="xr"><div></div><div class="pst" style="background:#3A2A24"></div><div><div class="rt">Lethal Weapon <span class="y">· 1987</span></div><div class="rm">TMDB tags it “christmas”. Put back and it shows again.</div></div><div><span class="chip out">Left out by me</span></div><button class="b s foc">Put back</button></div><div class="xr"><div></div><div class="pst" style="background:#2A2324"></div><div><div class="rt">Eyes Wide Shut <span class="y">· 1999</span></div><div class="rm">TMDB tags it “christmas”. Put back and it shows again.</div></div><div><span class="chip out">Left out by me</span></div><button class="b s">Put back</button></div><div class="xr"><div></div><div class="pst" style="background:#3D2620"></div><div><div class="rt">Iron Man 3 <span class="y">· 2013</span></div><div class="rm">TMDB tags it “christmas”. Put back and it shows again.</div></div><div><span class="chip out">Left out by me</span></div><button class="b s">Put back</button></div></section><div class="toast" role="status">Put back Lethal Weapon. It’ll show at Christmas.<button class="b s" style="min-width:88px">Undo</button></div></main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1050}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>
