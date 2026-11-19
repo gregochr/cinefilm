@@ -4,9 +4,15 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRanking;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.ToIntFunction;
+import java.util.stream.Collectors;
 
 /**
  * The rules of phase 3c-1 (forced-timing-reference-plan.md): which editions get a full English reference to measure
@@ -102,9 +108,34 @@ final class TimingReferenceRule {
     }
 
     /**
-     * The usable stored references among an edition's candidates ({@link #usable}), in candidate order. A reference
-     * that does not know where its last cue ends (stored before that was kept) is not usable here: this is for the
-     * playback path, which never parses cue text.
+     * The edition's references in order, whatever a stored one is (facts or a full row): first the stored ones among
+     * the candidates, in candidate order; then every other stored reference with {@value #FULL_LINES} or more lines,
+     * by OpenSubtitles file id. The others are full files the film once had downloaded for another purpose (the forced
+     * comparison); their frame rate is unknown, and that is accepted. Whether each is {@link #usable} is the caller's
+     * to say. The caller passes only the references stored for the film's current IMDb id.
+     *
+     * @param candidates the edition's candidates in order (empty when the film has no current full search)
+     * @param stored the film's stored references for its current IMDb id by OpenSubtitles file id
+     * @param cueCount a stored reference's cue count
+     * @param <T> the kind of stored reference
+     * @return the references in order
+     */
+    static <T> List<T> references(List<OpenSubtitlesResult> candidates, Map<Long, T> stored,
+                                  ToIntFunction<T> cueCount) {
+        Set<Long> candidateIds = candidates.stream().map(OpenSubtitlesResult::fileId)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<T> ordered = new ArrayList<>();
+        candidateIds.stream().map(stored::get).filter(Objects::nonNull).forEach(ordered::add);
+        stored.entrySet().stream().filter(e -> !candidateIds.contains(e.getKey())
+                && cueCount.applyAsInt(e.getValue()) >= FULL_LINES)
+            .sorted(Map.Entry.comparingByKey()).forEach(e -> ordered.add(e.getValue()));
+        return ordered;
+    }
+
+    /**
+     * The usable stored references of an edition ({@link #references}, then {@link #usable}), in that order. A
+     * reference that does not know where its last cue ends (stored before that was kept) is not usable here: this is
+     * for the playback path, which never parses cue text.
      *
      * @param candidates the edition's candidates in order
      * @param stored the film's stored references' facts for its current IMDb id by OpenSubtitles file id
@@ -115,8 +146,8 @@ final class TimingReferenceRule {
     static List<ReferenceFacts> usableReferences(List<OpenSubtitlesResult> candidates,
                                                  Map<Long, ReferenceFacts> stored, long runtimeMs,
                                                  Long creditsStartMs) {
-        return candidates.stream().map(c -> stored.get(c.fileId()))
-            .filter(r -> r != null && r.lastCueEndMs() != null
+        return references(candidates, stored, ReferenceFacts::cueCount).stream()
+            .filter(r -> r.lastCueEndMs() != null
                 && usable(r.cueCount(), r.lastCueEndMs(), runtimeMs, creditsStartMs)).toList();
     }
 

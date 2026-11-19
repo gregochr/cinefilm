@@ -180,6 +180,26 @@ class TimingReferenceRuleTest {
         assertThat(TimingReferenceRule.usableReferences(candidates, stored, 20_000L, null)).isEmpty();
     }
 
+    @Test
+    void referencesAreTheStoredCandidatesInCandidateOrderThenOtherStoredFullFilesByFileId() {
+        List<OpenSubtitlesResult> candidates = List.of(result(1003, false), result(1001, false), result(1002, false));
+        Map<Long, ReferenceFacts> stored = Map.of(1001L, facts(1001, 10, 90_000L), 1003L, facts(1003, 300, null),
+            1009L, facts(1009, 300, 90_000L), 1007L, facts(1007, 500, 90_000L), 1008L, facts(1008, 299, 90_000L));
+
+        assertThat(TimingReferenceRule.references(candidates, stored, ReferenceFacts::cueCount))
+            .extracting(ReferenceFacts::osFileId).containsExactly(1003L, 1001L, 1007L, 1009L);
+    }
+
+    @Test
+    void withNoCandidatesTheReferencesAreTheStoredFilesOfThreeHundredLinesOrMore() {
+        Map<Long, ReferenceFacts> stored = Map.of(1001L, facts(1001, 299, 90_000L), 1002L, facts(1002, 300, 90_000L));
+
+        assertThat(TimingReferenceRule.references(List.of(), stored, ReferenceFacts::cueCount))
+            .extracting(ReferenceFacts::osFileId).containsExactly(1002L);
+        assertThat(TimingReferenceRule.usableReferences(List.of(), stored, 90_000L, null))
+            .extracting(ReferenceFacts::osFileId).containsExactly(1002L);
+    }
+
     private static OpenSubtitlesReference reference(int cues, Long lastCueEndMs) {
         OpenSubtitlesReference reference = new OpenSubtitlesReference();
         reference.setCueCount(cues);

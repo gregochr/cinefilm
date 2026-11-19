@@ -3,6 +3,7 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
 import gregochr.cinefilm.film.FullNeedChoice;
@@ -10,6 +11,7 @@ import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.ForcedChoice.Source;
 import gregochr.cinefilm.subtitle.ForcedResolver.DownloadState;
@@ -126,29 +128,54 @@ public class TimingReferenceService {
         Map<Long, OsFullRef> candidates = new HashMap<>();
         films.findOpenSubtitlesFull().forEach(ref -> candidates.put(ref.id(), ref));
         Set<Long> filmIds = found.stream().map(q -> q.edition().getFilm().getId()).collect(Collectors.toSet());
-        filmIds.retainAll(candidates.keySet());
-        if (filmIds.isEmpty()) {
+        Set<Long> eligible = new HashSet<>(filmIds);
+        eligible.retainAll(candidates.keySet());
+        eligible.addAll(withStoredReference(found, candidates.keySet()));
+        if (eligible.isEmpty()) {
             return List.of();
         }
         Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm = new HashMap<>();
-        references.findByFilmIdIn(filmIds).forEach(r -> storedByFilm
+        references.findByFilmIdIn(eligible).forEach(r -> storedByFilm
             .computeIfAbsent(r.getFilmId(), k -> new HashMap<>())
             .computeIfAbsent(r.getImdbId(), k -> new HashMap<>()).put(r.getOsFileId(), r));
         List<Target> targets = new ArrayList<>();
         for (Qualified q : found) {
-            OsFullRef ref = candidates.get(q.edition().getFilm().getId());
-            if (ref != null) {
-                targets.add(target(q, ref, storedByFilm.getOrDefault(ref.id(), Map.of())
-                    .getOrDefault(ref.imdbId(), Map.of())));
+            Film film = q.edition().getFilm();
+            if (!eligible.contains(film.getId())) {
+                continue;
             }
+            OsFullRef ref = candidates.get(film.getId());
+            // No current full search: the candidates are empty, and the stored full files are all there is.
+            OsFullRef used = ref != null ? ref : new OsFullRef(film.getId(), film.getImdbId(), null);
+            targets.add(target(q, used, storedByFilm.getOrDefault(used.id(), Map.of())
+                .getOrDefault(used.imdbId(), Map.of())));
         }
         return targets;
     }
 
+    /**
+     * The qualified editions' films with no current full candidates that still have a stored reference of 300 lines or
+     * more under their current IMDb id (the facts only, no cue text): they are measured against it, with nothing to
+     * fetch.
+     */
+    private Set<Long> withStoredReference(List<Qualified> found, Set<Long> searched) {
+        Map<Long, String> imdbIds = new HashMap<>();
+        found.forEach(q -> imdbIds.put(q.edition().getFilm().getId(), q.edition().getFilm().getImdbId()));
+        imdbIds.keySet().removeAll(searched);
+        if (imdbIds.isEmpty()) {
+            return Set.of();
+        }
+        return references.findFactsByFilmIdIn(imdbIds.keySet()).stream()
+            .filter(r -> r.cueCount() >= TimingReferenceRule.FULL_LINES && r.imdbId().equals(imdbIds.get(r.filmId())))
+            .map(ReferenceFacts::filmId).collect(Collectors.toSet());
+    }
+
     private Target target(Qualified q, OsFullRef ref, Map<Long, OpenSubtitlesReference> stored) {
         Edition edition = q.edition();
-        List<OpenSubtitlesResult> all = OpenSubtitlesResult.listFromJson(ref.osFullCandidates());
-        List<OpenSubtitlesResult> ranked = TimingReferenceRule.candidates(ref.osFullCandidates(), edition.getName());
+        List<OpenSubtitlesResult> all = ref.osFullCandidates() == null ? List.of()
+            : OpenSubtitlesResult.listFromJson(ref.osFullCandidates());
+        List<OpenSubtitlesResult> ranked = ref.osFullCandidates() == null ? List.of()
+            : TimingReferenceRule.candidates(ref.osFullCandidates(), edition.getName());
         Set<Long> currentIds = all.stream().map(OpenSubtitlesResult::fileId).collect(Collectors.toSet());
         int kept = (int) stored.keySet().stream().filter(currentIds::contains).count();
         return new Target(ref.id(), edition.getId(), edition.getName(), ref.imdbId(), edition.getRuntimeMs(),

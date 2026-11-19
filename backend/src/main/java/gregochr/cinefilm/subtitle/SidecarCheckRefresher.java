@@ -204,6 +204,8 @@ public class SidecarCheckRefresher {
         try {
             Instant blockedUntil = budget.blockedUntil(clock.instant());
             if (blockedUntil != null) {
+                // The limit stops fetching, not measuring: stored references cost nothing to read.
+                measureTimingReferences(false);
                 LOG.info("Subtitle file checks wait: OpenSubtitles' download limit is reached until {}", blockedUntil);
                 return;
             }

@@ -23,6 +23,7 @@ import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.ForcedChoice.Decision;
 import gregochr.cinefilm.subtitle.ForcedChoice.Source;
@@ -331,6 +332,35 @@ class TimingReferenceServiceTest {
         when(films.findOpenSubtitlesFull()).thenReturn(List.of());
 
         assertThat(service.filmIds()).containsExactly(1L);
+        assertThat(service.targets()).isEmpty();
+    }
+
+    private static ReferenceFacts facts(long fileId, String imdbId, int cues) {
+        return new ReferenceFacts(fileId, 1L, imdbId, fileId, null, cues, 90_000L);
+    }
+
+    @Test
+    void aFilmNeverSearchedButWithAStoredFullFileUnderItsImdbIdIsATargetWithNoCandidates() {
+        qualifying(List.of(sidecar(5, 10L, 20, false)), List.of());
+        when(films.findOpenSubtitlesFull()).thenReturn(List.of());
+        when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(List.of(facts(1_001, IMDB, 300)));
+        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored(1_001), stored(1_002)));
+
+        assertThat(service.targets()).singleElement().satisfies(target -> {
+            assertThat(target.candidates()).isEmpty();
+            assertThat(target.imdbId()).isEqualTo(IMDB);
+            assertThat(target.referencesKept()).isZero();
+            assertThat(target.stored()).containsOnlyKeys(1_001L, 1_002L);
+        });
+    }
+
+    @Test
+    void aStoredFileUnder300LinesOrUnderAnotherImdbIdDoesNotMakeAFilmWithNoCandidatesATarget() {
+        qualifying(List.of(sidecar(5, 10L, 20, false)), List.of());
+        when(films.findOpenSubtitlesFull()).thenReturn(List.of());
+        when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(List.of(facts(1_001, IMDB, 299),
+            facts(1_002, "tt0000002", 400)));
+
         assertThat(service.targets()).isEmpty();
     }
 

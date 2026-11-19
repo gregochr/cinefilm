@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ch.qos.logback.classic.Level;
@@ -225,12 +226,28 @@ class SidecarCheckRefresherTimingReferenceTest {
     }
 
     @Test
-    void whileOpenSubtitlesLimitHoldsNothingIsFetchedOrMeasured() {
+    void whileOpenSubtitlesLimitHoldsStoredReferencesAreMeasuredAndNothingIsFetched() {
         when(budget.blockedUntil(NOW)).thenReturn(Instant.parse("2024-04-01T02:00:00Z"));
+        when(timingReference.targets()).thenReturn(List.of(target(false), target(2L, true)));
 
         startAndRun();
 
-        verify(timingReference, never()).targets();
+        verify(api, never()).download(5012L);
+        verify(budget, never()).take(DAY, CHECK_LIMIT);
+        assertThat(messages()).hasSize(2);
+        assertThat(messages().get(0)).startsWith("Forced timing reference of edition 20 (film 2): OWNER file 7");
+        assertThat(messages().get(1)).isEqualTo("Subtitle file checks wait: OpenSubtitles' download limit is reached "
+            + "until 2024-04-01T02:00:00Z");
+    }
+
+    @Test
+    void whileOpenSubtitlesLimitHoldsNoOtherCheckRuns() {
+        when(budget.blockedUntil(NOW)).thenReturn(Instant.parse("2024-04-01T02:00:00Z"));
+        when(timingReference.targets()).thenReturn(List.of());
+
+        startAndRun();
+
+        verifyNoInteractions(service, fullFit);
         assertThat(messages()).containsExactly("Subtitle file checks wait: OpenSubtitles' download limit is reached "
             + "until 2024-04-01T02:00:00Z");
     }

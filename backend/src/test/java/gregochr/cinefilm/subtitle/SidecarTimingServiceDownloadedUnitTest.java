@@ -206,9 +206,10 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
-    void aFileThatIsNotUsableOrWasFetchedForAnotherImdbIdOrIsNotACandidateIsNotFittedTo() {
+    void aFileThatIsNotUsableOrWasFetchedForAnotherImdbIdOrHasUnder300LinesIsNotFittedTo() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
-        stored(reference(5012, 299, IMDB), reference(5013, 300, "tt0000002"), reference(9999, 300, IMDB));
+        stored(reference(5012, 299, IMDB), reference(5013, 300, "tt0000002"), reference(9999, 299, IMDB),
+            reference(9998, 300, "tt0000002"));
 
         FitJob job = onlyJob();
 
@@ -404,14 +405,80 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
-    void aFileThatAlreadyKnowsItsLastCueEndOrIsNotACandidateIsNeitherDueNorFilledIn() {
+    void aFileThatAlreadyKnowsItsLastCueEndOrHasUnder300LinesIsNeitherDueNorFilledIn() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         currentFit();
         when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(BASE_KEY + "|os:" + IMDB + ":5012")));
-        stored(reference(5012, 300, IMDB), storedBeforeV30(9999));
+        OpenSubtitlesReference short299 = storedBeforeV30(9999);
+        short299.setCueCount(299);
+        stored(reference(5012, 300, IMDB), short299);
 
         assertThat(service.dueFilmIds()).isEmpty();
         assertThat(lockedService().backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
+    }
+
+    @Test
+    void aFilmWhoseOnlyStoredFullFileIsNotACandidateIsFittedToItAndTheKeyNamesIt() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(reference(9999, 300, IMDB));
+
+        FitJob job = onlyJob(9999L);
+
+        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(9999L);
+        assertThat(job.osReferences().get(0).release()).isEqualTo("Release 9999");
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":9999");
+    }
+
+    @Test
+    void aFilmNeverSearchedForFullSubtitlesIsFittedToItsStoredFullFile() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        edition.getFilm().setOsFullCandidates(null);
+        edition.getFilm().setOsFullSearchedImdbId(null);
+        stored(reference(9999, 300, IMDB));
+
+        FitJob job = onlyJob(9999L);
+
+        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(9999L);
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":9999");
+    }
+
+    @Test
+    void aSearchUnderAnotherImdbIdGivesNoCandidatesButTheStoredFileUnderTheCurrentOneStillCounts() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        edition.getFilm().setOsFullSearchedImdbId("tt0000002");
+        stored(reference(5012, 300, IMDB));
+
+        FitJob job = onlyJob(5012L);
+
+        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
+    }
+
+    @Test
+    void candidateFilesComeBeforeOtherStoredFilesWhateverTheirIds() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        edition.getFilm().setOsFullCandidates(OpenSubtitlesResult.listToJson(List.of(candidate(5013))));
+        stored(reference(4000, 300, IMDB), reference(5013, 300, IMDB), reference(3000, 300, IMDB));
+
+        FitJob job = onlyJob(5013L, 3000L, 4000L);
+
+        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId)
+            .containsExactly(5013L, 3000L, 4000L);
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":3000,4000,5013");
+    }
+
+    @Test
+    void aStoredFileThatIsNotACandidateIsFilledInWhenItDoesNotKnowItsLastCueEnd() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference old = storedBeforeV30(9999);
+        when(references.findFactsByFilmIdIn(Set.of(1L))).thenAnswer(call -> List.of(factsOf(old)));
+        when(references.findAllById(Set.of(9999L))).thenReturn(List.of(old));
+        served();
+
+        SaveOutcome outcome = service.backfillLastCueEnds(1L);
+
+        assertThat(outcome).isEqualTo(SaveOutcome.SAVED);
+        assertThat(old.getLastCueEndMs()).isEqualTo(300 * 10_000L + 1_000);
+        verify(references).save(old);
     }
 
     @Test

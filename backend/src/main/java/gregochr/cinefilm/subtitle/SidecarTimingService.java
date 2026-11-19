@@ -545,9 +545,10 @@ public class SidecarTimingService {
 
     /**
      * For each served edition the timing check fits to OpenSubtitles files (a single file whose embedded read found no
-     * English track, of a film searched for full subtitles under its current IMDb id that the owner has not marked
-     * {@code NONE_EXIST}, as {@link TimingReferenceService} does), the usable stored files among
-     * its candidates: the same selection as {@link TimingReferenceService}, through {@link TimingReferenceRule} and
+     * English track, of a film the owner has not marked {@code NONE_EXIST}, as {@link TimingReferenceService} does),
+     * the usable stored files: the candidates' first, then any other stored full file of the film under its current
+     * IMDb id (a film with no current full search has no candidates). The same selection as
+     * {@link TimingReferenceService}, through {@link TimingReferenceRule} and
      * {@link CreditsStarts}. This runs on the playback path ({@link #current}), so it reads facts only (no cue text,
      * nothing parsed) and the credits of all those editions in one query; a reference with no kept last-cue end is not
      * usable until {@link #backfillLastCueEnds} fills it in.
@@ -559,7 +560,6 @@ public class SidecarTimingService {
             Film film = e.getFilm();
             List<MediaFile> parts = e.originalParts();
             if (parts.size() == 1 && e.getRuntimeMs() > 0 && film.getImdbId() != null
-                && film.getOsFullCandidates() != null && film.getImdbId().equals(film.getOsFullSearchedImdbId())
                 && isRead(parts.get(0), reads)
                 && reads.get(parts.get(0).getId()).getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE) {
                 wanted.putIfAbsent(e.getId(), e);
@@ -585,12 +585,15 @@ public class SidecarTimingService {
             Map<Long, ReferenceFacts> stored = new HashMap<>();
             storedByFilm.getOrDefault(film.getId(), List.of()).stream()
                 .filter(r -> film.getImdbId().equals(r.imdbId())).forEach(r -> stored.put(r.osFileId(), r));
-            List<OpenSubtitlesResult> candidates = TimingReferenceRule.candidates(film.getOsFullCandidates(),
-                e.getName());
+            // Candidates only from a search of the current IMDb id; with none, stored full files are all there is.
+            boolean searched = film.getOsFullCandidates() != null
+                && film.getImdbId().equals(film.getOsFullSearchedImdbId());
+            List<OpenSubtitlesResult> candidates = searched
+                ? TimingReferenceRule.candidates(film.getOsFullCandidates(), e.getName()) : List.of();
             List<ReferenceFacts> usable = TimingReferenceRule.usableReferences(candidates, stored, e.getRuntimeMs(),
                 creditsStarts.get(e.getId()));
-            Set<Long> unfilled = candidates.stream().map(c -> stored.get(c.fileId())).filter(
-                r -> r != null && r.lastCueEndMs() == null && r.cueCount() >= TimingReferenceRule.FULL_LINES)
+            Set<Long> unfilled = TimingReferenceRule.references(candidates, stored, ReferenceFacts::cueCount).stream()
+                .filter(r -> r.lastCueEndMs() == null && r.cueCount() >= TimingReferenceRule.FULL_LINES)
                 .map(ReferenceFacts::id).collect(Collectors.toSet());
             if (!usable.isEmpty() || !unfilled.isEmpty()) {
                 found.put(e.getId(), new OsRefs(film.getImdbId(), usable, unfilled));

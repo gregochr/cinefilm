@@ -182,6 +182,34 @@ class TimingReferenceFetchTest {
     }
 
     @Test
+    void aStoredFullFileThatIsNotACandidateIsMeasuredAfterTheCandidatesAndNothingIsFetchedForIt() {
+        OpenSubtitlesReference extra = stored(4000, full(300));
+        extra.setRelease("Extra.2008");
+        OpenSubtitlesReference tooShort = stored(3000, full(299));
+        when(service.targets()).thenReturn(List.of(target(1, List.of(candidate(5012)),
+            Map.of(4000L, extra, 3000L, tooShort, 5012L, stored(5012, full(300))))));
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(2);
+        assertThat(lines(Level.INFO)).hasSize(2);
+        assertThat(lines(Level.INFO).get(0)).contains("against OpenSubtitles file 5012 (\"Release 5012\"");
+        assertThat(lines(Level.INFO).get(1)).contains("against OpenSubtitles file 4000 (\"Extra.2008\", fps unknown, "
+            + "hearing-impaired unknown, 300 lines); ALIGNED at -2000 ms");
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void aFilmWithNoCandidatesAtAllIsMeasuredAgainstItsStoredFullFile() {
+        when(service.targets()).thenReturn(List.of(target(1, List.of(), Map.of(4000L, stored(4000, full(300))))));
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(1);
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
     void aStoredUsableMatchingReferenceIsMeasuredWithNoFetchAndTheLineHoldsEveryFact() {
         OpenSubtitlesResult impaired = new OpenSubtitlesResult(4012, 5012, "Film.2008.HI", 23.976, 10, true, true,
             null, null);
