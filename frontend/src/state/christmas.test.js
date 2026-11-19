@@ -114,6 +114,22 @@ describe('rows', () => {
     });
   });
 
+  it('undoes a Leave out to INCLUDE when another film sharing the TMDB id was included by the owner', () => {
+    const tagged = { reason: 'KEYWORD', tmdbId: 104, title: 'A' };
+    const untagged = { reason: 'ADDED', tmdbId: 104, title: 'B' };
+    expect(rowAction(tagged, [untagged])).toMatchObject({
+      label: 'Leave out',
+      choice: 'EXCLUDE',
+      previous: 'INCLUDE',
+    });
+    // A different TMDB id in Added, or none, leaves the previous choice empty.
+    expect(rowAction(tagged, [{ ...untagged, tmdbId: 105 }]).previous).toBeNull();
+    expect(rowAction(tagged, []).previous).toBeNull();
+    // Remove and Put back do not depend on the Added list.
+    expect(rowAction(untagged, [untagged]).previous).toBe('INCLUDE');
+    expect(rowAction({ title: 'C', tmdbId: 104 }, [untagged]).previous).toBe('EXCLUDE');
+  });
+
   it('chips each kind', () => {
     expect(chipFor(keyword)).toEqual({ label: 'TMDB keyword', variant: 'keyword' });
     expect(chipFor(added)).toEqual({ label: 'Added by me', variant: 'added' });

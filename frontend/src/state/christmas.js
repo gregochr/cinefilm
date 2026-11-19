@@ -59,8 +59,19 @@ const ACTIONS = {
   leftOut: { label: 'Put back', choice: null, previous: 'EXCLUDE', toast: 'putback' },
 };
 
-/** The one action a row offers: its label, the choice to send, the choice Undo sends back, and the toast kind. */
-export const rowAction = (row) => ACTIONS[rowKind(row)];
+/**
+ * The one action a row offers: its label, the choice to send, the choice Undo sends back, and the toast kind.
+ * `added` is the screen's Added list. Two library films can share a TMDB id (a keyword-tagged film and an untagged one
+ * the owner included); the server keeps the one INCLUDE row for the untagged one, so leaving the tagged one out
+ * replaces that INCLUDE and an Undo must restore it, not delete the choice. The previous choice therefore comes from
+ * the data for that TMDB id, not from the clicked row's reason alone.
+ */
+export function rowAction(row, added = []) {
+  const action = ACTIONS[rowKind(row)];
+  if (action.toast !== 'leave') return action;
+  const included = added.some((film) => film.tmdbId === row.tmdbId);
+  return included ? { ...action, previous: 'INCLUDE' } : action;
+}
 
 /** The toast kind that says the opposite (after an Undo). */
 export const INVERSE_TOAST = { leave: 'putback', putback: 'leave', add: 'remove', remove: 'add' };
