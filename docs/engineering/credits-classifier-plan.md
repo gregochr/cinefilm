@@ -265,8 +265,8 @@ path:
 - **Thresholds keep a safety margin:** the earliest out-of-fold error must be at least −5 s. Offline it is scored
   at `t − 5 s` ("How a film is scored"), so it amounts to `t ≥ target` on every development film the evaluation scores `FOUND`.
   The calibration ranks this margin first (L3c's ranking, levels 1–2), so it always makes a choice. A choice that
-  misses the margin on any development film is not shipped: it is reported to the owner with the L5 report, and
-  the owner decides.
+  misses the margin on any development film is not shipped without the owner's decision: it is reported with the
+  L5 report.
 
 ## Frames: the dataset job (L2)
 
@@ -489,14 +489,14 @@ as film.
 7. **Reasons text:** `Credits model v1 (A|B): credits from 2:18:47, <opening> (margin 41.2, min p 0.97 over 15 s)`.
    The margin shown is the raw `S(t, u*)` that the margin band uses.
 
-**Calibration.** `λ`, `δ`, `G`, `σ`, `θ` and `θ_d` are chosen together in cross-validation: first meet the −5 s
-margin (scored at `t − 5 s`, so it constrains the coarse step only), then maximise the ±10 s share (where `θ_d`
-acts, through the simulated `f`).
+**Calibration.** `λ`, `δ`, `G`, `σ`, `θ` and `θ_d` are chosen together by L3c's nested selection ("Calibration and
+nested selection"), ranked by: fewer `FOUND` films early by more than 15 s, then by more than 5 s (scored at
+`t − 5 s`, so it constrains the coarse step only), then fewer negative violations, then the larger ±10 s share
+(where `θ_d` acts, through the simulated `f`).
 
-- **Negatives come from real films.** Each labelled film's window is cut off at the target start − 5 s, and that
-  must give `NOT_FOUND` or `UNSURE`.
-- For each film, the best film-only stretch score (stretches ending at or before start − 5 s) must sit below `σ`,
-  with margin.
+- **Negatives come from real films.** Each labelled film's window is cut off at the target start − 5 s. The film
+  is a violation when the best film-only stretch score there (stretches ending before start − 5 s) is `≥ 0.8σ`,
+  which also covers a `FOUND` on the cut window.
 - Negatives follow the same folds.
 
 **Epilogue cards** that Plex itself counts as credits can't be seen by the Plex gate. The development films whose
@@ -1373,7 +1373,8 @@ a grid point together, so both are chosen by the nested rule.
   7. the run given first on the command line.
 
   The margin is a ranking, not a hard rule, so a choice always exists. Each choice records its counts, and a choice
-  whose count 1 or 2 is not zero is reported to the owner with the L5 report.
+  whose count 1 or 2 is not zero is reported to the owner with the L5 report; such a `final` choice is not shipped
+  without the owner's decision.
 - **Which predictions score which film** (`π` of an ensemble: `logitPi` is the mean of its models' `base`):
   - **Outer fold `k`:** the choice is made on the development films outside `k`. A film of fold `j` is scored by the
     mean of the three triple models `{k, j, m}` (each trained on the other two folds). Fold `k`'s films are then
