@@ -27,13 +27,33 @@ final class TinyOnnx {
      * @return a serialised ONNX ModelProto
      */
     static byte[] bytes() {
+        return model(false);
+    }
+
+    /**
+     * The same model with a {@code Cast} node (to DOUBLE, ONNX type 11) after the mean, so the output is a double
+     * tensor. For the test that an encoder refuses a non-float output; written to a temporary file, never committed.
+     *
+     * @return a serialised ONNX ModelProto
+     */
+    static byte[] doubleOutputBytes() {
+        return model(true);
+    }
+
+    private static byte[] model(boolean cast) {
         byte[] axes = concat(string(1, "axes"), varint(20, 7), varint(8, 2), varint(8, 3));
         byte[] keepdims = concat(string(1, "keepdims"), varint(20, 2), varint(3, 0));
-        byte[] node = concat(string(1, "pixel_values"), string(2, "image_embeds"), string(3, "mean"),
-            string(4, "ReduceMean"), message(5, axes), message(5, keepdims));
-        byte[] input = valueInfo("pixel_values", dimParam("N"), dimValue(3), dimValue(224), dimValue(224));
-        byte[] output = valueInfo("image_embeds", dimParam("N"), dimValue(3));
-        byte[] graph = concat(message(1, node), string(2, "tiny-encoder"), message(11, input), message(12, output));
+        byte[] mean = concat(string(1, "pixel_values"), string(2, cast ? "mean_float" : "image_embeds"),
+            string(3, "mean"), string(4, "ReduceMean"), message(5, axes), message(5, keepdims));
+        byte[] nodes = message(1, mean);
+        if (cast) {
+            byte[] to = concat(string(1, "to"), varint(20, 2), varint(3, 11));
+            nodes = concat(nodes, message(1, concat(string(1, "mean_float"), string(2, "image_embeds"),
+                string(3, "cast"), string(4, "Cast"), message(5, to))));
+        }
+        byte[] input = valueInfo("pixel_values", 1, dimParam("N"), dimValue(3), dimValue(224), dimValue(224));
+        byte[] output = valueInfo("image_embeds", cast ? 11 : 1, dimParam("N"), dimValue(3));
+        byte[] graph = concat(nodes, string(2, "tiny-encoder"), message(11, input), message(12, output));
         byte[] opset = varint(2, 13);
         return concat(varint(1, 7), string(2, "cinefilm-test"), message(7, graph), message(8, opset));
     }
@@ -48,12 +68,12 @@ final class TinyOnnx {
         Files.write(Path.of(args[0]), bytes());
     }
 
-    private static byte[] valueInfo(String name, byte[]... dims) {
+    private static byte[] valueInfo(String name, int elemType, byte[]... dims) {
         byte[] shape = new byte[0];
         for (byte[] dim : dims) {
             shape = concat(shape, message(1, dim));
         }
-        byte[] tensorType = concat(varint(1, 1), message(2, shape));
+        byte[] tensorType = concat(varint(1, elemType), message(2, shape));
         return concat(string(1, name), message(2, message(1, tensorType)));
     }
 

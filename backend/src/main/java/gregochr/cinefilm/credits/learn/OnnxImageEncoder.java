@@ -1,5 +1,6 @@
 package gregochr.cinefilm.credits.learn;
 
+import ai.onnxruntime.OnnxJavaType;
 import ai.onnxruntime.OnnxTensor;
 import ai.onnxruntime.OnnxValue;
 import ai.onnxruntime.OrtEnvironment;
@@ -11,6 +12,8 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * An {@link ImageEncoder} over ONNX Runtime. It holds nothing but the session: one intra-op thread, one inter-op
@@ -19,6 +22,8 @@ import java.util.Map;
  * tested on Linux only (CI) and is the one class the local per-class coverage floor excludes.
  */
 final class OnnxImageEncoder implements ImageEncoder {
+
+    private static final Logger LOG = LoggerFactory.getLogger(OnnxImageEncoder.class);
 
     private final EncoderSpec spec;
     private final OrtEnvironment environment;
@@ -63,6 +68,9 @@ final class OnnxImageEncoder implements ImageEncoder {
                 || !Arrays.equals(out.getInfo().getShape(), new long[] {n, spec.dimension()})) {
                 throw new IllegalStateException("the output is not a [" + n + ", " + spec.dimension() + "] tensor");
             }
+            if (out.getInfo().type != OnnxJavaType.FLOAT) {
+                throw new IllegalStateException("the output is " + out.getInfo().type + ", not FLOAT");
+            }
             FloatBuffer flat = out.getFloatBuffer();
             float[][] rows = new float[n][spec.dimension()];
             for (float[] row : rows) {
@@ -84,7 +92,7 @@ final class OnnxImageEncoder implements ImageEncoder {
         try {
             session.close();
         } catch (OrtException e) {
-            throw new IllegalStateException("cannot close the session: " + e.getMessage(), e);
+            LOG.warn("cannot close the ONNX session of {}: {}", spec.file(), e.getMessage());
         }
     }
 }

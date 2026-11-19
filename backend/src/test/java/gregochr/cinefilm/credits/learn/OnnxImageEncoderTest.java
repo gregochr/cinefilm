@@ -1,15 +1,20 @@
 package gregochr.cinefilm.credits.learn;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
+import ai.onnxruntime.OrtException;
 import gregochr.cinefilm.credits.RgbFrame;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Runs on Linux only: ONNX Runtime 1.30 and later ship no macOS x86-64 natives, so the library cannot load on the
@@ -123,5 +128,45 @@ class OnnxImageEncoderTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("the output holds a NaN or infinite value");
         }
+    }
+
+    @Test
+    void aShapeTheModelRejectsIsAnEncoderFailureWithTheLibrarysCause() throws IOException {
+        EncoderSpec real = fixture();
+        EncoderSpec spec = new EncoderSpec(real.name(), real.file(), real.sha256(), real.input(), real.output(), 2,
+            real.mean(), real.std(), 3);
+
+        try (OnnxImageEncoder encoder = new OnnxImageEncoder(spec, TinyFixture.dir())) {
+            List<RgbFrame> frames = List.of(new RgbFrame(2, 2, new byte[12]));
+
+            assertThatThrownBy(() -> encoder.encode(frames))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageStartingWith("the encoder failed: ")
+                .hasCauseInstanceOf(OrtException.class);
+        }
+    }
+
+    @Test
+    void aNonFloatOutputIsRefused(@TempDir Path dir) throws IOException {
+        Files.write(dir.resolve("tiny.onnx"), TinyOnnx.doubleOutputBytes());
+        Files.copy(TinyFixture.dir().resolve("encoder.json"), dir.resolve("encoder.json"));
+        EncoderSpec spec = fixture();
+
+        try (OnnxImageEncoder encoder = new OnnxImageEncoder(spec, dir)) {
+            List<RgbFrame> frames = List.of(solid(1, 2, 3));
+
+            assertThatThrownBy(() -> encoder.encode(frames))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("the output is DOUBLE, not FLOAT");
+        }
+    }
+
+    @Test
+    void closingTwiceThrowsNothing() throws IOException {
+        OnnxImageEncoder encoder = new OnnxImageEncoder(fixture(), TinyFixture.dir());
+
+        encoder.close();
+
+        assertThatCode(encoder::close).doesNotThrowAnyException();
     }
 }
