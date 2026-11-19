@@ -70,7 +70,7 @@ final class FeatureRunReader {
 
             @Override
             public void row(String kind, long offset, List<String> fields, String where) {
-                add(films.getLast(), kind, offset, CreditsTrainJob.features(fields, where));
+                add(films.getLast(), kind, offset, TrainRows.features(fields, where));
             }
         });
         return films;
@@ -96,7 +96,7 @@ final class FeatureRunReader {
 
     private static void scan(Path features, boolean look, Visitor visitor) throws IOException {
         try (BufferedReader reader = Files.newBufferedReader(features)) {
-            if (!FeatureRows.COLUMNS.equals(CreditsTrainJob.fields(reader.readLine()))) {
+            if (!FeatureRows.COLUMNS.equals(TrainRows.fields(reader.readLine()))) {
                 throw new IllegalArgumentException("features.csv does not start with the features header");
             }
             long[] previous = null;
@@ -108,7 +108,7 @@ final class FeatureRunReader {
             int number = 1;
             while ((line = reader.readLine()) != null) {
                 number++;
-                List<String> row = CreditsTrainJob.fields(line);
+                List<String> row = TrainRows.fields(line);
                 if (row.isEmpty()) {
                     continue;
                 }
@@ -119,7 +119,7 @@ final class FeatureRunReader {
                 }
                 Side side = side(row.get(2), look, where);
                 Integer fold = fold(row.get(1), side, where);
-                previous = CreditsTrainJob.checkOrder(row, previous, where);
+                previous = TrainRows.checkOrder(row, previous, where);
                 if (!any || film != previous[0]) {
                     visitor.film(previous[0], side, fold);
                     film = previous[0];
@@ -157,7 +157,7 @@ final class FeatureRunReader {
             throw new IllegalArgumentException(where + "a development row with no fold is refused; nothing was "
                 + "written");
         }
-        long fold = CreditsTrainJob.number(text, "fold", where);
+        long fold = TrainRows.number(text, "fold", where);
         if (fold < 0 || fold >= CreditsTrainJob.FOLDS) {
             throw new IllegalArgumentException(where + "fold must be 0 to " + (CreditsTrainJob.FOLDS - 1) + ": "
                 + fold);
