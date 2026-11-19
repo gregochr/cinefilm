@@ -118,6 +118,28 @@ class LibraryLockTest {
     }
 
     @Test
+    void aScanCannotStartWhileChristmasFilmsAreBeingChangedAndSaysSo() {
+        lock.tryAcquire(LibraryLock.CHRISTMAS);
+        ScanService scans = scans();
+
+        assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
+            .hasMessage("Christmas films are being changed");
+
+        assertThat(queued).isEmpty();
+        assertThat(lock.heldBy(LibraryLock.CHRISTMAS)).isTrue();
+    }
+
+    @Test
+    void aScanRefusedByAHolderItDoesNotKnowGetsTheNeutralLineNotTheMatchWording() {
+        lock.tryAcquire("a future holder");
+        ScanService scans = scans();
+
+        assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
+            .hasMessage("The library is busy; try again in a moment");
+        assertThat(queued).isEmpty();
+    }
+
+    @Test
     void aScanCannotStartWhileEditionsAreBeingEditedAndSaysSo() {
         lock.tryAcquire(LibraryLock.EDIT);
         ScanService scans = scans();
@@ -177,6 +199,8 @@ class LibraryLockTest {
             .isEqualTo("Credits are being saved; try again in a moment");
         assertThat(busyTextWhenHeldBy(LibraryLock.PLEX_CREDITS))
             .isEqualTo("Plex credits are being imported; try again in a moment");
+        assertThat(busyTextWhenHeldBy(LibraryLock.CHRISTMAS))
+            .isEqualTo("Christmas films are being changed; try again in a moment");
     }
 
     @Test

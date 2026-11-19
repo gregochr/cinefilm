@@ -108,7 +108,10 @@ public class ScanService {
                 : lock.heldBy(LibraryLock.CREDITS) ? new ScanAlreadyRunningException("Credits are being saved")
                 : lock.heldBy(LibraryLock.PLEX_CREDITS)
                     ? new ScanAlreadyRunningException("Credits from Plex are being saved")
-                : new ScanAlreadyRunningException("A match is being fixed");
+                : lock.heldBy(LibraryLock.MATCH) ? new ScanAlreadyRunningException("A match is being fixed")
+                : lock.heldBy(LibraryLock.CHRISTMAS)
+                    ? new ScanAlreadyRunningException("Christmas films are being changed")
+                : new ScanAlreadyRunningException(lock.busyText());
         }
         progress.set(new Progress(0, 0, null));
         try {

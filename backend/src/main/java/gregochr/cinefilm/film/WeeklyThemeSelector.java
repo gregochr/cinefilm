@@ -24,6 +24,15 @@ public final class WeeklyThemeSelector {
     /** Maximum number of films shown in the row. */
     public static final int MAX_FILMS = 12;
 
+    /** TMDB's keyword that marks a Christmas film. */
+    public static final String CHRISTMAS_KEYWORD = "christmas";
+
+    /** The order films appear in a themed row: year (unknown last), then sort title, then id (a total order). */
+    public static final Comparator<Film> ROW_ORDER =
+        Comparator.comparing(Film::getYear, Comparator.nullsLast(Comparator.<Integer>naturalOrder()))
+            .thenComparing(Film::getSortTitle)
+            .thenComparing(Film::getId, Comparator.nullsLast(Comparator.<Long>naturalOrder()));
+
     private WeeklyThemeSelector() {
     }
 
@@ -59,6 +68,14 @@ public final class WeeklyThemeSelector {
             pick(library, chosen.matches));
     }
 
+    /**
+     * Every Christmas film of the library in the order Home shows them, with no cap: not excluded, and either included
+     * or tagged with TMDB's {@code christmas} keyword. Home's row is the first {@link #MAX_FILMS} of this list.
+     */
+    public static List<Film> christmasFilms(List<Film> library, Set<Long> include, Set<Long> exclude) {
+        return ordered(library, f -> isChristmas(f, include, exclude));
+    }
+
     private static WeeklyTheme holidayTheme(HolidayWeeks.Holiday holiday, List<Film> library,
                                             Set<Long> include, Set<Long> exclude) {
         return switch (holiday) {
@@ -75,16 +92,15 @@ public final class WeeklyThemeSelector {
         if (tmdbId != null && exclude.contains(tmdbId)) {
             return false;
         }
-        return tmdbId != null && include.contains(tmdbId) || film.getKeywords().contains("christmas");
+        return tmdbId != null && include.contains(tmdbId) || film.getKeywords().contains(CHRISTMAS_KEYWORD);
     }
 
     private static List<Film> pick(List<Film> library, Predicate<Film> matches) {
-        return library.stream()
-            .filter(matches)
-            .sorted(Comparator.comparing(Film::getYear, Comparator.nullsLast(Comparator.<Integer>naturalOrder()))
-                .thenComparing(Film::getSortTitle))
-            .limit(MAX_FILMS)
-            .toList();
+        return ordered(library, matches).stream().limit(MAX_FILMS).toList();
+    }
+
+    private static List<Film> ordered(List<Film> library, Predicate<Film> matches) {
+        return library.stream().filter(matches).sorted(ROW_ORDER).toList();
     }
 
     /** Candidates in a stable order: decades ascending, then genres A-Z, then directors A-Z. */
