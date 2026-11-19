@@ -95,6 +95,8 @@ export default function FixMatchPanel({ item, opener, onApplied, onClose }) {
   const base = useId();
   const titleId = `${base}-title`;
   const subId = `${base}-sub`;
+  // A film opened from somewhere that does not know its files (the Christmas search) has no file line.
+  const hasFiles = Array.isArray(item.files) && item.files.length > 0;
   const searchRef = useRef(null);
   // `useDialog.close` runs only its first `after`, so Cancel, ×, Esc and a successful apply close once, and the
   // buttons are disabled while `closing`. The report does not wait for the fade (which an unmount cancels).
@@ -120,14 +122,16 @@ export default function FixMatchPanel({ item, opener, onApplied, onClose }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={subId}
+        aria-describedby={hasFiles ? subId : undefined}
         className="ee__dialog fixmatch"
       >
         <header className="ee__header">
           <div className="ee__heading">
-            <span id={subId} className="ee__eyebrow admin__mono">
-              {fileLine(item.files, search.fileRuntimeMs)}
-            </span>
+            {hasFiles ? (
+              <span id={subId} className="ee__eyebrow admin__mono">
+                {fileLine(item.files, search.fileRuntimeMs)}
+              </span>
+            ) : null}
             <h2 id={titleId} className="ee__title">
               Fix match
             </h2>

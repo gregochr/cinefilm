@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_NONE_TEXT,
+  addResultRow,
+  resultState,
+  resultWrite,
   FAILED_CHANGE_TEXT,
   INVERSE_TOAST,
   SCAN_RUNNING_TEXT,
@@ -259,5 +262,99 @@ describe('keywords', () => {
     expect(emptyKind(body({ ...none, leftOut: films(1) }))).toBeNull();
     expect(emptyKind(body({ ...none, inWeek: films(1) }))).toBeNull();
     expect(emptyKind(body({ ...none, added: films(1) }))).toBeNull();
+  });
+});
+
+describe('add a film: search result rows', () => {
+  it('shows each state as its chip or muted line and one action', () => {
+    expect(addResultRow('IN_KEYWORD')).toEqual({
+      chip: { label: 'TMDB keyword', variant: 'keyword' },
+      line: null,
+      action: { label: 'Leave out', fix: false },
+    });
+    expect(addResultRow('IN_ADDED')).toMatchObject({
+      chip: { label: 'Added by me', variant: 'added' },
+      action: { label: 'Remove', fix: false },
+    });
+    expect(addResultRow('LEFT_OUT')).toMatchObject({
+      chip: { label: 'Left out by me', variant: 'left-out' },
+      action: { label: 'Put back' },
+    });
+    expect(addResultRow('NOT_IN')).toEqual({
+      chip: null,
+      line: 'Not a Christmas film',
+      action: { label: 'Add', fix: false },
+    });
+    expect(addResultRow('KEYWORDS_PENDING')).toMatchObject({
+      chip: { label: 'Keywords not fetched yet', variant: 'pending' },
+      action: { label: 'Add' },
+    });
+    expect(addResultRow('NO_TMDB_ID')).toEqual({
+      chip: null,
+      line: 'Needs a match first',
+      action: { label: 'Find the film…', fix: true },
+    });
+  });
+
+  it('has no row for a state not known yet', () => {
+    expect(addResultRow(null)).toBeNull();
+    expect(addResultRow('SOMETHING_NEW')).toBeNull();
+  });
+});
+
+describe('add a film: a result state', () => {
+  const data = {
+    inWeek: [
+      { filmId: 1, tmdbId: 11, reason: 'KEYWORD' },
+      { filmId: 2, tmdbId: 12, reason: 'ADDED' },
+    ],
+    added: [{ filmId: 2, tmdbId: 12 }],
+    leftOut: [{ filmId: 3, tmdbId: 13 }],
+  };
+
+  it('reads the screen lists first, whatever an older answer said', () => {
+    expect(resultState(1, data, { state: 'NOT_IN', issuedAt: 5 }, 1)).toBe('IN_KEYWORD');
+    expect(resultState(2, data, { state: 'NOT_IN', issuedAt: 5 }, 1)).toBe('IN_ADDED');
+    expect(resultState(3, data, { state: 'IN_KEYWORD', issuedAt: 5 }, 1)).toBe('LEFT_OUT');
+    expect(resultState(1, data, undefined, 1)).toBe('IN_KEYWORD');
+  });
+
+  it('uses the answer for a film no list holds', () => {
+    expect(resultState(9, data, { state: 'KEYWORDS_PENDING', issuedAt: 1 }, 4)).toBe(
+      'KEYWORDS_PENDING',
+    );
+    expect(resultState(9, data, { state: 'NO_TMDB_ID', issuedAt: 1 }, 4)).toBe('NO_TMDB_ID');
+    expect(resultState(9, data, { state: 'NOT_IN', issuedAt: 1 }, 4)).toBe('NOT_IN');
+  });
+
+  it('says NOT_IN for a film an older answer put in a list once the data is newer than the question', () => {
+    for (const state of ['IN_ADDED', 'LEFT_OUT', 'IN_KEYWORD']) {
+      expect(resultState(9, data, { state, issuedAt: 3 }, 4)).toBe('NOT_IN');
+    }
+  });
+
+  it('believes an answer that is not older than the data: the list has not caught up yet', () => {
+    // A keyword poll or the read after Fix match has not landed: the answer knows more than the data does.
+    expect(resultState(9, data, { state: 'IN_KEYWORD', issuedAt: 4 }, 4)).toBe('IN_KEYWORD');
+    expect(resultState(9, data, { state: 'LEFT_OUT', issuedAt: 4 }, 4)).toBe('LEFT_OUT');
+  });
+
+  it('is unknown with no answer and no list', () => {
+    expect(resultState(9, data, undefined, 1)).toBeNull();
+  });
+
+  it('writes the choice each action sends, with the choice Undo sends back', () => {
+    expect(resultWrite('NOT_IN', 5, [])).toEqual({
+      choice: 'INCLUDE',
+      previous: null,
+      toast: 'add',
+    });
+    expect(resultWrite('KEYWORDS_PENDING', 5, [])).toMatchObject({ choice: 'INCLUDE' });
+    expect(resultWrite('IN_ADDED', 5, [])).toMatchObject({ choice: null, previous: 'INCLUDE' });
+    expect(resultWrite('LEFT_OUT', 5, [])).toMatchObject({ choice: null, previous: 'EXCLUDE' });
+    expect(resultWrite('IN_KEYWORD', 5, [])).toMatchObject({ choice: 'EXCLUDE', previous: null });
+    // A TMDB id shared with a film the owner included: Undo must restore that INCLUDE.
+    expect(resultWrite('IN_KEYWORD', 5, [{ tmdbId: 5 }])).toMatchObject({ previous: 'INCLUDE' });
+    expect(resultWrite('NO_TMDB_ID', null, [])).toBeNull();
   });
 });
