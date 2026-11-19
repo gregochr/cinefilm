@@ -5,8 +5,9 @@
 # Usage: ci-install-ffmpeg.sh
 #   FFMPEG_INSTALL_LIMIT   overall budget in seconds, default 720
 #   FFMPEG_UPDATE_LIMIT    cap for `apt-get update` alone, default 300
-#   FFMPEG_ATTEMPT_LIMIT   cap for the first download, default 240 (the retry gets what is left)
-#   FFMPEG_DEB_DIR         apt's archive dir, default $RUNNER_TEMP/ffmpeg-debs (cached between runs by ci.yml)
+#   FFMPEG_ATTEMPT_LIMIT   cap for the first download, default 240 (the retry ends INSTALL_RESERVE before the limit)
+#   FFMPEG_INSTALL_RESERVE seconds of the budget kept for the install itself, default 120
+#   FFMPEG_DEB_DIR       apt's archive dir, default $RUNNER_TEMP/ffmpeg-debs (cached between runs by ci.yml)
 #   FFMPEG_CACHE_MATCHED   the restored cache key, for the notice (empty = cache miss)
 #
 # WHY THIS IS NOT JUST `apt-get update && apt-get install`
@@ -25,11 +26,12 @@
 # On 2026-11-19 the opposite happened: DNS was fine and `apt-get update` worked, but one slow mirror stalled
 # single packages of the 66 MB install until the budget ran out, four runs in a row. So the install is split:
 #   1. `apt-get install --download-only` fills a user-owned dir (FFMPEG_DEB_DIR) that the workflow caches
-#      between runs. Only this phase has the cap, and it is retried once with the rest of the budget on a
+#      between runs. Only this phase has the cap, and it is retried once until the install reserve on a
 #      timeout or an apt error (exit 100, e.g. a fetch failure): apt keeps every completed .deb, so the retry
 #      only fetches what is missing. A kill here cannot corrupt anything, nothing is unpacked yet.
-#   2. `apt-get install` runs ONCE against the complete dir with the remaining budget. It is never retried
-#      and never killed for the download cap, so TERM or KILL does not land mid-dpkg and leave a broken lock.
+#   2. `apt-get install` runs ONCE against the complete dir. It is never retried and has a reserved share of
+#      the budget (FFMPEG_INSTALL_RESERVE): the download retry must end that long before the overall limit,
+#      and the install is not held to the download cap.
 # `update` is still capped on its own, so the DNS outage still fails fast with the same message.
 # ============================================================================
 set -uo pipefail
@@ -37,6 +39,7 @@ set -uo pipefail
 limit="${FFMPEG_INSTALL_LIMIT:-720}"
 update_limit="${FFMPEG_UPDATE_LIMIT:-300}"
 attempt_limit="${FFMPEG_ATTEMPT_LIMIT:-240}"
+install_reserve="${FFMPEG_INSTALL_RESERVE:-120}"
 if [[ "$update_limit" -gt "$limit" ]]; then
     update_limit="$limit"
 fi
@@ -124,14 +127,15 @@ rc=$?
 run_apt "$attempt_limit" install --download-only -y --no-install-recommends ffmpeg
 rc=$?
 # Retry the download once after a timeout or an apt error (exit 100), if enough budget is left to matter.
-if [[ "$rc" -eq 124 || "$rc" -eq 100 ]] && [[ $(( limit - SECONDS )) -gt 30 ]]; then
-    echo "::warning::apt-get download did not finish (exit ${rc}) with $(count "$(list_debs)") .deb files downloaded; retrying once with the remaining budget"
-    run_apt "$limit" install --download-only -y --no-install-recommends ffmpeg
+if [[ "$rc" -eq 124 || "$rc" -eq 100 ]] && [[ $(( limit - SECONDS )) -gt $(( install_reserve + 30 )) ]]; then
+    echo "::warning::apt-get download did not finish (exit ${rc}) with $(count "$(list_debs)") .deb files downloaded; retrying once, leaving ${install_reserve}s of the budget for the install"
+    # The retry must end by limit - install_reserve, so the install always has its share.
+    run_apt $(( limit - install_reserve - SECONDS )) install --download-only -y --no-install-recommends ffmpeg
     rc=$?
 fi
 [[ "$rc" -eq 0 ]] || fail "install --download-only" "$rc" "$limit"
 
-# Everything is local now. One install, the rest of the budget, no retry.
+# Everything is local now. One install, never retried, with at least its reserved share of the budget.
 run_apt "$limit" install -y --no-install-recommends ffmpeg
 rc=$?
 [[ "$rc" -eq 0 ]] || fail install "$rc" "$limit"

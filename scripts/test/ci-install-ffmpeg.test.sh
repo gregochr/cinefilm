@@ -182,7 +182,9 @@ assert_contains "warns about the retry" "$OUTPUT" "::warning::apt-get download d
 assert_eq "update, the retried download, install, autoclean" "update download install autoclean" "$SUBS"
 assert_eq "the first attempt got the 240 s cap" 240 "$(sed -n 2p "$STUB_DIR/timeout-limits")"
 RETRY_BUDGET=$(sed -n 3p "$STUB_DIR/timeout-limits")
-assert_eq "the retry got the rest of the 720 s budget" 1 "$(awk -v b="$RETRY_BUDGET" 'BEGIN { print (b >= 715 && b <= 720) ? 1 : 0 }')"
+assert_eq "the retry ends the install reserve (120 s) before the 720 s limit" 1 "$(awk -v b="$RETRY_BUDGET" 'BEGIN { print (b >= 595 && b <= 600) ? 1 : 0 }')"
+INSTALL_AFTER_RETRY=$(sed -n 4p "$STUB_DIR/timeout-limits")
+assert_eq "the install after a hung first download keeps at least the reserve" 1 "$(awk -v b="$INSTALL_AFTER_RETRY" 'BEGIN { print (b >= 120 && b <= 720) ? 1 : 0 }')"
 assert_eq "five apt-gets ran under a timeout" 5 "$(grep -c . "$STUB_DIR/timeout-limits")"
 assert_file_has "the debs kept from the first attempt count as a change" "$STUB_DIR/step-output" "debs_changed=true"
 
@@ -269,6 +271,25 @@ FFMPEG_ATTEMPT_LIMIT=50
 export FFMPEG_ATTEMPT_LIMIT
 run_install
 assert_eq "the download cap is configurable" 50 "$(sed -n 2p "$STUB_DIR/timeout-limits")"
+
+echo "FFMPEG_INSTALL_RESERVE is honoured"
+make_stubs
+touch "$STUB_DIR/hang.download.1"
+FFMPEG_INSTALL_RESERVE=300
+export FFMPEG_INSTALL_RESERVE
+run_install
+assert_eq "exits 0 after the retry" 0 "$RC"
+assert_eq "the retry ends 300 s before the limit" 1 "$(awk -v b="$(sed -n 3p "$STUB_DIR/timeout-limits")" 'BEGIN { print (b >= 415 && b <= 420) ? 1 : 0 }')"
+unset FFMPEG_INSTALL_RESERVE
+
+make_stubs
+touch "$STUB_DIR/hang.download.1"
+FFMPEG_INSTALL_LIMIT=140
+export FFMPEG_INSTALL_LIMIT
+run_install
+assert_eq "no room for a retry plus the reserve: fails after the first download" 1 "$RC"
+assert_eq "update and one download only" "update" "$SUBS"
+unset FFMPEG_INSTALL_LIMIT
 
 echo "a retry is skipped when the budget is nearly spent"
 make_stubs

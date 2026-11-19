@@ -102,8 +102,8 @@ jobs:
       # 20-minute timeout. scripts/ci-install-ffmpeg.sh has its own 12-minute budget so a clear error prints first;
       # the step timeout is only a backstop above it.
       # On 2026-11-19 one slow mirror stalled single packages of the install four runs in a row. The script keeps the
-      # downloaded .debs in ${{ runner.temp }}/ffmpeg-debs (`--download-only`, capped and retried once) and then runs
-      # the install once; the .debs are cached here (the *.deb glob leaves out apt's root-owned lock file and partial/).
+      # downloaded .debs in ${{ runner.temp }}/ffmpeg-debs (`--download-only`, capped and retried once, ending 2
+      # minutes before the script's budget) and then runs the install once, never retried, in that reserved share; the .debs are cached here (the *.deb glob leaves out apt's root-owned lock file and partial/).
       # Cache keys are immutable, so the key carries the run id AND attempt: a re-run keeps the run id, and its save
       # would otherwise be refused. restore-keys finds the newest earlier cache, and apt re-fetches only what changed.
       # The save runs even when the install failed (completed .debs are whole files), but only when the script
@@ -134,6 +134,8 @@ jobs:
 
       - name: Save ffmpeg debs
         if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' && steps.ffmpeg-install.outputs.debs_changed == 'true' }}
+        timeout-minutes: 3
+        continue-on-error: true
         uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/ffmpeg-debs/*.deb

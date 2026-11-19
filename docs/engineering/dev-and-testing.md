@@ -578,9 +578,9 @@ cancels superseded runs of the same ref.
 so `update` is capped on its own (300 s) and fails fast with an `::error::`. 2026-11-19, a slow mirror: `update`
 worked but single packages of the 66 MB install stalled and four runs in a row timed out. Now the install is split.
 `apt-get install --download-only` writes the `.deb` files to `$RUNNER_TEMP/ffmpeg-debs` (`Dir::Cache::archives`, no
-sudo needed for the dir) under a 240 s cap and is retried once with the rest of the 720 s total after a timeout or
-an apt error (exit 100, e.g. a fetch failure); then the real `apt-get install` runs once, never retried and never
-killed for the download cap, so a kill cannot land mid-dpkg. `DPkg::Lock::Timeout=60` is set, and an `autoclean`
+sudo needed for the dir) under a 240 s cap and is retried once after a timeout or an apt error (exit 100, e.g. a
+fetch failure), ending at the latest 120 s (`FFMPEG_INSTALL_RESERVE`) before the 720 s total; then the real
+`apt-get install` runs once, never retried, with that reserved share of the budget at least. `DPkg::Lock::Timeout=60` is set, and an `autoclean`
 afterwards (non-fatal, a `::warning::` on failure) drops stale `.deb` versions. `actions/cache/restore@v6` fills the
 dir before the install (3-minute step timeout, `continue-on-error`; key
 `ffmpeg-debs-<os>-<arch>-<run id>-<run attempt>`, because cache keys are immutable and a re-run keeps the run id;
