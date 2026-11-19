@@ -148,14 +148,14 @@ final class EvaluateFixtures {
 
     /**
      * Replaces every model of {@code run}'s {@code oof-models.json} and {@code nested-models.json} whose key does not
-     * start with {@code prefix} by {@code other}'s model of that key.
+     * hold {@code fold} by {@code other}'s model of that key.
      */
-    static void mixIn(Path run, Path other, String prefix) throws IOException {
+    static void mixIn(Path run, Path other, int fold) throws IOException {
         for (String file : new String[] {"oof-models.json", "nested-models.json"}) {
             ObjectNode own = (ObjectNode) MAPPER.readTree(Files.readAllBytes(run.resolve(file)));
             JsonNode theirs = MAPPER.readTree(Files.readAllBytes(other.resolve(file)));
             for (String key : new ArrayList<>(own.propertyNames())) {
-                if (!key.startsWith(prefix)) {
+                if (!List.of(key.split(",")).contains(Integer.toString(fold))) {
                     own.set(key, theirs.get(key));
                 }
             }

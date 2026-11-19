@@ -30,13 +30,13 @@ import tools.jackson.databind.json.JsonMapper;
  * One run of the credits evaluation tool ({@code docs/engineering/credits-classifier-plan.md}, "L3c specification",
  * {@code CreditsEvaluateMain}). It scores every row of every film with the shipping segmenter code on stored
  * features, chooses a training run and the six segmenter numbers by the nested rule
- * ({@link CreditsCalibration}), and writes {@code evaluation.csv}, {@code calibration.json} and, with
- * {@code --look=L5}, {@code look.json} into a new {@code <out>/eval-<stamp>/}. Everything is computed before
- * anything is written, so a refused run leaves no file. Single-threaded and deterministic. Never a Spring bean.
+ * ({@link CreditsCalibration}), and writes {@code evaluation.csv} and {@code calibration.json} into a new
+ * {@code <out>/eval-<stamp>/}. Everything is computed before anything is written, so a refused run leaves no file.
+ * Single-threaded and deterministic. Never a Spring bean.
  *
  * <p>A development film of fold {@code k} is scored by the four pair models without {@code k}, with outer fold
- * {@code k}'s choice, which was made on the other folds' films. Test films are scored only with {@code --look=L5},
- * by the five shipping models of the final choice's run, with the final choice.
+ * {@code k}'s choice, which was made on the other folds' films. A test row is refused: test films, {@code --look}
+ * and {@code --baseline} come with L3c-eval-2b.
  */
 final class CreditsEvaluateJob {
 

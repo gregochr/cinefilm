@@ -190,19 +190,23 @@ class CreditsEvaluateJobTest {
     void eachFilmIsScoredByItsOwnFoldsOutOfFoldModelsWithItsOwnFoldsChoice() throws IOException {
         Path features = EvaluateFixtures.featuresRun(temp, false);
         Path inverted = EvaluateFixtures.trainRun(temp, "train-inv", true);
-        EvaluateFixtures.mixIn(trainA, inverted, "0,");
+        Path trainB = EvaluateFixtures.trainRun(temp, "train-b");
+        EvaluateFixtures.mixIn(trainA, inverted, 0);
+        EvaluateFixtures.mixIn(trainB, inverted, 1);
 
-        run(features, "--train", inverted.toString(), "--train", trainA.toString());
+        run(features, "--train", inverted.toString(), "--train", trainA.toString(), "--train", trainB.toString());
 
         JsonNode outer = json("calibration.json").get("outer");
         List<String> lines = evaluation().lines().skip(1).toList();
         assertThat(lines).hasSize(10);
+        String[] runs = {"train-a", "train-b", "train-a", "train-a", "train-a"};
         for (String line : lines) {
             String[] fields = line.split(",", -1);
-            assertThat(fields[15]).isEqualTo(outer.get(fields[2]).get("run").stringValue()).isEqualTo("train-a");
-            assertThat(fields[3]).isEqualTo(fields[2].equals("0") ? "FOUND" : "NOT_FOUND");
+            int fold = Integer.parseInt(fields[2]);
+            assertThat(fields[15]).isEqualTo(outer.get(fields[2]).get("run").stringValue()).isEqualTo(runs[fold]);
+            assertThat(fields[3]).isEqualTo(fold < 2 ? "FOUND" : "NOT_FOUND");
         }
-        int[][] within = {{5, 5}, {1, 5}, {1, 5}, {1, 4}, {1, 5}};
+        int[][] within = {{5, 5}, {5, 5}, {1, 5}, {1, 4}, {1, 5}};
         for (int k = 0; k < within.length; k++) {
             assertThat(outer.get(Integer.toString(k)).get("counts").toString()).isEqualTo(
                 "{\"early15\":0,\"early5\":0,\"violations\":0,\"within10\":" + within[k][0] + ",\"within60\":"

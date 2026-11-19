@@ -46,7 +46,10 @@ final class FeatureRunReader {
         }
     }
 
-    /** Reads {@code features.csv}, one line at a time, and groups its rows by film. */
+    /**
+     * Reads {@code features.csv}, one line at a time, and groups its rows by film. {@code look} allows test rows; it
+     * is groundwork for L3c-eval-2b, and until then the job passes false.
+     */
     static List<FilmRows> read(Path features, boolean look) throws IOException {
         List<FilmRows> films = new ArrayList<>();
         try (BufferedReader reader = Files.newBufferedReader(features)) {
