@@ -64,3 +64,9 @@ Horror needs no new data: the `Horror` genre already exists on `Film.genres`.
 - TMDB keyword coverage is uneven for older or obscure films; the override list is the safety valve. Decide after the
   backfill whether to print the Christmas matches in the admin/log for a sanity check.
 - Whether the keywords table should be shared with a later "theme by keyword" feature (not in scope).
+
+## Update 2026-11-19: overrides move to the database
+
+The `cinefilm.holiday.christmas.include` / `.exclude` properties (and the `CINEFILM_HOLIDAY_CHRISTMAS_*` variables)
+described above are replaced by a `christmas_override` table and an Admin screen, and the config implementation is
+removed with no seed. See `christmas-films-plan.md`.
