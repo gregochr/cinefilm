@@ -518,6 +518,9 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* The fixed toast (56px tall, 16px up from the bottom) sits over the end of the scroll: room for the last result to
+     scroll clear of it. The sheet itself already pads the bottom safe-area inset. */
+  padding-bottom: 96px;
 }
 .xmas-add-sheet__body .xmas-add__head {
   padding: 16px;

@@ -121,10 +121,17 @@ export default function AdminChristmas() {
     const active = document.activeElement;
     const lost = !active || active === document.body || !active.isConnected;
     const resultButton = panelButtons.current.get(focusRequest.filmId);
+    // With the phone's sheet up, the last place focus may fall back to is inside it, never the page behind it.
+    const sheetField = document.querySelector('.xmas-add-sheet .xmas-add__input');
     if (focusRequest.panel) {
       // The result's button; with the panel shut, the film's row in the list; else the list.
       if (lost)
-        (resultButton ?? buttons.current.get(focusRequest.filmId) ?? panel.current)?.focus();
+        (
+          resultButton ??
+          sheetField ??
+          buttons.current.get(focusRequest.filmId) ??
+          panel.current
+        )?.focus();
       return;
     }
     if (focusRequest.undo && undoButton.current) {
@@ -139,7 +146,7 @@ export default function AdminChristmas() {
       button.focus();
       return;
     }
-    if (lost) panel.current?.focus();
+    if (lost) (sheetField ?? panel.current)?.focus();
   }, [focusRequest]);
 
   // While the phone's search sheet is up it shows the toast itself, inside its dialog.

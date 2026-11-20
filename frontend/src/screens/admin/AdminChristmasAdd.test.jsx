@@ -635,4 +635,27 @@ describe('Christmas films: adding a film on a phone', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Add a film' })).not.toBeInTheDocument();
   });
+
+  it('keeps focus in the sheet when Undo is pressed for a film the results no longer show', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    const sheet = screen.getByRole('dialog', { name: 'Add a film' });
+    await user.keyboard('batman');
+    await user.click(await within(sheet).findByRole('button', { name: 'Add Batman' }));
+    await within(sheet).findByRole('button', { name: 'Remove Batman' });
+
+    await user.clear(within(sheet).getByRole('textbox', { name: 'Add a film' }));
+    await user.keyboard('trading');
+    await within(sheet).findByRole('button', { name: /Trading Places/ });
+    await user.click(within(sheet).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(toast()).toHaveTextContent('Removed Batman.'));
+    expect(sheet).toContainElement(document.activeElement);
+    expect(document.activeElement).not.toBe(document.body);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Add a film' })).not.toBeInTheDocument();
+  });
 });
