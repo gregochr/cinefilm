@@ -54,8 +54,9 @@ these films lack. It is superseded.
   frame-rate drift and another cut, which a single offset cannot.
 - **Bias.** Cue times lead or lag speech by a roughly constant amount. For each score, 3d-M takes it as the median
   fitted offset of the synthetic draws (below), leaving one film out. B's synthetic draws are all decoys (see "The
-  test set"), so B takes A's bias, and the ear-check tests that. The starts-only bias is reported beside it, so a
-  dependence on the cue ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
+  test set"), so B takes A's bias. Nothing measures B's own bias: B's timing is proven only to about ±0.5 s, by
+  ear, and 3d-3's trust question says so. The starts-only bias is reported beside A's, so a dependence on the cue
+  ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
   Real forced files' cue ends are not tested by the draws.
 - **`ALIGNED`** requires all four:
   - the margin is over the threshold;
@@ -133,9 +134,11 @@ track. A bitmap track still carries each line's display and clear times, which i
     a bitmap line's display and clear times, or a text cue's start and end. The 3 text tracks found in
     `embedded_cue_starts` hold starts only; there each end is the next start, capped at 3 s.
   - **Score A** is judged on every draw.
-  - **Score B** is never judged on them. Every draw comes from an English-original film and sits on English speech,
-    so a B fit must never come out `ALIGNED`: the draws are decoys for B. They are chosen without the classifier.
-    The report says how many of them sit mostly on speech labelled foreign, as a check on the labels.
+  - **Score B** is never judged on them. Draws from films with **no forced file** sit on English speech, so a B fit
+    must never come out `ALIGNED`, at any offset: they are decoys for B. Draws from films with a forced file are
+    left out for B, since a full track also subtitles the foreign lines; the report counts the films left. The decoys
+    are chosen without the classifier. The report says how many of them sit mostly on speech labelled foreign, as a
+    check on the labels.
   - **What the draws cannot show.** A's draws are dense runs of subtitled lines, not a sparse forced file among
     English dialogue, A's known weakness. B's accuracy on foreign speech is not shown by any draw; the ear-check
     below is its proof.
@@ -159,18 +162,21 @@ track. A bitmap track still carries each line's display and clear times, which i
   - every forced file against other films' audio (a seeded sample of 40 when there are more);
   - the forced file with its cue order and gaps shuffled (durations kept) against its own film;
   - each fit's second-best peak more than 2 s away.
-- **The owner's ear, B's proof (owner, 2026-11-20).** After every threshold and the bias are frozen, the report lists
-  10 real forced files whose B fit is `ALIGNED`, per model:
-  - the 2 with the lowest margin;
-  - the 2 furthest from 0;
-  - 6 more by a seeded random draw (fewer if fewer are `ALIGNED`).
+- **The owner's ear, B's proof (owner, 2026-11-20).** It runs only after every threshold and the bias are frozen, and
+  only for **one model**, chosen before it on the decoys and absolute answers (the one that passes them; if both do,
+  the cheaper). The list is drawn only from forced files whose films have maps, and each file's fit uses thresholds
+  chosen without its own film. It holds:
+  - **10 distinct real forced files** whose B fit is `ALIGNED`, by a seeded random draw;
+  - **plus, heard on top,** the lowest-margin file and the one furthest from 0, if the draw missed them.
 
-  For each, the report gives three film times **with the fitted offset applied**, from the start, middle and end of
-  the cues, and each line's text. The owner plays the film there and says whether the foreign line is spoken when its
-  subtitle would show (about half a second either way is right). **B is proven only if all 10 are right.** Ten right
-  bounds B's error rate on `ALIGNED` fits below about 26% (95%); the report says so, and the decoys and absolute
-  answers carry the rest. A's ear-check, if A is ever considered, is the same list under A. Files not heard keep the
-  verdict the gate gives; 3d-3's trust question carries the ear-check's bound.
+  For each file the report gives three film times on the file's timeline: each cue's raw time plus the fitted offset
+  plus the bias, from the start, middle and end of the cues, with each line's text. The owner plays the film **with
+  subtitles off** at each time. A file is right only if the foreign line is spoken at all three, within about half a
+  second. **B is proven only if 10 random files are heard and every file heard is right**; fewer than 10 `ALIGNED`
+  files means B is unproven. Ten random files right bound B's error rate on `ALIGNED` fits below about 26% (one-sided
+  95%), for errors the ear can catch (about 0.5 s), not the ±200 ms A is held to; the report says so, and the decoys
+  and absolute answers carry the rest. A's ear-check, if A is ever considered, is the same list under A. Files not
+  heard keep the verdict the gate gives; 3d-3's trust question carries the ear-check's bound.
 - **For information, not truth:** the five OpenSubtitles films and Taken 3 (spot-checked at 32–37 min), plus an
   optional accented-English film chosen at export.
 
@@ -182,7 +188,8 @@ track. A bitmap track still carries each line's display and clear times, which i
     the same offsets as the best peak's, with ±2 s around both left out.
   - **p(en) and neutral band.** Chosen on the language labels.
   - **Held out.** The absolute answers are left out of all of these and judged once at the end.
-- **Accuracy.** A: at least 90% of synthetic draws within ±200 ms, after the bias. B: the ear-check, all 10 right.
+- **Accuracy.** A: at least 90% of synthetic draws within ±200 ms, after the bias. B: the ear-check, every file
+  heard right, to about ±0.5 s.
 - **Robustness:**
   - at least 90% of the drop and jitter changes within ±200 ms of b;
   - at least 95% of the second-half moves `CHECK`;
@@ -191,7 +198,7 @@ track. A bitmap track still carries each line's display and clear times, which i
 - **Never confident and wrong:** zero `ALIGNED` results more than 1 s off. This counts:
   - the synthetic draws;
   - the robustness changes;
-  - every decoy (B on English-original draws included);
+  - every decoy; for B, any `ALIGNED` on a decoy draw counts, whatever its offset;
   - every ear-check the owner finds wrong.
 - **The absolute answers** each pass, as stated above.
 - **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
@@ -205,8 +212,9 @@ track. A bitmap track still carries each line's display and clear times, which i
   - **Otherwise neither.**
 - **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
   - One film is timed first.
-  - If the films with forced files and the full-track films together would take too long, the run covers the full-track films, the absolute
-    answers and a seeded sample of the rest. The report says what that sample cannot show.
+  - If the films with forced files and the full-track films together would take too long, the run covers the
+    full-track films, the absolute answers, the foreign-label sample and a seeded sample of the rest. The report says
+    what that sample cannot show.
 
 If neither score passes, stop and report. The chosen
 thresholds and the bias are written into this plan before 3d-1a is briefed.
@@ -284,7 +292,8 @@ The shape is fixed here. Details come from 3d-M's numbers.
 - **Admin's reasons:** "Lined up with the film's speech", or "No clear match with the film's speech".
 - **Fit parity, the gate before 3d-3 is briefed.** A tool-run `main` fits the 3d-M test set from `SpeechMapMain`'s
   output files and the `psql` export of the forced files, never the database. The
-  offsets must be within 10 ms of 3d-M's, and it must meet the same accuracy and never-wrong gate. This needs the
+  offsets must be within 10 ms of 3d-M's with the same verdict on every file (the heard files above all), and it
+  must meet the same never-wrong gate. A's accuracy is measured again; B's carries over from 3d-M's ear-check. This needs the
   owner's release after 3d-2.
 
 ### 3d-3 — trust: the soundtrack may decide (needs the owner's yes)
