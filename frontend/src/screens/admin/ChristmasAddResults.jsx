@@ -70,8 +70,11 @@ export default function ChristmasAddResults({
 }) {
   return (
     <>
-      <p className="xmas-add__head">{head}</p>
-      {statesFailed ? <p className="xmas-add__failed">{STATES_FAILED_TEXT}</p> : null}
+      {/* The one live region of the results: it stays mounted, so a change of its text is heard. */}
+      <div role="status">
+        <p className="xmas-add__head">{head}</p>
+        {statesFailed ? <p className="xmas-add__failed">{STATES_FAILED_TEXT}</p> : null}
+      </div>
       {rows.length === 0 ? null : (
         <ul aria-label="Films in your library" className="xmas-add__list">
           {rows.map((row) => (

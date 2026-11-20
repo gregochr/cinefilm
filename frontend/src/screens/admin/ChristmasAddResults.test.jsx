@@ -49,7 +49,7 @@ const option = (title) =>
 describe('ChristmasAddResults', () => {
   it('shows each state as a chip or muted line and its one button', () => {
     setup();
-    expect(screen.getByText('3 films in your library')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('3 films in your library');
     expect(screen.getByRole('list', { name: 'Films in your library' })).toBeInTheDocument();
     const notIn = within(option('Batman'));
     expect(notIn.getByText('Not a Christmas film')).toBeInTheDocument();
@@ -86,9 +86,28 @@ describe('ChristmasAddResults', () => {
 
   it('says when the states could not be read', () => {
     setup({ statesFailed: true });
-    expect(
-      screen.getByText(/Couldn’t check which of these are in Christmas week/),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /Couldn’t check which of these are in Christmas week/,
+    );
+  });
+
+  it('keeps one status region, so a change of the head text is announced from it', () => {
+    const props = {
+      rows: [],
+      busy: new Set(),
+      statesFailed: false,
+      onAct: vi.fn(),
+      registerButton: vi.fn(() => () => {}),
+    };
+    const { rerender } = render(<ChristmasAddResults head={SEARCH_LOADING_TEXT} {...props} />);
+    const region = screen.getByRole('status');
+    expect(region).toHaveTextContent(SEARCH_LOADING_TEXT);
+    rerender(<ChristmasAddResults head="2 films in your library" {...props} />);
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region).toHaveTextContent('2 films in your library');
+    rerender(<ChristmasAddResults head={SEARCH_ERROR_TEXT} {...props} statesFailed />);
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(region).toHaveTextContent(SEARCH_ERROR_TEXT);
   });
 });
 
