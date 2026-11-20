@@ -309,6 +309,9 @@
   color: #f7cabb;
 }
 
+.xmas-empty .xmas-empty__add {
+  margin: 20px 0 0;
+}
 .xmas-chip--pending {
   border-color: transparent;
   background: var(--cf-surface-3);
@@ -339,9 +342,16 @@
   background: var(--cf-surface-2);
   color: var(--cf-text-muted);
 }
-.xmas-add__field:focus-within {
+.xmas-add__field:focus-within,
+.xmas-add__field--button:focus-visible {
   outline: none;
   box-shadow: var(--cf-focus-ring);
+}
+.xmas-add__field--button {
+  width: 100%;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
 }
 .xmas-add__input {
   flex: 1;
@@ -459,6 +469,63 @@
   }
 }
 
+/* Phone sheet: full screen, nothing behind it (design 06) */
+.xmas-add-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--cf-bg);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.xmas-add-sheet__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--cf-line);
+}
+.xmas-add-sheet__bar .xmas-add__field {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+}
+.xmas-add-sheet__bar .xmas-add__input {
+  font-size: 17px; /* 16px or more, so iOS does not zoom the page on focus */
+}
+.xmas-add-sheet__cancel {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--cf-text);
+  font: inherit;
+  font-size: 17px;
+  cursor: pointer;
+}
+.xmas-add-sheet__cancel:focus-visible {
+  outline: none;
+  box-shadow: var(--cf-focus-ring);
+}
+.xmas-add-sheet__body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.xmas-add-sheet__body .xmas-add__head {
+  padding: 16px;
+}
+.xmas-add-sheet__body .xmas-add-row {
+  min-height: 72px;
+  padding: 8px 16px;
+}
 /* Toast */
 .xmas-toast-region {
   position: fixed;

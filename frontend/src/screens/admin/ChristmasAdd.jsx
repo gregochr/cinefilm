@@ -6,6 +6,7 @@ import { useAddFilm } from '../../state/useAddFilm.js';
 import { hasQuery } from '../../state/useSearchCombobox.js';
 import { useSignInRecovery } from './useSignInRecovery.js';
 import ChristmasAddResults, { headText } from './ChristmasAddResults.jsx';
+import ChristmasAddSheet from './ChristmasAddSheet.jsx';
 
 /** What the panel leaves open when a press or focus lands there: the toast (its Undo) and a dialog (Fix match). */
 const BELONGS = '.xmas-toast-region, [aria-modal="true"], .ee';
@@ -17,10 +18,12 @@ const DIALOG_OPEN = '[aria-modal="true"], .ee';
  * desktop the results are a panel under the field: a plain list of rows with real buttons (so not a listbox), and the
  * keyboard moves real focus. ArrowDown from the field goes to the first result's button, the arrows move between
  * buttons, ArrowUp from the first goes back to the field, and Esc from any of them closes the panel and focuses the
- * field. The panel also closes when focus leaves it for something else. An action goes through the screen's write
- * path (`onAct`), the row updates in place and the panel stays open. `onFix(film, opener)` opens Fix match for a film with
+ * field. The panel also closes when focus leaves it for something else. At phone width the field opens a full-screen
+ * sheet (`sheetOpen` / `onSheetOpenChange` are the screen's, and `phone` too, so it decides in the same render where
+ * the toast goes: `toast` is shown inside the sheet while it is up). An action goes through the screen's write path
+ * (`onAct`), the row updates in place and the panel stays open. `onFix(film, opener)` opens Fix match for a film with
  * no TMDB id; `refreshKey` changes when a match was fixed; `version` and `issued` are the screen data's request
- * numbers (see `resultState`).
+ * numbers (see `resultState`). `onPanelChange(open)` says when the panel opens or closes (the toast waits meanwhile).
  */
 export default function ChristmasAdd({
   data,
@@ -31,6 +34,11 @@ export default function ChristmasAdd({
   onFix,
   registerButton,
   refreshKey,
+  toast,
+  phone,
+  sheetOpen,
+  onSheetOpenChange,
+  onPanelChange,
 }) {
   const { index, status } = useSearchIndex();
   const uid = useId();
@@ -49,7 +57,9 @@ export default function ChristmasAdd({
   const wrapper = useRef(null);
   const panel = useRef(null);
   const input = useRef(null);
-  const showing = state.open && hasQuery(state.query);
+  const trigger = useRef(null);
+  const showing = state.open && hasQuery(state.query) && !phone;
+  const sheetShown = sheetOpen && phone;
 
   // A press outside the field and its panel closes the panel (the query stays).
   useEffect(() => {
@@ -62,15 +72,42 @@ export default function ChristmasAdd({
     return () => document.removeEventListener('mousedown', onDown);
   }, [showing, dispatch]);
 
+  useEffect(() => {
+    onPanelChange?.(showing);
+    return () => onPanelChange?.(false);
+  }, [showing, onPanelChange]);
+
+  // Widening the window past phone width while the sheet is up: it goes, and focus goes to the field (the sheet had it).
+  useEffect(() => {
+    if (phone || !sheetOpen) return;
+    onSheetOpenChange(false);
+    input.current?.focus();
+  }, [phone, sheetOpen, onSheetOpenChange]);
+
   const act = useCallback(
     (row, opener) => {
       const view = addResultRow(row.state);
       if (!view) return;
-      if (view.action.fix) onFix({ filmId: row.filmId, title: row.title }, opener);
-      else onAct(row);
+      if (view.action.fix) {
+        // On a phone the sheet closes with this (and the search is cleared, as Cancel does), so Fix match hands focus
+        // back to the button that opened the sheet.
+        onFix({ filmId: row.filmId, title: row.title }, phone ? trigger.current : opener);
+        if (phone) {
+          onSheetOpenChange(false);
+          dispatch({ type: 'clear' });
+        }
+      } else {
+        onAct(row);
+      }
     },
-    [onAct, onFix],
+    [onAct, onFix, phone, onSheetOpenChange, dispatch],
   );
+
+  const closeSheet = () => {
+    onSheetOpenChange(false);
+    dispatch({ type: 'clear' });
+    trigger.current?.focus();
+  };
 
   const onKeyDown = (event) => {
     if (event.nativeEvent?.isComposing) return;
@@ -106,6 +143,35 @@ export default function ChristmasAdd({
     if (!to || wrapper.current?.contains(to) || to.closest?.(BELONGS)) return;
     dispatch({ type: 'close' });
   };
+
+  if (phone) {
+    return (
+      <div className="xmas-add">
+        <button
+          ref={trigger}
+          type="button"
+          className="xmas-add__field xmas-add__field--button"
+          aria-haspopup="dialog"
+          aria-expanded={sheetShown}
+          onClick={() => onSheetOpenChange(true)}
+        >
+          <SearchIcon size={16} />
+          <span>Add a film</span>
+        </button>
+        {sheetShown ? (
+          <ChristmasAddSheet
+            add={add}
+            head={headText(add)}
+            busy={busy}
+            onAct={act}
+            registerButton={registerButton}
+            onClose={closeSheet}
+            toast={toast}
+          />
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     // The wrapper only watches focus leave it; the field and the buttons inside do the work.

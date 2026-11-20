@@ -1,5 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { announceSignedIn } from '../../api/client.js';
 import { prepareIndex, useSearchIndex } from '../../state/searchIndex.js';
@@ -45,7 +46,9 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-function Harness({ after = null, ...props }) {
+/** The screen's part: it owns whether the sheet is open (and whether it is a phone). */
+function Harness({ phone = false, after = null, ...props }) {
+  const [sheetOpen, setSheetOpen] = useState(false);
   return (
     <>
       <p>outside</p>
@@ -56,6 +59,9 @@ function Harness({ after = null, ...props }) {
         busy={new Set()}
         registerButton={() => () => {}}
         refreshKey={0}
+        phone={phone}
+        sheetOpen={sheetOpen}
+        onSheetOpenChange={setSheetOpen}
         {...props}
       />
       {after}
@@ -66,8 +72,11 @@ function Harness({ after = null, ...props }) {
 function setup(props = {}) {
   const onAct = vi.fn();
   const onFix = vi.fn();
-  const view = render(<Harness onAct={onAct} onFix={onFix} {...props} />);
-  return { onAct, onFix, ...view };
+  const onPanelChange = vi.fn();
+  const view = render(
+    <Harness onAct={onAct} onFix={onFix} onPanelChange={onPanelChange} {...props} />,
+  );
+  return { onAct, onFix, onPanelChange, ...view };
 }
 
 const field = () => screen.getByRole('textbox', { name: 'Add a film' });
@@ -91,11 +100,12 @@ describe('ChristmasAdd on a desktop', () => {
 
   it('opens a panel of results with their states as you type, and says how many in a live region', async () => {
     const user = userEvent.setup();
-    setup();
+    const { onPanelChange } = setup();
     await search(user, 'batman');
     expect(status()).toHaveTextContent('2 films in your library');
     expect(screen.getByText('Not a Christmas film')).toBeInTheDocument();
     expect(screen.getByText('Keywords not fetched yet')).toBeInTheDocument();
+    expect(onPanelChange).toHaveBeenLastCalledWith(true);
   });
 
   it('moves real focus with the arrows: field, first result, next, back, and the field above the first', async () => {
@@ -146,12 +156,13 @@ describe('ChristmasAdd on a desktop', () => {
 
   it('closes on Esc from the field and from a result button, and focus returns to the field', async () => {
     const user = userEvent.setup();
-    setup();
+    const { onPanelChange } = setup();
     await search(user, 'batman');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
     expect(field()).toHaveFocus();
     expect(field()).toHaveValue('batman');
+    expect(onPanelChange).toHaveBeenLastCalledWith(false);
 
     await user.keyboard('{ArrowDown}');
     await screen.findByRole('button', { name: 'Add Batman Returns' });
@@ -192,6 +203,30 @@ describe('ChristmasAdd on a desktop', () => {
     await user.tab();
     expect(screen.getByRole('button', { name: 'after' })).toHaveFocus();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  });
+
+  it('stays open when focus goes to the toast or to a dialog', async () => {
+    const user = userEvent.setup();
+    setup({
+      after: (
+        <>
+          <div className="xmas-toast-region">
+            <button type="button">Undo</button>
+          </div>
+          <div role="dialog" aria-modal="true" aria-label="Elsewhere">
+            <button type="button">Inside</button>
+          </div>
+        </>
+      ),
+    });
+    await search(user, 'batman');
+    screen.getByRole('button', { name: 'Add Batman Returns' }).focus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
+    expect(panelList()).toBeInTheDocument();
+    screen.getByRole('button', { name: 'Add Batman Returns' }).focus();
+    screen.getByRole('button', { name: 'Inside' }).focus();
+    expect(panelList()).toBeInTheDocument();
   });
 
   it('opens Fix match for a film with no TMDB id, with the button as the opener', async () => {
@@ -244,5 +279,89 @@ describe('ChristmasAdd on a desktop', () => {
     );
     act(() => announceSignedIn());
     expect(await screen.findByRole('button', { name: 'Add Batman' })).toBeInTheDocument();
+  });
+});
+
+describe('ChristmasAdd on a phone', () => {
+  it('shows a button for the field, which opens the full-screen sheet', async () => {
+    const user = userEvent.setup();
+    setup({ phone: true });
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    const trigger = screen.getByRole('button', { name: 'Add a film' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await user.click(trigger);
+    expect(screen.getByRole('dialog', { name: 'Add a film' })).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(field()).toHaveFocus();
+  });
+
+  it('searches in the sheet and acts with one tap, leaving the sheet open', async () => {
+    const user = userEvent.setup();
+    const { onAct } = setup({ phone: true });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    await user.keyboard('batman');
+    await user.click(await screen.findByRole('button', { name: 'Add Batman' }));
+    expect(onAct).toHaveBeenCalledWith(expect.objectContaining({ filmId: 1 }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    // One live region, the results', inside the dialog.
+    expect(status()).toHaveTextContent('2 films in your library');
+    expect(screen.getByRole('dialog')).toContainElement(status());
+  });
+
+  it('closes on Cancel and Esc, clears the search and returns focus to the button', async () => {
+    const user = userEvent.setup();
+    setup({ phone: true });
+    const trigger = screen.getByRole('button', { name: 'Add a film' });
+    await user.click(trigger);
+    await user.keyboard('batman');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    expect(field()).toHaveValue('');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('closes the sheet and clears the search when Fix match opens, with the button as the opener', async () => {
+    const user = userEvent.setup();
+    const { onFix } = setup({ phone: true });
+    const trigger = screen.getByRole('button', { name: 'Add a film' });
+    await user.click(trigger);
+    await user.keyboard('gremlins');
+    await user.click(await screen.findByRole('button', { name: 'Find the film… Gremlins' }));
+    expect(onFix).toHaveBeenCalledWith({ filmId: 3, title: 'Gremlins' }, trigger);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(trigger);
+    expect(field()).toHaveValue('');
+  });
+
+  it('shows the screen toast inside the sheet', async () => {
+    const user = userEvent.setup();
+    setup({ phone: true, toast: <button type="button">Undo</button> });
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    // Inside the dialog, so the Tab trap and a screen reader both reach it.
+    expect(screen.getByRole('dialog')).toContainElement(
+      screen.getByRole('button', { name: 'Undo' }),
+    );
+  });
+
+  it('drops the sheet when the window is widened, focuses the field, and does not bring it back', async () => {
+    const user = userEvent.setup();
+    const view = setup({ phone: true });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    view.rerender(<Harness phone={false} onAct={view.onAct} onFix={view.onFix} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(field()).toHaveFocus();
+
+    view.rerender(<Harness phone onAct={view.onAct} onFix={view.onFix} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add a film' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 });
