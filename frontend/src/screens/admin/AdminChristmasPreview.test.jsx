@@ -8,14 +8,16 @@ const BASE = '/api/admin/christmas';
 const fresh = () => structuredClone(fixtures.christmas);
 
 /** GET answers the fixture; a PUT that leaves a film out answers with it moved to the left-out list. */
-function serve() {
+function serve({ failUndo = false } = {}) {
   return installFetch((method, url, init) => {
     if (!url.startsWith(BASE)) return null;
     if (method === 'GET') return respond(fresh());
+    const choice = JSON.parse(init.body).choice;
+    if (failUndo && choice === null) return respond({}, 500);
     const tmdbId = Number(url.slice(BASE.length + 1));
     const data = fresh();
     const film = data.inWeek.find((f) => f.tmdbId === tmdbId);
-    if (JSON.parse(init.body).choice === 'EXCLUDE' && film) {
+    if (choice === 'EXCLUDE' && film) {
       data.inWeek = data.inWeek.filter((f) => f !== film);
       data.leftOut.push({ ...film, taggedByTmdb: true });
     }
@@ -122,5 +124,57 @@ describe('Christmas films: the preview and back link on a phone', () => {
     media.change(false);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide preview' })).toBeInTheDocument();
+    // Focus was on the sheet's Close: it lands on a live element, not the body.
+    expect(document.body).not.toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Hide preview' })).toHaveFocus();
+
+    // Narrowed again: the sheet does not come back by itself.
+    media.change(true);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument();
+    expect(document.body.style.overflow).not.toBe('hidden');
+  });
+
+  describe('Undo pressed inside the sheet', () => {
+    /** Leaves Gremlins out, opens the sheet, and Tabs to the Undo inside it. */
+    async function toUndoInSheet(user) {
+      await open();
+      await user.click(screen.getByRole('button', { name: 'Leave out Gremlins' }));
+      await screen.findByText(/Left out Gremlins/);
+      await user.click(screen.getByRole('button', { name: OPEN }));
+      const sheet = screen.getByRole('dialog', { name: 'Home in Christmas week' });
+      for (let i = 0; i < 30; i += 1) {
+        if (document.activeElement === within(sheet).getByRole('button', { name: 'Undo' })) break;
+        await user.tab();
+      }
+      expect(within(sheet).getByRole('button', { name: 'Undo' })).toHaveFocus();
+      return sheet;
+    }
+
+    it('keeps focus in the sheet when the Undo works, and Esc still closes it', async () => {
+      const user = userEvent.setup();
+      stubMedia(true);
+      serve();
+      const sheet = await toUndoInSheet(user);
+      await user.keyboard('{Enter}');
+      expect(await screen.findByText(/Put back Gremlins|Removed|Put back/)).toBeInTheDocument();
+      expect(sheet).toContainElement(document.activeElement);
+      expect(screen.getByRole('button', { name: 'Leave out Gremlins' })).not.toHaveFocus();
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('keeps focus in the sheet when the Undo fails, and Esc still closes it', async () => {
+      const user = userEvent.setup();
+      stubMedia(true);
+      serve({ failUndo: true });
+      const sheet = await toUndoInSheet(user);
+      await user.keyboard('{Enter}');
+      expect(await within(sheet).findByText(/Couldn.t save that change/)).toBeInTheDocument();
+      expect(sheet).toContainElement(document.activeElement);
+      expect(screen.getByRole('tabpanel')).not.toHaveFocus();
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 });

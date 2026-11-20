@@ -143,16 +143,29 @@ export default function AdminChristmas() {
       undoButton.current.focus();
       return;
     }
+    // The preview sheet is modal too: the row's button behind it is out of reach, so focus stays in the sheet.
+    const previewClose = document.querySelector('.xmas-preview-sheet__bar button');
     const button =
-      focusRequest.filmId === null
+      focusRequest.filmId === null || previewClose
         ? null
         : (buttons.current.get(focusRequest.filmId) ?? resultButton);
     if (button) {
       button.focus();
       return;
     }
-    if (lost) (sheetField ?? panel.current)?.focus();
+    if (lost) (sheetField ?? previewClose ?? panel.current)?.focus();
   }, [focusRequest]);
+
+  // The preview sheet goes when the window is widened or the lists empty. Its open state goes with it, so it does not
+  // come back unasked when the window narrows again, and focus (it was on the sheet) moves to a live element.
+  useEffect(() => {
+    if (!previewOpen || previewShown) return;
+    setPreviewOpen(false);
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) {
+      (document.querySelector('.xmas-preview__toggle') ?? panel.current)?.focus();
+    }
+  }, [previewOpen, previewShown]);
 
   // While the phone's search sheet is up it shows the toast itself, inside its dialog.
   const toastEl = (
