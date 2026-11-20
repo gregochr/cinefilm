@@ -309,9 +309,6 @@
   color: #f7cabb;
 }
 
-.xmas-empty .xmas-empty__add {
-  margin: 20px 0 0;
-}
 .xmas-chip--pending {
   border-color: transparent;
   background: var(--cf-surface-3);

@@ -117,15 +117,6 @@ async function search(user, text, waitFor = 'Add Batman') {
 }
 
 describe('Christmas films: adding a film', () => {
-  it('says in the rule line that you can add any film yourself', async () => {
-    serve();
-    await open();
-    expect(
-      screen.getByText(/unless you leave it out\. You can also add any film yourself\./),
-    ).toBeInTheDocument();
-    expect(field()).toBeInTheDocument();
-  });
-
   it('adds a film in place: the button becomes Remove, the panel stays open and focus stays on it', async () => {
     const user = userEvent.setup();
     const fetchMock = serve();
@@ -375,45 +366,6 @@ describe('Christmas films: adding a film', () => {
     expect(await panelButton('Add Mystery Film')).toBeInTheDocument();
     expect(within(panelList()).getByText('Keywords not fetched yet')).toBeInTheDocument();
     await waitFor(() => expect(gets(fetchMock).length).toBeGreaterThanOrEqual(2));
-  });
-
-  it('keeps the search open when the first film is added from the empty screen', async () => {
-    const user = userEvent.setup();
-    const empty = (included = new Set()) => {
-      const data = bodyWith(included);
-      data.inWeek = data.inWeek.filter((f) => f.reason === 'ADDED' && included.has(f.tmdbId));
-      data.added = [...data.inWeek];
-      data.leftOut = [];
-      data.keywords = { fetched: 1412, total: 1412, running: false };
-      return data;
-    };
-    serve({ get: () => empty(), put: () => respond(empty(new Set([150]))) });
-    renderApp('/admin/christmas');
-    expect(await screen.findByText('No Christmas films yet')).toBeInTheDocument();
-    expect(
-      screen.getByText('No films in your library are tagged Christmas. Add any you count.'),
-    ).toBeInTheDocument();
-    await user.click(await search(user, 'batman'));
-    expect(await screen.findByRole('tablist', { name: 'Christmas lists' })).toBeInTheDocument();
-    expect(panelList()).toBeInTheDocument();
-    expect(await panelButton('Remove Batman')).toHaveFocus();
-  });
-
-  it('offers the search while keywords are still being fetched, with the add-yourself line', async () => {
-    serve({
-      get: () => {
-        const data = fresh();
-        data.inWeek = [];
-        data.added = [];
-        data.leftOut = [];
-        return data;
-      },
-    });
-    renderApp('/admin/christmas');
-    expect(
-      await screen.findByText("You don't have to wait: add any film yourself."),
-    ).toBeInTheDocument();
-    expect(field()).toBeInTheDocument();
   });
 
   it('turns a removed film into Add in place, with focus kept, when the write lands before /states answers', async () => {

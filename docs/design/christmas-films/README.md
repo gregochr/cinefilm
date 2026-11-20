@@ -125,7 +125,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
   - the button for that state
 - **Behaviour:**
   - **One tap acts.** The row updates in place (Add becomes "Remove" with an "Added by me" chip) and the panel stays open, so I can add several.
-  - **Keyboard:** Esc closes the panel; arrow keys move through the results. After a change made in the search panel the result's own button (Remove, Leave out, Add…) is the keyboard undo; the toast's Undo is for the pointer and for list rows.
+  - **Keyboard:** Esc closes the panel; arrow keys move through the results.
   - The search matches as you type and allows typos, like the existing header search.
 - **Phone:** tapping the field opens a full-screen search with "Cancel".
 
@@ -180,3 +180,4 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 ## Deviations in the build
 
 - The empty state ("No Christmas films yet") shows only when In Christmas week, Added by me **and** Left out by me are all empty, not when In and Added alone are. A film left out must stay reachable, with its Put back button.
+- Until the search to add films ships (slice 4), no copy promises an Add control: the rule line, the under-5 line and the left-out note leave out the sentences about adding. Slice 4 restores the design copy.

@@ -3,8 +3,6 @@ import { Button } from '../../components/Button.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import {
   EMPTY_NONE_TEXT,
-  EMPTY_PENDING_ADD_TEXT,
-  RULE_TEXT,
   EMPTY_TAB_TEXT,
   emptyKind,
   emptyPendingText,
@@ -63,7 +61,6 @@ function EmptyPanel({ kind, keywords, panelRef }) {
           {formatCount(keywords.fetched)} / {formatCount(keywords.total)}
         </span>
       </div>
-      <p className="xmas-empty__add">{EMPTY_PENDING_ADD_TEXT}</p>
     </section>
   );
 }
@@ -140,33 +137,27 @@ export default function AdminChristmas() {
   let body;
   if (data) {
     const empty = emptyKind(data);
-    const rows = empty ? [] : tabRows(data, tab);
-    // The controls row is in the same place with or without lists, so adding the first film from the empty screen
-    // does not rebuild the search field (and close its panel) under the owner.
-    body = (
-      <>
-        {empty ? (
-          <EmptyPanel kind={empty} keywords={data.keywords} panelRef={panel} />
-        ) : (
+    if (empty) {
+      body = <EmptyPanel kind={empty} keywords={data.keywords} panelRef={panel} />;
+    } else {
+      const rows = tabRows(data, tab);
+      body = (
+        <>
           <ChristmasStatusCard data={data} />
-        )}
-        <div className="xmas-controls">
-          {empty ? null : (
+          <div className="xmas-controls">
             <ChristmasTabs counts={tabCounts(data)} selected={tab} onSelect={setTab} />
-          )}
-          <ChristmasAdd
-            data={data}
-            version={version}
-            issued={state.issued}
-            busy={busy}
-            onAct={state.changeResult}
-            onFix={openFixMatch}
-            registerButton={registerPanelButton}
-            refreshKey={changed}
-            onPanelChange={setPanelOpen}
-          />
-        </div>
-        {empty ? null : (
+            <ChristmasAdd
+              data={data}
+              version={version}
+              issued={state.issued}
+              busy={busy}
+              onAct={state.changeResult}
+              onFix={openFixMatch}
+              registerButton={registerPanelButton}
+              refreshKey={changed}
+              onPanelChange={setPanelOpen}
+            />
+          </div>
           <div
             ref={panel}
             id={panelDomId(tab)}
@@ -188,9 +179,9 @@ export default function AdminChristmas() {
               <p className="xmas-panel__empty">{EMPTY_TAB_TEXT[tab]}</p>
             )}
           </div>
-        )}
-      </>
-    );
+        </>
+      );
+    }
   } else if (error) {
     body = (
       <div className="xmas-error">
@@ -216,7 +207,10 @@ export default function AdminChristmas() {
       <header className="xmas-head">
         <p className="xmas-head__eyebrow">Admin</p>
         <SectionTitle>Christmas films</SectionTitle>
-        <p className="xmas-head__rule">{RULE_TEXT}</p>
+        <p className="xmas-head__rule">
+          A film counts if TMDB tags it with the &ldquo;christmas&rdquo; keyword, unless you leave
+          it out.
+        </p>
       </header>
       {body}
       <ChristmasToast

@@ -542,9 +542,7 @@ describe('Christmas films: states', () => {
     data.keywords = { fetched: 1412, total: 1412, running: false };
     serve({ get: () => data });
     await open0();
-    expect(
-      screen.getByText('No films in your library are tagged Christmas. Add any you count.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('No films in your library are tagged Christmas.')).toBeInTheDocument();
     expect(screen.queryByText('212 / 1,412')).not.toBeInTheDocument();
     expect(screen.queryByText(/still fetching/)).not.toBeInTheDocument();
   });
@@ -633,7 +631,7 @@ describe('Christmas films: states', () => {
     expect(card).toHaveTextContent(
       '3 films are in, which is under 5, so Christmas week shows the usual weekly theme instead.',
     );
-    expect(card).toHaveTextContent('Add 2 more and Home shows Christmas films.');
+    expect(card).toHaveTextContent('Home needs at least 5 Christmas films to show them.');
     expect(screen.queryByText(/Home shows 12\. These/)).not.toBeInTheDocument();
   });
 });
