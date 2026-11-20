@@ -209,7 +209,8 @@ well, whether or not the scan counted them; the report lists them and which film
   the gap between display and speech). One click marks where the line starts and a second where it ends, and each
   clip is listed with the line's text. A file with fewer than three such lines is clipped on those it has, stays in the draw,
   and is reported. Under B every `ALIGNED` file has at least one (the fifth condition). Under A a file with none is
-  left out of the draw and reported, and A is unproven if more than 2 of its `ALIGNED` files are left out. The owner plays them on the
+  left out of the draw and reported, and A is unproven if more than 2 of its `ALIGNED` files are left out, or if the lowest-margin file or the one
+  furthest from 0 is one of them. The owner plays them on the
   Mac. A file is right only if, in every clip, the foreign speech begins on the first click, within about half a
   second, with no foreign speech in the 3 s before it, and stops near the second. The rule is strict on purpose: an
   unsubtitled foreign line just before a run makes a right fit fail, which can only make B fail, never pass.
