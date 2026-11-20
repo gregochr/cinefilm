@@ -1,7 +1,7 @@
 # Forced subtitles: timing from the soundtrack (3d) — plan
 
-Status: plan, 2026-11-20 (revised after adversarial review). Replaces the `alass` sketch under "3d" in
-`forced-timing-reference-plan.md`.
+Status: plan, 2026-11-20 (revised after adversarial review, and for B's proof by ear after the header scan).
+Replaces the `alass` sketch under "3d" in `forced-timing-reference-plan.md`.
 
 ## Why
 
@@ -53,15 +53,20 @@ these films lack. It is superseded.
 - **Halves.** The first and second halves of the cues are fitted separately and must agree within 300 ms. This catches
   frame-rate drift and another cut, which a single offset cannot.
 - **Bias.** Cue times lead or lag speech by a roughly constant amount. For each score, 3d-M takes it as the median
-  fitted offset of the synthetic draws (below) that the score is judged on (for B, only the non-English-original
-  draws, never its decoys), leaving one film out. The starts-only bias is reported beside it, so
-  a dependence on the invented cue ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
+  fitted offset of the synthetic draws (below), leaving one film out. Its sign: the corrected offset is the fitted
+  offset **minus** the bias. B's synthetic draws are all decoys (see "The
+  test set"), so B takes A's bias. Nothing measures B's own bias: B's timing is proven only to about ±0.5 s, by
+  ear, and 3d-3's trust question says so. The starts-only bias is reported beside A's, so a dependence on the cue
+  ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
   Real forced files' cue ends are not tested by the draws.
-- **`ALIGNED`** requires all four:
+- **`ALIGNED`** requires all four (five for B):
   - the margin is over the threshold;
   - at least 8 cues land on speech (`TimingFit.MIN_CUES`);
   - the halves agree;
-  - |offset| ≤ 30 s, inside 3c's other-cut rule.
+  - |offset| ≤ 30 s, inside 3c's other-cut rule;
+  - for score B only, a fifth: at least one cue that opens a run (no cue in the 3 s before it) has speech labelled
+    foreign under it at the fitted offset. So every B `ALIGNED` fit can be heard in the ear-check, and the files it
+    proves are the files the product shows.
 
   An offset over 10 s (`TimingFit.MAX_ALIGNED_OFFSET_MS`) is allowed here only because the halves check holds.
   Otherwise the result is `CHECK`.
@@ -103,10 +108,11 @@ This is **not** credits L4a's convention: L4a ran the released image, installed 
     model frame by frame, since `get_speech_timestamps` returns stretches with no probability.
 - **Per film:** the share of speech labelled foreign, English and neutral; a p(en) histogram; and, for Dances with
   Wolves, the p(en) distribution on its Lakota stretches.
-- **Language labels, for choosing the p(en) and neutral thresholds** (films held out). They come from each film's
+- **Language labels, for choosing the p(en) and neutral thresholds,** leave-one-film-out: every fit and decoy of a
+  film is judged with thresholds chosen without that film. They come from each film's
   original language (`film.original_language`, from TMDB), because almost no forced file has a known answer:
-  - **Foreign:** speech under full-track cues in a film whose original language is not English. The track
-    translates the dialogue, so most of that speech is foreign.
+  - **Foreign:** all speech in a film whose original language is not English. No English subtitle track is needed.
+    The library has about 20 such films; a seeded sample of up to 10 is mapped.
   - **English:** speech under full-track cues in an English-original film with no forced file.
   - **Lakota, reported only:** Dances with Wolves' sidecar 2 cue spans at offset 0. The film is an absolute answer,
     so these spans never take part in choosing a threshold.
@@ -120,27 +126,58 @@ The first export (2026-11-20) found 151 forced files on 148 single-part films. O
 `ALIGNED` fit and only **one** is owner-verified: the owner checks films by watching, not in Admin. So the known
 answers are built from the films' own full English tracks. The owner exports the inputs read-only with `psql`.
 
+A header scan of all 1,102 films (2026-11-20) found 61 with a full English subtitle track. **All 61 are bitmap
+tracks** (pictures, as on a disc), and **all 61 films are English-original**: no foreign-original film has an English
+track. A bitmap track still carries each line's display and clear times, which is all a fit needs. The kit reads
+them from that one subtitle stream in the same offline container, by codec (the header scan records it):
+- **PGS** (Blu-ray): every display set that shows new content ends the line before it and starts a new one; an empty
+  one ends the open line.
+- **VobSub** (`dvd_subtitle`, DVD): the start and end come from each packet's own display commands (or the
+  container's duration when it states one).
+- A line with no readable end ends at the next start, at most 3 s on, as for the text tracks; the report counts
+  them.
+ That read covers most of each file over SMB and is
+counted in the per-film cost. The 3 text tracks the app already read (`embedded_cue_starts`, `USABLE`) are used as
+well, whether or not the scan counted them; the report lists them and which films they are on. So:
+
+- score A gets its known answers from those 61 films;
+- score B has none: it is proven by the owner's ear instead (below).
+
 - **Synthetic forced files, the main test (answer 0).**
   - **What they are.** Every single-part film with an embedded full English track gives 10 seeded draws of 8–40 of
-    its cues, in 1–4 runs of consecutive cues, as forced files are. Starts come from `embedded_cue_starts`; ends are
-    the next start, capped at 3 s.
+    its cues, in 1–4 runs of consecutive cues, as forced files are. Starts and ends are read from the track itself:
+    a bitmap line's display and clear times, or a text cue's start and end. The 3 text tracks found in
+    `embedded_cue_starts` hold starts only; there each end is the next start, capped at 3 s.
   - **Score A** is judged on every draw.
-  - **Score B** is judged on draws from non-English-original films, where the cues sit on foreign speech. On
-    English-original films with no forced file, a B fit must never come out `ALIGNED`, which makes those draws decoys
-    for B. They are chosen without the classifier. The report says how many of them sit mostly on speech labelled
-    foreign, as a check on the labels.
-  - **What the draws cannot show.** In a non-English-original film nearly all speech is foreign, so these draws never
-    test B's penalty for English speech. That premise is tested only by Dances with Wolves and the English-original
-    decoys. B's accuracy counts only with draws from at least 5 films and at least 50 draws; below that it is
-    unproven, not passed.
+  - **Score B** is never judged on them. Draws from films whose `original_language` is `en` and that have **no forced file** sit on English speech, so a B fit
+    must never come out `ALIGNED`, at any offset: they are decoys for B. Draws from films with a forced file are
+    left out for B, since a full track also subtitles the foreign lines, and so are draws from films whose language
+    is not `en` or unknown; the report counts both. The decoys
+    are chosen without the classifier. Such a film can still have a short foreign line under an English track's
+    cue, so the decoy set is settled **before any margin threshold is chosen**: after the language thresholds, every
+    decoy whose best B offset is within 1 s of 0 with a B score above 0 is heard once by the owner. This screen runs
+    for each model before the model is chosen. For each such draw the kit clips every cue whose
+    span at that offset holds speech labelled foreign, at most 3 per draw, largest first. The draw is dropped, counted, only if foreign
+    speech is heard under **every** clipped cue and those cues hold most of the foreign-labelled span at that
+    offset; otherwise it stays a decoy. These clips take only the ear-check's shape (6 s before, 2 s after, two
+    clicks, the line's text), not its first-of-run choice or its 3 s rule: the only question is whether foreign
+    speech is heard under the cue. The margin threshold is then computed once on the rest. If more than 10 draws need
+    hearing across both models, the report stops for a decision. **B needs at least 5 films and 50 decoy draws left
+    after the screen**; below that, B is unproven. The report says how many decoys sit mostly
+    on speech labelled foreign, as a check on the labels.
+  - **What the draws cannot show.** A's draws are dense runs of subtitled lines, not a sparse forced file among
+    English dialogue, A's known weakness. B's accuracy on foreign speech is not shown by any draw; the ear-check
+    below is its proof.
 - **Absolute answers, each judged on its own.** The **films** of all three are left out entirely of everything that
   chooses a threshold or the bias, on both sides: their synthetic draws, their language labels, the bias median, and
   every decoy, whether as the forced file or as the audio (cross-film pairs included). Their results are still
-  reported.
+  reported. Each is judged on the corrected offset (fitted minus the frozen bias), the offset the product would show.
+  The tolerance below is ±200 ms under A; under B it is ±500 ms, the precision B is proven to.
   - **Dances with Wolves.** The fits of sidecars 2 and 48 must differ by 14 ± 0.3 s, sidecar 2 must come out within
     ±1 s of 0, and both must be `ALIGNED`.
-  - **The one `EMBEDDED` `ALIGNED` file:** its fitted offset on the raw cues, ±200 ms.
-  - **The one owner-verified file:** its current offset, ±200 ms.
+  - **The one `EMBEDDED` `ALIGNED` file:** the offset fitted to its English track on the raw cues, within the
+    tolerance.
+  - **The one owner-verified file:** its current offset, within the tolerance.
 - **Robustness of the real forced files, against each one's base fit b.** These are changes the score curve is not
   invariant to:
   - drop 30–50% of the cues, or jitter cue starts by ±300 ms: must stay within ±200 ms of b;
@@ -153,13 +190,44 @@ answers are built from the films' own full English tracks. The owner exports the
   - every forced file against other films' audio (a seeded sample of 40 when there are more);
   - the forced file with its cue order and gaps shuffled (durations kept) against its own film;
   - each fit's second-best peak more than 2 s away.
-- **The owner's ear.** The base fits flagged `ALIGNED` more than 1 s from 0 are listed. The owner checks min(5, N)
-  of them:
-  - a seeded random draw plus the two lowest-margin ones;
-  - plus one or two `ALIGNED` fits near 0.
+- **The owner's ear, B's proof (owner, 2026-11-20).** It runs only after every threshold and the bias are frozen, and
+  only for **one model**, chosen before it on the decoys and cost alone (the one that passes the decoys; if both do,
+  the cheaper). The absolute answers are then judged once, on that model, before the ear-check. If the chosen model
+  fails any later gate, B fails: the other model is never tried. The list is drawn only from forced files whose films have maps, from their fits
+  under the **final frozen** thresholds and bias, the ones the product will use (nothing is tuned on what is heard).
+  It holds:
+  - **10 distinct real forced files** whose B fit is `ALIGNED`, by a seeded random draw;
+  - **plus, heard on top,** the lowest-margin file and the one furthest from 0, if the draw missed them.
 
-  The owner listens **with the fitted offset applied** and says whether it is right. The report gives the error upper bound
-  this sample allows. Flagged files not heard stay `CHECK` until heard, and 3d-3's trust question carries their count.
+  The player's clock shows whole seconds, so the owner does not listen in the player. For each file the kit cuts
+  three **audio clips** from the same file, in the same offline container, from the start, middle and end of the
+  cues. Each clip's line has **speech labelled foreign** under it at the fitted offset (so a caption or sign over
+  English dialogue is never clipped) and is the **first line of a run**: no cue in the
+  3 s before it, so a fit shifted by a whole
+  line cannot land its click on other foreign speech unnoticed. Each clip runs from 6 s before the point where the
+  fit puts that line's speech to 2 s after where it puts the line's end (its raw time plus the fitted offset, the bias not applied, since the bias is
+  the gap between display and speech). One click marks where the line starts and a second where it ends, and each
+  clip is listed with the line's text. A file with fewer than three such lines is clipped on those it has, stays in the draw,
+  and is reported. Under B every `ALIGNED` file has at least one (the fifth condition). Under A a file with none is
+  left out of the draw and reported, and A is unproven if more than 2 of its `ALIGNED` files are left out, or if the lowest-margin file or the one
+  furthest from 0 is one of them. The owner plays them on the
+  Mac. A file is right only if, in every clip, the foreign speech begins on the first click, within about half a
+  second, with no foreign speech in the 3 s before it, and stops near the second. The rule is strict on purpose: an
+  unsubtitled foreign line just before a run makes a right fit fail, which can only make B fail, never pass.
+
+  Forced files on films whose original language is not `en`, unknown included (none today: all 151 are on
+  English-original films), get no B verdict,
+  here or in the product, since B has no English to penalise there; they are left out of the ear-check and useful
+  coverage, and counted.
+
+  **B is proven only if 10 random files are heard and every file heard is right**; fewer than 10 `ALIGNED` files
+  means B is unproven. Ten random files right bound B's error rate on clippable `ALIGNED` fits below about 26% (one-sided
+  95%), for errors the ear can catch (about 0.5 s), not the ±200 ms A is held to; the report says so, with the counts of files left out as unclippable and
+  heard on one clip only, and the decoys
+  and absolute answers carry the rest. A's ear-check, if A is ever considered, is a list drawn the same way from the
+  files whose A fit is `ALIGNED`, with the same rule: 10 random files heard and every file heard right, otherwise A
+  is unproven. Files not heard keep the verdict the gate gives; 3d-3's trust question carries the
+  ear-check's bound.
 - **For information, not truth:** the five OpenSubtitles films and Taken 3 (spot-checked at 32–37 min), plus an
   optional accented-English film chosen at export.
 
@@ -170,32 +238,44 @@ answers are built from the films' own full English tracks. The owner exports the
     out on both sides). Coverage is reported at 1.0×, 1.25× and 1.5×. A second-best peak's z-score is taken against
     the same offsets as the best peak's, with ±2 s around both left out.
   - **p(en) and neutral band.** Chosen on the language labels.
-  - **Held out.** The absolute answers are left out of all of these and judged once at the end.
-- **Accuracy, per score, only on items it can be scored on.** At least 90% of synthetic draws within ±200 ms, after
-  the bias: all draws for A, non-English-original draws for B.
+  - **Held out.** The absolute answers are left out of all of these, and judged once, on the chosen model and under
+    the frozen set below, before the ear-check.
+  - **Frozen.** After the leave-one-film-out gates, the same rules (margin 1.25× the largest decoy or wrong-pick
+    margin, the p(en) and neutral band, the bias median) are computed once over every film except the absolute answers,
+    then applied to every film, the absolute answers included. That frozen set is what the product uses; the frozen record of every file's fit and verdict is what useful
+    coverage, the ear-check and 3d-2's parity are taken from.
+- **Accuracy.** A: at least 90% of synthetic draws within ±200 ms, after the bias. B: the ear-check, every file
+  heard right, to about ±0.5 s.
 - **Robustness:**
   - at least 90% of the drop and jitter changes within ±200 ms of b;
   - at least 95% of the second-half moves `CHECK`;
-  - **no false rejections by the halves rule:** at least 90% of synthetic draws (one cut, answer 0) have halves that
-    agree. The share of draws that come out `ALIGNED` is reported.
-- **Never confident and wrong:** zero `ALIGNED` results more than 1 s off. This counts:
+  - **no false rejections by the halves rule (A):** at least 90% of synthetic draws (one cut, answer 0) have halves
+    that agree. The share of draws that come out `ALIGNED` is reported. B has no draws with an answer, so for B the
+    report counts the real forced files rejected by the halves rule alone, for information.
+- **Never confident and wrong:** zero `ALIGNED` results more than 1 s from the known answer (or from b, for robustness changes), and none
+  on a decoy. This counts:
   - the synthetic draws;
   - the robustness changes;
-  - every decoy (B on English-original draws included);
+  - every decoy; for B, any `ALIGNED` on a decoy draw counts, whatever its offset, except a draw dropped after the
+    owner heard foreign speech under it (see "The test set");
   - every ear-check the owner finds wrong.
 - **The absolute answers** each pass, as stated above.
-- **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
+- **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED` in the frozen record. Eligible means 8 or more cues on
   speech. This is reported beside the ear-check's precision.
-- **Which score is built:**
-  - **B,** if its accuracy is proven (see above) and it passes the absolute answers and the decoys.
-  - **Otherwise A, only if** Dances with Wolves and the other absolute answers pass under A, no ear-check is wrong,
-    and the owner says yes. The synthetic draws are dense runs of subtitled lines and cannot show A's known weakness:
-    locking a sparse forced file on to English dialogue.
+- **Which score is built:** for each score, every gate above that applies to it must pass.
+  - **B** first, if its gates pass in this order: the decoy screen and the decoy minimum; never confident and wrong;
+    robustness; useful coverage; the absolute answers on the chosen model; |A's bias| at most 300 ms (the report
+    stops past that, since B takes it untested); and last the ear-check, run only after all the others have passed.
+  - **Otherwise A,** if its gates pass, Dances with Wolves and the other absolute answers pass under A, A's ear-check
+    proves A (10 random files heard, every file heard right, and not unproven by the left-out rules), and the owner
+    says yes. The synthetic draws cannot show A's known weakness: locking a sparse forced file on
+    to English dialogue.
   - **Otherwise neither.**
 - **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
   - One film is timed first.
-  - If the films with forced files and the full-track films together would take too long, the run covers the full-track films, the absolute
-    answers and a seeded sample of the rest. The report says what that sample cannot show.
+  - If the films with forced files and the full-track films together would take too long, the run covers the
+    full-track films, the absolute answers, the foreign-label sample and a seeded sample of the rest. The report says
+    what that sample cannot show.
 
 If neither score passes, stop and report. The chosen
 thresholds and the bias are written into this plan before 3d-1a is briefed.
@@ -263,7 +343,9 @@ The shape is fixed here. Details come from 3d-M's numbers.
 
 - **The fit.** As in "The fit" above, with 3d-M's thresholds.
 - **The source.** A new reference source, `SOUNDTRACK`, added by a migration that widens `reference_source`'s check.
-- **One row per sidecar.** When the sidecar's edition has a speech map, the row is the soundtrack fit. With no map yet,
+- **One row per sidecar.** When the sidecar's edition has a speech map, the row is the soundtrack fit, except when
+  the score built is B and `film.original_language` is not `en` (a null language included): then the row stays as with no map
+  (3d-M never measured B there), with tests for a foreign and a null language. If A is built, the exception does not apply. With no map yet,
   the row stays the OpenSubtitles fit. The OpenSubtitles result for an edition with a map is still logged.
 - **The key.** The map's fingerprint and versions plus `SoundtrackFit.RULES_VERSION`. The four key sites (`state`,
   `job`, `saveLocked`, `current`) are each tested.
@@ -272,8 +354,11 @@ The shape is fixed here. Details come from 3d-M's numbers.
   is fitted to its own part's map.
 - **Admin's reasons:** "Lined up with the film's speech", or "No clear match with the film's speech".
 - **Fit parity, the gate before 3d-3 is briefed.** A tool-run `main` fits the 3d-M test set from `SpeechMapMain`'s
-  output files and the `psql` export of the forced files, never the database. The
-  offsets must be within 10 ms of 3d-M's, and it must meet the same accuracy and never-wrong gate. This needs the
+  output files and the `psql` export of the forced files, never the database. 3d-M's gate judges each film with
+  thresholds chosen without it, but the product uses one frozen set, so after freezing 3d-M also records every
+  file's fit and verdict under the final thresholds and bias, which is the record the ear-check is drawn from. The
+  tool's offsets must be within 10 ms of that record, with the same verdict on every file, and it must meet the same
+  never-wrong gate. A's accuracy is measured again; B's carries over from 3d-M's ear-check. This needs the
   owner's release after 3d-2.
 
 ### 3d-3 — trust: the soundtrack may decide (needs the owner's yes)
@@ -299,11 +384,16 @@ and let a download beat the film's embedded forced track. So:
    image pull, wheel fetch and model fetch (each pinned and hash-checked), then runs with no network and only while
    nothing is playing. It is measurement only and never part of CineFilm.
 2. **Trust (asked again before 3d-3, with 3d-M's numbers).** When the soundtrack says `ALIGNED`, may CineFilm set the
-   offset and choose between forced files by itself, within the `SPEECH` limits above?
+   offset and choose between forced files by itself, within the `SPEECH` limits above? If B is chosen, the question
+   says that the speech position is proven only by ear, to about ±0.5 s and not the ±200 ms A is held to; that the
+   display correction (A's bias, stated in ms) is taken from A and untested for B; and that ten heard fits right
+   bound B's error rate on clippable `ALIGNED` fits below about 26% (one-sided 95%) for errors of that size, with
+   the counts of unclippable and single-clip files.
 
 ## Not in scope
 
-- Burned-in or picture-based subtitles.
+- Burned-in subtitles, and picture-based forced files as fit input. Picture-based full tracks are read in 3d-M only
+  for their display times.
 - Recognising which foreign language is spoken.
 - Sung foreign parts. These are labelled neutral where Whisper marks music or no speech. 3d-M reports how often songs
   are still labelled foreign speech.
