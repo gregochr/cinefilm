@@ -126,8 +126,13 @@ answers are built from the films' own full English tracks. The owner exports the
 A header scan of all 1,102 films (2026-11-20) found 61 with a full English subtitle track. **All 61 are bitmap
 tracks** (pictures, as on a disc), and **all 61 films are English-original**: no foreign-original film has an English
 track. A bitmap track still carries each line's display and clear times, which is all a fit needs. The kit reads
-them by demuxing that one subtitle stream (no decoding) in the same offline container: a display set that shows
-something starts a line, the next one that clears it ends it. That read covers most of each file over SMB and is
+them from that one subtitle stream in the same offline container, by codec (the header scan records it):
+- **PGS** (Blu-ray): every display set that shows new content ends the line before it and starts a new one; an empty
+  one ends the open line.
+- **VobSub** (`dvd_subtitle`, DVD): the start and end come from each packet's own display commands (or the
+  container's duration when it states one).
+- A line with no readable end ends at the next start, at most 10 s on; the report counts them.
+ That read covers most of each file over SMB and is
 counted in the per-film cost. The 3 text tracks the app already read (`embedded_cue_starts`, `USABLE`) are used as
 well, whether or not the scan counted them; the report lists them and which films they are on. So:
 
@@ -177,7 +182,8 @@ well, whether or not the scan counted them; the report lists them and which film
   - each fit's second-best peak more than 2 s away.
 - **The owner's ear, B's proof (owner, 2026-11-20).** It runs only after every threshold and the bias are frozen, and
   only for **one model**, chosen before it on the decoys and cost alone (the one that passes the decoys; if both do,
-  the cheaper). The absolute answers are then judged once, on that model, before the ear-check. The list is drawn only from forced files whose films have maps, and each file's fit uses thresholds
+  the cheaper). The absolute answers are then judged once, on that model, before the ear-check. If the chosen model
+  fails any later gate, B fails: the other model is never tried. The list is drawn only from forced files whose films have maps, and each file's fit uses thresholds
   chosen without its own film. It holds:
   - **10 distinct real forced files** whose B fit is `ALIGNED`, by a seeded random draw;
   - **plus, heard on top,** the lowest-margin file and the one furthest from 0, if the draw missed them.
@@ -188,9 +194,15 @@ well, whether or not the scan counted them; the report lists them and which film
   line cannot land its click on other foreign speech unnoticed. Each clip runs from 6 s before to 4 s after the point
   where the fit puts that line's speech (its raw time plus the fitted offset, the bias not applied, since the bias is
   the gap between display and speech). One click marks where the line starts and a second where it ends, and each
-  clip is listed with the line's text. The owner plays them on the Mac. A file is right only if, in all three clips,
-  the foreign speech begins on the first click, within about half a second, with no foreign speech in the 3 s
-  before it, and stops near the second.
+  clip is listed with the line's text. A file with fewer than three such lines is clipped on those it has (at least
+  one, since a file's first line always qualifies), stays in the draw, and is reported. The owner plays them on the
+  Mac. A file is right only if, in every clip, the foreign speech begins on the first click, within about half a
+  second, with no foreign speech in the 3 s before it, and stops near the second. The rule is strict on purpose: an
+  unsubtitled foreign line just before a run makes a right fit fail, which can only make B fail, never pass.
+
+  Forced files on foreign-original films (none today: all 151 are on English-original films) get no B verdict,
+  here or in the product, since B has no English to penalise there; they are left out of the ear-check and useful
+  coverage, and counted.
 
   **B is proven only if 10 random files are heard and every file heard is right**; fewer than 10 `ALIGNED` files
   means B is unproven. Ten random files right bound B's error rate on `ALIGNED` fits below about 26% (one-sided
@@ -317,9 +329,11 @@ The shape is fixed here. Details come from 3d-M's numbers.
   is fitted to its own part's map.
 - **Admin's reasons:** "Lined up with the film's speech", or "No clear match with the film's speech".
 - **Fit parity, the gate before 3d-3 is briefed.** A tool-run `main` fits the 3d-M test set from `SpeechMapMain`'s
-  output files and the `psql` export of the forced files, never the database. The
-  offsets must be within 10 ms of 3d-M's with the same verdict on every file (the heard files above all), and it
-  must meet the same never-wrong gate. A's accuracy is measured again; B's carries over from 3d-M's ear-check. This needs the
+  output files and the `psql` export of the forced files, never the database. 3d-M's gate judges each film with
+  thresholds chosen without it, but the product uses one frozen set, so after freezing 3d-M also records every
+  file's fit and verdict under the final thresholds and bias, and lists any heard file whose verdict differs. The
+  tool's offsets must be within 10 ms of that record, with the same verdict on every file, and it must meet the same
+  never-wrong gate. A's accuracy is measured again; B's carries over from 3d-M's ear-check. This needs the
   owner's release after 3d-2.
 
 ### 3d-3 — trust: the soundtrack may decide (needs the owner's yes)
