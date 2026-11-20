@@ -118,9 +118,11 @@ export function rowNote(row, tab) {
 /** "Title · year" (the year is left off when unknown). */
 export const titleLine = (row) => (row.year ? `${row.title} · ${row.year}` : row.title);
 
-/** The cut line's words. */
-export const cutText = (max, count) =>
-  `Home shows ${max}. These ${count} are in, but won't fit. Leave out an older film to make room.`;
+/** The cut line's words; the phone's is the short form (design `05`). */
+export const cutText = (max, count, short = false) =>
+  short
+    ? `Home shows ${max}. These ${count} won't fit.`
+    : `Home shows ${max}. These ${count} are in, but won't fit. Leave out an older film to make room.`;
 
 /** The status card's sentences: the bold count, the rest of the headline, and the line under it. */
 export function statusText(data) {
@@ -255,3 +257,29 @@ export const EMPTY_TAB_TEXT = {
   added: "You haven't added any films.",
   leftOut: "You haven't left any films out.",
 };
+
+// The Home-row preview in the status card.
+
+/** Home's row title and caption in Christmas week (the backend's WeeklyTheme builds the same two strings). */
+export const PREVIEW_TITLE = 'This week: Christmas';
+export const PREVIEW_CAPTION = 'A new theme every Monday';
+
+export const PREVIEW_LABEL = 'Preview · Home in Christmas week';
+
+/** What the preview says instead of posters when Christmas week falls back to the usual theme. */
+export const fallbackText = (min) =>
+  `Christmas week will show the usual weekly theme — under ${min} Christmas films.`;
+
+/**
+ * What Home's row would hold: `{ fallsBack, min, films }`. `films` are the first `max` In-week films in the shape
+ * Home's Poster takes (`id`, `title`, `year`, `posterPath`), none when the week falls back.
+ */
+export function previewRow(data) {
+  const { max, min } = data.limits;
+  const films = data.fallsBack
+    ? []
+    : data.inWeek
+        .slice(0, max)
+        .map((f) => ({ id: f.filmId, title: f.title, year: f.year, posterPath: f.posterUrl }));
+  return { fallsBack: data.fallsBack, min, films };
+}

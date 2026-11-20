@@ -75,6 +75,14 @@ describe('ChristmasList: the In tab', () => {
     expect(row('Arthur Christmas')).toHaveClass('xmas-row--cut');
   });
 
+  it('uses the short cut line on a phone', () => {
+    render(<List rows={christmasFixture().inWeek} tab="inWeek" max={12} short />);
+    expect(screen.getAllByRole('listitem')[12]).toHaveTextContent(
+      "Home shows 12. These 2 won't fit.",
+    );
+    expect(screen.queryByText(/Leave out an older film/)).not.toBeInTheDocument();
+  });
+
   it('counts a single film over the limit', () => {
     const rows = christmasFixture().inWeek.slice(0, 13);
     render(<List rows={rows} tab="inWeek" max={12} />);

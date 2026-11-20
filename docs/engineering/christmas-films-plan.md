@@ -89,9 +89,13 @@ The owner can leave out, put back, add and remove films with no config; every ch
 order is exactly Home's with the cut after 12; the preview matches Home; a film without keywords or without a TMDB id
 says so in search; both layouts and every state in `04` work; no reference to `CINEFILM_HOLIDAY_*` remains.
 
-## Slice 4 detail (2026-11-19): split in two PRs
+## Slice 4 detail (2026-11-19): add a film, built as three PRs; the preview is slice 5
 
-Slices 1-3 are merged (#231, #233 API, #235, #239, #243). Slice 4 is split so each PR stays under 1,500 lines.
+Slices 1-3 are merged (#231, #233 API, #235, #239, #243). Slice 4 (add a film) was built as three PRs, all merged:
+#246 (groundwork: states API, state helpers, results list), #259 (the desktop search panel), #260 (the phone sheet, the
+toast hold, the restored copy). The Home preview below is **slice 5**; the text under "4a" describes the first design,
+and the build differs in one way: the search is a plain textbox with a plain list of result buttons (no combobox or
+listbox roles), because each row holds a button.
 
 ### 4a: Add a film (search to add)
 
@@ -104,7 +108,7 @@ Slices 1-3 are merged (#231, #233 API, #235, #239, #243). Slice 4 is split so ea
 - "Find the film..." opens Fix match the way other Admin rows do (reuse `FixMatchPanel` via the Admin shell if reachable from this screen, else navigate to the Library todo list; builder checks `Admin.jsx` and picks the existing mechanism, no new Fix match code).
 - Tests: states api (empty list, url), `addResultRow` for all six states, panel open/close/Esc/arrow keys, Add then in-place Remove and Undo, NO_TMDB_ID and KEYWORDS_PENDING rows, stale `/states` answer ignored, phone sheet opens and Cancel closes (follow how `SearchSheet` is tested), `userEvent`, no `container.querySelector`.
 
-### 4b: Home preview and phone polish
+### Slice 5: Home preview and phone polish (was "4b")
 
 - Preview inside the status card: label "Preview · Home in Christmas week", "Hide preview"/"Show preview" button (open by default, remembered in `localStorage` inside try/catch), the real Home row title and caption ("This week: Christmas" / "A new theme every Monday"), then the first 12 `inWeek` posters reusing Home's poster row (`FilmRow` + `Poster`, lazy, 2:3 reserved). When `fallsBack`: "Christmas week will show the usual weekly theme — under 5 Christmas films." Phone: a full-width 44px "Preview Home in Christmas week ›" button opening the row in a sheet.
 - Phone "‹ Admin" back link above the eyebrow; phone cut line uses the short text if the design shows it (`05`).

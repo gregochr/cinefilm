@@ -14,6 +14,11 @@ import {
   cutText,
   emptyKind,
   emptyPendingText,
+  PREVIEW_CAPTION,
+  PREVIEW_LABEL,
+  PREVIEW_TITLE,
+  fallbackText,
+  previewRow,
   failureText,
   filmsText,
   keywordLine,
@@ -365,5 +370,45 @@ describe('add a film: a result state', () => {
     // A TMDB id shared with a film the owner included: Undo must restore that INCLUDE.
     expect(resultWrite('IN_KEYWORD', 5, [{ tmdbId: 5 }])).toMatchObject({ previous: 'INCLUDE' });
     expect(resultWrite('NO_TMDB_ID', null, [])).toBeNull();
+  });
+});
+
+describe('the Home preview', () => {
+  const data = (extra = {}) => ({
+    limits: { max: 12, min: 5 },
+    fallsBack: false,
+    inWeek: Array.from({ length: 14 }, (_, i) => ({
+      filmId: i + 1,
+      tmdbId: 100 + i,
+      title: `Film ${i + 1}`,
+      year: 1980 + i,
+      posterUrl: `/p${i + 1}.jpg`,
+    })),
+    ...extra,
+  });
+
+  it('says what Home says', () => {
+    expect(PREVIEW_TITLE).toBe('This week: Christmas');
+    expect(PREVIEW_CAPTION).toBe('A new theme every Monday');
+    expect(PREVIEW_LABEL).toBe('Preview · Home in Christmas week');
+    expect(fallbackText(5)).toBe(
+      'Christmas week will show the usual weekly theme — under 5 Christmas films.',
+    );
+  });
+
+  it('holds the first 12 films in the shape of Home’s poster', () => {
+    const row = previewRow(data());
+    expect(row.fallsBack).toBe(false);
+    expect(row.films).toHaveLength(12);
+    expect(row.films[0]).toEqual({ id: 1, title: 'Film 1', year: 1980, posterPath: '/p1.jpg' });
+    expect(row.films[11].id).toBe(12);
+  });
+
+  it('holds no films when the week falls back', () => {
+    expect(previewRow(data({ fallsBack: true }))).toEqual({ fallsBack: true, min: 5, films: [] });
+  });
+
+  it('writes the phone’s short cut line', () => {
+    expect(cutText(12, 2, true)).toBe("Home shows 12. These 2 won't fit.");
   });
 });
