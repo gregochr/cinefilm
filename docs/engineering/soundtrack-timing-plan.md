@@ -153,10 +153,12 @@ well, whether or not the scan counted them; the report lists them and which film
     are chosen without the classifier. Such a film can still have a short foreign line under an English track's
     cue, so the decoy set is settled **before any margin threshold is chosen**: after the language thresholds, every
     decoy whose best B offset is within 1 s of 0 with a B score above 0 is heard once by the owner. This screen runs
-    for each model before the model is chosen. For each such draw the kit clips (as in the ear-check) every cue whose
+    for each model before the model is chosen. For each such draw the kit clips every cue whose
     span at that offset holds speech labelled foreign, at most 3 per draw, largest first. The draw is dropped, counted, only if foreign
     speech is heard under **every** clipped cue and those cues hold most of the foreign-labelled span at that
-    offset; otherwise it stays a decoy. The margin threshold is then computed once on the rest. If more than 10 draws need
+    offset; otherwise it stays a decoy. These clips take only the ear-check's shape (6 s before, 2 s after, two
+    clicks, the line's text), not its first-of-run choice or its 3 s rule: the only question is whether foreign
+    speech is heard under the cue. The margin threshold is then computed once on the rest. If more than 10 draws need
     hearing across both models, the report stops for a decision. **B needs at least 5 films and 50 decoy draws left
     after the screen**; below that, B is unproven. The report says how many decoys sit mostly
     on speech labelled foreign, as a check on the labels.
@@ -212,8 +214,9 @@ well, whether or not the scan counted them; the report lists them and which film
   coverage, and counted.
 
   **B is proven only if 10 random files are heard and every file heard is right**; fewer than 10 `ALIGNED` files
-  means B is unproven. Ten random files right bound B's error rate on `ALIGNED` fits below about 26% (one-sided
-  95%), for errors the ear can catch (about 0.5 s), not the ±200 ms A is held to; the report says so, and the decoys
+  means B is unproven. Ten random files right bound B's error rate on clippable `ALIGNED` fits below about 26% (one-sided
+  95%), for errors the ear can catch (about 0.5 s), not the ±200 ms A is held to; the report says so, with the counts of files left out as unclippable and
+  heard on one clip only, and the decoys
   and absolute answers carry the rest. A's ear-check, if A is ever considered, is a list drawn the same way from the
   files whose A fit is `ALIGNED`, with the same rule: 10 random files heard and every file heard right, otherwise A
   is unproven. Files not heard keep the verdict the gate gives; 3d-3's trust question carries the
@@ -228,11 +231,11 @@ well, whether or not the scan counted them; the report lists them and which film
     out on both sides). Coverage is reported at 1.0×, 1.25× and 1.5×. A second-best peak's z-score is taken against
     the same offsets as the best peak's, with ±2 s around both left out.
   - **p(en) and neutral band.** Chosen on the language labels.
-  - **Held out.** The absolute answers are left out of all of these and judged once, on the chosen model, before the
-    ear-check.
+  - **Held out.** The absolute answers are left out of all of these, and judged once, on the chosen model and under
+    the frozen set below, before the ear-check.
   - **Frozen.** After the leave-one-film-out gates, the same rules (margin 1.25× the largest decoy or wrong-pick
-    margin, the p(en) and neutral band, the bias median) are applied once to every film except the absolute answers.
-    That frozen set is what the product uses; the frozen record of every file's fit and verdict is what useful
+    margin, the p(en) and neutral band, the bias median) are computed once over every film except the absolute answers,
+    then applied to every film, the absolute answers included. That frozen set is what the product uses; the frozen record of every file's fit and verdict is what useful
     coverage, the ear-check and 3d-2's parity are taken from.
 - **Accuracy.** A: at least 90% of synthetic draws within ±200 ms, after the bias. B: the ear-check, every file
   heard right, to about ±0.5 s.
@@ -242,7 +245,7 @@ well, whether or not the scan counted them; the report lists them and which film
   - **no false rejections by the halves rule (A):** at least 90% of synthetic draws (one cut, answer 0) have halves
     that agree. The share of draws that come out `ALIGNED` is reported. B has no draws with an answer, so for B the
     report counts the real forced files rejected by the halves rule alone, for information.
-- **Never confident and wrong:** zero `ALIGNED` results more than 1 s off, among items with a known answer, and none
+- **Never confident and wrong:** zero `ALIGNED` results more than 1 s from the known answer (or from b, for robustness changes), and none
   on a decoy. This counts:
   - the synthetic draws;
   - the robustness changes;
@@ -376,7 +379,8 @@ and let a download beat the film's embedded forced track. So:
    offset and choose between forced files by itself, within the `SPEECH` limits above? If B is chosen, the question
    says that the speech position is proven only by ear, to about ±0.5 s and not the ±200 ms A is held to; that the
    display correction (A's bias, stated in ms) is taken from A and untested for B; and that ten heard fits right
-   bound B's error rate on `ALIGNED` fits below about 26% (one-sided 95%) for errors of that size.
+   bound B's error rate on clippable `ALIGNED` fits below about 26% (one-sided 95%) for errors of that size, with
+   the counts of unclippable and single-clip files.
 
 ## Not in scope
 
