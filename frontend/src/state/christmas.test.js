@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_NONE_TEXT,
+  EMPTY_PENDING_ADD_TEXT,
+  RULE_TEXT,
   addResultRow,
   resultState,
   resultWrite,
@@ -198,11 +200,11 @@ describe('status card', () => {
     expect(statusText(body({ inWeek: films(3), fallsBack: true }))).toEqual({
       bold: '3 films',
       rest: ' are in, which is under 5, so Christmas week shows the usual weekly theme instead.',
-      hint: 'Home needs at least 5 Christmas films to show them.',
+      hint: 'Add 2 more and Home shows Christmas films.',
     });
     const one = statusText(body({ inWeek: films(1), fallsBack: true }));
     expect(one.rest).toMatch(/^ is in, /);
-    expect(one.hint).toBe('Home needs at least 5 Christmas films to show them.');
+    expect(one.hint).toBe('Add 4 more and Home shows Christmas films.');
   });
 });
 
@@ -252,7 +254,9 @@ describe('keywords', () => {
     expect(emptyPendingText({ fetched: 212, total: 1412 })).toBe(
       "CineFilm finds them from TMDB keywords, and it's still fetching those: 212 of 1,412 films so far. Films appear here as their keywords arrive, usually within the hour.",
     );
-    expect(EMPTY_NONE_TEXT).toBe('No films in your library are tagged Christmas.');
+    expect(EMPTY_NONE_TEXT).toBe(
+      'No films in your library are tagged Christmas. Add any you count.',
+    );
   });
 
   it('picks the empty variant only when every list is empty', () => {
@@ -299,6 +303,11 @@ describe('add a film: search result rows', () => {
   it('has no row for a state not known yet', () => {
     expect(addResultRow(null)).toBeNull();
     expect(addResultRow('SOMETHING_NEW')).toBeNull();
+  });
+
+  it('keeps the copy the design asks for', () => {
+    expect(RULE_TEXT).toMatch(/You can also add any film yourself\.$/);
+    expect(EMPTY_PENDING_ADD_TEXT).toBe("You don't have to wait: add any film yourself.");
   });
 });
 

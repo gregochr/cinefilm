@@ -68,9 +68,10 @@ function stateNow(id, included) {
     : STATES[id];
 }
 
-function serve({ get, put, states } = {}) {
+function serve({ get, put, states, session } = {}) {
   const included = new Set([104]);
   return installFetch((method, url, init) => {
+    if (session && method === 'POST' && url === '/api/session') return session(init);
     if (url.startsWith(`${BASE}/states`)) {
       const ids = new URL(url, 'http://x').searchParams.get('filmIds').split(',').map(Number);
       return states ? states(ids) : respond(ids.map((id) => stateNow(id, included)));
@@ -117,6 +118,15 @@ async function search(user, text, waitFor = 'Add Batman') {
 }
 
 describe('Christmas films: adding a film', () => {
+  it('says in the rule line that you can add any film yourself', async () => {
+    serve();
+    await open();
+    expect(
+      screen.getByText(/unless you leave it out\. You can also add any film yourself\./),
+    ).toBeInTheDocument();
+    expect(field()).toBeInTheDocument();
+  });
+
   it('adds a film in place: the button becomes Remove, the panel stays open and focus stays on it', async () => {
     const user = userEvent.setup();
     const fetchMock = serve();
@@ -295,6 +305,24 @@ describe('Christmas films: adding a film', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('keeps the toast up while the panel is open, and lets it go once the panel has closed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    serve();
+    await open();
+    await user.click(await search(user, 'batman'));
+    await panelButton('Remove Batman');
+    // Focus stays on the result, out of reach of the toast's Undo: it waits well past its 8 seconds.
+    await act(async () => vi.advanceTimersByTime(30000));
+    expect(toast()).toHaveTextContent('Added Batman.');
+
+    await user.keyboard('{Escape}');
+    await act(async () => vi.advanceTimersByTime(7900));
+    expect(toast()).toHaveTextContent('Added Batman.');
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(toast()).not.toHaveTextContent('Added Batman.');
+  });
+
   it('says Needs a match first and opens Fix match for a film with no TMDB id', async () => {
     const user = userEvent.setup();
     serve();
@@ -350,6 +378,45 @@ describe('Christmas films: adding a film', () => {
     await waitFor(() => expect(gets(fetchMock).length).toBeGreaterThanOrEqual(2));
   });
 
+  it('keeps the search open when the first film is added from the empty screen', async () => {
+    const user = userEvent.setup();
+    const empty = (included = new Set()) => {
+      const data = bodyWith(included);
+      data.inWeek = data.inWeek.filter((f) => f.reason === 'ADDED' && included.has(f.tmdbId));
+      data.added = [...data.inWeek];
+      data.leftOut = [];
+      data.keywords = { fetched: 1412, total: 1412, running: false };
+      return data;
+    };
+    serve({ get: () => empty(), put: () => respond(empty(new Set([150]))) });
+    renderApp('/admin/christmas');
+    expect(await screen.findByText('No Christmas films yet')).toBeInTheDocument();
+    expect(
+      screen.getByText('No films in your library are tagged Christmas. Add any you count.'),
+    ).toBeInTheDocument();
+    await user.click(await search(user, 'batman'));
+    expect(await screen.findByRole('tablist', { name: 'Christmas lists' })).toBeInTheDocument();
+    expect(panelList()).toBeInTheDocument();
+    expect(await panelButton('Remove Batman')).toHaveFocus();
+  });
+
+  it('offers the search while keywords are still being fetched, with the add-yourself line', async () => {
+    serve({
+      get: () => {
+        const data = fresh();
+        data.inWeek = [];
+        data.added = [];
+        data.leftOut = [];
+        return data;
+      },
+    });
+    renderApp('/admin/christmas');
+    expect(
+      await screen.findByText("You don't have to wait: add any film yourself."),
+    ).toBeInTheDocument();
+    expect(field()).toBeInTheDocument();
+  });
+
   it('turns a removed film into Add in place, with focus kept, when the write lands before /states answers', async () => {
     const user = userEvent.setup();
     const slow = deferred();
@@ -384,5 +451,211 @@ describe('Christmas films: adding a film', () => {
     await act(async () => slow.resolve(respond([STATES[4]])));
     expect(await panelButton('Add Trading Places')).toBe(remove);
     expect(remove).toHaveFocus();
+  });
+
+  it('does the same when the press comes in the tick the result first renders and /states is only asked later', async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    serve({
+      states: (ids) => {
+        calls += 1;
+        return respond(ids.map((id) => ({ ...STATES[id], state: 'NOT_IN' })));
+      },
+    });
+    await open();
+    await user.click(field());
+    await user.keyboard('trading{ArrowDown}{Enter}');
+    const add = await panelButton('Add Trading Places');
+    expect(add).toHaveFocus();
+    await waitFor(() => expect(calls).toBeGreaterThan(0));
+    expect(await panelButton('Add Trading Places')).toBe(add);
+    expect(add).toHaveFocus();
+  });
+
+  it('shows Add after an early removal when the search text changes and comes back before an answer', async () => {
+    const user = userEvent.setup();
+    const slow = deferred();
+    let calls = 0;
+    serve({
+      states: (ids) => {
+        calls += 1;
+        return calls === 1
+          ? slow.promise
+          : respond(ids.map((id) => ({ ...STATES[id], state: 'NOT_IN' })));
+      },
+    });
+    await open();
+    await user.click(field());
+    await user.keyboard('trading');
+    await waitFor(() => expect(calls).toBe(1));
+    await user.click(await panelButton('Remove Trading Places'));
+    await panelButton('Add Trading Places');
+
+    await user.clear(field());
+    await user.keyboard('begins');
+    await panelButton('Add Batman Begins');
+    await act(async () => slow.resolve(respond([STATES[4]])));
+    await user.clear(field());
+    await user.keyboard('trading');
+    expect(await panelButton('Add Trading Places')).toBeInTheDocument();
+  });
+});
+
+describe('Christmas films: adding a film on a phone', () => {
+  let media;
+  beforeEach(() => {
+    // `media.change(false)` is the window being widened.
+    const listeners = new Set();
+    const list = {
+      matches: true,
+      addEventListener: (type, fn) => listeners.add(fn),
+      removeEventListener: (type, fn) => listeners.delete(fn),
+    };
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => list),
+    );
+    media = {
+      change(next) {
+        list.matches = next;
+        act(() => listeners.forEach((fn) => fn()));
+      },
+    };
+  });
+
+  it('opens a full-screen sheet, acts with one tap, keeps the toast and its Undo inside, and closes on Cancel', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    const sheet = screen.getByRole('dialog', { name: 'Add a film' });
+    await user.keyboard('batman');
+    await user.click(await within(sheet).findByRole('button', { name: 'Add Batman' }));
+    const remove = await within(sheet).findByRole('button', { name: 'Remove Batman' });
+    expect(remove).toHaveFocus();
+
+    // One toast, inside the dialog (its Tab trap and a screen reader reach it), and its Undo works.
+    expect(screen.getAllByRole('status', { name: 'Christmas notification' })).toHaveLength(1);
+    expect(within(sheet).getByRole('status', { name: 'Christmas notification' })).toHaveTextContent(
+      'Added Batman.',
+    );
+    await user.click(within(sheet).getByRole('button', { name: 'Undo' }));
+    expect(await within(sheet).findByRole('button', { name: 'Add Batman' })).toHaveFocus();
+    expect(toast()).toHaveTextContent('Removed Batman.');
+
+    await user.click(within(sheet).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Add a film' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add a film' })).toHaveFocus();
+    // The toast is back in the page.
+    expect(screen.getAllByRole('status', { name: 'Christmas notification' })).toHaveLength(1);
+  });
+
+  it('has exactly one toast region through every change of where the sheet is', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    const regions = () => screen.getAllByRole('status', { name: 'Christmas notification' });
+    expect(regions()).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    const sheet = screen.getByRole('dialog', { name: 'Add a film' });
+    expect(regions()).toHaveLength(1);
+    expect(sheet).toContainElement(regions()[0]);
+
+    await user.keyboard('batman');
+    await user.click(await within(sheet).findByRole('button', { name: 'Add Batman' }));
+    await within(sheet).findByRole('button', { name: 'Remove Batman' });
+    expect(within(sheet).getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+
+    // Widened while the sheet is up: the sheet and the toast's place change in the same render.
+    media.change(false);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(regions()).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: 'Add a film' })).toHaveFocus();
+    // And back to a phone: the sheet stays shut and the toast stays in the page.
+    media.change(true);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(regions()).toHaveLength(1);
+    expect(toast()).toHaveTextContent('Added Batman.');
+    // The Undo that moved with it still works.
+    await user.click(within(toast()).getByRole('button', { name: 'Undo' }));
+    expect(toast()).toHaveTextContent('Removed Batman.');
+  });
+
+  it('lets the toast time out after a widening that moved it while its Undo had focus', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    serve();
+    renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    const sheet = screen.getByRole('dialog', { name: 'Add a film' });
+    await user.keyboard('batman');
+    await user.click(await within(sheet).findByRole('button', { name: 'Add Batman' }));
+    await within(sheet).findByRole('button', { name: 'Remove Batman' });
+    for (let i = 0; i < 10; i += 1) {
+      if (document.activeElement?.textContent === 'Undo') break;
+      await user.tab();
+    }
+    expect(within(sheet).getByRole('button', { name: 'Undo' })).toHaveFocus();
+
+    media.change(false);
+    expect(toast()).toHaveTextContent('Added Batman.');
+    // The desktop panel is open on the same query; closing it releases the pin.
+    await user.keyboard('{Escape}');
+    await act(async () => vi.advanceTimersByTime(9000));
+    expect(toast()).not.toHaveTextContent('Added Batman.');
+  });
+
+  it('keeps focus inside the sheet after a sign-in that followed a 401', async () => {
+    const user = userEvent.setup();
+    let signedIn = false;
+    serve({
+      states: (ids) => (signedIn ? respond(ids.map((id) => STATES[id])) : respond(null, 401)),
+      session: (init) => {
+        signedIn = JSON.parse(init.body).password === 'right';
+        return respond(signedIn ? { authenticated: true } : null, signedIn ? 200 : 401);
+      },
+    });
+    renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    await user.keyboard('batman');
+    const card = await screen.findByRole('dialog', { name: 'Signed out' });
+    await user.type(within(card).getByLabelText('Password'), 'right');
+    await user.click(within(card).getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Signed out' })).not.toBeInTheDocument(),
+    );
+    const sheet = screen.getByRole('dialog', { name: 'Add a film' });
+    expect(sheet).toContainElement(document.activeElement);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Add a film' })).not.toBeInTheDocument();
+  });
+
+  it('keeps focus in the sheet when Undo is pressed for a film the results no longer show', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    const sheet = screen.getByRole('dialog', { name: 'Add a film' });
+    await user.keyboard('batman');
+    await user.click(await within(sheet).findByRole('button', { name: 'Add Batman' }));
+    await within(sheet).findByRole('button', { name: 'Remove Batman' });
+
+    await user.clear(within(sheet).getByRole('textbox', { name: 'Add a film' }));
+    await user.keyboard('trading');
+    await within(sheet).findByRole('button', { name: /Trading Places/ });
+    await user.click(within(sheet).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(toast()).toHaveTextContent('Removed Batman.'));
+    expect(sheet).toContainElement(document.activeElement);
+    expect(document.activeElement).not.toBe(document.body);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Add a film' })).not.toBeInTheDocument();
   });
 });

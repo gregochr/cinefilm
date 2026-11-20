@@ -130,7 +130,7 @@ export function statusText(data) {
     return {
       bold: filmsText(n),
       rest: ` ${n === 1 ? 'is' : 'are'} in, which is under ${min}, so Christmas week shows the usual weekly theme instead.`,
-      hint: `Home needs at least ${min} Christmas films to show them.`,
+      hint: `Add ${min - n} more and Home shows Christmas films.`,
     };
   }
   return {
@@ -177,7 +177,14 @@ export function emptyKind(data) {
 export const emptyPendingText = ({ fetched, total }) =>
   `CineFilm finds them from TMDB keywords, and it's still fetching those: ${formatCount(fetched)} of ${formatCount(total)} films so far. Films appear here as their keywords arrive, usually within the hour.`;
 
-export const EMPTY_NONE_TEXT = 'No films in your library are tagged Christmas.';
+export const EMPTY_NONE_TEXT = 'No films in your library are tagged Christmas. Add any you count.';
+
+/** The line that follows the keywords-still-arriving copy, before the search field. */
+export const EMPTY_PENDING_ADD_TEXT = "You don't have to wait: add any film yourself.";
+
+/** The rule line under the title. */
+export const RULE_TEXT =
+  'A film counts if TMDB tags it with the “christmas” keyword, unless you leave it out. You can also add any film yourself.';
 
 // Adding a film: the search result rows (the answer of `GET /api/admin/christmas/states`).
 

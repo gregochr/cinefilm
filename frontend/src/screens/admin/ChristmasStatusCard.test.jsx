@@ -64,6 +64,6 @@ describe('ChristmasStatusCard', () => {
     expect(card()).toHaveTextContent(
       '3 films are in, which is under 5, so Christmas week shows the usual weekly theme instead.',
     );
-    expect(card()).toHaveTextContent('Home needs at least 5 Christmas films to show them.');
+    expect(card()).toHaveTextContent('Add 2 more and Home shows Christmas films.');
   });
 });
