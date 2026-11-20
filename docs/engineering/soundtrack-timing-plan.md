@@ -100,8 +100,11 @@ This is **not** credits L4a's convention: L4a ran the released image, installed 
     model frame by frame, since `get_speech_timestamps` returns stretches with no probability.
 - **Per film:** the share of speech labelled foreign, English and neutral; a p(en) histogram; and, for Dances with
   Wolves, the p(en) distribution on its Lakota stretches.
-- **The classifier's own accuracy.** On films with an embedded full English track, that track marks where English is
-  spoken. That measures signal B's English labels directly, independent of any forced file.
+- **The classifier's own accuracy,** on films with an embedded full English track and an `ALIGNED` forced file. The
+  full track also translates the foreign dialogue, so it cannot mark English on its own. The forced file, at its true
+  offset, marks the foreign dialogue: speech it covers is foreign. Speech that the full track covers and the forced
+  file does not is English. Stretches that straddle the two are left out. This measures B's labels before any score
+  uses them.
 
 ### The test set
 
@@ -128,7 +131,9 @@ The owner exports the inputs read-only with `psql`.
   ±200 ms.
 - **Never confident and wrong:** zero `ALIGNED` results more than 1 s off. That counts the shifted controls and every
   cross-film pair.
-- **Dances with Wolves** passes as stated above.
+- **Useful coverage:** with the held-out thresholds, at least 70% of the embedded set and of the shifted controls
+  that could be `ALIGNED` come out `ALIGNED`. A signal that only ever says `CHECK` fixes nothing.
+- **Dances with Wolves** passes as stated above, with **both** sidecars `ALIGNED`.
 - **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
 
 If B passes and A does not, build B. If both pass, build B and log A. If neither passes, stop and report. The chosen
