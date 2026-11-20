@@ -278,29 +278,6 @@ class CreditsEvaluateJobTest {
     }
 
     @Test
-    void aLogregRunIsRefusedUntilEmbeddingsCanBeReadAndNothingIsWritten() throws IOException {
-        Path features = EvaluateFixtures.featuresRun(temp, false);
-        Path logreg = EvaluateFixtures.logregRun(temp, "train-lr");
-        Path second = EvaluateFixtures.logregRun(temp, "train-lr2");
-
-        assertThatThrownBy(() -> run(features, "--train", logreg.toString(), "--train", second.toString()))
-            .isInstanceOf(IllegalArgumentException.class).hasMessage("train-lr: a logreg run is scored on "
-                + "embeddings, which this tool cannot read yet; nothing was written");
-        assertThat(out()).doesNotExist();
-    }
-
-    @Test
-    void aLogisticRegressionIsNotScoredFromFeatureRows() throws IOException {
-        FeatureRunReader.FilmRows rows = FeatureRunReader.read(Files.writeString(temp.resolve("features.csv"),
-            FeatureRows.header() + EvaluateFixtures.lonely()), false).getFirst();
-        FrameModel model = TrainedRun.load(EvaluateFixtures.logregRun(temp, "train-lr"),
-            new CreditsTrainJob.Hashes("ds-hash", "labels-hash")).shipping().getFirst();
-
-        assertThatThrownBy(() -> CreditsEvaluateJob.predict(model, rows)).isInstanceOf(IllegalStateException.class)
-            .hasMessage("a LogisticRegression predicts from embeddings, not from feature rows");
-    }
-
-    @Test
     void theBaselineJoinsOnMediaFileIdAndFingerprintAndScoresV2ByItsOffset() throws IOException {
         Path features = EvaluateFixtures.featuresRun(temp, true);
         Path baseline = Files.writeString(temp.resolve("v2.csv"),

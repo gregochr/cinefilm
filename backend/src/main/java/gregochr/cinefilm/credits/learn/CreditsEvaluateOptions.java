@@ -11,13 +11,15 @@ import java.util.Set;
 /**
  * The command line of the credits evaluation tool ({@code docs/engineering/credits-classifier-plan.md}, "L3c
  * specification", {@code CreditsEvaluateMain}). The only flag for test films is
- * {@code --look=L5}, and {@code --baseline} needs it.
+ * {@code --look=L5}, and {@code --baseline} needs it. {@code --embeddings} names the embeddings run that model B's
+ * training runs are scored on; the job refuses it with model A's runs and refuses model B's runs without it.
  */
-record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean look, Path baseline) {
+record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean look, Path baseline,
+                              Path embeddings) {
 
     private static final String LOOK = "--look";
     private static final String LOOK_VALUE = "L5";
-    private static final List<String> SINGLE = List.of("features", "out", "baseline");
+    private static final List<String> SINGLE = List.of("features", "out", "baseline", "embeddings");
     private static final String TRAIN = "train";
 
     /** Parses {@code --flag value} pairs ({@code --train} may repeat) and {@code --look=L5}. */
@@ -72,7 +74,9 @@ record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean
             }
         }
         String baseline = flags.get("baseline");
+        String embeddings = flags.get("embeddings");
         return new CreditsEvaluateOptions(Path.of(flags.get("features")), List.copyOf(train),
-            Path.of(flags.get("out")), look, baseline == null ? null : Path.of(baseline));
+            Path.of(flags.get("out")), look, baseline == null ? null : Path.of(baseline),
+            embeddings == null ? null : Path.of(embeddings));
     }
 }
