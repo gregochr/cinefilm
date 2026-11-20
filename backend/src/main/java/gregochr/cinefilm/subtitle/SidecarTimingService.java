@@ -522,7 +522,8 @@ public class SidecarTimingService {
     /**
      * What a sidecar's fit is made of: the film files' embedded reads (see {@link TimingKeys#referenceKey}) and, when
      * the film has no English track of its own, the usable stored OpenSubtitles files it is fitted to, as
-     * {@code |os:<imdbId>:<their file ids, sorted>}. A new stored file, a new IMDb id or a re-rip makes the row stale.
+     * {@code |os<DownloadedFit.RULES_VERSION>:<imdbId>:<their file ids, sorted>}. A new stored file, a new IMDb id, a
+     * re-rip or a change of {@link DownloadedFit#RULES_VERSION} makes the row stale.
      */
     private static String referenceKey(Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os) {
         String key = TimingKeys.referenceKey(s.edition(), s.sidecar(), reads);
@@ -530,7 +531,8 @@ public class SidecarTimingService {
         if (downloaded.isEmpty()) {
             return key;
         }
-        return key + "|os:" + os.get(s.edition().getId()).imdbId() + ":" + downloaded.stream()
+        String imdbId = os.get(s.edition().getId()).imdbId();
+        return key + "|os" + DownloadedFit.RULES_VERSION + ":" + imdbId + ":" + downloaded.stream()
             .map(ReferenceFacts::osFileId).sorted().map(String::valueOf).collect(Collectors.joining(","));
     }
 

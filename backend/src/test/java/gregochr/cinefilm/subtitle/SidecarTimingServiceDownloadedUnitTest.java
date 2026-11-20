@@ -55,6 +55,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     private static final Instant LATER = NOW.plusSeconds(3_600);
     private static final String IMDB = "tt0000001";
     private static final String BASE_KEY = "10:1000:" + NOW.toEpochMilli();
+    private static final String OS_KEY = "|os" + DownloadedFit.RULES_VERSION + ":" + IMDB;
     private static final List<Long> STARTS = IntStream.range(0, 12).mapToObj(i -> 10_000L + i * 7_000L).toList();
 
     @Mock
@@ -170,7 +171,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     private FitJob jobFitting(Long... fileIds) {
         List<DownloadedFit.Reference> fitTo = Arrays.stream(fileIds)
             .map(id -> new DownloadedFit.Reference(id, "Release " + id, 300, List.of(1L))).toList();
-        return new FitJob(1L, 5L, TimingKeys.identity(sidecar), BASE_KEY + "|os:" + IMDB + ":5012", STARTS, List.of(),
+        return new FitJob(1L, 5L, TimingKeys.identity(sidecar), BASE_KEY + OS_KEY + ":5012", STARTS, List.of(),
             null, fitTo);
     }
 
@@ -202,7 +203,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L, 5013L);
         assertThat(job.osReferences().get(0).starts()).hasSize(300).startsWith(10_000L, 20_000L);
         assertThat(job.osReferences().get(0).release()).isEqualTo("Release 5012");
-        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":5012,5013");
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + OS_KEY + ":5012,5013");
     }
 
     @Test
@@ -263,7 +264,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         FitJob job = onlyJob(5013L);
 
         assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5013L);
-        assertThat(job.referenceKey()).endsWith("|os:" + IMDB + ":5013");
+        assertThat(job.referenceKey()).endsWith(OS_KEY + ":5013");
     }
 
     @Test
@@ -279,11 +280,23 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
+    void aRowKeyedBeforeTheRulesWereVersionedIsStaleAndDueForARefit() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        served();
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        stored(reference(5012, 300, IMDB));
+        when(alignments.findBySidecarIdIn(List.of(5L)))
+            .thenReturn(List.of(row(BASE_KEY + "|os:" + IMDB + ":5012")));
+
+        assertThat(service.dueFilmIds()).containsExactly(1L);
+    }
+
+    @Test
     void anOpenSubtitlesFitIsCurrentOnlyWhileTheSameFilesAreUsableForTheSameImdbId() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         served();
         when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
-        String key = BASE_KEY + "|os:" + IMDB + ":5012";
+        String key = BASE_KEY + OS_KEY + ":5012";
         when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(key)));
 
         stored(reference(5012, 300, IMDB));
@@ -392,7 +405,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         assertThat(old.getLastCueEndMs()).isEqualTo(3_500_000L);
         verify(references).save(old);
         assertThat(after.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
-        assertThat(after.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":5012");
+        assertThat(after.referenceKey()).isEqualTo(BASE_KEY + OS_KEY + ":5012");
     }
 
     @Test
@@ -408,7 +421,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     void aFileThatAlreadyKnowsItsLastCueEndOrHasUnder300LinesIsNeitherDueNorFilledIn() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         currentFit();
-        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(BASE_KEY + "|os:" + IMDB + ":5012")));
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(BASE_KEY + OS_KEY + ":5012")));
         OpenSubtitlesReference short299 = storedBeforeV30(9999);
         short299.setCueCount(299);
         stored(reference(5012, 300, IMDB), short299);
@@ -426,7 +439,7 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(9999L);
         assertThat(job.osReferences().get(0).release()).isEqualTo("Release 9999");
-        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":9999");
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + OS_KEY + ":9999");
     }
 
     @Test
@@ -439,7 +452,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         FitJob job = onlyJob(9999L);
 
         assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(9999L);
-        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":9999");
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + OS_KEY + ":9999");
     }
 
     @Test
@@ -468,7 +481,7 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId)
             .containsExactly(5013L, 3000L, 4000L);
-        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":3000,4000,5013");
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY + OS_KEY + ":3000,4000,5013");
     }
 
     @Test
@@ -566,7 +579,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     void adminIsToldTheSourceAndTheReleaseAndAnOpenSubtitlesFitIsNeverApplied() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         stored(reference(5012, 300, IMDB));
-        ForcedSubtitleAlignment row = row(BASE_KEY + "|os:" + IMDB + ":5012");
+        ForcedSubtitleAlignment row = row(BASE_KEY + OS_KEY + ":5012");
         row.setFittedOffsetMs(900);
         row.setVerdict(Verdict.ALIGNED);
         when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row));

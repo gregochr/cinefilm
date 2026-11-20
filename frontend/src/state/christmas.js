@@ -179,6 +179,69 @@ export const emptyPendingText = ({ fetched, total }) =>
 
 export const EMPTY_NONE_TEXT = 'No films in your library are tagged Christmas.';
 
+// Adding a film: the search result rows (the answer of `GET /api/admin/christmas/states`).
+
+const ADD_ROWS = {
+  IN_KEYWORD: {
+    chip: { label: 'TMDB keyword', variant: 'keyword' },
+    line: null,
+    label: 'Leave out',
+  },
+  IN_ADDED: { chip: { label: 'Added by me', variant: 'added' }, line: null, label: 'Remove' },
+  LEFT_OUT: {
+    chip: { label: 'Left out by me', variant: 'left-out' },
+    line: null,
+    label: 'Put back',
+  },
+  NOT_IN: { chip: null, line: 'Not a Christmas film', label: 'Add' },
+  KEYWORDS_PENDING: {
+    chip: { label: 'Keywords not fetched yet', variant: 'pending' },
+    line: null,
+    label: 'Add',
+  },
+  NO_TMDB_ID: { chip: null, line: 'Needs a match first', label: 'Find the film…', fix: true },
+};
+
+/**
+ * What a search result shows for a state: `{ chip, line, action }`. `chip` is `{ label, variant }` or null, `line` the
+ * muted words shown instead of a chip or null, `action` `{ label, fix }` (`fix`: opens Fix match instead of writing).
+ * Null for a state not known yet (no answer: no button).
+ */
+export function addResultRow(state) {
+  const row = ADD_ROWS[state];
+  if (!row) return null;
+  return { chip: row.chip, line: row.line, action: { label: row.label, fix: row.fix === true } };
+}
+
+/** The states an answer can give for a film that is in one of the lists. */
+const LEAVES_LISTS = new Set(['IN_KEYWORD', 'IN_ADDED', 'LEFT_OUT']);
+
+/**
+ * A result's state now: the screen's own lists (`data`) first, so a change made here, or a later poll, is shown at
+ * once and an older `/states` answer cannot undo it. Otherwise the answer, `{ state, issuedAt }`, where `issuedAt` is
+ * the request number (`useChristmas`' `issued()`) when it was asked: an answer that puts a film in a list which no list
+ * holds is believed while the data was not asked for after the question (a poll or a read after Fix match was in
+ * flight first), and means the film has since left every list (`NOT_IN`) once the data was asked for later. The
+ * numbers are positions in the sequence of requests, so a slow answer cannot pass for a newer one. No answer: null. */
+export function resultState(filmId, data, answer, version) {
+  const inWeek = data.inWeek.find((film) => film.filmId === filmId);
+  if (inWeek) return inWeek.reason === 'ADDED' ? 'IN_ADDED' : 'IN_KEYWORD';
+  if (data.leftOut.some((film) => film.filmId === filmId)) return 'LEFT_OUT';
+  if (!answer) return null;
+  return LEAVES_LISTS.has(answer.state) && version > answer.issuedAt ? 'NOT_IN' : answer.state;
+}
+
+/** The write a result's action makes: like `rowAction`, plus Add (INCLUDE; Undo deletes the choice). Null for `NO_TMDB_ID`. */
+export function resultWrite(state, tmdbId, added) {
+  if (state === 'NOT_IN' || state === 'KEYWORDS_PENDING') {
+    return { choice: 'INCLUDE', previous: null, toast: 'add' };
+  }
+  if (state === 'IN_KEYWORD') return rowAction({ tmdbId, reason: 'KEYWORD' }, added);
+  if (state === 'IN_ADDED') return rowAction({ tmdbId, reason: 'ADDED' }, added);
+  if (state === 'LEFT_OUT') return rowAction({ tmdbId }, added);
+  return null;
+}
+
 /** The line a tab with nothing in it shows (when the other lists are not empty either). */
 export const EMPTY_TAB_TEXT = {
   inWeek: 'No films are in Christmas week yet.',

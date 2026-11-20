@@ -137,7 +137,7 @@ class ForcedAlignmentSourceIntegrationTest extends IntegrationTestBase {
         Long filmId = films.findAll().get(0).getId();
         FitJob job = timing.fitJobs(filmId).get(0);
         assertThat(job.osReferences()).hasSize(1);
-        assertThat(job.referenceKey()).endsWith("|os:" + IMDB + ":5012");
+        assertThat(job.referenceKey()).endsWith("|os" + DownloadedFit.RULES_VERSION + ":" + IMDB + ":5012");
         DownloadedFit.Choice best = DownloadedFit.choose(job.servedStarts(), job.osReferences());
 
         SaveOutcome outcome = timing.save(job, best.result(), best.reference().osFileId(), NOW.plusSeconds(60));
