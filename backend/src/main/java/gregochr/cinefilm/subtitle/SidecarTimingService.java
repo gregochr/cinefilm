@@ -574,7 +574,8 @@ public class SidecarTimingService {
             Edition e = s.edition();
             Film film = e.getFilm();
             List<MediaFile> parts = e.originalParts();
-            if ((parts.size() == 1 || s.sidecar().isWholeEdition()) && e.getRuntimeMs() > 0 && film.getImdbId() != null
+            if (!parts.isEmpty() && (parts.size() == 1 || s.sidecar().isWholeEdition())
+                && e.getRuntimeMs() > 0 && film.getImdbId() != null
                 && parts.stream().allMatch(p -> isRead(p, reads)
                     && reads.get(p.getId()).getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE)) {
                 wanted.putIfAbsent(e.getId(), e);

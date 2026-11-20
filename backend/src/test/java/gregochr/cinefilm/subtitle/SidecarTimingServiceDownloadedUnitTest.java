@@ -812,6 +812,16 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
+    void aWholeEditionSidecarOnAnEditionWithNoOriginalPartsCostsNoReferenceQueryInAdmin() {
+        Edition empty = edition(edition.getFilm(), 41L, "Empty", 90 * MIN, null);
+        sidecar.setWholeEdition(true);
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row("any")));
+
+        assertThat(service.current(Map.of(5L, empty), List.of(sidecar))).isEmpty();
+        verifyNoInteractions(references);
+    }
+
+    @Test
     void aSplitWholeEditionsStoredFileWithNoLastCueEndMakesTheFilmDueAndIsFilledIn() {
         split();
         splitReads(EmbeddedCueStarts.Status.NO_REFERENCE, EmbeddedCueStarts.Status.NO_REFERENCE);
