@@ -145,9 +145,12 @@ well, whether or not the scan counted them; the report lists them and which film
     left out for B, since a full track also subtitles the foreign lines; the report counts the films left. The decoys
     are chosen without the classifier. Such a film can still have a short foreign line under an English track's
     cue, so the decoy set is settled **before any margin threshold is chosen**: after the language thresholds, every
-    decoy whose best B offset is within 1 s of 0 with a B score above 0 is heard once by the owner, as a clip (see
-    the ear-check). Foreign speech there drops that draw, counted; the margin threshold is then computed once on the
-    rest. If more than 10 need hearing, the report stops for a decision. The report says how many decoys sit mostly
+    decoy whose best B offset is within 1 s of 0 with a B score above 0 is heard once by the owner. This screen runs
+    for each model before the model is chosen. For each such draw the kit clips (as in the ear-check) every cue whose
+    span at that offset holds speech labelled foreign, at most 3 per draw; foreign speech heard under any of them
+    drops the draw, counted. The margin threshold is then computed once on the rest. If more than 10 draws need
+    hearing across both models, the report stops for a decision. **B needs at least 5 films and 50 decoy draws left
+    after the screen**; below that, B is unproven. The report says how many decoys sit mostly
     on speech labelled foreign, as a check on the labels.
   - **What the draws cannot show.** A's draws are dense runs of subtitled lines, not a sparse forced file among
     English dialogue, A's known weakness. B's accuracy on foreign speech is not shown by any draw; the ear-check
@@ -180,11 +183,14 @@ well, whether or not the scan counted them; the report lists them and which film
   - **plus, heard on top,** the lowest-margin file and the one furthest from 0, if the draw missed them.
 
   The player's clock shows whole seconds, so the owner does not listen in the player. For each file the kit cuts
-  three **audio clips** from the same file, in the same offline container: from the start, middle and end of the
-  cues, each 6 s before to 4 s after the point where the fit puts that line's speech (its raw time plus the fitted
-  offset, the bias not applied, since the bias is the gap between display and speech). A short click marks that
-  point, and each clip is listed with the line's text. The owner plays them on the Mac. A file is right only if, in
-  all three clips, the foreign line begins on the click, within about half a second.
+  three **audio clips** from the same file, in the same offline container, from the start, middle and end of the
+  cues. Each clip's line is the **first line of a run**: no cue in the 3 s before it, so a fit shifted by a whole
+  line cannot land its click on other foreign speech unnoticed. Each clip runs from 6 s before to 4 s after the point
+  where the fit puts that line's speech (its raw time plus the fitted offset, the bias not applied, since the bias is
+  the gap between display and speech). One click marks where the line starts and a second where it ends, and each
+  clip is listed with the line's text. The owner plays them on the Mac. A file is right only if, in all three clips,
+  the foreign speech begins on the first click, within about half a second, with no foreign speech in the 3 s
+  before it, and stops near the second.
 
   **B is proven only if 10 random files are heard and every file heard is right**; fewer than 10 `ALIGNED` files
   means B is unproven. Ten random files right bound B's error rate on `ALIGNED` fits below about 26% (one-sided
@@ -222,12 +228,12 @@ well, whether or not the scan counted them; the report lists them and which film
 - **The absolute answers** each pass, as stated above.
 - **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
   speech. This is reported beside the ear-check's precision.
-- **Which score is built:**
-  - **B,** if, in this order: no decoy is confident and wrong (its decoy draws among them); the second-half moves and
-    the drop and jitter changes pass; useful coverage passes; the absolute answers pass on the chosen model; and then
-    the ear-check passes. The ear-check is run only after all the others have passed.
-  - **Otherwise A, only if** Dances with Wolves and the other absolute answers pass under A, A's ear-check finds none
-    wrong, and the owner says yes. The synthetic draws cannot show A's known weakness: locking a sparse forced file on
+- **Which score is built:** for each score, every gate above that applies to it must pass.
+  - **B** first, if its gates pass in this order: the decoy screen and the decoy minimum; never confident and wrong;
+    robustness; useful coverage; the absolute answers on the chosen model; |A's bias| at most 300 ms (the report
+    stops past that, since B takes it untested); and last the ear-check, run only after all the others have passed.
+  - **Otherwise A,** if its gates pass, Dances with Wolves and the other absolute answers pass under A, A's ear-check
+    finds none wrong, and the owner says yes. The synthetic draws cannot show A's known weakness: locking a sparse forced file on
     to English dialogue.
   - **Otherwise neither.**
 - **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
@@ -340,8 +346,9 @@ and let a download beat the film's embedded forced track. So:
    nothing is playing. It is measurement only and never part of CineFilm.
 2. **Trust (asked again before 3d-3, with 3d-M's numbers).** When the soundtrack says `ALIGNED`, may CineFilm set the
    offset and choose between forced files by itself, within the `SPEECH` limits above? If B is chosen, the question
-   says that B's timing is proven only by ear, to about ±0.5 s and not the ±200 ms A is held to, and that ten heard
-   fits right bound its error rate on `ALIGNED` fits below about 26% (one-sided 95%) for errors of that size.
+   says that the speech position is proven only by ear, to about ±0.5 s and not the ±200 ms A is held to; that the
+   display correction (A's bias, stated in ms) is taken from A and untested for B; and that ten heard fits right
+   bound B's error rate on `ALIGNED` fits below about 26% (one-sided 95%) for errors of that size.
 
 ## Not in scope
 
