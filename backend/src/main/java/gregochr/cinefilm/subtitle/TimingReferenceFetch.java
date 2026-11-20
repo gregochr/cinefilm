@@ -175,6 +175,11 @@ final class TimingReferenceFetch {
         }
     }
 
+    /** A download is never measured against the OpenSubtitles file it came from: it would match itself. */
+    private static boolean isOwnFile(File file, OpenSubtitlesReference reference) {
+        return file.osFileId() != null && file.osFileId() == reference.getOsFileId();
+    }
+
     private static boolean isUsable(Target target, OpenSubtitlesReference reference) {
         return TimingReferenceRule.usable(reference, target.runtimeMs(), target.creditsStartMs());
     }
@@ -188,6 +193,9 @@ final class TimingReferenceFetch {
         boolean matches = false;
         double best = 0;
         for (File file : target.files()) {
+            if (isOwnFile(file, reference)) {
+                continue;
+            }
             // Only a file under 300 lines decides the walk: a full-length one would match any full reference.
             if (file.lines() >= TimingReferenceRule.FULL_LINES) {
                 continue;
@@ -200,25 +208,31 @@ final class TimingReferenceFetch {
     }
 
     /**
-     * Writes the line of each forced file not measured yet against each usable stored reference among the edition's
-     * candidates (at most {@value TimingReferenceRule#MAX_REFERENCES} are ever stored per film), in candidate order. A
-     * file whose cues have changed is measured again; returns how many lines were written.
+     * Writes the line of each forced file not measured yet against each usable stored reference of the edition
+     * ({@link TimingReferenceRule#references}: the candidates' first, then any other stored full file of the film), in
+     * that order. A file whose cues have changed is measured again; returns how many lines were written.
      */
     private int measure(Target target, Map<Long, OpenSubtitlesReference> stored) {
+        Map<Long, OpenSubtitlesResult> candidates = new HashMap<>();
+        target.candidates().forEach(c -> candidates.putIfAbsent(c.fileId(), c));
         int written = 0;
-        for (OpenSubtitlesResult candidate : target.candidates()) {
-            OpenSubtitlesReference reference = stored.get(candidate.fileId());
-            if (reference != null && isUsable(target, reference)) {
-                written += measure(target, candidate, reference);
+        for (OpenSubtitlesReference reference : TimingReferenceRule.references(target.candidates(), stored,
+            OpenSubtitlesReference::getCueCount)) {
+            if (isUsable(target, reference)) {
+                written += measure(target, candidates.get(reference.getOsFileId()), reference);
             }
         }
         return written;
     }
 
+    /** Measures against one reference; {@code candidate} is null for a stored file that is not a current candidate. */
     private int measure(Target target, OpenSubtitlesResult candidate, OpenSubtitlesReference reference) {
         List<Long> referenceStarts = null;
         int written = 0;
         for (File file : target.files()) {
+            if (isOwnFile(file, reference)) {
+                continue;
+            }
             String cues = JsonEtag.etag(file.cuesText().getBytes(StandardCharsets.UTF_8));
             if (!done.add(file.sidecarId() + ":" + cues + ":" + reference.getOsFileId())) {
                 continue;
@@ -233,9 +247,11 @@ final class TimingReferenceFetch {
                     + "start {}",
                 target.editionId(), target.filmId(), file.origin(), file.sidecarId(), file.lines(),
                 file.lines() >= TimingReferenceRule.FULL_LINES ? "300 or more" : "under 300", reference.getOsFileId(),
-                candidate.release(), candidate.fps() == null ? "unknown" : candidate.fps(),
-                candidate.hearingImpaired(), reference.getCueCount(), fit.verdict(), fit.fittedOffsetMs(),
-                Math.round(fit.matchedShare() * PERCENT), fit.servedCount(), fit.medianResidualMs(),
+                candidate == null ? reference.getRelease() : candidate.release(),
+                candidate == null || candidate.fps() == null ? "unknown" : candidate.fps(),
+                candidate == null ? "unknown" : candidate.hearingImpaired(), reference.getCueCount(),
+                fit.verdict(), fit.fittedOffsetMs(), Math.round(fit.matchedShare() * PERCENT), fit.servedCount(),
+                fit.medianResidualMs(),
                 FullFitProbe.clock(TimingReferenceRule.lastCueEnd(reference)), FullFitProbe.clock(target.runtimeMs()),
                 target.creditsStartMs() == null ? "unknown" : FullFitProbe.clock(target.creditsStartMs()));
             written++;

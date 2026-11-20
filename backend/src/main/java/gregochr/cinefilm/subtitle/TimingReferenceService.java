@@ -3,6 +3,7 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
 import gregochr.cinefilm.film.FullNeedChoice;
@@ -10,6 +11,7 @@ import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.ForcedChoice.Source;
 import gregochr.cinefilm.subtitle.ForcedResolver.DownloadState;
@@ -71,8 +73,14 @@ public class TimingReferenceService {
      * @param origin where it came from
      * @param lines its cue count
      * @param cuesText its cues as stored (the raw file: no owner offset)
+     * @param osFileId the OpenSubtitles file it was downloaded from, or null for an owner's file
      */
-    record File(Long sidecarId, Origin origin, int lines, String cuesText) {
+    record File(Long sidecarId, Origin origin, int lines, String cuesText, Long osFileId) {
+
+        /** A file with no known OpenSubtitles origin. */
+        File(Long sidecarId, Origin origin, int lines, String cuesText) {
+            this(sidecarId, origin, lines, cuesText, null);
+        }
     }
 
     /**
@@ -81,13 +89,15 @@ public class TimingReferenceService {
      * @param filmId the film
      * @param editionId the edition
      * @param editionName the edition's name (its cut tags order the candidates)
-     * @param imdbId the film's current IMDb id, which the full candidates were searched for
+     * @param imdbId the film's current IMDb id: the full candidates (when there are any) were searched for it, and
+     *     the stored references are those stored under it
      * @param runtimeMs the edition's runtime
      * @param creditsStartMs where credits detection found the credits start on the edition's timeline, or null
      * @param ownerPick true when the owner picked one of its files
      * @param files its forced files
      * @param candidates the film's single-file full candidates with a plausible frame rate, a hearing-impaired file
-     *     strictly last (whatever its cut), the rest in the order for this edition's cut
+     *     strictly last (whatever its cut), the rest in the order for this edition's cut; empty when the film has no
+     *     current full search (it is then a target only for its stored files, with nothing to fetch)
      * @param referencesKept how many of the film's stored references are among its current full candidates
      * @param stored the film's stored references for this IMDb id by OpenSubtitles file id
      */
@@ -113,7 +123,8 @@ public class TimingReferenceService {
 
     /**
      * The editions to find and measure a reference for, owner's picks first, then by film and edition: those whose
-     * film has full candidates from a search of its current IMDb id.
+     * film has full candidates from a search of its current IMDb id, or, with no current search, a stored reference
+     * of 300 lines or more under its current IMDb id (the references are then the stored ones, nothing is fetched).
      *
      * @return the targets
      */
@@ -126,29 +137,54 @@ public class TimingReferenceService {
         Map<Long, OsFullRef> candidates = new HashMap<>();
         films.findOpenSubtitlesFull().forEach(ref -> candidates.put(ref.id(), ref));
         Set<Long> filmIds = found.stream().map(q -> q.edition().getFilm().getId()).collect(Collectors.toSet());
-        filmIds.retainAll(candidates.keySet());
-        if (filmIds.isEmpty()) {
+        Set<Long> eligible = new HashSet<>(filmIds);
+        eligible.retainAll(candidates.keySet());
+        eligible.addAll(withStoredReference(found, candidates.keySet()));
+        if (eligible.isEmpty()) {
             return List.of();
         }
         Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm = new HashMap<>();
-        references.findByFilmIdIn(filmIds).forEach(r -> storedByFilm
+        references.findByFilmIdIn(eligible).forEach(r -> storedByFilm
             .computeIfAbsent(r.getFilmId(), k -> new HashMap<>())
             .computeIfAbsent(r.getImdbId(), k -> new HashMap<>()).put(r.getOsFileId(), r));
         List<Target> targets = new ArrayList<>();
         for (Qualified q : found) {
-            OsFullRef ref = candidates.get(q.edition().getFilm().getId());
-            if (ref != null) {
-                targets.add(target(q, ref, storedByFilm.getOrDefault(ref.id(), Map.of())
-                    .getOrDefault(ref.imdbId(), Map.of())));
+            Film film = q.edition().getFilm();
+            if (!eligible.contains(film.getId())) {
+                continue;
             }
+            OsFullRef ref = candidates.get(film.getId());
+            // No current full search: the candidates are empty, and the stored full files are all there is.
+            OsFullRef used = ref != null ? ref : new OsFullRef(film.getId(), film.getImdbId(), null);
+            targets.add(target(q, used, storedByFilm.getOrDefault(used.id(), Map.of())
+                .getOrDefault(used.imdbId(), Map.of())));
         }
         return targets;
     }
 
+    /**
+     * The qualified editions' films with no current full candidates that still have a stored reference of 300 lines or
+     * more under their current IMDb id (the facts only, no cue text): they are measured against it, with nothing to
+     * fetch.
+     */
+    private Set<Long> withStoredReference(List<Qualified> found, Set<Long> searched) {
+        Map<Long, String> imdbIds = new HashMap<>();
+        found.forEach(q -> imdbIds.put(q.edition().getFilm().getId(), q.edition().getFilm().getImdbId()));
+        imdbIds.keySet().removeAll(searched);
+        if (imdbIds.isEmpty()) {
+            return Set.of();
+        }
+        return references.findFactsByFilmIdIn(imdbIds.keySet()).stream()
+            .filter(r -> r.cueCount() >= TimingReferenceRule.FULL_LINES && r.imdbId().equals(imdbIds.get(r.filmId())))
+            .map(ReferenceFacts::filmId).collect(Collectors.toSet());
+    }
+
     private Target target(Qualified q, OsFullRef ref, Map<Long, OpenSubtitlesReference> stored) {
         Edition edition = q.edition();
-        List<OpenSubtitlesResult> all = OpenSubtitlesResult.listFromJson(ref.osFullCandidates());
-        List<OpenSubtitlesResult> ranked = TimingReferenceRule.candidates(ref.osFullCandidates(), edition.getName());
+        List<OpenSubtitlesResult> all = ref.osFullCandidates() == null ? List.of()
+            : OpenSubtitlesResult.listFromJson(ref.osFullCandidates());
+        List<OpenSubtitlesResult> ranked = ref.osFullCandidates() == null ? List.of()
+            : TimingReferenceRule.candidates(ref.osFullCandidates(), edition.getName());
         Set<Long> currentIds = all.stream().map(OpenSubtitlesResult::fileId).collect(Collectors.toSet());
         int kept = (int) stored.keySet().stream().filter(currentIds::contains).count();
         return new Target(ref.id(), edition.getId(), edition.getName(), ref.imdbId(), edition.getRuntimeMs(),
@@ -194,7 +230,7 @@ public class TimingReferenceService {
             if (TimingReferenceRule.qualifies(facts, resolution.decision().source() == Source.EMBEDDED,
                 edition.getRuntimeMs(), edition.originalParts().size())) {
                 List<File> files = served.stream().map(s -> new File(s.getId(), origin(s), s.getCueCount(),
-                    s.getCuesText())).toList();
+                    s.getCuesText(), s.getOpenSubtitlesFileId())).toList();
                 qualified.add(new Qualified(edition, files, files.stream().anyMatch(f -> f.origin() == Origin.CHOSEN)));
             }
         }

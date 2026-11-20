@@ -161,6 +161,31 @@ untouched, so a wrong provisional rule can only mislabel a row in Admin.
 - **Split:** 3c-2a is the backend; 3c-2b the copy (`proofText`, `downloadProof`, reasons) and the Admin source line.
   A follow-up adjusts the choice or the 1 s limit from the lines; the trust question above is asked then.
 
+#### Stored references and the quota (2026-11-19)
+
+**Production finding: nothing was ever measured or fitted.** OpenSubtitles' free quota of 20 downloads a day is spent
+every day, and `SidecarCheckRefresher.run()` returned at "download limit is reached" before the timing step, so even
+the free measuring of stored files never ran. The only full English files stored for films with forced subtitles
+(Dances with Wolves, Fury, Spectre, Taken 3, The Revenant, The Equalizer 3, Dawn of the Planet of the Apes) came from
+the older forced comparison downloads and are not in `film.os_full_candidates`; every path limited references to the
+candidates, and the fit needed a current full search. `SidecarTimingRefresher` logged "0 files read, 0 fitted" and no
+`OPENSUBTITLES` alignment rows exist.
+
+Two changes:
+
+- **A quota-blocked run still measures.** When the budget is blocked, `run()` runs the timing step with fetching off,
+  then logs the wait line and returns. Nothing else about the blocked path changes.
+- **Any stored full file of the film is a reference.** `TimingReferenceRule.references` gives the edition's references
+  in order: the stored ones among the candidates, in candidate order, then every other stored reference under the
+  film's current IMDb id with 300 lines or more, by OpenSubtitles file id (their frame rate is unknown, accepted).
+  `usable` still applies to each, and on the playback path the last-cue end must be known. The one rule feeds 3c-1's
+  measuring, `SidecarTimingService.osRefs` (the fit, the key and `current()`) and the backfill's unfilled set.
+  Eligibility no longer needs `os_full_candidates` or a current full search when such a stored file exists (the
+  candidates are then empty); NONE_EXIST films, multi-part editions, an unknown runtime, the `NO_REFERENCE` embedded
+  read and "a sidecar's own file is never its reference" are unchanged.
+
+**Fetching still walks the candidates only**, so no download is spent on a file that is not a candidate.
+
 ### 3d — tie the full file to the film's speech (`alass`)
 
 Built after 3c-1's lines. If forced and full files nearly always agree, 3d is the missing proof. If they often disagree,

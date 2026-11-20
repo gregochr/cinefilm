@@ -182,6 +182,48 @@ class TimingReferenceFetchTest {
     }
 
     @Test
+    void aStoredFullFileThatIsNotACandidateIsMeasuredAfterTheCandidatesAndNothingIsFetchedForIt() {
+        OpenSubtitlesReference extra = stored(4000, full(300));
+        extra.setRelease("Extra.2008");
+        OpenSubtitlesReference tooShort = stored(3000, full(299));
+        when(service.targets()).thenReturn(List.of(target(1, List.of(candidate(5012)),
+            Map.of(4000L, extra, 3000L, tooShort, 5012L, stored(5012, full(300))))));
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(2);
+        assertThat(lines(Level.INFO)).hasSize(2);
+        assertThat(lines(Level.INFO).get(0)).contains("against OpenSubtitles file 5012 (\"Release 5012\"");
+        assertThat(lines(Level.INFO).get(1)).contains("against OpenSubtitles file 4000 (\"Extra.2008\", fps unknown, "
+            + "hearing-impaired unknown, 300 lines); ALIGNED at -2000 ms");
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void aDownloadIsNeverMeasuredAgainstTheOpenSubtitlesFileItCameFrom() {
+        File owner = forced(7, Origin.OWNER);
+        File download = new File(8L, Origin.DOWNLOAD, owner.lines(), owner.cuesText(), 5012L);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(owner, download),
+            List.of(candidate(5012)), Map.of(5012L, stored(5012, full(300))))));
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(1);
+        assertThat(lines(Level.INFO)).singleElement().asString().contains("OWNER file 7 ");
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void aFilmWithNoCandidatesAtAllIsMeasuredAgainstItsStoredFullFile() {
+        when(service.targets()).thenReturn(List.of(target(1, List.of(), Map.of(4000L, stored(4000, full(300))))));
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(1);
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
     void aStoredUsableMatchingReferenceIsMeasuredWithNoFetchAndTheLineHoldsEveryFact() {
         OpenSubtitlesResult impaired = new OpenSubtitlesResult(4012, 5012, "Film.2008.HI", 23.976, 10, true, true,
             null, null);
@@ -245,6 +287,22 @@ class TimingReferenceFetchTest {
             + "(\"Release 5012\", hearing-impaired false), 300 lines, usable true, best match 100% of a forced "
             + "file's lines");
         assertThat(lines(Level.INFO).get(1)).contains("OWNER file 7").contains("against OpenSubtitles file 5012");
+    }
+
+    @Test
+    void aDownloadsOwnOpenSubtitlesFileDoesNotStopTheWalkAsAMatch() {
+        File owner = forced(7, Origin.OWNER);
+        File download = new File(8L, Origin.DOWNLOAD, owner.lines(), owner.cuesText(), 5012L);
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5013, full(300), saved);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(download),
+            List.of(candidate(5012), candidate(5013)), Map.of(5012L, stored(5012, full(300))))));
+
+        fetch.run(CHECK_LIMIT, true);
+
+        // The download matches file 5012 only because it came from it: the walk goes on to 5013.
+        verify(api).download(5013L);
+        assertThat(saved).containsOnlyKeys(5013L);
     }
 
     @Test
