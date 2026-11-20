@@ -48,10 +48,14 @@ class FilmKeywordsLockIntegrationTest extends IntegrationTestBase {
     private JdbcTemplate jdbc;
 
     private boolean saveIsWaitingOnALock() {
-        // The save's guarded stamp is the statement that blocks; the probe's own backend is excluded so its query
-        // text (which names the column) can never match itself.
+        // The probe runs on the lock-holding transaction's own connection, and PostgreSQL keeps the first
+        // pg_stat_activity read for the whole transaction, so the snapshot is cleared to read live backend status.
+        jdbc.queryForObject("select pg_stat_clear_snapshot()::text", String.class);
+        // The save's guarded stamp is the statement that blocks; it must be blocked by this transaction. The probe's
+        // own backend is excluded so its query text (which names the column) can never match itself.
         Integer waiting = jdbc.queryForObject(
             "select count(*) from pg_stat_activity where wait_event_type = 'Lock' and pid <> pg_backend_pid() "
+                + "and pg_backend_pid() = any(pg_blocking_pids(pid)) "
                 + "and datname = current_database() and query like '%keywords_fetched_at%'",
             Integer.class);
         return waiting != null && waiting > 0;
