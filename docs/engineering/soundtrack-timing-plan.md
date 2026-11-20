@@ -184,8 +184,9 @@ well, whether or not the scan counted them; the report lists them and which film
 - **The owner's ear, B's proof (owner, 2026-11-20).** It runs only after every threshold and the bias are frozen, and
   only for **one model**, chosen before it on the decoys and cost alone (the one that passes the decoys; if both do,
   the cheaper). The absolute answers are then judged once, on that model, before the ear-check. If the chosen model
-  fails any later gate, B fails: the other model is never tried. The list is drawn only from forced files whose films have maps, and each file's fit uses thresholds
-  chosen without its own film. It holds:
+  fails any later gate, B fails: the other model is never tried. The list is drawn only from forced files whose films have maps, from their fits
+  under the **final frozen** thresholds and bias, the ones the product will use (nothing is tuned on what is heard).
+  It holds:
   - **10 distinct real forced files** whose B fit is `ALIGNED`, by a seeded random draw;
   - **plus, heard on top,** the lowest-margin file and the one furthest from 0, if the draw missed them.
 
@@ -203,7 +204,8 @@ well, whether or not the scan counted them; the report lists them and which film
   second, with no foreign speech in the 3 s before it, and stops near the second. The rule is strict on purpose: an
   unsubtitled foreign line just before a run makes a right fit fail, which can only make B fail, never pass.
 
-  Forced files on foreign-original films (none today: all 151 are on English-original films) get no B verdict,
+  Forced files on films whose original language is not `en`, unknown included (none today: all 151 are on
+  English-original films), get no B verdict,
   here or in the product, since B has no English to penalise there; they are left out of the ear-check and useful
   coverage, and counted.
 
@@ -325,8 +327,8 @@ The shape is fixed here. Details come from 3d-M's numbers.
 - **The fit.** As in "The fit" above, with 3d-M's thresholds.
 - **The source.** A new reference source, `SOUNDTRACK`, added by a migration that widens `reference_source`'s check.
 - **One row per sidecar.** When the sidecar's edition has a speech map, the row is the soundtrack fit, except when
-  the score built is B and `film.original_language` is set and not English: then the row stays as with no map
-  (3d-M never measured B there), with a test. If A is built, the exception does not apply. With no map yet,
+  the score built is B and `film.original_language` is not `en` (a null language included): then the row stays as with no map
+  (3d-M never measured B there), with tests for a foreign and a null language. If A is built, the exception does not apply. With no map yet,
   the row stays the OpenSubtitles fit. The OpenSubtitles result for an edition with a map is still logged.
 - **The key.** The map's fingerprint and versions plus `SoundtrackFit.RULES_VERSION`. The four key sites (`state`,
   `job`, `saveLocked`, `current`) are each tested.
@@ -337,7 +339,7 @@ The shape is fixed here. Details come from 3d-M's numbers.
 - **Fit parity, the gate before 3d-3 is briefed.** A tool-run `main` fits the 3d-M test set from `SpeechMapMain`'s
   output files and the `psql` export of the forced files, never the database. 3d-M's gate judges each film with
   thresholds chosen without it, but the product uses one frozen set, so after freezing 3d-M also records every
-  file's fit and verdict under the final thresholds and bias, and lists any heard file whose verdict differs. The
+  file's fit and verdict under the final thresholds and bias, which is the record the ear-check is drawn from. The
   tool's offsets must be within 10 ms of that record, with the same verdict on every file, and it must meet the same
   never-wrong gate. A's accuracy is measured again; B's carries over from 3d-M's ear-check. This needs the
   owner's release after 3d-2.
