@@ -59,11 +59,14 @@ these films lack. It is superseded.
   ear, and 3d-3's trust question says so. The starts-only bias is reported beside A's, so a dependence on the cue
   ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
   Real forced files' cue ends are not tested by the draws.
-- **`ALIGNED`** requires all four:
+- **`ALIGNED`** requires all four (five for B):
   - the margin is over the threshold;
   - at least 8 cues land on speech (`TimingFit.MIN_CUES`);
   - the halves agree;
-  - |offset| ≤ 30 s, inside 3c's other-cut rule.
+  - |offset| ≤ 30 s, inside 3c's other-cut rule;
+  - for score B only, a fifth: at least one cue that opens a run (no cue in the 3 s before it) has speech labelled
+    foreign under it at the fitted offset. So every B `ALIGNED` fit can be heard in the ear-check, and the files it
+    proves are the files the product shows.
 
   An offset over 10 s (`TimingFit.MAX_ALIGNED_OFFSET_MS`) is allowed here only because the halves check holds.
   Otherwise the result is `CHECK`.
@@ -205,8 +208,8 @@ well, whether or not the scan counted them; the report lists them and which film
   fit puts that line's speech to 2 s after where it puts the line's end (its raw time plus the fitted offset, the bias not applied, since the bias is
   the gap between display and speech). One click marks where the line starts and a second where it ends, and each
   clip is listed with the line's text. A file with fewer than three such lines is clipped on those it has, stays in the draw,
-  and is reported; a file with none is left out of the draw before it is made, does not count toward the 10, and is
-  reported. The owner plays them on the
+  and is reported. Under B every `ALIGNED` file has at least one (the fifth condition). Under A a file with none is
+  left out of the draw and reported, and A is unproven if more than 2 of its `ALIGNED` files are left out. The owner plays them on the
   Mac. A file is right only if, in every clip, the foreign speech begins on the first click, within about half a
   second, with no foreign speech in the 3 s before it, and stops near the second. The rule is strict on purpose: an
   unsubtitled foreign line just before a run makes a right fit fail, which can only make B fail, never pass.
