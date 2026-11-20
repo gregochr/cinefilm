@@ -1373,6 +1373,52 @@ The same three runs, evaluated again on L3c-grid's 42,000 points: `eval-20261119
 - **What follows:** model A's tuning is settled. The dark and plate shortfall is left to model B and the L5
   comparison.
 
+### Model B, and the choice of type (2026-11-20, v0.9.2)
+
+Model B's runs, all on v0.9.2 (`toolGitCommit` `280593c`) and on the same features run, dataset and labels hashes as
+model A's. Development films only, with no look.
+
+- **Embeddings:** `embed-20261120T081506Z`, MobileNet v2-12 fp32, in 2 h 20 min (the estimate was about 3 h).
+- **Seven training runs**, 46 to 66 minutes each (the estimate was about 2 h):
+
+  | Run | Rows | `l2` |
+  |---|---|---|
+  | `train-lr-20261120T130105Z` | base | 0.1 |
+  | `train-lr-20261120T135533Z` | base | 1 |
+  | `train-lr-20261120T144102Z` | base | 10 |
+  | `train-lr-20261120T154515Z` | `--with-dense` | 0.1 |
+  | `train-lr-20261120T164708Z` | `--with-dense` | 1 |
+  | `train-lr-20261120T175255Z` | `--with-dense` | 10 |
+  | `train-lr-20261120T185053Z` | `--lit-text-variant` | 1 |
+
+- **One evaluation over all seven:** `eval-20261120T220653Z`, on the 42,000-point grid.
+  - **Outer choices:** fold 0 base `l2` 10; fold 1 lit-text; folds 2 and 4 with-dense `l2` 1; fold 3 with-dense
+    `l2` 10. `σ` is 160, the top of its grid, in four of the five; `δ` is 20, the top of its grid, in two.
+  - **Final:** with-dense `l2` 10, `λ` 2, `δ` 15, `G` 2, `σ` 160, `θ` 0.8, `θ_d` 0.5. Its own counts: 127 within
+    ±10 s, 322 within ±60 s or not found, no early film, no violation (model A's final: 188 and 333).
+- **Held out, against model A** (each film scored with its fold's choice):
+
+  | | Model A | Model B |
+  |---|---|---|
+  | Early by more than 15 s | 1 (dark, high band) | 3 (1 dark high, 2 lit high) |
+  | Early by more than 5 s | 2 | 4 |
+  | Dark within ±10 s | 209 of 368 (56.8%) | 179 of 368 (48.6%) |
+  | Dark within ±60 s or not found | 325 (88.3%) | 332 (90.2%) |
+  | Plate within ±10 s / ±60 s or not found | 0 / 8 of 17 | 0 / 9 of 17 |
+  | Lit within ±10 s / ±60 s or not found | 1 / 127 of 224 | 8 / 139 of 224 |
+
+- **The choice: model A**, by "Choosing"'s ranking at its first level (one held-out film early by more than 15 s
+  against three), and at the third as well (dark and plate within ±10 s: 209 against 179). Accepted by the owner on
+  2026-11-20.
+- **B's top-of-grid choices were not followed up.** `σ` at 160 in four outer folds and the final, `δ` at 20 in two
+  and `l2` 10 in two and the final suggest B's grid was narrow for it. Widening it would have cost a code PR, a
+  release and about four hours of runs; B's first-level loss is two lit films early by more than 15 s, which a wider
+  smoothing range is not expected to remove, and the ranking was pre-registered. The owner chose A without it.
+- **What follows:** L5's single look, one `--look=L5 --baseline` evaluation over model A's three runs alone
+  (`train-20261119T144958Z`, `train-20261119T145507Z`, `train-20261119T145939Z`), on a features run made with
+  `--look=L5`. Model B is never scored on test films, and no `CreditsEmbedMain --look=L5` run is made. Model B's code
+  is deleted in L6b.
+
 ## L3c specification (written 2026-11-19)
 
 Three PRs, each at most 1,500 changed lines: **L3c-1**, the segmenter and the training `main`'s nested models;
