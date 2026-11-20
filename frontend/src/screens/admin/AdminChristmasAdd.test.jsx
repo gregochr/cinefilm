@@ -415,4 +415,21 @@ describe('Christmas films: adding a film', () => {
     ).toBeInTheDocument();
     expect(field()).toBeInTheDocument();
   });
+
+  it('turns a removed film into Add in place, with focus kept, when the write lands before /states answers', async () => {
+    const user = userEvent.setup();
+    const slow = deferred();
+    serve({ states: () => slow.promise });
+    await open();
+    await user.click(field());
+    await user.keyboard('trading');
+    const remove = await panelButton('Remove Trading Places');
+    await user.click(remove);
+    const add = await panelButton('Add Trading Places');
+    expect(add).toBe(remove);
+    expect(add).toHaveFocus();
+
+    await act(async () => slow.resolve(respond([STATES[4]])));
+    expect(await panelButton('Add Trading Places')).toHaveFocus();
+  });
 });

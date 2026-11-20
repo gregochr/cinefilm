@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { announceSignedIn } from '../api/client.js';
 import { prepareIndex } from './searchIndex.js';
 import { STATES_DEBOUNCE_MS, useAddFilm } from './useAddFilm.js';
 
@@ -237,6 +238,69 @@ describe('useAddFilm', () => {
     await settle();
     expect(result.current.statesFailed).toBe(true);
     expect(result.current.rows[0].state).toBeNull();
+  });
+
+  it('still finds a typo of a title when a person matches the query exactly', () => {
+    fetchMock.mockResolvedValue(ok([]));
+    const index = prepareIndex({
+      films: [{ id: 9, t: 'The Martian', y: 2015 }],
+      collections: [],
+      people: [{ id: 5, n: 'Martin Freeman', a: 3 }],
+    });
+    const { result } = renderHook(() =>
+      useAddFilm({ index, status: 'ready', data: emptyData(), idPrefix: 'opt', issued }),
+    );
+    act(() => result.current.setQuery('martin'));
+    expect(result.current.rows.map((r) => r.title)).toEqual(['The Martian']);
+  });
+
+  it('asks again for the films on screen when a sign-in follows a 401', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 401 }));
+    fetchMock.mockResolvedValueOnce(ok([{ filmId: 3, tmdbId: 103, state: 'NOT_IN' }]));
+    const { result, unmount } = setup();
+    act(() => result.current.setQuery('gremlins'));
+    await settle();
+    expect(result.current.statesFailed).toBe(true);
+    expect(result.current.rows[0].state).toBeNull();
+
+    await act(async () => announceSignedIn());
+    await settle();
+    expect(asked()).toEqual(['3', '3']);
+    expect(result.current.statesFailed).toBe(false);
+    expect(result.current.rows[0].state).toBe('NOT_IN');
+
+    unmount();
+    announceSignedIn();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a film that left the lists before any answer as not in, until a newer answer says otherwise', async () => {
+    const gate = deferred();
+    fetchMock.mockReturnValueOnce(gate.promise);
+    const listed = {
+      inWeek: [{ filmId: 3, tmdbId: 103, reason: 'ADDED' }],
+      added: [],
+      leftOut: [],
+    };
+    const { result, rerender } = setup(listed, { version: 1 });
+    act(() => result.current.setQuery('gremlins'));
+    expect(result.current.rows[0]).toMatchObject({ state: 'IN_ADDED', tmdbId: 103 });
+    await settle();
+
+    // Removed here (answered as 2.5) before the question was answered: the button turns into Add in place.
+    rerender({ data: emptyData(), version: 2.5 });
+    expect(result.current.rows[0]).toMatchObject({ state: 'NOT_IN', tmdbId: 103 });
+
+    // The answer, asked at 1, still says it is in: older than the removal, so it cannot undo it.
+    await act(async () => gate.resolve(ok([{ filmId: 3, tmdbId: 103, state: 'IN_ADDED' }])));
+    expect(result.current.rows[0]).toMatchObject({ state: 'NOT_IN', tmdbId: 103 });
+
+    // One asked after it wins.
+    issuedNow = 3;
+    fetchMock.mockResolvedValueOnce(ok([{ filmId: 3, tmdbId: 103, state: 'IN_ADDED' }]));
+    rerender({ data: emptyData(), version: 2.5, refreshKey: 1 });
+    await settle();
+    expect(result.current.rows[0].state).toBe('IN_ADDED');
   });
 
   it('is not ready while the index loads', () => {
