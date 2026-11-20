@@ -124,8 +124,9 @@ answers are built from the films' own full English tracks. The owner exports the
     the next start, capped at 3 s.
   - **Score A** is judged on every draw.
   - **Score B** is judged on draws from non-English-original films, where the cues sit on foreign speech. On
-    English-original films a B fit must never come out `ALIGNED`, which makes those draws decoys for B. A decoy draw
-    that sits mostly on speech labelled foreign (a foreign scene the full track also subtitles) is left out.
+    English-original films with no forced file, a B fit must never come out `ALIGNED`, which makes those draws decoys
+    for B. They are chosen without the classifier. The report says how many of them sit mostly on speech labelled
+    foreign, as a check on the labels.
   - **What the draws cannot show.** In a non-English-original film nearly all speech is foreign, so these draws never
     test B's penalty for English speech. That premise is tested only by Dances with Wolves and the English-original
     decoys. B's accuracy counts only with draws from at least 5 films and at least 50 draws; below that it is
@@ -180,8 +181,12 @@ answers are built from the films' own full English tracks. The owner exports the
 - **The absolute answers** each pass, as stated above.
 - **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
   speech. This is reported beside the ear-check's precision.
-- **Which score is built:** B only if its accuracy is proven (see above) and it passes the absolute answers and the
-  decoys; otherwise A, if A passes; otherwise neither.
+- **Which score is built:**
+  - **B,** if its accuracy is proven (see above) and it passes the absolute answers and the decoys.
+  - **Otherwise A, only if** Dances with Wolves and the other absolute answers pass under A, no ear-check is wrong,
+    and the owner says yes. The synthetic draws are dense runs of subtitled lines and cannot show A's known weakness:
+    locking a sparse forced file on to English dialogue.
+  - **Otherwise neither.**
 - **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
   - One film is timed first.
   - If the films with forced files and the full-track films together would take too long, the run covers the full-track films, the absolute
