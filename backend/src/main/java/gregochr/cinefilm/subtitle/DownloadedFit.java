@@ -17,6 +17,11 @@ public final class DownloadedFit {
 
     /** The largest offset an {@code ALIGNED} fit may have against a downloaded file, in ms (provisional). */
     static final int MAX_ALIGNED_OFFSET_MS = 1_000;
+    /**
+     * The version of {@link #judge}'s rules, part of the stored reference key. Bump it when the rules change, so
+     * stored OpenSubtitles fits are re-judged. 2 since 2026-11-20.
+     */
+    public static final int RULES_VERSION = 2;
     /** A served file needs at least this many lines to be full subtitles rather than forced ones. */
     static final int FULL_LINES = SubtitleComparison.FULL_LINES;
     /**

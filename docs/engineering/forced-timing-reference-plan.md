@@ -117,7 +117,8 @@ references, the search columns, and new reference metadata.
 
 - **Fit** (`SidecarTimingService`): for a timing-reference edition, the reference starts are the chosen reference's cue
   starts (whole-edition timeline).
-  - **Key** = the existing embedded key + `|os:<imdbId>:<osFileId>`. A re-rip, a new IMDb id or a new chosen reference
+  - **Key** = the existing embedded key + `|os<version>:<imdbId>:<osFileId>` (the version is `DownloadedFit.RULES_VERSION`, bumped when
+    the verdict rules change so stored fits are re-judged; 2 since 2026-11-20). A re-rip, a new IMDb id or a new chosen reference
     each make the fit stale. Existing `NO_REFERENCE` rows go stale through the key change and move to `NEEDS_FIT`.
   - The chosen reference is bulk-loaded in `reads()` / `fits()`. Four call sites compute the key: `state()`, `job()`,
     `saveLocked()` and `current()` (`current()` runs on every `ForcedResolver.resolve`). Their tests cover the new key.
@@ -164,7 +165,7 @@ untouched, so a wrong provisional rule can only mislabel a row in Admin.
   would need `ForcedResolver` in `current()`); display only. The background check fills in pre-V30 last-cue ends.
 - **Choice (provisional):** fit to every usable stored reference (never the sidecar's own file); keep `ALIGNED` first,
   then the larger share, the smaller median residual, the lower file id. Key: the embedded key +
-  `|os:<imdbId>:<usable file ids, sorted>`. `ALIGNED` within 1 s, one constant marked provisional.
+  `|os<version>:<imdbId>:<usable file ids, sorted>` (the version bumped when the verdict rules change). `ALIGNED` within 1 s, one constant marked provisional.
 - **Split:** 3c-2a is the backend; 3c-2b the copy (`proofText`, `downloadProof`, reasons) and the Admin source line.
   A follow-up adjusts the choice or the 1 s limit from the lines; the trust question above is asked then.
 
