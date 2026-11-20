@@ -52,8 +52,10 @@ these films lack. It is superseded.
   one threshold works across films.
 - **Halves.** The first and second halves of the cues are fitted separately and must agree within 300 ms. This catches
   frame-rate drift and another cut, which a single offset cannot.
-- **Bias.** Cue starts lead or lag speech by a roughly constant amount. 3d-M estimates that global bias by
-  cross-validation and subtracts it.
+- **Bias.** Cue starts lead or lag speech by a roughly constant amount. 3d-M takes it as the median of (cue start −
+  speech start) over the full-track films (below), assumed to carry over to forced files. That assumption is checked
+  against the `EMBEDDED` file and the owner-verified file, each within ±200 ms. If they disagree, no bias is
+  subtracted, and the report says so.
 - **`ALIGNED`** requires all four:
   - the margin is over the threshold;
   - at least 8 cues land on speech (`TimingFit.MIN_CUES`);
@@ -100,60 +102,80 @@ This is **not** credits L4a's convention: L4a ran the released image, installed 
     model frame by frame, since `get_speech_timestamps` returns stretches with no probability.
 - **Per film:** the share of speech labelled foreign, English and neutral; a p(en) histogram; and, for Dances with
   Wolves, the p(en) distribution on its Lakota stretches.
-- **The classifier's own accuracy,** on films with an embedded full English track and an `ALIGNED` forced file. The
-  full track also translates the foreign dialogue, so it cannot mark English on its own. At the forced file's true
-  offset:
-  - **Foreign:** speech under a forced cue that a full-track cue starts within 300 ms of (the `TimingFit` window).
-    This drops most sign and caption cues, which sit over English speech.
-  - **English:** speech under a full-track cue that no forced cue overlaps.
-  - **Left out:** a stretch with no cue at all, and one that straddles the two.
+- **Language labels, for choosing the p(en) and neutral thresholds** (films held out). They come from each film's
+  original language (`film.original_language`, from TMDB), because almost no forced file has a known answer:
+  - **Foreign:** speech under full-track cues in a film whose original language is not English. The track
+    translates the dialogue, so most of that speech is foreign.
+  - **English:** speech under full-track cues in an English-original film with no forced file.
+  - **Lakota:** Dances with Wolves' sidecar 2 cue spans at offset 0.
 
-  Forced files skip some foreign lines, so this truth is approximate. It is used to read the p(en) and neutral-band
-  thresholds, never as a pass or fail gate.
+  These labels are approximate (an English-original film has some foreign lines, and the reverse), so they set the
+  thresholds and are never a pass or fail gate.
 
 ### The test set
 
 The first export (2026-11-20) found 151 forced files on 148 single-part films. Only **one** has an `EMBEDDED`
-`ALIGNED` fit and only **one** is owner-verified: the owner checks films by watching, not in Admin. So known answers
-are scarce, and the main tests are ones that need none. The owner exports the inputs read-only with `psql`.
+`ALIGNED` fit and only **one** is owner-verified: the owner checks films by watching, not in Admin. So the known
+answers are built from the films' own full English tracks. The owner exports the inputs read-only with `psql`.
 
-- **Shift recovery, the main test (no answers needed):**
-  - **Base fit.** Every forced file gets a base fit b.
-  - **Recoverable shifts.** The same file at 16 random shifts s within ±30 s (the `ALIGNED` cap) must fit at b + s.
-    That holds whatever the file's true timing is, so all 151 files count.
-  - **Beyond the cap.** 4 shifts beyond 30 s must come out `CHECK`.
-- **Cross-film controls (no answers needed).** Every forced file is run against other films' audio (a sample of 40
-  when there are more). None may come out `ALIGNED`.
-- **Full English tracks (answer 0 by definition).** Every single-part film with an embedded full English track (its
-  cue starts, from `embedded_cue_starts`) is fitted with a starts-only version of score A: the share of cue starts
-  that fall in speech within ±200 ms. This tests the speech timing at scale, but not the language labels.
-- **Absolute answers.**
-  - **Dances with Wolves.** The fits of sidecars 2 and 48 must differ by 14 ± 0.3 s, and sidecar 2 must come out
-    within ±1 s of 0.
-  - **The one `EMBEDDED` `ALIGNED` file:** its fitted offset on the raw cues.
-  - **The one owner-verified file:** its current offset.
-- **Base offsets for the owner's ear.** Every `ALIGNED` base fit more than 1 s from 0 is listed, by margin. The owner
-  checks up to five by ear, as for Dances with Wolves.
+- **Synthetic forced files, the main test (answer 0).**
+  - **What they are.** Every single-part film with an embedded full English track gives 10 seeded draws of 8–40 of
+    its cues, in 1–4 runs of consecutive cues, as forced files are. Starts come from `embedded_cue_starts`; ends are
+    the next start, capped at 3 s.
+  - **Score A** is judged on every draw.
+  - **Score B** is judged on draws from non-English-original films, where the cues sit on foreign speech. On
+    English-original films a B fit must never come out `ALIGNED`, which makes those draws decoys for B.
+- **Absolute answers, each judged on its own** and held out of every threshold and bias choice:
+  - **Dances with Wolves.** The fits of sidecars 2 and 48 must differ by 14 ± 0.3 s, sidecar 2 must come out within
+    ±1 s of 0, and both must be `ALIGNED`.
+  - **The one `EMBEDDED` `ALIGNED` file:** its fitted offset on the raw cues, ±200 ms.
+  - **The one owner-verified file:** its current offset, ±200 ms.
+- **Robustness of the real forced files, against each one's base fit b.** These are changes the score curve is not
+  invariant to:
+  - drop 30–50% of the cues, or jitter cue starts by ±300 ms: must stay within ±200 ms of b;
+  - move only the second half by 2–20 s, as another cut would: must come out `CHECK`. This is the only test of the
+    halves rule.
+
+  A plain shift of every cue is reported as a check of the search code only, outside any gate. Shifts are kept within
+  the window: |b + s| ≤ 110 s, with "beyond the cap" meaning |b + s| > 30 s.
+- **Decoys,** each a wrong pick for the threshold rule:
+  - every forced file against other films' audio (a seeded sample of 40 when there are more);
+  - the forced file with its cue order and gaps shuffled (durations kept) against its own film;
+  - each fit's second-best peak more than 2 s away.
+- **The owner's ear.** The base fits flagged `ALIGNED` more than 1 s from 0 are listed. The owner checks min(5, N)
+  of them:
+  - a seeded random draw plus the two lowest-margin ones;
+  - plus one or two `ALIGNED` fits near 0.
+
+  The owner listens **with the fitted offset applied** and says whether it is right. The report gives the error upper bound
+  this sample allows. Flagged files not heard stay `CHECK` until heard, and 3d-3's trust question carries their count.
 - **For information, not truth:** the five OpenSubtitles films and Taken 3 (spot-checked at 32–37 min), plus an
   optional accented-English film chosen at export.
 
 ### The gate for building
 
-- **Thresholds are not judged on the films they were set on.** The margin and neutral-band thresholds are chosen by
-  leave-one-film-out, with the held-out film left out on both sides. The margin threshold must be at least 1.5× the
-  largest margin of any wrong pick: a cross-film fit, or a shift recovered more than 1 s off.
-- **Accuracy.** At least 90% within ±200 ms on:
-  - shift recovery (of files whose base fit has 8 or more cues on speech);
-  - the full English tracks;
-  - the absolute answers.
-- **Never confident and wrong:** zero `ALIGNED` results more than 1 s off, across shift recovery, the cross-film
-  controls, the full tracks and the absolute answers. **A file the owner checks by ear and finds right as it is,
-  while the fit confidently said otherwise, also counts.**
-- **Useful coverage:** with the held-out thresholds, at least 70% of forced files' base fits come out `ALIGNED`.
-- **Dances with Wolves** passes as stated above, with **both** sidecars `ALIGNED`.
-- **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB. One film is timed first. If
-  148 films would take too long, the run covers the films with answers, the full-track films and a seeded sample of
-  the rest, and the report says what that sample cannot show.
+- **Thresholds come first and are never tuned to raise coverage.**
+  - **Margin.** Chosen by leave-one-film-out (the held-out film left out on both sides) at 1.5× the largest margin of
+    any decoy or wrong pick.
+  - **p(en) and neutral band.** Chosen on the language labels.
+  - **Held out.** The absolute answers are left out of all of these and judged once at the end.
+- **Accuracy, per score, only on items it can be scored on.** At least 90% of synthetic draws within ±200 ms, after
+  the bias: all draws for A, non-English-original draws for B.
+- **Robustness:**
+  - at least 90% of the drop and jitter changes within ±200 ms of b;
+  - at least 95% of the second-half moves `CHECK`.
+- **Never confident and wrong:** zero `ALIGNED` results more than 1 s off. This counts:
+  - the synthetic draws;
+  - the robustness changes;
+  - every decoy (B on English-original draws included);
+  - every ear-check the owner finds wrong.
+- **The absolute answers** each pass, as stated above.
+- **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
+  speech and the halves agreeing. This is reported beside the ear-check's precision.
+- **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
+  - One film is timed first.
+  - If the films with forced files and the full-track films together would take too long, the run covers the full-track films, the absolute
+    answers and a seeded sample of the rest. The report says what that sample cannot show.
 
 If B passes and A does not, build B. If both pass, build B and log A. If neither passes, stop and report. The chosen
 thresholds and the bias are written into this plan before 3d-1a is briefed.
