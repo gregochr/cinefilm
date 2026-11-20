@@ -47,33 +47,100 @@ class DownloadedFitTest {
         assertThat(judge(Verdict.ALIGNED, 4_250, 12, REFERENCE).reasons().get(0)).contains("but 4.3 s apart");
     }
 
-    @Test
-    void aServedFileOfThreeHundredLinesOrMoreIsNeverAlignedAndTwoHundredNinetyNineIs() {
-        Reference big = new Reference(5012, "Taken", 5_000, List.of(1L));
+    private static final String FULL = "Looks like full subtitles, not forced";
 
-        assertThat(judge(Verdict.ALIGNED, 0, 299, big).verdict()).isEqualTo(Verdict.ALIGNED);
-        Result full = judge(Verdict.ALIGNED, 0, 300, big);
-        assertThat(full.verdict()).isEqualTo(Verdict.CHECK);
-        assertThat(full.reasons()).containsExactly("Looks like full subtitles, not forced");
-        assertThat(judge(Verdict.ALIGNED, 0, 301, big).verdict()).isEqualTo(Verdict.CHECK);
+    private static Reference lines(int cueCount) {
+        return new Reference(5012, "Taken.2008.BluRay", cueCount, List.of(1L));
     }
 
     @Test
-    void aFileWithMoreThanHalfTheReferencesLinesIsNeverAlignedAndExactlyHalfIs() {
-        Reference hundred = new Reference(5012, "Taken", 100, List.of(1L));
+    void twiceTheReferenceButUnderThreeHundredLinesIsAligned() {
+        Result result = judge(Verdict.ALIGNED, 0, 299, lines(149));
 
-        assertThat(judge(Verdict.ALIGNED, 0, 50, hundred).verdict()).isEqualTo(Verdict.ALIGNED);
-        assertThat(judge(Verdict.ALIGNED, 0, 51, hundred).verdict()).isEqualTo(Verdict.CHECK);
-        assertThat(judge(Verdict.ALIGNED, 0, 51, hundred).reasons())
-            .containsExactly("Looks like full subtitles, not forced");
-        assertThat(judge(Verdict.ALIGNED, 0, 50, new Reference(5012, "Taken", 99, List.of(1L))).verdict())
-            .isEqualTo(Verdict.CHECK);
+        assertThat(result.verdict()).isEqualTo(Verdict.ALIGNED);
+        assertThat(result.reasons())
+            .containsExactly("Lines match a full English file from OpenSubtitles (Taken.2008.BluRay)");
+    }
+
+    @Test
+    void threeHundredLinesAndMoreThanTwiceTheReferenceIsCheckFull() {
+        Result result = judge(Verdict.ALIGNED, 0, 300, lines(149));
+
+        assertThat(result.verdict()).isEqualTo(Verdict.CHECK);
+        assertThat(result.reasons()).containsExactly(FULL);
+    }
+
+    @Test
+    void exactlyTwiceTheReferenceIsAlignedAndOneMoreLineIsCheckFull() {
+        Result twice = judge(Verdict.ALIGNED, 0, 300, lines(150));
+        Result more = judge(Verdict.ALIGNED, 0, 301, lines(150));
+
+        assertThat(twice.verdict()).isEqualTo(Verdict.ALIGNED);
+        assertThat(twice.reasons())
+            .containsExactly("Lines match a full English file from OpenSubtitles (Taken.2008.BluRay)");
+        assertThat(more.verdict()).isEqualTo(Verdict.CHECK);
+        assertThat(more.reasons()).containsExactly(FULL);
+    }
+
+    @Test
+    void aForcedFileOfThreeHundredSixteenLinesAgainstThreeHundredFortyEightIsAligned() {
+        Result result = judge(Verdict.ALIGNED, 10, 316, lines(348));
+
+        assertThat(result.verdict()).isEqualTo(Verdict.ALIGNED);
+        assertThat(result.reasons())
+            .containsExactly("Lines match a full English file from OpenSubtitles (Taken.2008.BluRay)");
     }
 
     @Test
     void aFullLookingFileIsCheckEvenWhenTimingFitsAndEvenWhenItDoesNot() {
-        assertThat(judge(Verdict.CHECK, 0, 300, REFERENCE).reasons())
-            .containsExactly("Looks like full subtitles, not forced");
+        for (Verdict verdict : new Verdict[] {Verdict.ALIGNED, Verdict.CHECK}) {
+            Result result = judge(verdict, 0, 2_431, lines(43));
+
+            assertThat(result.verdict()).isEqualTo(Verdict.CHECK);
+            assertThat(result.reasons()).containsExactly(FULL);
+        }
+    }
+
+    private static Result looseFit(int offset, int matched, int served, int residual, List<String> reasons) {
+        return new Result(Verdict.CHECK, offset, (double) matched / served, matched, served, residual, reasons);
+    }
+
+    private static final String LOOSE_REASON = "The lines line up only loosely (typically 170 ms off)";
+    private static final String FALLBACK = "The lines do not line up well enough with the full English file from "
+        + "OpenSubtitles (Taken.2008.BluRay) to tell: it may be another cut or timed differently";
+
+    @Test
+    void aLooseMatchOfNearlyEveryLineSaysSoWithTheReleaseAndTheResidual() {
+        Result result = DownloadedFit.judge(looseFit(170, 74, 77, 170, List.of(LOOSE_REASON)), REFERENCE);
+
+        assertThat(result.verdict()).isEqualTo(Verdict.CHECK);
+        assertThat(result.reasons()).containsExactly("Lines match a full English file from OpenSubtitles "
+            + "(Taken.2008.BluRay) but only loosely (typically 170 ms off): one of them may be timed slightly "
+            + "differently");
+    }
+
+    @Test
+    void aLooseMatchAtTheEightyPercentAndOffsetEdgesStillSaysSo() {
+        assertThat(TimingFit.enoughMatched(62, 77)).isTrue();
+        assertThat(DownloadedFit.judge(looseFit(10_000, 62, 77, 121, List.of(LOOSE_REASON)), REFERENCE).reasons()
+            .get(0)).contains("but only loosely (typically 121 ms off)");
+    }
+
+    @Test
+    void everyOtherCheckKeepsTheFallbackSentence() {
+        assertThat(TimingFit.enoughMatched(61, 77)).isFalse();
+        List<Result> others = List.of(
+            looseFit(170, 74, 77, 170, List.of(LOOSE_REASON, "Another reason")),
+            looseFit(170, 74, 77, 120, List.of(LOOSE_REASON)),
+            looseFit(170, 61, 77, 170, List.of(LOOSE_REASON)),
+            looseFit(10_001, 74, 77, 170, List.of(LOOSE_REASON)));
+
+        for (Result fit : others) {
+            Result result = DownloadedFit.judge(fit, REFERENCE);
+
+            assertThat(result.verdict()).isEqualTo(Verdict.CHECK);
+            assertThat(result.reasons()).containsExactly(FALLBACK);
+        }
     }
 
     @Test
