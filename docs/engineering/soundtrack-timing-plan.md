@@ -144,9 +144,11 @@ well, whether or not the scan counted them; the report lists them and which film
     must never come out `ALIGNED`, at any offset: they are decoys for B. Draws from films with a forced file are
     left out for B, since a full track also subtitles the foreign lines; the report counts the films left. The decoys
     are chosen without the classifier. Such a film can still have a short foreign line under an English track's
-    cue, so a B `ALIGNED` within 1 s of 0 on a decoy is listed for the owner to hear once (subtitles off, as below):
-    foreign speech there drops that draw from the decoys, counted; otherwise it is confident and wrong. The report says how many of them sit mostly on speech labelled foreign, as a
-    check on the labels.
+    cue, so the decoy set is settled **before any margin threshold is chosen**: after the language thresholds, every
+    decoy whose best B offset is within 1 s of 0 with a B score above 0 is heard once by the owner, as a clip (see
+    the ear-check). Foreign speech there drops that draw, counted; the margin threshold is then computed once on the
+    rest. If more than 10 need hearing, the report stops for a decision. The report says how many decoys sit mostly
+    on speech labelled foreign, as a check on the labels.
   - **What the draws cannot show.** A's draws are dense runs of subtitled lines, not a sparse forced file among
     English dialogue, A's known weakness. B's accuracy on foreign speech is not shown by any draw; the ear-check
     below is its proof.
@@ -177,15 +179,19 @@ well, whether or not the scan counted them; the report lists them and which film
   - **10 distinct real forced files** whose B fit is `ALIGNED`, by a seeded random draw;
   - **plus, heard on top,** the lowest-margin file and the one furthest from 0, if the draw missed them.
 
-  For each file the report gives three film times on the edition's timeline (the clock CineFilm's web player shows):
-  each cue's raw time plus the corrected offset (fitted minus bias), from the start, middle and end of the cues, with
-  each line's text. At each time t the owner starts playing at t − 5 s **with subtitles off** and watches the
-  player's clock. A file is right only if the foreign line begins between t − 0.5 s and t + 0.5 s at all three. **B is proven only if 10 random files are heard and every file heard is right**; fewer than 10 `ALIGNED`
-  files means B is unproven. Ten random files right bound B's error rate on `ALIGNED` fits below about 26% (one-sided
+  The player's clock shows whole seconds, so the owner does not listen in the player. For each file the kit cuts
+  three **audio clips** from the same file, in the same offline container: from the start, middle and end of the
+  cues, each 6 s before to 4 s after the point where the fit puts that line's speech (its raw time plus the fitted
+  offset, the bias not applied, since the bias is the gap between display and speech). A short click marks that
+  point, and each clip is listed with the line's text. The owner plays them on the Mac. A file is right only if, in
+  all three clips, the foreign line begins on the click, within about half a second.
+
+  **B is proven only if 10 random files are heard and every file heard is right**; fewer than 10 `ALIGNED` files
+  means B is unproven. Ten random files right bound B's error rate on `ALIGNED` fits below about 26% (one-sided
   95%), for errors the ear can catch (about 0.5 s), not the ±200 ms A is held to; the report says so, and the decoys
-  and absolute answers carry the rest. A's ear-check, if A is ever considered, is a list drawn the same way from the files whose A fit is
-  `ALIGNED`. Files not
-  heard keep the verdict the gate gives; 3d-3's trust question carries the ear-check's bound.
+  and absolute answers carry the rest. A's ear-check, if A is ever considered, is a list drawn the same way from the
+  files whose A fit is `ALIGNED`. Files not heard keep the verdict the gate gives; 3d-3's trust question carries the
+  ear-check's bound.
 - **For information, not truth:** the five OpenSubtitles films and Taken 3 (spot-checked at 32–37 min), plus an
   optional accented-English film chosen at export.
 
@@ -206,10 +212,12 @@ well, whether or not the scan counted them; the report lists them and which film
   - **no false rejections by the halves rule (A):** at least 90% of synthetic draws (one cut, answer 0) have halves
     that agree. The share of draws that come out `ALIGNED` is reported. B has no draws with an answer, so for B the
     report counts the real forced files rejected by the halves rule alone, for information.
-- **Never confident and wrong:** zero `ALIGNED` results more than 1 s off. This counts:
+- **Never confident and wrong:** zero `ALIGNED` results more than 1 s off, among items with a known answer, and none
+  on a decoy. This counts:
   - the synthetic draws;
   - the robustness changes;
-  - every decoy; for B, any `ALIGNED` on a decoy draw counts, whatever its offset;
+  - every decoy; for B, any `ALIGNED` on a decoy draw counts, whatever its offset, except a draw dropped after the
+    owner heard foreign speech under it (see "The test set");
   - every ear-check the owner finds wrong.
 - **The absolute answers** each pass, as stated above.
 - **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
@@ -331,7 +339,9 @@ and let a download beat the film's embedded forced track. So:
    image pull, wheel fetch and model fetch (each pinned and hash-checked), then runs with no network and only while
    nothing is playing. It is measurement only and never part of CineFilm.
 2. **Trust (asked again before 3d-3, with 3d-M's numbers).** When the soundtrack says `ALIGNED`, may CineFilm set the
-   offset and choose between forced files by itself, within the `SPEECH` limits above?
+   offset and choose between forced files by itself, within the `SPEECH` limits above? If B is chosen, the question
+   says that B's timing is proven only by ear, to about ±0.5 s and not the ±200 ms A is held to, and that ten heard
+   fits right bound its error rate on `ALIGNED` fits below about 26% (one-sided 95%) for errors of that size.
 
 ## Not in scope
 
