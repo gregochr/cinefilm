@@ -105,3 +105,25 @@ describe('FixMatchPanel reports once', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe('FixMatchPanel file line', () => {
+  it('shows the file line for a film with files, and none (nor a description) without', () => {
+    installFetch();
+    const { unmount } = render(<FixMatchPanel item={item} onApplied={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText(/^File: The Wicker Man\.m4v/)).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toHaveAttribute('aria-describedby');
+    unmount();
+
+    render(
+      <FixMatchPanel
+        item={{ filmId: 31, title: 'The Wicker Man' }}
+        onApplied={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/^File:/)).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).not.toHaveAttribute(
+      'aria-describedby',
+    );
+  });
+});

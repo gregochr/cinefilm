@@ -268,6 +268,187 @@ describe('useChristmas: changes', () => {
     expect(result.current.focusRequest).toMatchObject({ filmId: 6, undo: false });
   });
 
+  it('changes a search result: Add sends INCLUDE, toasts with an Undo, and keeps focus on the result', async () => {
+    const fetchMock = serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    await act(async () =>
+      result.current.changeResult({ filmId: 50, tmdbId: 150, title: 'Batman', state: 'NOT_IN' }),
+    );
+    expect(puts(fetchMock)[0][0]).toBe('/api/admin/christmas/150');
+    expect(JSON.parse(puts(fetchMock)[0][1].body)).toEqual({ choice: 'INCLUDE' });
+    expect(result.current.toast).toMatchObject({
+      message: 'Added Batman.',
+      undo: { tmdbId: 150, filmId: 50, choice: null, kind: 'add', panel: true },
+    });
+    // Not onto the toast's Undo: the panel's button keeps focus.
+    expect(result.current.focusRequest).toMatchObject({ filmId: 50, undo: false, panel: true });
+
+    await act(async () => result.current.undo(result.current.toast.undo));
+    expect(JSON.parse(puts(fetchMock)[1][1].body)).toEqual({ choice: null });
+    expect(result.current.toast.message).toBe('Removed Batman.');
+    // An Undo of a change made in the panel asks for focus on that result too.
+    expect(result.current.focusRequest).toMatchObject({ filmId: 50, panel: true });
+  });
+
+  it('asks for focus on the result when an Undo made from the panel fails', async () => {
+    let fail = false;
+    serve(() => (fail ? reply(409, null) : reply(200, christmasFixture())));
+    const { result } = await ready();
+    await act(async () =>
+      result.current.changeResult({ filmId: 50, tmdbId: 150, title: 'Batman', state: 'NOT_IN' }),
+    );
+    fail = true;
+    await act(async () => result.current.undo(result.current.toast.undo));
+    expect(result.current.focusRequest).toMatchObject({ filmId: 50, undo: false, panel: true });
+  });
+
+  it('stamps the data with its request number, a write half a step later, and refresh reads quietly', async () => {
+    const fetchMock = serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    expect(result.current.version).toBe(1);
+    expect(result.current.issued()).toBe(1);
+    await act(async () => result.current.refresh());
+    await waitFor(() => expect(result.current.version).toBe(2));
+    expect(result.current.loading).toBe(false);
+    expect(gets(fetchMock)).toHaveLength(2);
+    await act(async () =>
+      result.current.changeResult({ filmId: 50, tmdbId: 150, title: 'B', state: 'NOT_IN' }),
+    );
+    expect(result.current.version).toBe(3.5);
+    // A question asked now is not older than the write's answer; one asked while it was in flight was.
+    expect(result.current.issued()).toBe(3.5);
+  });
+
+  it('stamps a question asked while a write is in flight with the request, below the write answer', async () => {
+    const gate = deferred();
+    serve(() => gate.promise);
+    const { result } = await ready();
+    act(() => {
+      result.current.changeResult({ filmId: 50, tmdbId: 150, title: 'B', state: 'NOT_IN' });
+    });
+    await waitFor(() => expect(result.current.busy.has(150)).toBe(true));
+    expect(result.current.issued()).toBe(2);
+    await act(async () => gate.resolve(reply(200, christmasFixture())));
+    expect(result.current.version).toBe(2.5);
+    expect(result.current.issued()).toBe(2.5);
+  });
+
+  it('reads again when a read was dropped for a write that then fails', async () => {
+    const getGate = deferred();
+    const putGate = deferred();
+    let reads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url, init) => {
+        if (init.method === 'PUT') return putGate.promise;
+        reads += 1;
+        return reads === 2 ? getGate.promise : Promise.resolve(reply(200, christmasFixture()));
+      }),
+    );
+    const { result } = await ready();
+    act(() => result.current.refresh());
+    act(() => {
+      result.current.changeResult({ filmId: 50, tmdbId: 150, title: 'B', state: 'NOT_IN' });
+    });
+    await waitFor(() => expect(result.current.busy.has(150)).toBe(true));
+    // The read lands after the write began: it is dropped, and the write then fails.
+    await act(async () => getGate.resolve(reply(200, christmasFixture())));
+    await act(async () => putGate.resolve(reply(500, null)));
+    await waitFor(() => expect(reads).toBe(3));
+  });
+
+  it('stamps a poll that lands late with when it was asked, not when it landed', async () => {
+    const gate = deferred();
+    let reads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => {
+        reads += 1;
+        return reads === 2 ? gate.promise : Promise.resolve(reply(200, christmasFixture()));
+      }),
+    );
+    const { result } = await ready();
+    act(() => result.current.refresh());
+    // A question about films asked now is stamped with the newest request, the slow read's.
+    expect(result.current.issued()).toBe(2);
+    await act(async () => gate.resolve(reply(200, christmasFixture())));
+    await waitFor(() => expect(result.current.version).toBe(2));
+    expect(result.current.issued()).toBe(2);
+  });
+
+  it('does not start the clock on unpinning while the toast is held', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    act(() => result.current.pinToast(true));
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    act(() => result.current.holdToast());
+    act(() => result.current.pinToast(false));
+    await act(async () => vi.advanceTimersByTime(60000));
+    expect(result.current.toast).not.toBeNull();
+    act(() => result.current.releaseToast());
+    await act(async () => vi.advanceTimersByTime(8100));
+    expect(result.current.toast).toBeNull();
+  });
+
+  it('keeps the toast up while pinned, and gives it its 8 seconds once released', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    act(() => result.current.pinToast(true));
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    await act(async () => vi.advanceTimersByTime(60000));
+    expect(result.current.toast).not.toBeNull();
+    // A pointer leaving the toast does not start the clock while pinned.
+    act(() => result.current.releaseToast());
+    await act(async () => vi.advanceTimersByTime(60000));
+    expect(result.current.toast).not.toBeNull();
+    act(() => result.current.pinToast(false));
+    await act(async () => vi.advanceTimersByTime(7900));
+    expect(result.current.toast).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(200));
+    expect(result.current.toast).toBeNull();
+  });
+
+  it('removes an added film from a result, and sends nothing for a film with no TMDB id', async () => {
+    const fetchMock = serve(() => reply(200, christmasFixture()));
+    const { result } = await ready();
+    await act(async () =>
+      result.current.changeResult({
+        filmId: 4,
+        tmdbId: 104,
+        title: 'Trading Places',
+        state: 'IN_ADDED',
+      }),
+    );
+    expect(JSON.parse(puts(fetchMock)[0][1].body)).toEqual({ choice: null });
+    expect(result.current.toast).toMatchObject({ undo: { choice: 'INCLUDE' } });
+
+    await act(async () =>
+      result.current.changeResult({
+        filmId: 60,
+        tmdbId: null,
+        title: 'Mystery',
+        state: 'NO_TMDB_ID',
+      }),
+    );
+    expect(puts(fetchMock)).toHaveLength(1);
+  });
+
+  it('holds a result while its request is in flight, like a row', async () => {
+    const gate = deferred();
+    const fetchMock = serve(() => gate.promise);
+    const { result } = await ready();
+    const film = { filmId: 50, tmdbId: 150, title: 'Batman', state: 'NOT_IN' };
+    act(() => {
+      result.current.changeResult(film);
+    });
+    await waitFor(() => expect(result.current.busy.has(150)).toBe(true));
+    await act(async () => result.current.changeResult(film));
+    expect(puts(fetchMock)).toHaveLength(1);
+    await act(async () => gate.resolve(reply(200, christmasFixture())));
+  });
+
   it('holds a row while its request is in flight: a second change sends nothing', async () => {
     const gate = deferred();
     const fetchMock = serve(() => gate.promise);
@@ -296,7 +477,7 @@ describe('useChristmas: changes', () => {
     expect(result.current.data.inWeek).toHaveLength(14);
     expect(result.current.busy.size).toBe(0);
     // A failed Undo replaces the toast its button was in, so the screen is asked to settle focus.
-    expect(result.current.focusRequest).toEqual({ filmId: null, undo: false, n: 1 });
+    expect(result.current.focusRequest).toEqual({ filmId: null, undo: false, panel: false, n: 1 });
   });
 
   it('says the scan is running for a bare 409, and a plain failure for anything else', async () => {

@@ -88,3 +88,24 @@ and `state` contain no JSX; no `container.querySelector`; `userEvent`, not `fire
 The owner can leave out, put back, add and remove films with no config; every change undoes; the "In Christmas week"
 order is exactly Home's with the cut after 12; the preview matches Home; a film without keywords or without a TMDB id
 says so in search; both layouts and every state in `04` work; no reference to `CINEFILM_HOLIDAY_*` remains.
+
+## Slice 4 detail (2026-11-19): split in two PRs
+
+Slices 1-3 are merged (#231, #233 API, #235, #239, #243). Slice 4 is split so each PR stays under 1,500 lines.
+
+### 4a: Add a film (search to add)
+
+- `api/christmas.js`: `getChristmasStates(filmIds)` -> `GET /api/admin/christmas/states?filmIds=1,2,3` (ids joined by comma; empty list answers `[]` without a request). Answer rows `{filmId, tmdbId|null, state}`, state one of `IN_KEYWORD | IN_ADDED | LEFT_OUT | NOT_IN | KEYWORDS_PENDING | NO_TMDB_ID`.
+- `state/christmas.js` (no JSX): `addResultRow(state)` -> `{chip, line, action}` per state (copy from the design: "TMDB keyword" / "Added by me" / "Left out by me" chips; `NOT_IN` -> muted "Not a Christmas film" with Add; `KEYWORDS_PENDING` -> "Keywords not fetched yet" chip with Add; `NO_TMDB_ID` -> muted "Needs a match first" with a "Find the film..." button into Fix match; `IN_KEYWORD` -> Leave out; `IN_ADDED` -> Remove; `LEFT_OUT` -> Put back), unit-tested.
+- Search source: reuse the client-side index (`state/searchIndex.js` + `state/search.js` `search(prepared, query)`, titles only: pass caps so only film titles come back, up to 8). Then ask `/states` for those film ids (debounced by query change; ignore stale answers). A result row with no state answer yet shows no button.
+- Acting on a result calls the existing `useChristmas` write path (`change`/INCLUDE|EXCLUDE|null with the same Undo toast, 409 text, one write in flight per TMDB id) so the row updates in place and the panel stays open; the list and `/states` answers are re-derived from the new `data` (no second fetch needed: state for a film is recomputed from `data.inWeek/added/leftOut` by filmId where possible, else keep the last `/states` answer and patch it).
+- UI: desktop: the search field "Add a film" (340px wide, 44px) at the right of the controls row; typing opens a results panel under it (440px, `#1A1713`, 64px rows; poster, "Title · year", chip or muted line, one button; `role="combobox"`/`listbox` pattern like the header search, arrows move, Esc closes and returns focus to the field). Phone (<= 600px): tapping the field opens a full-screen sheet with "Cancel" (design `06`). One tap acts and the panel stays open.
+- Restore the design copy removed in 3: the rule line ("...You can also add any film yourself."), the under-5 line ("Add {5 - n} more and Home shows Christmas films."), the empty-state "You don't have to wait: add any film yourself." with the search field, the "No films in your library are tagged Christmas. Add any you count." copy and the left-out note as in the design; delete the "Deviations" bullet about adding from `docs/design/christmas-films/README.md`.
+- "Find the film..." opens Fix match the way other Admin rows do (reuse `FixMatchPanel` via the Admin shell if reachable from this screen, else navigate to the Library todo list; builder checks `Admin.jsx` and picks the existing mechanism, no new Fix match code).
+- Tests: states api (empty list, url), `addResultRow` for all six states, panel open/close/Esc/arrow keys, Add then in-place Remove and Undo, NO_TMDB_ID and KEYWORDS_PENDING rows, stale `/states` answer ignored, phone sheet opens and Cancel closes (follow how `SearchSheet` is tested), `userEvent`, no `container.querySelector`.
+
+### 4b: Home preview and phone polish
+
+- Preview inside the status card: label "Preview · Home in Christmas week", "Hide preview"/"Show preview" button (open by default, remembered in `localStorage` inside try/catch), the real Home row title and caption ("This week: Christmas" / "A new theme every Monday"), then the first 12 `inWeek` posters reusing Home's poster row (`FilmRow` + `Poster`, lazy, 2:3 reserved). When `fallsBack`: "Christmas week will show the usual weekly theme — under 5 Christmas films." Phone: a full-width 44px "Preview Home in Christmas week ›" button opening the row in a sheet.
+- Phone "‹ Admin" back link above the eyebrow; phone cut line uses the short text if the design shows it (`05`).
+- Tests: open/closed remembered (and storage throwing), fallsBack text, 12 posters max, sheet on phone, back link.
