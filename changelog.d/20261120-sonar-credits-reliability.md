@@ -1,3 +1,3 @@
-### Fix — credits: the embeddings file no longer leaks a stream when it fails to open
+### Fixed — credits: the embeddings file no longer leaks a stream when it fails to open
 
 `EmbeddingFile.open` now closes the records' input stream when skipping the header (or anything else before the reader takes it over) throws, and rethrows the original failure. This clears the SonarQube blocker `java:S2095` that failed the quality gate on new-code reliability. The four `java:S6218` findings (records with an array component) on `FilmEmbeddings`, `TrainRows`, `TrainRows.Kept` and `FilmScore.Prediction` are recorded as accepted in `sonar-project.properties`: none of them is ever compared, hashed, used as a key or printed.

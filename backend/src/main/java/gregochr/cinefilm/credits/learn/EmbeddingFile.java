@@ -110,8 +110,10 @@ final class EmbeddingFile {
     }
 
     /**
-     * As {@link #open(Path)}, opening the file's bytes with {@code opener}. If anything fails after the records'
-     * stream is open and before the reader owns it, the stream is closed and the failure is rethrown unchanged.
+     * As {@link #open(Path)}, opening the file's bytes with {@code opener}. If an {@link IOException} or a
+     * {@link RuntimeException} is thrown after the records' stream is open and before the reader owns it, the
+     * stream is closed, any failure to close it is added to the original as suppressed, and the original is
+     * rethrown. An {@link Error} is not caught, so it leaves the stream open.
      */
     static Reader open(Path file, StreamOpener opener) throws IOException {
         long length = Files.size(file);
