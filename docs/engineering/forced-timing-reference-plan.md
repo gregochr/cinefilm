@@ -189,16 +189,35 @@ Two changes:
   `usable` still applies to each, and on the playback path the last-cue end must be known. The one rule feeds 3c-1's
   measuring, `SidecarTimingService.osRefs` (the fit, the key and `current()`) and the backfill's unfilled set.
   Eligibility no longer needs `os_full_candidates` or a current full search when such a stored file exists (the
-  candidates are then empty); NONE_EXIST films, multi-part editions, an unknown runtime, the `NO_REFERENCE` embedded
+  candidates are then empty); NONE_EXIST films, editions with a track in any part (split editions are 3c-3), an unknown runtime, the `NO_REFERENCE` embedded
   read and "a sidecar's own file is never its reference" are unchanged.
 
 **First results (2026-11-20, v0.9.2).** `ALIGNED`: Dawn of the Planet of the Apes 0 ms, Spectre 0 ms, The Revenant
 -60 ms. Fury `CHECK` (loose, 170 ms). The Equalizer 3 `CHECK` only by the old full rule (316 lines vs a 348-line
 foreign-parts reference; the owner confirmed English is not subtitled), hence the 600-line exemption from the half rule. Taken 3 has
 no usable reference (only an EXTENDED file ending 115.0 min against a 108.95 min runtime, rightly rejected). Dances
-with Wolves is out of scope (multi-part edition).
+with Wolves is one file and has no usable reference (its only stored file is the 277-line theatrical one, parts-only); the
+split case is the Lord of the Rings Extended Editions (3c-3).
 
 **Fetching still walks the candidates only**, so no download is spent on a file that is not a candidate.
+
+### 3c-3 — split editions
+
+The fit side now accepts what the download side (`TimingReferenceService`) already did: an edition of several original
+parts (the three Lord of the Rings Extended Editions: two files each, no English track, one whole-edition Elvish forced
+file each).
+
+- **`osRefs`** takes an edition with one or more original parts when **every** part's read is current and
+  `NO_REFERENCE` (the condition of `TimingReferenceService.noReference`). A mixed split edition (a track in one part)
+  stays out. Runtime, IMDb id and `NONE_EXIST` conditions are unchanged; the edition runtime and `CreditsStarts` are
+  already on the edition timeline.
+- **`downloadedFor`:** on a split edition only a **whole-edition** sidecar gets references. A per-part sidecar gets
+  none, so its key, job and row stay as they were (the embedded `NO_REFERENCE` path).
+- **No shifting:** a whole-edition sidecar's cue times are on the edition timeline and the reference is a whole-film
+  file on the same timeline.
+- **No `RULES_VERSION` bump:** no single-part key changes, and a split whole-edition row goes stale on its own because
+  its key gains the `|os2:` suffix. An OpenSubtitles fit still never sets an offset and never counts as proof.
+- The backfill covers split editions' references too.
 
 ### 3d — tie the full file to the film's speech (`alass`)
 

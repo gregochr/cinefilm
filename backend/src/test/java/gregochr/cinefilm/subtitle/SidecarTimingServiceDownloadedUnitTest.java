@@ -7,6 +7,7 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -112,7 +113,11 @@ class SidecarTimingServiceDownloadedUnitTest {
     /** The film's served sidecar: the owner's file (or the download the test made of it). */
     private void served() {
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(sidecar));
+        when(sidecars.findByMediaFileIdInAndKind(partIds(), SubtitleKind.FORCED)).thenReturn(List.of(sidecar));
+    }
+
+    private List<Long> partIds() {
+        return edition.originalParts().stream().map(MediaFile::getId).toList();
     }
 
     private static OpenSubtitlesResult candidate(long fileId) {
@@ -614,5 +619,180 @@ class SidecarTimingServiceDownloadedUnitTest {
             ReferenceSource.EMBEDDED)).isTrue();
         assertThat(SidecarTimingService.shouldApply(aligned(900), sidecar, List.of(10L),
             ReferenceSource.OPENSUBTITLES)).isFalse();
+    }
+
+    // ---- Split editions (phase 3c-3): the Lord of the Rings Extended Editions, two files and no English track ----
+
+    private static final String SPLIT_KEY = "10:1000:" + NOW.toEpochMilli() + "@0,11:2000:" + NOW.toEpochMilli() + "@"
+        + 45 * MIN;
+
+    private MediaFile secondPart;
+
+    /** Makes the edition two parts of 45 minutes, the sidecar a file timed for the whole edition. */
+    private void split() {
+        part.setPartNumber(1);
+        part.setDurationMs(45 * MIN);
+        secondPart = file(edition, "Taken-2.m4v");
+        secondPart.setId(11L);
+        secondPart.setPartNumber(2);
+        secondPart.setDurationMs(45 * MIN);
+        secondPart.setSizeBytes(2_000L);
+        secondPart.setModifiedAt(NOW);
+        sidecar.setWholeEdition(true);
+    }
+
+    private EmbeddedCueStarts splitRead(MediaFile of, EmbeddedCueStarts.Status status, String fingerprint) {
+        EmbeddedCueStarts read = new EmbeddedCueStarts();
+        read.setMediaFileId(of.getId());
+        read.setFingerprint(fingerprint);
+        read.setStatus(status);
+        read.setReason("The film has no English subtitle track");
+        return read;
+    }
+
+    private void splitReads(EmbeddedCueStarts.Status first, EmbeddedCueStarts.Status second) {
+        when(cache.findAllById(Set.of(10L, 11L))).thenReturn(List.of(
+            splitRead(part, first, TimingKeys.fingerprint(part)),
+            splitRead(secondPart, second, TimingKeys.fingerprint(secondPart))));
+    }
+
+    @Test
+    void aSplitEditionWithNoTrackInAnyPartIsFittedToTheStoredFileWithTheEditionTimelineUnshifted() {
+        split();
+        splitReads(EmbeddedCueStarts.Status.NO_REFERENCE, EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(reference(5012, 300, IMDB));
+
+        FitJob job = onlyJob(5012L);
+
+        assertThat(job.noReference()).isNull();
+        assertThat(job.referenceStarts()).isEmpty();
+        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
+        assertThat(job.osReferences().get(0).starts()).hasSize(300).startsWith(10_000L, 20_000L);
+        assertThat(job.servedStarts()).isEqualTo(STARTS);
+        assertThat(job.referenceKey()).isEqualTo(SPLIT_KEY + OS_KEY + ":5012");
+    }
+
+    @Test
+    void aPerPartSidecarOfASplitEditionGetsNoStoredFileAndKeepsItsEmbeddedFit() {
+        split();
+        sidecar.setWholeEdition(false);
+        SubtitleSidecar whole = new SubtitleSidecar();
+        whole.setId(6L);
+        whole.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        whole.setOpenSubtitlesFileId(7001L);
+        whole.setPath("opensubtitles:40:7001");
+        whole.setImdbId(IMDB);
+        whole.setWholeEdition(true);
+        whole.setMediaFileId(10L);
+        whole.setCuesText(sidecar.getCuesText());
+        whole.setCueCount(STARTS.size());
+        whole.setUpdatedAt(NOW);
+        splitReads(EmbeddedCueStarts.Status.NO_REFERENCE, EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(reference(5012, 300, IMDB));
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(reference(5012, 300, IMDB)));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 11L), SubtitleKind.FORCED))
+            .thenReturn(List.of(sidecar, whole));
+        when(alignments.findBySidecarIdIn(List.of(5L, 6L))).thenReturn(List.of());
+
+        List<FitJob> jobs = service.fitJobs(1L);
+
+        assertThat(jobs).extracting(FitJob::sidecarId).containsExactly(5L, 6L);
+        FitJob perPart = jobs.get(0);
+        assertThat(perPart.osReferences()).isEmpty();
+        assertThat(perPart.referenceKey()).isEqualTo(BASE_KEY);
+        assertThat(perPart.noReference()).isEqualTo("The film has no English subtitle track");
+        FitJob wholeJob = jobs.get(1);
+        assertThat(wholeJob.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
+        assertThat(wholeJob.referenceKey()).isEqualTo(SPLIT_KEY + OS_KEY + ":5012");
+    }
+
+    @Test
+    void aSplitEditionWithATrackInOnePartIsNotFittedToAStoredFile() {
+        split();
+        splitReads(EmbeddedCueStarts.Status.USABLE, EmbeddedCueStarts.Status.NO_REFERENCE);
+
+        FitJob job = onlyJob();
+
+        // No stored file is even looked up for an edition with a track in one part.
+        verifyNoInteractions(references);
+        assertThat(job.osReferences()).isEmpty();
+        assertThat(job.referenceKey()).isEqualTo(SPLIT_KEY);
+        assertThat(job.noReference()).isEqualTo("Part 2: The film has no English subtitle track");
+    }
+
+    @Test
+    void aSplitEditionWhoseSecondPartWasReadBeforeItChangedIsNotFittedUntilItIsReadAgain() {
+        split();
+        when(cache.findAllById(Set.of(10L, 11L))).thenReturn(List.of(
+            splitRead(part, EmbeddedCueStarts.Status.NO_REFERENCE, TimingKeys.fingerprint(part)),
+            splitRead(secondPart, EmbeddedCueStarts.Status.NO_REFERENCE, "1:1")));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        assertThat(service.fitJobs(1L)).isEmpty();
+        verifyNoInteractions(references);
+        assertThat(service.readsFor(1L)).extracting(SidecarTimingService.ReferenceRead::mediaFileId)
+            .containsExactly(11L);
+    }
+
+    @Test
+    void aSplitEditionWithNoReadOfASecondPartIsNotGivenStoredFilesInAdmin() {
+        split();
+        // Only the first part has a read: the second is missing.
+        when(cache.findAllById(Set.of(10L, 11L))).thenReturn(List.of(
+            splitRead(part, EmbeddedCueStarts.Status.NO_REFERENCE, TimingKeys.fingerprint(part))));
+        ForcedSubtitleAlignment row = row(SPLIT_KEY + OS_KEY + ":5012");
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row));
+
+        assertThat(service.current(Map.of(5L, edition), List.of(sidecar))).isEmpty();
+        verifyNoInteractions(references);
+    }
+
+    @Test
+    void aSplitWholeEditionFitIsCurrentWhileItsKeyNamesTheStoredFileAndStaleWithoutIt() {
+        split();
+        splitReads(EmbeddedCueStarts.Status.NO_REFERENCE, EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(reference(5012, 300, IMDB));
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(SPLIT_KEY + OS_KEY + ":5012")));
+
+        AlignmentDto dto = service.current(Map.of(5L, edition), List.of(sidecar)).get(5L);
+
+        assertThat(dto.source()).isEqualTo("OPENSUBTITLES");
+        assertThat(dto.referenceRelease()).isEqualTo("Release 5012");
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(SPLIT_KEY)));
+        assertThat(service.current(Map.of(5L, edition), List.of(sidecar))).isEmpty();
+    }
+
+    @Test
+    void aSplitWholeEditionFitIsSavedAgainstTheStoredFileAndNeverSetsAnOffset() {
+        split();
+        splitReads(EmbeddedCueStarts.Status.NO_REFERENCE, EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(reference(5012, 300, IMDB));
+        served();
+        when(alignments.findBySidecarId(5L)).thenReturn(Optional.empty());
+        FitJob job = new FitJob(1L, 5L, TimingKeys.identity(sidecar), SPLIT_KEY + OS_KEY + ":5012", STARTS,
+            List.of(), null,
+            List.of(new DownloadedFit.Reference(5012L, "Release 5012", 300, List.of(1L))));
+
+        assertThat(service.save(job, aligned(900), 5012L, LATER)).isEqualTo(SaveOutcome.SAVED);
+        assertThat(sidecar.getOffsetMs()).isZero();
+    }
+
+    @Test
+    void aSplitWholeEditionsStoredFileWithNoLastCueEndMakesTheFilmDueAndIsFilledIn() {
+        split();
+        splitReads(EmbeddedCueStarts.Status.NO_REFERENCE, EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference old = storedBeforeV30(5012);
+        when(references.findFactsByFilmIdIn(Set.of(1L))).thenAnswer(call -> List.of(factsOf(old)));
+        when(references.findAllById(Set.of(5012L))).thenReturn(List.of(old));
+        served();
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(SPLIT_KEY)));
+
+        assertThat(service.dueFilmIds()).containsExactly(1L);
+        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
+        assertThat(old.getLastCueEndMs()).isEqualTo(300 * 10_000L + 1_000);
+        verify(references).save(old);
     }
 }

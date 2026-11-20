@@ -536,10 +536,18 @@ public class SidecarTimingService {
             .map(ReferenceFacts::osFileId).sorted().map(String::valueOf).collect(Collectors.joining(","));
     }
 
-    /** The usable stored OpenSubtitles files for a sidecar: never its own file (it cannot vouch for itself). */
+    /**
+     * The usable stored OpenSubtitles files for a sidecar: never its own file (it cannot vouch for itself). On a split
+     * edition (several original parts) only a sidecar timed for the whole edition gets any: its cue times and the
+     * stored whole-film file are on the same timeline, so neither is shifted. A per-part sidecar gets none and keeps
+     * its fit to its part's embedded read.
+     */
     private static List<ReferenceFacts> downloadedFor(Served s, Map<Long, OsRefs> os) {
         OsRefs refs = os.get(s.edition().getId());
-        return refs == null ? List.of() : refs.usable().stream()
+        if (refs == null || s.edition().originalParts().size() > 1 && !s.sidecar().isWholeEdition()) {
+            return List.of();
+        }
+        return refs.usable().stream()
             .filter(r -> !Objects.equals(r.osFileId(), s.sidecar().getOpenSubtitlesFileId())).toList();
     }
 
@@ -549,8 +557,9 @@ public class SidecarTimingService {
     }
 
     /**
-     * For each served edition the timing check fits to OpenSubtitles files (a single file whose embedded read found no
-     * English track, of a film the owner has not marked {@code NONE_EXIST}, as {@link TimingReferenceService} does),
+     * For each served edition the timing check fits to OpenSubtitles files (one or more original parts, every part's
+     * embedded read current and finding no English track, as {@link TimingReferenceService} requires, so a split
+     * edition with a track in one part stays out; of a film the owner has not marked {@code NONE_EXIST}),
      * the usable stored files: the candidates' first, then any other stored full file of the film under its current
      * IMDb id (a film with no current full search has no candidates). The same selection as
      * {@link TimingReferenceService}, through {@link TimingReferenceRule} and
@@ -564,9 +573,9 @@ public class SidecarTimingService {
             Edition e = s.edition();
             Film film = e.getFilm();
             List<MediaFile> parts = e.originalParts();
-            if (parts.size() == 1 && e.getRuntimeMs() > 0 && film.getImdbId() != null
-                && isRead(parts.get(0), reads)
-                && reads.get(parts.get(0).getId()).getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE) {
+            if (!parts.isEmpty() && e.getRuntimeMs() > 0 && film.getImdbId() != null
+                && parts.stream().allMatch(p -> isRead(p, reads)
+                    && reads.get(p.getId()).getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE)) {
                 wanted.putIfAbsent(e.getId(), e);
             }
         }
