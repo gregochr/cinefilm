@@ -584,6 +584,56 @@ describe('Christmas films: adding a film on a phone', () => {
     expect(toast()).toHaveTextContent('Removed Batman.');
   });
 
+  describe('Undo of a search change, pressed inside the Home preview sheet', () => {
+    /** Adds Batman in the search sheet, closes it, opens the preview sheet and Tabs to the toast's Undo. */
+    async function toUndoInPreview(user) {
+      renderApp('/admin/christmas');
+      await screen.findByRole('tablist', { name: 'Christmas lists' });
+      await user.click(screen.getByRole('button', { name: 'Add a film' }));
+      const search = screen.getByRole('dialog', { name: 'Add a film' });
+      await user.keyboard('batman');
+      await user.click(await within(search).findByRole('button', { name: 'Add Batman' }));
+      await within(search).findByRole('button', { name: 'Remove Batman' });
+      await user.click(within(search).getByRole('button', { name: 'Cancel' }));
+      await user.click(screen.getByRole('button', { name: /Preview Home in Christmas week/ }));
+      const sheet = screen.getByRole('dialog', { name: 'Home in Christmas week' });
+      for (let i = 0; i < 30; i += 1) {
+        if (document.activeElement === within(sheet).getByRole('button', { name: 'Undo' })) break;
+        await user.tab();
+      }
+      expect(within(sheet).getByRole('button', { name: 'Undo' })).toHaveFocus();
+      return sheet;
+    }
+
+    it('keeps focus in the sheet when the Undo works, and Esc closes it', async () => {
+      const user = userEvent.setup();
+      serve();
+      const sheet = await toUndoInPreview(user);
+      await user.keyboard('{Enter}');
+      await within(sheet).findByText('Removed Batman.');
+      expect(sheet).toContainElement(document.activeElement);
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('keeps focus in the sheet when the Undo fails, and Esc closes it', async () => {
+      const user = userEvent.setup();
+      serve({
+        put: (tmdbId, choice, included) => {
+          if (choice === null) return respond({}, 500);
+          included.add(tmdbId);
+          return respond(bodyWith(included));
+        },
+      });
+      const sheet = await toUndoInPreview(user);
+      await user.keyboard('{Enter}');
+      await within(sheet).findByText(/Couldn.t save that change/);
+      expect(sheet).toContainElement(document.activeElement);
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
   it('lets the toast time out after a widening that moved it while its Undo had focus', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

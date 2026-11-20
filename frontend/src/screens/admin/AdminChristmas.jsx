@@ -128,6 +128,14 @@ export default function AdminChristmas() {
     const resultButton = panelButtons.current.get(focusRequest.filmId);
     // With the phone's sheet up, the last place focus may fall back to is inside it, never the page behind it.
     const sheetField = document.querySelector('.xmas-add-sheet .xmas-add__input');
+    // The preview sheet is modal too: whatever made the change (a row, or the search before its sheet was closed), the
+    // buttons behind it are out of reach, so focus stays in the sheet: on the toast's Undo, else on Close if lost.
+    const previewClose = document.querySelector('.xmas-preview-sheet__bar button');
+    if (previewClose) {
+      if (focusRequest.undo && undoButton.current) undoButton.current.focus();
+      else if (lost) previewClose.focus();
+      return;
+    }
     if (focusRequest.panel) {
       // The result's button; with the panel shut, the film's row in the list; else the list.
       if (lost)
@@ -143,17 +151,15 @@ export default function AdminChristmas() {
       undoButton.current.focus();
       return;
     }
-    // The preview sheet is modal too: the row's button behind it is out of reach, so focus stays in the sheet.
-    const previewClose = document.querySelector('.xmas-preview-sheet__bar button');
     const button =
-      focusRequest.filmId === null || previewClose
+      focusRequest.filmId === null
         ? null
         : (buttons.current.get(focusRequest.filmId) ?? resultButton);
     if (button) {
       button.focus();
       return;
     }
-    if (lost) (sheetField ?? previewClose ?? panel.current)?.focus();
+    if (lost) (sheetField ?? panel.current)?.focus();
   }, [focusRequest]);
 
   // The preview sheet goes when the window is widened or the lists empty. Its open state goes with it, so it does not
