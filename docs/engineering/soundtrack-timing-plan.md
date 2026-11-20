@@ -113,33 +113,47 @@ This is **not** credits L4a's convention: L4a ran the released image, installed 
 
 ### The test set
 
-The owner exports the inputs read-only with `psql`.
+The first export (2026-11-20) found 151 forced files on 148 single-part films. Only **one** has an `EMBEDDED`
+`ALIGNED` fit and only **one** is owner-verified: the owner checks films by watching, not in Admin. So known answers
+are scarce, and the main tests are ones that need none. The owner exports the inputs read-only with `psql`.
 
-- **Dances with Wolves.** The fits of sidecars 2 and 48 must differ by 14 ± 0.3 s, and sidecar 2 must come out within
-  ±1 s of 0. This is the only claim the owner's listening supports.
-- **Every forced file with an `EMBEDDED` `ALIGNED` fit** (about 25 films have an embedded English track; the count is
-  taken at export). Truth is the stored fitted offset applied to the raw cues. These are near 0 by construction and
-  are the easy cases, so they are not the main test of non-zero offsets.
-- **Shifted controls, the main test:** each of those files at 16 random shifts within ±30 s (the `ALIGNED` cap),
-  which the fit must recover, and 4 beyond it, which must come out `CHECK`. Confident-and-wrong counts are reported
-  over the shifts that could be `ALIGNED`.
-- **Cross-film controls:** every forced file against every other film's audio. None may come out `ALIGNED`.
-- **For information, not truth:** the five OpenSubtitles films (Dawn of the Planet of the Apes, Spectre, The Revenant,
-  The Equalizer 3, Fury) and Taken 3, which the owner spot-checked at 32–37 min. Plus one film with heavily accented
-  English, chosen at export, as a control for English being labelled foreign.
+- **Shift recovery, the main test (no answers needed):**
+  - **Base fit.** Every forced file gets a base fit b.
+  - **Recoverable shifts.** The same file at 16 random shifts s within ±30 s (the `ALIGNED` cap) must fit at b + s.
+    That holds whatever the file's true timing is, so all 151 files count.
+  - **Beyond the cap.** 4 shifts beyond 30 s must come out `CHECK`.
+- **Cross-film controls (no answers needed).** Every forced file is run against other films' audio (a sample of 40
+  when there are more). None may come out `ALIGNED`.
+- **Full English tracks (answer 0 by definition).** Every single-part film with an embedded full English track (its
+  cue starts, from `embedded_cue_starts`) is fitted with a starts-only version of score A: the share of cue starts
+  that fall in speech within ±200 ms. This tests the speech timing at scale, but not the language labels.
+- **Absolute answers.**
+  - **Dances with Wolves.** The fits of sidecars 2 and 48 must differ by 14 ± 0.3 s, and sidecar 2 must come out
+    within ±1 s of 0.
+  - **The one `EMBEDDED` `ALIGNED` file:** its fitted offset on the raw cues.
+  - **The one owner-verified file:** its current offset.
+- **Base offsets for the owner's ear.** Every `ALIGNED` base fit more than 1 s from 0 is listed, by margin. The owner
+  checks up to five by ear, as for Dances with Wolves.
+- **For information, not truth:** the five OpenSubtitles films and Taken 3 (spot-checked at 32–37 min), plus an
+  optional accented-English film chosen at export.
 
 ### The gate for building
 
 - **Thresholds are not judged on the films they were set on.** The margin and neutral-band thresholds are chosen by
-  leave-one-film-out. The margin threshold must be at least 1.5× the largest margin of any wrong pick anywhere.
-- **Accuracy:** on the embedded set and the shifted controls, after the bias is subtracted, at least 90% are within
-  ±200 ms.
-- **Never confident and wrong:** zero `ALIGNED` results more than 1 s off. That counts the shifted controls and every
-  cross-film pair.
-- **Useful coverage:** with the held-out thresholds, at least 70% of the embedded set and of the shifted controls
-  that could be `ALIGNED` come out `ALIGNED`. A signal that only ever says `CHECK` fixes nothing.
+  leave-one-film-out, with the held-out film left out on both sides. The margin threshold must be at least 1.5× the
+  largest margin of any wrong pick: a cross-film fit, or a shift recovered more than 1 s off.
+- **Accuracy.** At least 90% within ±200 ms on:
+  - shift recovery (of files whose base fit has 8 or more cues on speech);
+  - the full English tracks;
+  - the absolute answers.
+- **Never confident and wrong:** zero `ALIGNED` results more than 1 s off, across shift recovery, the cross-film
+  controls, the full tracks and the absolute answers. **A file the owner checks by ear and finds right as it is,
+  while the fit confidently said otherwise, also counts.**
+- **Useful coverage:** with the held-out thresholds, at least 70% of forced files' base fits come out `ALIGNED`.
 - **Dances with Wolves** passes as stated above, with **both** sidecars `ALIGNED`.
-- **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
+- **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB. One film is timed first. If
+  148 films would take too long, the run covers the films with answers, the full-track films and a seeded sample of
+  the rest, and the report says what that sample cannot show.
 
 If B passes and A does not, build B. If both pass, build B and log A. If neither passes, stop and report. The chosen
 thresholds and the bias are written into this plan before 3d-1a is briefed.
