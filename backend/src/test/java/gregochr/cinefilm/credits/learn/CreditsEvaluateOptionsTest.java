@@ -21,7 +21,7 @@ class CreditsEvaluateOptionsTest {
     @Test
     void everyFlagIsRead() {
         CreditsEvaluateOptions options = CreditsEvaluateOptions.parse(with("--train", "b/", "--look=L5",
-            "--baseline", "v2.csv"));
+            "--baseline", "v2.csv", "--embeddings", "embed-1"));
 
         assertThat(options.features()).isEqualTo(Path.of("f"));
         assertThat(options.out()).isEqualTo(Path.of("o"));
@@ -29,6 +29,7 @@ class CreditsEvaluateOptionsTest {
             Path.of("b").toAbsolutePath().normalize());
         assertThat(options.look()).isTrue();
         assertThat(options.baseline()).isEqualTo(Path.of("v2.csv"));
+        assertThat(options.embeddings()).isEqualTo(Path.of("embed-1"));
     }
 
     @Test
@@ -37,6 +38,7 @@ class CreditsEvaluateOptionsTest {
 
         assertThat(options.look()).isFalse();
         assertThat(options.baseline()).isNull();
+        assertThat(options.embeddings()).isNull();
     }
 
     static Stream<Arguments> refusals() {
@@ -53,6 +55,8 @@ class CreditsEvaluateOptionsTest {
             Arguments.of(with("--look=L5", "--look=L5"), "flag --look given twice"),
             Arguments.of(with("--baseline"), "flag --baseline needs a value"),
             Arguments.of(with("--baseline", "v2.csv"), "--baseline needs --look=L5"),
+            Arguments.of(with("--embeddings"), "flag --embeddings needs a value"),
+            Arguments.of(with("--embeddings", "e", "--embeddings", "f"), "flag --embeddings given twice"),
             Arguments.of(with("--train", "x/a"), "the same training run is given twice: a"));
     }
 

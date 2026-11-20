@@ -240,6 +240,44 @@ class CreditsEvaluateJobTest {
     }
 
     @Test
+    void theFinalRunsShippingModelsScoreTheTestFilmsWhicheverPlaceItHasInTheList() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, true);
+        Path trainB = EvaluateFixtures.trainRun(temp, "train-b");
+        EvaluateFixtures.shipWith(trainB, EvaluateFixtures.trainRun(temp, "train-inv", true));
+
+        run(features, "--train", trainA.toString(), "--train", trainB.toString(), "--look=L5");
+        List<String> withAFirst = evaluation().lines().skip(11).toList();
+        Path second = temp.resolve("second");
+        job.run(CreditsEvaluateOptions.parse(new String[] {"--features", features.toString(), "--out",
+            second.toString(), "--train", trainB.toString(), "--train", trainA.toString(), "--look=L5"}));
+        List<String> withBFirst = Files.readAllLines(second.resolve(RUN).resolve("evaluation.csv")).stream().skip(11)
+            .toList();
+
+        assertThat(MAPPER.readTree(Files.readAllBytes(second.resolve(RUN).resolve("calibration.json")))
+            .get("final").get("run").stringValue()).isEqualTo("train-b");
+        assertThat(json("calibration.json").get("final").get("run").stringValue()).isEqualTo("train-a");
+        assertThat(withAFirst).containsExactly(
+            "11,test,,FOUND,120000,120000,true,true,-5000,0,LIT,low,LIT,,,train-a,false",
+            "12,test,,FOUND,120000,120000,true,true,-5000,0,LIT,low,LIT,,,train-a,false");
+        assertThat(withBFirst).containsExactly("11,test,,NOT_FOUND,,,,,,,,,LIT,,,train-b,false",
+            "12,test,,NOT_FOUND,,,,,,,,,LIT,,,train-b,false");
+    }
+
+    @Test
+    void trainingRunsOfMoreThanOneTypeAreRefusedAndNothingIsWritten() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, false);
+        Path logreg = EvaluateFixtures.logregRun(temp, "train-lr");
+
+        assertThatThrownBy(() -> run(features, "--train", trainA.toString(), "--train", logreg.toString()))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("train-lr: the training runs are of more than "
+                + "one type: train-a is gbt and train-lr is logreg; evaluate one type at a time");
+        assertThatThrownBy(() -> run(features, "--train", logreg.toString(), "--train", trainA.toString()))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("train-a: the training runs are of more than "
+                + "one type: train-lr is logreg and train-a is gbt; evaluate one type at a time");
+        assertThat(out()).doesNotExist();
+    }
+
+    @Test
     void theBaselineJoinsOnMediaFileIdAndFingerprintAndScoresV2ByItsOffset() throws IOException {
         Path features = EvaluateFixtures.featuresRun(temp, true);
         Path baseline = Files.writeString(temp.resolve("v2.csv"),

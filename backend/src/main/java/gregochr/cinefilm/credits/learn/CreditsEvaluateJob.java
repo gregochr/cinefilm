@@ -3,6 +3,7 @@ package gregochr.cinefilm.credits.learn;
 import gregochr.cinefilm.credits.learn.CreditsCalibration.Choice;
 import gregochr.cinefilm.credits.learn.CreditsCalibration.DevFilm;
 import gregochr.cinefilm.credits.learn.CreditsSegmenter.Verdict;
+import gregochr.cinefilm.credits.learn.EmbeddingCursor.FilmEmbeddings;
 import gregochr.cinefilm.credits.learn.EvaluationReport.Row;
 import gregochr.cinefilm.credits.learn.FeatureRunReader.FilmRows;
 import gregochr.cinefilm.credits.learn.FilmScore.Film;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.function.IntToDoubleFunction;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -40,6 +42,10 @@ import tools.jackson.databind.node.ObjectNode;
  * <p>A development film of fold {@code k} is scored by the four pair models without {@code k}, with outer fold
  * {@code k}'s choice, which was made on the other folds' films. Test films are scored only with {@code --look=L5},
  * by the five shipping models of the final choice's run, with the final choice.
+ *
+ * <p>The runs of one evaluation are all model A ({@code "gbt"}, scored on the feature rows) or all model B
+ * ({@code "logreg"}, scored on the embeddings of {@code --embeddings}, read by {@link EmbeddingCursor} in step with
+ * the films).
  */
 final class CreditsEvaluateJob {
 
@@ -56,8 +62,11 @@ final class CreditsEvaluateJob {
         this.gitCommit = gitCommit;
     }
 
-    /** A film's rows, Plex's facts about it and its stored frames. */
-    private record Scene(FilmRows rows, FrameLabelRecord label, Film film) {
+    /**
+     * A film's side and fold, Plex's facts about it and its stored frames, without its rows. A test film also keeps,
+     * for each run, the mean of that run's five shipping models' predictions; a development film keeps none.
+     */
+    private record Scene(Side side, Integer fold, FrameLabelRecord label, Film film, List<Prediction> shipping) {
     }
 
     /** A version 2 baseline row's key. */
@@ -66,6 +75,11 @@ final class CreditsEvaluateJob {
 
     /** A version 2 baseline verdict, and its offset when it is {@code FOUND}. */
     private record Baseline(String verdict, OptionalLong offsetMs) {
+    }
+
+    /** Takes a film's rows and, for model B, its embeddings (null for model A). */
+    private interface EmbeddedSink {
+        void accept(FilmRows rows, FilmEmbeddings embeddings);
     }
 
     /** Runs the tool. */
@@ -78,20 +92,24 @@ final class CreditsEvaluateJob {
         }
         Map<Long, FrameLabelRecord> labels = FeatureRunReader.labels(dir.resolve("frame-labels.json"));
         List<TrainedRun> runs = runs(options.train(), hashes);
+        requireEmbeddingsFor(options, runs);
         Map<Key, Baseline> baseline = options.baseline() == null ? Map.of() : baseline(options.baseline());
         List<DevFilm> development = new ArrayList<>();
         List<Scene> test = new ArrayList<>();
         Map<DevFilm, Scene> scenes = new IdentityHashMap<>();
-        for (FilmRows rows : FeatureRunReader.read(dir.resolve("features.csv"), options.look())) {
-            Scene scene = scene(rows, labels.get(rows.id()));
+        EmbeddedSink sink = (rows, embeddings) -> {
+            Film stored = film(rows, labels.get(rows.id()));
             if (rows.side() == Side.DEV) {
-                DevFilm film = devFilm(rows, scene.film(), runs);
+                Scene scene = new Scene(rows.side(), rows.fold(), labels.get(rows.id()), stored, List.of());
+                DevFilm film = devFilm(rows, embeddings, stored, runs);
                 development.add(film);
                 scenes.put(film, scene);
             } else {
-                test.add(scene);
+                test.add(new Scene(rows.side(), rows.fold(), labels.get(rows.id()), stored,
+                    shippingPredictions(rows, embeddings, runs)));
             }
-        }
+        };
+        scoreFilms(options, dir, hashes, runs, sink);
         List<String> names = runs.stream().map(TrainedRun::name).toList();
         List<Choice> outer = new ArrayList<>();
         List<Row> devRows = new ArrayList<>();
@@ -108,12 +126,10 @@ final class CreditsEvaluateJob {
         }
         Choice last = CreditsCalibration.chooseFinal(development, runs.size());
         List<Row> testRows = new ArrayList<>();
-        TrainedRun shipping = runs.get(last.run());
+        String shippingName = names.get(last.run());
         for (Scene scene : test) {
-            Prediction prediction = Prediction.ensemble(shipping.shipping().stream()
-                .map(model -> predict(model, scene.rows())).toList());
-            testRows.add(row(scene, FilmScore.of(scene.film(), prediction, last.params()), shipping.name(),
-                baseline));
+            testRows.add(row(scene, FilmScore.of(scene.film(), scene.shipping().get(last.run()), last.params()),
+                shippingName, baseline));
         }
         return write(options, hashes, names, outer, last, devRows, testRows);
     }
@@ -128,16 +144,49 @@ final class CreditsEvaluateJob {
                 throw new IllegalArgumentException(run.name() + ": manifestSha256 differs from "
                     + runs.getFirst().name() + "'s");
             }
+            if (!runs.isEmpty() && !runs.getFirst().type().equals(run.type())) {
+                throw new IllegalArgumentException(run.name() + ": the training runs are of more than one type: "
+                    + runs.getFirst().name() + " is " + runs.getFirst().type() + " and " + run.name() + " is "
+                    + run.type() + "; evaluate one type at a time");
+            }
             runs.add(run);
         }
         return runs;
     }
 
-    private static Scene scene(FilmRows rows, FrameLabelRecord label) {
+    /** Model B is scored on embeddings and model A on feature rows: each needs, or refuses, {@code --embeddings}. */
+    private static void requireEmbeddingsFor(CreditsEvaluateOptions options, List<TrainedRun> runs) {
+        boolean logreg = runs.getFirst().type().equals(TrainedRun.LOGREG);
+        if (logreg && options.embeddings() == null) {
+            throw new IllegalArgumentException("the training runs are logreg, which are scored on embeddings: "
+                + "pass --embeddings <embeddings run>");
+        }
+        if (!logreg && options.embeddings() != null) {
+            throw new IllegalArgumentException("--embeddings is for logreg runs, but the training runs are "
+                + runs.getFirst().type());
+        }
+    }
+
+    /** Hands each film of the features run to the sink, with its embeddings when the runs are model B's. */
+    private static void scoreFilms(CreditsEvaluateOptions options, Path dir, CreditsTrainJob.Hashes hashes,
+                                   List<TrainedRun> runs, EmbeddedSink sink) throws IOException {
+        Path csv = dir.resolve("features.csv");
+        if (options.embeddings() == null) {
+            FeatureRunReader.forEachFilm(csv, options.look(), rows -> sink.accept(rows, null));
+            return;
+        }
+        try (EmbeddingCursor cursor = EmbeddingCursor.open(options.embeddings(), dir, hashes, options.look(),
+            runs)) {
+            FeatureRunReader.forEachFilm(csv, options.look(), rows -> sink.accept(rows, cursor.film(rows)));
+            cursor.finish();
+        }
+    }
+
+    private static Film film(FilmRows rows, FrameLabelRecord label) {
         if (label == null || label.targetStartMs() == null) {
             throw new IllegalArgumentException("film " + rows.id() + " has no target in frame-labels.json");
         }
-        return new Scene(rows, label, rows.film(label.targetStartMs(), Optional.ofNullable(label.openingType())));
+        return rows.film(label.targetStartMs(), Optional.ofNullable(label.openingType()));
     }
 
     /**
@@ -182,18 +231,18 @@ final class CreditsEvaluateJob {
      * The film's prediction for each set a choice may ask for, per run: its own fold's out-of-fold ensemble (the
      * pair models holding that fold) and, for each other fold {@code k}, the triple models holding both.
      */
-    private static DevFilm devFilm(FilmRows rows, Film film, List<TrainedRun> runs) {
+    private static DevFilm devFilm(FilmRows rows, FilmEmbeddings embeddings, Film film, List<TrainedRun> runs) {
         int fold = rows.fold();
         List<Map<Integer, Prediction>> perRun = new ArrayList<>();
         for (TrainedRun run : runs) {
             Map<String, Prediction> single = new HashMap<>();
             Map<Integer, Prediction> sets = new LinkedHashMap<>();
             sets.put(CreditsCalibration.heldOutSet(fold), ensemble(run, CreditsCalibration.heldOutSet(fold), rows,
-                single));
+                embeddings, single));
             for (int k = 0; k < CreditsCalibration.FOLDS; k++) {
                 if (k != fold) {
                     int set = CreditsCalibration.innerSet(k, fold);
-                    sets.put(set, ensemble(run, set, rows, single));
+                    sets.put(set, ensemble(run, set, rows, embeddings, single));
                 }
             }
             perRun.add(sets);
@@ -202,31 +251,56 @@ final class CreditsEvaluateJob {
     }
 
     /** The mean of the models of a set: pair models for one fold, triple models for two. */
-    private static Prediction ensemble(TrainedRun run, int set, FilmRows rows, Map<String, Prediction> single) {
-        Map<String, GradientBoostedTrees> models = Integer.bitCount(set) == 1 ? run.pairs() : run.triples();
+    private static Prediction ensemble(TrainedRun run, int set, FilmRows rows, FilmEmbeddings embeddings,
+                                       Map<String, Prediction> single) {
+        Map<String, FrameModel> models = Integer.bitCount(set) == 1 ? run.pairs() : run.triples();
         List<Prediction> members = new ArrayList<>();
         for (String key : CreditsCalibration.memberKeys(set)) {
-            members.add(single.computeIfAbsent(key, k -> predict(models.get(k), rows)));
+            members.add(single.computeIfAbsent(key, k -> predict(models.get(k), rows, embeddings)));
         }
         return Prediction.ensemble(members);
     }
 
-    /** One model's {@code p} at every frame; NaN at a dense frame with no time features. */
-    private static Prediction predict(GradientBoostedTrees model, FilmRows rows) {
-        double[] coarse = rows.coarse().stream().mapToDouble(features -> p(model, features)).toArray();
-        double[] dense = rows.dense().stream().mapToDouble(features -> p(model, features)).toArray();
-        return new Prediction(coarse, dense, model.base());
+    /** For each run, the mean of its five shipping models' predictions: what a test film is scored by. */
+    private static List<Prediction> shippingPredictions(FilmRows rows, FilmEmbeddings embeddings,
+                                                        List<TrainedRun> runs) {
+        return runs.stream().map(run -> Prediction.ensemble(run.shipping().stream()
+            .map(model -> predict(model, rows, embeddings)).toList())).toList();
     }
 
-    /** {@code p} of a frame, NaN for a frame with no time features (a film of one coarse frame has one). */
-    private static double p(GradientBoostedTrees model, double[] features) {
-        return CreditsFeatures.hasTimeFeatures(features) ? model.predict(features) : Double.NaN;
+    /**
+     * One model's {@code p} at every frame; NaN at a frame with no time features, whichever the model. Model A
+     * predicts from the feature row, model B from the frame's embedding.
+     *
+     * @param model the model
+     * @param rows the film's rows
+     * @param embeddings the film's embeddings, which only model B reads; null for model A
+     * @return the predictions
+     */
+    static Prediction predict(FrameModel model, FilmRows rows, FilmEmbeddings embeddings) {
+        return switch (model) {
+            case GradientBoostedTrees trees -> new Prediction(
+                scores(rows.coarse(), i -> trees.predict(rows.coarse().get(i))),
+                scores(rows.dense(), i -> trees.predict(rows.dense().get(i))), trees.base());
+            case LogisticRegression regression -> new Prediction(
+                scores(rows.coarse(), i -> regression.predict(embeddings.coarse()[i])),
+                scores(rows.dense(), i -> regression.predict(embeddings.dense()[i])), regression.base());
+        };
+    }
+
+    /** {@code p} of each frame, NaN for a frame with no time features (a film of one coarse frame has one). */
+    private static double[] scores(List<double[]> features, IntToDoubleFunction score) {
+        double[] p = new double[features.size()];
+        for (int i = 0; i < p.length; i++) {
+            p[i] = CreditsFeatures.hasTimeFeatures(features.get(i)) ? score.applyAsDouble(i) : Double.NaN;
+        }
+        return p;
     }
 
     private static Row row(Scene scene, Result result, String run, Map<Key, Baseline> baseline) {
         FrameLabelRecord label = scene.label();
         Baseline v2 = baseline.get(new Key(label.mediaFileId(), label.fingerprint()));
-        return new Row(label.mediaFileId(), scene.rows().side(), scene.rows().fold(), result,
+        return new Row(label.mediaFileId(), scene.side(), scene.fold(), result,
             Optional.ofNullable(label.openingType()), label.leadingIsland(),
             v2 == null ? null : v2.verdict(),
             v2 == null || v2.offsetMs().isEmpty() ? OptionalLong.empty()
