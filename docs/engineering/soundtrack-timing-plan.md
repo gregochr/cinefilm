@@ -146,15 +146,17 @@ well, whether or not the scan counted them; the report lists them and which film
     a bitmap line's display and clear times, or a text cue's start and end. The 3 text tracks found in
     `embedded_cue_starts` hold starts only; there each end is the next start, capped at 3 s.
   - **Score A** is judged on every draw.
-  - **Score B** is never judged on them. Draws from films with **no forced file** sit on English speech, so a B fit
+  - **Score B** is never judged on them. Draws from films whose `original_language` is `en` and that have **no forced file** sit on English speech, so a B fit
     must never come out `ALIGNED`, at any offset: they are decoys for B. Draws from films with a forced file are
-    left out for B, since a full track also subtitles the foreign lines; the report counts the films left. The decoys
+    left out for B, since a full track also subtitles the foreign lines, and so are draws from films whose language
+    is not `en` or unknown; the report counts both. The decoys
     are chosen without the classifier. Such a film can still have a short foreign line under an English track's
     cue, so the decoy set is settled **before any margin threshold is chosen**: after the language thresholds, every
     decoy whose best B offset is within 1 s of 0 with a B score above 0 is heard once by the owner. This screen runs
     for each model before the model is chosen. For each such draw the kit clips (as in the ear-check) every cue whose
-    span at that offset holds speech labelled foreign, at most 3 per draw; foreign speech heard under any of them
-    drops the draw, counted. The margin threshold is then computed once on the rest. If more than 10 draws need
+    span at that offset holds speech labelled foreign, at most 3 per draw, largest first. The draw is dropped, counted, only if foreign
+    speech is heard under **every** clipped cue and those cues hold most of the foreign-labelled span at that
+    offset; otherwise it stays a decoy. The margin threshold is then computed once on the rest. If more than 10 draws need
     hearing across both models, the report stops for a decision. **B needs at least 5 films and 50 decoy draws left
     after the screen**; below that, B is unproven. The report says how many decoys sit mostly
     on speech labelled foreign, as a check on the labels.
@@ -228,6 +230,10 @@ well, whether or not the scan counted them; the report lists them and which film
   - **p(en) and neutral band.** Chosen on the language labels.
   - **Held out.** The absolute answers are left out of all of these and judged once, on the chosen model, before the
     ear-check.
+  - **Frozen.** After the leave-one-film-out gates, the same rules (margin 1.25× the largest decoy or wrong-pick
+    margin, the p(en) and neutral band, the bias median) are applied once to every film except the absolute answers.
+    That frozen set is what the product uses; the frozen record of every file's fit and verdict is what useful
+    coverage, the ear-check and 3d-2's parity are taken from.
 - **Accuracy.** A: at least 90% of synthetic draws within ±200 ms, after the bias. B: the ear-check, every file
   heard right, to about ±0.5 s.
 - **Robustness:**
@@ -244,7 +250,7 @@ well, whether or not the scan counted them; the report lists them and which film
     owner heard foreign speech under it (see "The test set");
   - every ear-check the owner finds wrong.
 - **The absolute answers** each pass, as stated above.
-- **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
+- **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED` in the frozen record. Eligible means 8 or more cues on
   speech. This is reported beside the ear-check's precision.
 - **Which score is built:** for each score, every gate above that applies to it must pass.
   - **B** first, if its gates pass in this order: the decoy screen and the decoy minimum; never confident and wrong;
@@ -374,7 +380,8 @@ and let a download beat the film's embedded forced track. So:
 
 ## Not in scope
 
-- Burned-in or picture-based subtitles.
+- Burned-in subtitles, and picture-based forced files as fit input. Picture-based full tracks are read in 3d-M only
+  for their display times.
 - Recognising which foreign language is spoken.
 - Sung foreign parts. These are labelled neutral where Whisper marks music or no speech. 3d-M reports how often songs
   are still labelled foreign speech.
