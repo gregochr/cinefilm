@@ -101,10 +101,15 @@ This is **not** credits L4a's convention: L4a ran the released image, installed 
 - **Per film:** the share of speech labelled foreign, English and neutral; a p(en) histogram; and, for Dances with
   Wolves, the p(en) distribution on its Lakota stretches.
 - **The classifier's own accuracy,** on films with an embedded full English track and an `ALIGNED` forced file. The
-  full track also translates the foreign dialogue, so it cannot mark English on its own. The forced file, at its true
-  offset, marks the foreign dialogue: speech it covers is foreign. Speech that the full track covers and the forced
-  file does not is English. Stretches that straddle the two are left out. This measures B's labels before any score
-  uses them.
+  full track also translates the foreign dialogue, so it cannot mark English on its own. At the forced file's true
+  offset:
+  - **Foreign:** speech under a forced cue that a full-track cue starts within 300 ms of (the `TimingFit` window).
+    This drops most sign and caption cues, which sit over English speech.
+  - **English:** speech under a full-track cue that no forced cue overlaps.
+  - **Left out:** a stretch with no cue at all, and one that straddles the two.
+
+  Forced files skip some foreign lines, so this truth is approximate. It is used to read the p(en) and neutral-band
+  thresholds, never as a pass or fail gate.
 
 ### The test set
 
