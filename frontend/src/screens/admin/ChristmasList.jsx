@@ -54,7 +54,15 @@ function ChristmasRow({ row, number, cut, tab, busy, onAct, buttonRef }) {
  * and the rows below it are dimmed (they still work). `registerButton(filmId)` returns the ref callback for a row's
  * action button, so the screen can put focus back on it.
  */
-export default function ChristmasList({ rows, tab, max, busy, onAct, registerButton }) {
+export default function ChristmasList({
+  rows,
+  tab,
+  max,
+  short = false,
+  busy,
+  onAct,
+  registerButton,
+}) {
   const numbered = tab === 'inWeek';
   const cutAt = numbered ? cutIndex(rows, max) : rows.length;
   const cutCount = rows.length - cutAt;
@@ -64,7 +72,7 @@ export default function ChristmasList({ rows, tab, max, busy, onAct, registerBut
       items.push(
         <li key="cut" className="xmas-cut">
           <span className="xmas-cut__rule" aria-hidden="true" />
-          <span>{cutText(max, cutCount)}</span>
+          <span>{cutText(max, cutCount, short)}</span>
         </li>,
       );
     }

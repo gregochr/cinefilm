@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '../../components/Button.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import {
@@ -71,8 +72,8 @@ function EmptyPanel({ kind, keywords, panelRef }) {
 
 /**
  * Christmas films: what Home's Christmas week will show, with a way to leave a film out, put it back, remove one the
- * owner added or add any film from the library (the search beside the tabs). The Home-row preview arrives in a later
- * slice; its place is inside the status card.
+ * owner added or add any film from the library (the search beside the tabs). The status card holds the Home-row preview
+ * (on a phone a sheet, its state here beside the search sheet's, so the toast follows whichever is up).
  */
 export default function AdminChristmas() {
   const state = useChristmas();
@@ -84,6 +85,10 @@ export default function AdminChristmas() {
   const [panelOpen, setPanelOpen] = useState(false);
   // Decided here, in the one render, where the toast goes: inside the sheet while it is up, else in the page.
   const sheetShown = sheetOpen && phone;
+  const [previewOpen, setPreviewOpen] = useState(false);
+  // The preview sheet lives in the status card, which the empty screen replaces: no card, no sheet.
+  const previewShown = previewOpen && phone && Boolean(data) && !emptyKind(data);
+  const overlayShown = sheetShown || previewShown;
   const buttons = useRef(new Map());
   const panelButtons = useRef(new Map());
   const panel = useRef(null);
@@ -101,8 +106,8 @@ export default function AdminChristmas() {
 
   // The toast stays up while the search panel or sheet is open: focus stays on the result, out of reach of its Undo.
   useEffect(() => {
-    pinToast(panelOpen || sheetShown);
-  }, [panelOpen, sheetShown, pinToast]);
+    pinToast(panelOpen || overlayShown);
+  }, [panelOpen, overlayShown, pinToast]);
 
   // A saved match changes what the lists hold (the film now has a TMDB id), so they are read again, quietly.
   const changedAtStart = useRef(changed);
@@ -171,7 +176,13 @@ export default function AdminChristmas() {
         {empty ? (
           <EmptyPanel kind={empty} keywords={data.keywords} panelRef={panel} />
         ) : (
-          <ChristmasStatusCard data={data} />
+          <ChristmasStatusCard
+            data={data}
+            phone={phone}
+            previewSheetOpen={previewShown}
+            onPreviewSheetOpenChange={setPreviewOpen}
+            toast={toastEl}
+          />
         )}
         <div className="xmas-controls">
           {empty ? null : (
@@ -207,6 +218,7 @@ export default function AdminChristmas() {
                 rows={rows}
                 tab={tab}
                 max={data.limits.max}
+                short={phone}
                 busy={busy}
                 onAct={state.change}
                 registerButton={registerButton}
@@ -241,12 +253,17 @@ export default function AdminChristmas() {
   return (
     <>
       <header className="xmas-head">
+        {phone ? (
+          <Link to="/admin" className="xmas-head__back">
+            ‹ Admin
+          </Link>
+        ) : null}
         <p className="xmas-head__eyebrow">Admin</p>
         <SectionTitle>Christmas films</SectionTitle>
         <p className="xmas-head__rule">{RULE_TEXT}</p>
       </header>
       {body}
-      {sheetShown ? null : toastEl}
+      {overlayShown ? null : toastEl}
     </>
   );
 }

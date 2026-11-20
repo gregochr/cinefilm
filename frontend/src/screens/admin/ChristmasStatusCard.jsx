@@ -6,9 +6,20 @@ import {
   meterSegments,
   statusText,
 } from '../../state/christmas.js';
+import ChristmasPreview from './ChristmasPreview.jsx';
 
-/** The status card: how many films Home will show, the 12-slot meter, and (while keywords arrive) the progress strip. */
-export default function ChristmasStatusCard({ data }) {
+/**
+ * The status card: how many films Home will show, the 12-slot meter, (while keywords arrive) the progress strip, and
+ * the Home preview. The phone props belong to the screen, which keeps the preview sheet's state beside the search
+ * sheet's so the toast follows whichever is up.
+ */
+export default function ChristmasStatusCard({
+  data,
+  phone,
+  previewSheetOpen,
+  onPreviewSheetOpenChange,
+  toast,
+}) {
   const { max } = data.limits;
   const total = data.inWeek.length;
   const text = statusText(data);
@@ -56,6 +67,13 @@ export default function ChristmasStatusCard({ data }) {
           <p role="status">{keywordLine(data.keywords)}</p>
         </div>
       ) : null}
+      <ChristmasPreview
+        data={data}
+        phone={phone}
+        sheetOpen={previewSheetOpen}
+        onSheetOpenChange={onPreviewSheetOpenChange}
+        toast={toast}
+      />
     </section>
   );
 }
