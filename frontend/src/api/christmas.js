@@ -13,3 +13,12 @@ export const getChristmas = (options) => get(BASE, options);
  */
 export const putChristmasChoice = (tmdbId, choice) =>
   put(`${BASE}/${encodeURIComponent(tmdbId)}`, { choice });
+
+/**
+ * Where a library film stands for Christmas week, for the film ids asked about: `[{ filmId, tmdbId|null, state }]`,
+ * `state` one of `IN_KEYWORD | IN_ADDED | LEFT_OUT | NOT_IN | KEYWORDS_PENDING | NO_TMDB_ID`. No ids, no request.
+ */
+export const getChristmasStates = (filmIds, options) =>
+  filmIds.length === 0
+    ? Promise.resolve([])
+    : get(`${BASE}/states?filmIds=${filmIds.map(encodeURIComponent).join(',')}`, options);
