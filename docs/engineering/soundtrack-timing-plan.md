@@ -168,11 +168,13 @@ well, whether or not the scan counted them; the report lists them and which film
 - **Absolute answers, each judged on its own.** The **films** of all three are left out entirely of everything that
   chooses a threshold or the bias, on both sides: their synthetic draws, their language labels, the bias median, and
   every decoy, whether as the forced file or as the audio (cross-film pairs included). Their results are still
-  reported.
+  reported. Each is judged on the corrected offset (fitted minus the frozen bias), the offset the product would show.
+  The tolerance below is ±200 ms under A; under B it is ±500 ms, the precision B is proven to.
   - **Dances with Wolves.** The fits of sidecars 2 and 48 must differ by 14 ± 0.3 s, sidecar 2 must come out within
     ±1 s of 0, and both must be `ALIGNED`.
-  - **The one `EMBEDDED` `ALIGNED` file:** its fitted offset on the raw cues, ±200 ms.
-  - **The one owner-verified file:** its current offset, ±200 ms.
+  - **The one `EMBEDDED` `ALIGNED` file:** the offset fitted to its English track on the raw cues, within the
+    tolerance.
+  - **The one owner-verified file:** its current offset, within the tolerance.
 - **Robustness of the real forced files, against each one's base fit b.** These are changes the score curve is not
   invariant to:
   - drop 30–50% of the cues, or jitter cue starts by ±300 ms: must stay within ±200 ms of b;
