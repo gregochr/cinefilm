@@ -94,8 +94,8 @@ class DownloadedFitTest {
 
     @Test
     void underSixHundredReferenceLinesOnlyMoreThanTwiceTheReferenceIsFull() {
-        assertAligned(judge(Verdict.ALIGNED, 0, 598, lines(299)));
-        assertFull(judge(Verdict.ALIGNED, 0, 599, lines(299)));
+        assertAligned(judge(Verdict.ALIGNED, 0, 600, lines(300)));
+        assertFull(judge(Verdict.ALIGNED, 0, 601, lines(300)));
     }
 
     @Test
