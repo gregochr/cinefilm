@@ -267,7 +267,8 @@ well, whether or not the scan counted them; the report lists them and which film
     robustness; useful coverage; the absolute answers on the chosen model; |A's bias| at most 300 ms (the report
     stops past that, since B takes it untested); and last the ear-check, run only after all the others have passed.
   - **Otherwise A,** if its gates pass, Dances with Wolves and the other absolute answers pass under A, A's ear-check
-    finds none wrong, and the owner says yes. The synthetic draws cannot show A's known weakness: locking a sparse forced file on
+    proves A (10 random files heard, every file heard right, and not unproven by the left-out rules), and the owner
+    says yes. The synthetic draws cannot show A's known weakness: locking a sparse forced file on
     to English dialogue.
   - **Otherwise neither.**
 - **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
