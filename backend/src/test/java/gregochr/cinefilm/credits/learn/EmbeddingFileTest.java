@@ -3,7 +3,9 @@ package gregochr.cinefilm.credits.learn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.FilterInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +14,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -381,6 +385,123 @@ class EmbeddingFileTest {
         reader.close();
 
         assertThatThrownBy(reader::next).isInstanceOf(IOException.class);
+    }
+
+    /** Delegates to a real stream but fails every read and skip with {@code failure}, and records its close. */
+    private static final class FailingStream extends FilterInputStream {
+
+        private final RuntimeException runtime;
+        private final IOException failure;
+        private final IOException closeFailure;
+        private int closes;
+
+        FailingStream(InputStream real, IOException failure, RuntimeException runtime, IOException closeFailure) {
+            super(real);
+            this.failure = failure;
+            this.runtime = runtime;
+            this.closeFailure = closeFailure;
+        }
+
+        private void fail() throws IOException {
+            if (runtime != null) {
+                throw runtime;
+            }
+            throw failure;
+        }
+
+        @Override
+        public int read() throws IOException {
+            fail();
+            return -1;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            fail();
+            return -1;
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            fail();
+            return 0;
+        }
+
+        @Override
+        public void close() throws IOException {
+            closes++;
+            super.close();
+            if (closeFailure != null) {
+                throw closeFailure;
+            }
+        }
+    }
+
+    /** Opens the header's stream for real and the records' stream as {@code second}. */
+    private static EmbeddingFile.StreamOpener headerThen(FailingStream[] second,
+                                                         Function<InputStream, FailingStream> make) {
+        AtomicInteger opens = new AtomicInteger();
+        return path -> {
+            InputStream real = Files.newInputStream(path);
+            if (opens.incrementAndGet() == 1) {
+                return real;
+            }
+            second[0] = make.apply(real);
+            return second[0];
+        };
+    }
+
+    @Test
+    void theRecordsStreamIsClosedAndTheFailureRethrownWhenSkippingTheHeaderFails() throws IOException {
+        Path path = write(file("CFEMB001", 1, 0, new byte[0]));
+        FailingStream[] second = new FailingStream[1];
+        IOException boom = new IOException("the disk went away");
+
+        assertThatThrownBy(() -> EmbeddingFile.open(path,
+            headerThen(second, real -> new FailingStream(real, boom, null, null))))
+            .isSameAs(boom).hasMessage("the disk went away").hasNoSuppressedExceptions();
+
+        assertThat(second[0].closes).isEqualTo(1);
+    }
+
+    @Test
+    void aRuntimeFailureWhileSkippingAlsoClosesTheStream() throws IOException {
+        Path path = write(file("CFEMB001", 1, 0, new byte[0]));
+        FailingStream[] second = new FailingStream[1];
+        IllegalStateException boom = new IllegalStateException("not a disk problem");
+
+        assertThatThrownBy(() -> EmbeddingFile.open(path,
+            headerThen(second, real -> new FailingStream(real, null, boom, null))))
+            .isSameAs(boom).hasMessage("not a disk problem");
+
+        assertThat(second[0].closes).isEqualTo(1);
+    }
+
+    @Test
+    void aFailureToCloseIsAddedAsSuppressedToTheOriginalFailure() throws IOException {
+        Path path = write(file("CFEMB001", 1, 0, new byte[0]));
+        FailingStream[] second = new FailingStream[1];
+        IOException boom = new IOException("read failed");
+        IOException closing = new IOException("close failed");
+
+        assertThatThrownBy(() -> EmbeddingFile.open(path,
+            headerThen(second, real -> new FailingStream(real, boom, null, closing))))
+            .isSameAs(boom).hasMessage("read failed").hasSuppressedException(closing);
+
+        assertThat(second[0].closes).isEqualTo(1);
+    }
+
+    @Test
+    void aBadHeaderIsRefusedBeforeTheRecordsStreamIsOpened() throws IOException {
+        Path path = write(file("NOTMAGIC", 1, 0, new byte[0]));
+        AtomicInteger opens = new AtomicInteger();
+
+        assertThatThrownBy(() -> EmbeddingFile.open(path, p -> {
+            opens.incrementAndGet();
+            return Files.newInputStream(p);
+        })).isInstanceOf(IllegalArgumentException.class).hasMessage("the file does not start with CFEMB001");
+
+        assertThat(opens).hasValue(1);
     }
 
     @Test
