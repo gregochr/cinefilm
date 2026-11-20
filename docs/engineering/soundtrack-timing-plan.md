@@ -1,7 +1,7 @@
 # Forced subtitles: timing from the soundtrack (3d) — plan
 
-Status: plan, 2026-11-20 (revised after adversarial review). Replaces the `alass` sketch under "3d" in
-`forced-timing-reference-plan.md`.
+Status: plan, 2026-11-20 (revised after adversarial review, and for B's proof by ear after the header scan).
+Replaces the `alass` sketch under "3d" in `forced-timing-reference-plan.md`.
 
 ## Why
 
@@ -53,9 +53,9 @@ these films lack. It is superseded.
 - **Halves.** The first and second halves of the cues are fitted separately and must agree within 300 ms. This catches
   frame-rate drift and another cut, which a single offset cannot.
 - **Bias.** Cue times lead or lag speech by a roughly constant amount. For each score, 3d-M takes it as the median
-  fitted offset of the synthetic draws (below) that the score is judged on (for B, only the non-English-original
-  draws, never its decoys), leaving one film out. The starts-only bias is reported beside it, so
-  a dependence on the invented cue ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
+  fitted offset of the synthetic draws (below), leaving one film out. B's synthetic draws are all decoys (see "The
+  test set"), so B takes A's bias, and the ear-check tests that. The starts-only bias is reported beside it, so a
+  dependence on the cue ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
   Real forced files' cue ends are not tested by the draws.
 - **`ALIGNED`** requires all four:
   - the margin is over the threshold;
@@ -105,8 +105,8 @@ This is **not** credits L4a's convention: L4a ran the released image, installed 
   Wolves, the p(en) distribution on its Lakota stretches.
 - **Language labels, for choosing the p(en) and neutral thresholds** (films held out). They come from each film's
   original language (`film.original_language`, from TMDB), because almost no forced file has a known answer:
-  - **Foreign:** speech under full-track cues in a film whose original language is not English. The track
-    translates the dialogue, so most of that speech is foreign.
+  - **Foreign:** all speech in a film whose original language is not English. No English subtitle track is needed.
+    The library has about 20 such films; a seeded sample of up to 10 is mapped.
   - **English:** speech under full-track cues in an English-original film with no forced file.
   - **Lakota, reported only:** Dances with Wolves' sidecar 2 cue spans at offset 0. The film is an absolute answer,
     so these spans never take part in choosing a threshold.
@@ -120,19 +120,25 @@ The first export (2026-11-20) found 151 forced files on 148 single-part films. O
 `ALIGNED` fit and only **one** is owner-verified: the owner checks films by watching, not in Admin. So the known
 answers are built from the films' own full English tracks. The owner exports the inputs read-only with `psql`.
 
+A header scan of all 1,102 films (2026-11-20) found 61 with a full English subtitle track. **All 61 are bitmap
+tracks** (pictures, as on a disc), and **all 61 films are English-original**: no foreign-original film has an English
+track. A bitmap track still carries each line's display and clear times, which is all a fit needs. So:
+
+- score A gets its known answers from those 61 films;
+- score B has none: it is proven by the owner's ear instead (below).
+
 - **Synthetic forced files, the main test (answer 0).**
   - **What they are.** Every single-part film with an embedded full English track gives 10 seeded draws of 8–40 of
-    its cues, in 1–4 runs of consecutive cues, as forced files are. Starts come from `embedded_cue_starts`; ends are
-    the next start, capped at 3 s.
+    its cues, in 1–4 runs of consecutive cues, as forced files are. Starts and ends are read from the track itself:
+    a bitmap line's display and clear times, or a text cue's start and end. The 3 text tracks found in
+    `embedded_cue_starts` hold starts only; there each end is the next start, capped at 3 s.
   - **Score A** is judged on every draw.
-  - **Score B** is judged on draws from non-English-original films, where the cues sit on foreign speech. On
-    English-original films with no forced file, a B fit must never come out `ALIGNED`, which makes those draws decoys
-    for B. They are chosen without the classifier. The report says how many of them sit mostly on speech labelled
-    foreign, as a check on the labels.
-  - **What the draws cannot show.** In a non-English-original film nearly all speech is foreign, so these draws never
-    test B's penalty for English speech. That premise is tested only by Dances with Wolves and the English-original
-    decoys. B's accuracy counts only with draws from at least 5 films and at least 50 draws; below that it is
-    unproven, not passed.
+  - **Score B** is never judged on them. Every draw comes from an English-original film and sits on English speech,
+    so a B fit must never come out `ALIGNED`: the draws are decoys for B. They are chosen without the classifier.
+    The report says how many of them sit mostly on speech labelled foreign, as a check on the labels.
+  - **What the draws cannot show.** A's draws are dense runs of subtitled lines, not a sparse forced file among
+    English dialogue, A's known weakness. B's accuracy on foreign speech is not shown by any draw; the ear-check
+    below is its proof.
 - **Absolute answers, each judged on its own.** The **films** of all three are left out entirely of everything that
   chooses a threshold or the bias, on both sides: their synthetic draws, their language labels, the bias median, and
   every decoy, whether as the forced file or as the audio (cross-film pairs included). Their results are still
@@ -153,13 +159,18 @@ answers are built from the films' own full English tracks. The owner exports the
   - every forced file against other films' audio (a seeded sample of 40 when there are more);
   - the forced file with its cue order and gaps shuffled (durations kept) against its own film;
   - each fit's second-best peak more than 2 s away.
-- **The owner's ear.** The base fits flagged `ALIGNED` more than 1 s from 0 are listed. The owner checks min(5, N)
-  of them:
-  - a seeded random draw plus the two lowest-margin ones;
-  - plus one or two `ALIGNED` fits near 0.
+- **The owner's ear, B's proof (owner, 2026-11-20).** After every threshold and the bias are frozen, the report lists
+  10 real forced files whose B fit is `ALIGNED`, per model:
+  - the 2 with the lowest margin;
+  - the 2 furthest from 0;
+  - 6 more by a seeded random draw (fewer if fewer are `ALIGNED`).
 
-  The owner listens **with the fitted offset applied** and says whether it is right. The report gives the error upper bound
-  this sample allows. Flagged files not heard stay `CHECK` until heard, and 3d-3's trust question carries their count.
+  For each, the report gives three film times **with the fitted offset applied**, from the start, middle and end of
+  the cues, and each line's text. The owner plays the film there and says whether the foreign line is spoken when its
+  subtitle would show (about half a second either way is right). **B is proven only if all 10 are right.** Ten right
+  bounds B's error rate on `ALIGNED` fits below about 26% (95%); the report says so, and the decoys and absolute
+  answers carry the rest. A's ear-check, if A is ever considered, is the same list under A. Files not heard keep the
+  verdict the gate gives; 3d-3's trust question carries the ear-check's bound.
 - **For information, not truth:** the five OpenSubtitles films and Taken 3 (spot-checked at 32–37 min), plus an
   optional accented-English film chosen at export.
 
@@ -171,8 +182,7 @@ answers are built from the films' own full English tracks. The owner exports the
     the same offsets as the best peak's, with ±2 s around both left out.
   - **p(en) and neutral band.** Chosen on the language labels.
   - **Held out.** The absolute answers are left out of all of these and judged once at the end.
-- **Accuracy, per score, only on items it can be scored on.** At least 90% of synthetic draws within ±200 ms, after
-  the bias: all draws for A, non-English-original draws for B.
+- **Accuracy.** A: at least 90% of synthetic draws within ±200 ms, after the bias. B: the ear-check, all 10 right.
 - **Robustness:**
   - at least 90% of the drop and jitter changes within ±200 ms of b;
   - at least 95% of the second-half moves `CHECK`;
@@ -187,10 +197,11 @@ answers are built from the films' own full English tracks. The owner exports the
 - **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
   speech. This is reported beside the ear-check's precision.
 - **Which score is built:**
-  - **B,** if its accuracy is proven (see above) and it passes the absolute answers and the decoys.
-  - **Otherwise A, only if** Dances with Wolves and the other absolute answers pass under A, no ear-check is wrong,
-    and the owner says yes. The synthetic draws are dense runs of subtitled lines and cannot show A's known weakness:
-    locking a sparse forced file on to English dialogue.
+  - **B,** if it passes the absolute answers and the decoys (its English-original draws among them), and then the
+    ear-check. The ear-check is run only after the rest of B's gate has passed.
+  - **Otherwise A, only if** Dances with Wolves and the other absolute answers pass under A, A's ear-check finds none
+    wrong, and the owner says yes. The synthetic draws cannot show A's known weakness: locking a sparse forced file on
+    to English dialogue.
   - **Otherwise neither.**
 - **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
   - One film is timed first.
