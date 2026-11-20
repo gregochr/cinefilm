@@ -11,7 +11,9 @@ import {
   tabCounts,
   tabRows,
 } from '../../state/christmas.js';
+import { useAdminContext } from '../../state/adminContext.js';
 import { useChristmas } from '../../state/useChristmas.js';
+import ChristmasAdd from './ChristmasAdd.jsx';
 import ChristmasList from './ChristmasList.jsx';
 import ChristmasStatusCard from './ChristmasStatusCard.jsx';
 import ChristmasTabs, { panelDomId, tabDomId } from './ChristmasTabs.jsx';
@@ -64,15 +66,17 @@ function EmptyPanel({ kind, keywords, panelRef }) {
 }
 
 /**
- * Christmas films: what Home's Christmas week will show, with a way to leave a film out, put it back or remove one the
- * owner added. Adding a film and the Home-row preview arrive with the search (a later slice); their place is between
- * the status card and the tabs.
+ * Christmas films: what Home's Christmas week will show, with a way to leave a film out, put it back, remove one the
+ * owner added or add any film from the library (the search beside the tabs). The Home-row preview arrives in a later
+ * slice; its place is inside the status card.
  */
 export default function AdminChristmas() {
   const state = useChristmas();
-  const { data, loading, error, busy, toast, focusRequest } = state;
+  const { openFixMatch, changed } = useAdminContext();
+  const { data, version, loading, error, busy, toast, focusRequest, refresh } = state;
   const [tab, setTab] = useState('inWeek');
   const buttons = useRef(new Map());
+  const panelButtons = useRef(new Map());
   const panel = useRef(null);
   const undoButton = useRef(null);
 
@@ -81,23 +85,47 @@ export default function AdminChristmas() {
     else buttons.current.delete(filmId);
   };
 
-  // After a change lands: onto the toast's Undo button (the row's button is gone, and the toast sits after the whole
-  // list, so a keyboard user could not reach Undo within its 8 seconds; the toast waits while it has focus), back onto
-  // the row's button (after an Undo), or, when focus was lost with a row or the toast, onto the list so the keyboard is
-  // not left on the page body.
+  const registerPanelButton = (filmId) => (node) => {
+    if (node) panelButtons.current.set(filmId, node);
+    else panelButtons.current.delete(filmId);
+  };
+
+  // A saved match changes what the lists hold (the film now has a TMDB id), so they are read again, quietly.
+  const changedAtStart = useRef(changed);
+  useEffect(() => {
+    if (changed !== changedAtStart.current) refresh();
+  }, [changed, refresh]);
+
+  // After a change lands: for one made in the search panel (or its Undo) the result's button keeps focus by itself, so
+  // focus is set only if it was lost (an Undo press takes the toast's button away): then back onto that button. Else
+  // onto the toast's Undo button (the row's button is gone, and the toast sits after the whole list, so a keyboard user
+  // could not reach Undo within its 8 seconds; the toast waits while it has focus), back onto the row's button (after
+  // an Undo), or, when focus was lost with a row or the toast, onto the list so the keyboard is not left on the page
+  // body.
   useEffect(() => {
     if (!focusRequest) return;
+    const active = document.activeElement;
+    const lost = !active || active === document.body || !active.isConnected;
+    const resultButton = panelButtons.current.get(focusRequest.filmId);
+    if (focusRequest.panel) {
+      // The result's button; with the panel shut, the film's row in the list; else the list.
+      if (lost)
+        (resultButton ?? buttons.current.get(focusRequest.filmId) ?? panel.current)?.focus();
+      return;
+    }
     if (focusRequest.undo && undoButton.current) {
       undoButton.current.focus();
       return;
     }
-    const button = focusRequest.filmId === null ? null : buttons.current.get(focusRequest.filmId);
+    const button =
+      focusRequest.filmId === null
+        ? null
+        : (buttons.current.get(focusRequest.filmId) ?? resultButton);
     if (button) {
       button.focus();
       return;
     }
-    const active = document.activeElement;
-    if (!active || active === document.body || !active.isConnected) panel.current?.focus();
+    if (lost) panel.current?.focus();
   }, [focusRequest]);
 
   let body;
@@ -110,7 +138,19 @@ export default function AdminChristmas() {
       body = (
         <>
           <ChristmasStatusCard data={data} />
-          <ChristmasTabs counts={tabCounts(data)} selected={tab} onSelect={setTab} />
+          <div className="xmas-controls">
+            <ChristmasTabs counts={tabCounts(data)} selected={tab} onSelect={setTab} />
+            <ChristmasAdd
+              data={data}
+              version={version}
+              issued={state.issued}
+              busy={busy}
+              onAct={state.changeResult}
+              onFix={openFixMatch}
+              registerButton={registerPanelButton}
+              refreshKey={changed}
+            />
+          </div>
           <div
             ref={panel}
             id={panelDomId(tab)}
