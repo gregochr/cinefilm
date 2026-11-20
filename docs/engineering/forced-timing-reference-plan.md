@@ -124,9 +124,12 @@ references, the search columns, and new reference metadata.
   - A fit never uses the forced file's own OpenSubtitles file id as its reference.
   - New column `forced_subtitle_alignment.reference_source` (`EMBEDDED` default, `OPENSUBTITLES`).
 - **Verdicts against a downloaded file** (pure, with boundary tests):
-  - **A file with 300 lines or more and more than twice the reference's lines is never `ALIGNED`** (the rule of
-    decision 38). It is `CHECK`, "Looks like full subtitles, not forced". Amsterdam (2,431 vs 43) and Olympus Has Fallen
-    (1,300 vs 29) are real cases; a forced file with much foreign dialogue (The Equalizer 3, 316 vs 348) is not full.
+  - **A file with 300 lines or more and more than half the reference's lines is never `ALIGNED`**, except against a
+    reference of under 600 lines, where it must have more than twice the reference's lines (decision 38's rule). It is
+    `CHECK`, "Looks like full subtitles, not forced". Every stored reference has 300 lines or more, and one under 600
+    may itself be a foreign-parts file mislabelled as full (The Equalizer 3: a 348-line reference, a genuine 316-line
+    forced file), so against it only "more than twice" counts; against a larger reference a 300+ file with more than
+    half its lines is full subtitles (1,300 vs 1,300).
   - `TimingFit`'s `ALIGNED` rules **and** |offset| of 1 s or less give `ALIGNED`, "Lines match a full English file from
     OpenSubtitles (<release>)".
   - The same match more than 1 s out gives `CHECK`, "…but <n> s apart: one of them is timed for another release".
@@ -147,7 +150,7 @@ references, the search columns, and new reference metadata.
   "Checked against a full English file from OpenSubtitles (<release>), not yet against the film". An owner's pick that
   does not match shows its `CHECK` there, and still plays. Built (3c-2b): `proofText`/`downloadProof` and `TimingFit`'s reasons
   were left as they are, because an `ALIGNED` proof is only ever an embedded one until trust changes.
-- **Tests.** The verdict boundaries (1 s / 1.001 s, a share of 0.80, 7 / 8 cues, 299 / 300 lines, twice the reference),
+- **Tests.** The verdict boundaries (1 s / 1.001 s, a share of 0.80, 7 / 8 cues, 299 / 300 lines, half the reference, the 600-line reference exemption),
   `isAligned` false for `OPENSUBTITLES`, `ForcedChoice` unchanged with such a fit (one test per step it could have
   moved), staleness on each key part, the DTO JSON (integration), and the frontend source line.
 
@@ -190,7 +193,7 @@ Two changes:
 
 **First results (2026-11-20, v0.9.2).** `ALIGNED`: Dawn of the Planet of the Apes 0 ms, Spectre 0 ms, The Revenant
 -60 ms. Fury `CHECK` (loose, 170 ms). The Equalizer 3 `CHECK` only by the old full rule (316 lines vs a 348-line
-foreign-parts reference; the owner confirmed English is not subtitled), hence the twice-the-reference rule. Taken 3 has
+foreign-parts reference; the owner confirmed English is not subtitled), hence the 600-line exemption from the half rule. Taken 3 has
 no usable reference (only an EXTENDED file ending 115.0 min against a 108.95 min runtime, rightly rejected). Dances
 with Wolves is out of scope (multi-part edition).
 

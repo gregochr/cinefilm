@@ -17,8 +17,14 @@ public final class DownloadedFit {
 
     /** The largest offset an {@code ALIGNED} fit may have against a downloaded file, in ms (provisional). */
     static final int MAX_ALIGNED_OFFSET_MS = 1_000;
-    /** A served file with this many lines or more (and more than twice the reference's) is full, not forced. */
+    /** A served file needs at least this many lines to be full subtitles rather than forced ones. */
     static final int FULL_LINES = SubtitleComparison.FULL_LINES;
+    /**
+     * A reference under this many lines may itself be a foreign-parts file mislabelled as full (The Equalizer 3: 348
+     * lines), so against it only decision 38's "more than twice" counts; against a larger reference, a file of
+     * {@value #FULL_LINES} lines or more with more than half its lines is full subtitles.
+     */
+    static final int FORCED_SIZED_REFERENCE_LINES = 2 * FULL_LINES;
 
     private DownloadedFit() {
     }
@@ -49,12 +55,14 @@ public final class DownloadedFit {
     }
 
     /**
-     * Turns a raw fit against a downloaded file into a verdict. A file of {@value #FULL_LINES} lines or more and more
-     * than twice the reference's lines (decision 38) is full subtitles and never {@code ALIGNED}. {@link TimingFit}'s
-     * {@code ALIGNED} within {@value #MAX_ALIGNED_OFFSET_MS} ms is {@code ALIGNED}; the same match further out is
-     * {@code CHECK} (one of the two is timed for another release). A {@code CHECK} whose only reason is a loose
-     * median (at least 80% matched, offset within {@link TimingFit#MAX_ALIGNED_OFFSET_MS}) says the lines match but
-     * only loosely; anything else is {@code CHECK}. Too few lines stays {@code TOO_FEW}.
+     * Turns a raw fit against a downloaded file into a verdict. A file of {@value #FULL_LINES} lines or more with more
+     * than half the reference's lines is full subtitles and never {@code ALIGNED}, except against a reference of under
+     * {@value #FORCED_SIZED_REFERENCE_LINES} lines, where it needs more than twice the reference's (decision 38).
+     * {@link TimingFit}'s {@code ALIGNED} within {@value #MAX_ALIGNED_OFFSET_MS} ms is {@code ALIGNED};
+     * the same match further out is {@code CHECK} (one of the two is timed for another
+     * release). A {@code CHECK} whose only reason is a loose median (at least 80% matched,
+     * offset within {@link TimingFit#MAX_ALIGNED_OFFSET_MS}) says the lines match but only loosely;
+     * anything else is {@code CHECK}. Too few lines stays {@code TOO_FEW}.
      *
      * @param fit the raw fit of the served cue starts to the reference's
      * @param reference the file fitted to
@@ -64,7 +72,7 @@ public final class DownloadedFit {
         if (fit.verdict() == Verdict.TOO_FEW || fit.verdict() == Verdict.NO_REFERENCE) {
             return fit;
         }
-        if (fit.servedCount() >= FULL_LINES && fit.servedCount() > reference.cueCount() * 2L) {
+        if (looksFull(fit.servedCount(), reference.cueCount())) {
             return withVerdict(fit, Verdict.CHECK, "Looks like full subtitles, not forced");
         }
         if (fit.verdict() == Verdict.ALIGNED) {
@@ -83,6 +91,11 @@ public final class DownloadedFit {
         }
         return withVerdict(fit, Verdict.CHECK, "The lines do not line up well enough with the full English file from "
             + "OpenSubtitles (" + reference.label() + ") to tell: it may be another cut or timed differently");
+    }
+
+    private static boolean looksFull(int served, int referenceCount) {
+        return served >= FULL_LINES && served * 2L > referenceCount
+            && (referenceCount >= FORCED_SIZED_REFERENCE_LINES || served > referenceCount * 2L);
     }
 
     /** A CHECK whose single reason is the loose median: nearly every line matches, within the offset limit. */
