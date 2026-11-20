@@ -1379,7 +1379,7 @@ Model B's runs, all on v0.9.2 (`toolGitCommit` `280593c`) and on the same featur
 model A's. Development films only, with no look.
 
 - **Embeddings:** `embed-20261120T081506Z`, MobileNet v2-12 fp32, in 2 h 20 min (the estimate was about 3 h).
-- **Seven training runs**, 46 to 64 minutes each (the estimate was about 2 h):
+- **Seven training runs**, 46 to 66 minutes each (the estimate was about 2 h):
 
   | Run | Rows | `l2` |
   |---|---|---|
