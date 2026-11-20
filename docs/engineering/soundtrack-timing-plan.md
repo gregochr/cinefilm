@@ -198,7 +198,8 @@ well, whether or not the scan counted them; the report lists them and which film
 
   The player's clock shows whole seconds, so the owner does not listen in the player. For each file the kit cuts
   three **audio clips** from the same file, in the same offline container, from the start, middle and end of the
-  cues. Each clip's line **lands on speech** at the fitted offset and is the **first line of a run**: no cue in the
+  cues. Each clip's line has **speech labelled foreign** under it at the fitted offset (so a caption or sign over
+  English dialogue is never clipped) and is the **first line of a run**: no cue in the
   3 s before it, so a fit shifted by a whole
   line cannot land its click on other foreign speech unnoticed. Each clip runs from 6 s before the point where the
   fit puts that line's speech to 2 s after where it puts the line's end (its raw time plus the fitted offset, the bias not applied, since the bias is
