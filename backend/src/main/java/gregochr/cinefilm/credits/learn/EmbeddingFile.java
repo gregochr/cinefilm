@@ -101,15 +101,37 @@ final class EmbeddingFile {
      *     or the file's length is not the header plus {@code rows} records
      */
     static Reader open(Path file) throws IOException {
+        return open(file, Files::newInputStream);
+    }
+
+    /** How a file's bytes are opened; the seam that lets a test see the stream {@link #open} closes on failure. */
+    interface StreamOpener {
+        InputStream open(Path file) throws IOException;
+    }
+
+    /**
+     * As {@link #open(Path)}, opening the file's bytes with {@code opener}. If anything fails after the records'
+     * stream is open and before the reader owns it, the stream is closed and the failure is rethrown unchanged.
+     */
+    static Reader open(Path file, StreamOpener opener) throws IOException {
         long length = Files.size(file);
         byte[] head;
-        try (InputStream in = Files.newInputStream(file)) {
+        try (InputStream in = opener.open(file)) {
             head = in.readNBytes(HEADER_BYTES);
         }
         Header header = header(head, length);
-        DataInputStream in = new DataInputStream(new BufferedInputStream(Files.newInputStream(file)));
-        in.skipNBytes(HEADER_BYTES);
-        return new Reader(in, header.dimension(), header.rows(), header.record());
+        DataInputStream in = new DataInputStream(new BufferedInputStream(opener.open(file)));
+        try {
+            in.skipNBytes(HEADER_BYTES);
+            return new Reader(in, header.dimension(), header.rows(), header.record());
+        } catch (IOException | RuntimeException e) {
+            try {
+                in.close();
+            } catch (IOException closing) {
+                e.addSuppressed(closing);
+            }
+            throw e;
+        }
     }
 
     /** What the header says: the dimension, the row count and the size of one record. */
