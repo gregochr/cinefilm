@@ -777,6 +777,38 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         assertThat(service.save(job, aligned(900), 5012L, LATER)).isEqualTo(SaveOutcome.SAVED);
         assertThat(sidecar.getOffsetMs()).isZero();
+        ArgumentCaptor<ForcedSubtitleAlignment> captor = ArgumentCaptor.forClass(ForcedSubtitleAlignment.class);
+        verify(alignments).save(captor.capture());
+        assertThat(captor.getValue().getReferenceSource()).isEqualTo(ReferenceSource.OPENSUBTITLES);
+        assertThat(captor.getValue().getReferenceOsFileId()).isEqualTo(5012L);
+        assertThat(captor.getValue().getReferenceKey()).isEqualTo(SPLIT_KEY + OS_KEY + ":5012");
+        assertThat(captor.getValue().isApplied()).isFalse();
+    }
+
+    @Test
+    void aSplitEditionServedOnlyByPerPartSidecarsIsNeitherDueNorBackfilledForReferencesNobodyUses() {
+        split();
+        sidecar.setWholeEdition(false);
+        SubtitleSidecar second = new SubtitleSidecar();
+        second.setId(6L);
+        second.setPath("Taken-2.en.forced.srt");
+        second.setMediaFileId(11L);
+        second.setCuesText(sidecar.getCuesText());
+        second.setCueCount(STARTS.size());
+        second.setUpdatedAt(NOW);
+        splitReads(EmbeddedCueStarts.Status.NO_REFERENCE, EmbeddedCueStarts.Status.NO_REFERENCE);
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 11L), SubtitleKind.FORCED))
+            .thenReturn(List.of(sidecar, second));
+        ForcedSubtitleAlignment first = row(BASE_KEY);
+        ForcedSubtitleAlignment other = row("11:2000:" + NOW.toEpochMilli());
+        other.setSidecarId(6L);
+        other.setSidecarIdentity(TimingKeys.identity(second));
+        when(alignments.findBySidecarIdIn(List.of(5L, 6L))).thenReturn(List.of(first, other));
+
+        assertThat(service.dueFilmIds()).isEmpty();
+        verifyNoInteractions(references);
     }
 
     @Test

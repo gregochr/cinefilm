@@ -203,13 +203,16 @@ split case is the Lord of the Rings Extended Editions (3c-3).
 
 ### 3c-3 — split editions
 
-The fit side now accepts what the download side (`TimingReferenceService`) already did: an edition of several original
-parts (the three Lord of the Rings Extended Editions: two files each, no English track, one whole-edition Elvish forced
-file each).
+The fit side now uses the read condition of `TimingReferenceService.noReference` (every part `NO_REFERENCE`) and gives
+references only to whole-edition sidecars, even when per-part sidecars are served beside them (the download side
+additionally requires every served file to be whole-edition before it fetches). The case is an edition of several
+original parts (the three Lord of the Rings Extended Editions: two files each, no English track, one whole-edition
+Elvish forced file each).
 
 - **`osRefs`** takes an edition with one or more original parts when **every** part's read is current and
   `NO_REFERENCE` (the condition of `TimingReferenceService.noReference`). A mixed split edition (a track in one part)
-  stays out. Runtime, IMDb id and `NONE_EXIST` conditions are unchanged; the edition runtime and `CreditsStarts` are
+  stays out, and so does a split edition served only by per-part sidecars (they would never use the
+  references). Runtime, IMDb id and `NONE_EXIST` conditions are unchanged; the edition runtime and `CreditsStarts` are
   already on the edition timeline.
 - **`downloadedFor`:** on a split edition only a **whole-edition** sidecar gets references. A per-part sidecar gets
   none, so its key, job and row stay as they were (the embedded `NO_REFERENCE` path).

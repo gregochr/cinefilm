@@ -559,9 +559,10 @@ public class SidecarTimingService {
     /**
      * For each served edition the timing check fits to OpenSubtitles files (one or more original parts, every part's
      * embedded read current and finding no English track, as {@link TimingReferenceService} requires, so a split
-     * edition with a track in one part stays out; of a film the owner has not marked {@code NONE_EXIST}),
-     * the usable stored files: the candidates' first, then any other stored full file of the film under its current
-     * IMDb id (a film with no current full search has no candidates). The same selection as
+     * edition with a track in one part stays out; of a film the owner has not marked {@code NONE_EXIST}). A split
+     * edition comes in only through a sidecar timed for the whole edition: per-part sidecars do not bring it
+     * in. The result is the usable stored files: the candidates' first, then any other stored full file of the film
+     * under its current IMDb id (a film with no current full search has no candidates). The same selection as
      * {@link TimingReferenceService}, through {@link TimingReferenceRule} and
      * {@link CreditsStarts}. This runs on the playback path ({@link #current}), so it reads facts only (no cue text,
      * nothing parsed) and the credits of all those editions in one query; a reference with no kept last-cue end is not
@@ -573,7 +574,7 @@ public class SidecarTimingService {
             Edition e = s.edition();
             Film film = e.getFilm();
             List<MediaFile> parts = e.originalParts();
-            if (!parts.isEmpty() && e.getRuntimeMs() > 0 && film.getImdbId() != null
+            if ((parts.size() == 1 || s.sidecar().isWholeEdition()) && e.getRuntimeMs() > 0 && film.getImdbId() != null
                 && parts.stream().allMatch(p -> isRead(p, reads)
                     && reads.get(p.getId()).getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE)) {
                 wanted.putIfAbsent(e.getId(), e);
