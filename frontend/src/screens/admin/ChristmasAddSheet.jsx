@@ -3,6 +3,7 @@ import { SearchIcon } from '../../components/icons.jsx';
 import { containTab } from '../../components/useDialog.js';
 import { hasQuery } from '../../state/useSearchCombobox.js';
 import ChristmasAddResults from './ChristmasAddResults.jsx';
+import { useSignInRecovery } from './useSignInRecovery.js';
 
 /**
  * The phone's "Add a film": a full-screen sheet with the field, Cancel and the results (design `06`). The state is the
@@ -21,12 +22,21 @@ export default function ChristmasAddSheet({
   toast,
 }) {
   const input = useRef(null);
+  const dialog = useRef(null);
+  const signedIn = useSignInRecovery();
   const { state, rows, setQuery } = add;
   const open = hasQuery(state.query);
 
   useLayoutEffect(() => {
     input.current?.focus();
   }, []);
+
+  // After a 401 the sign-in card takes focus and then goes: put it back inside the sheet, or Esc and the Tab trap
+  // would no longer reach it.
+  useEffect(() => {
+    if (signedIn === 0) return;
+    if (!dialog.current?.contains(document.activeElement)) input.current?.focus();
+  }, [signedIn]);
 
   // Nothing behind scrolls while the sheet is up.
   useEffect(() => {
@@ -50,6 +60,7 @@ export default function ChristmasAddSheet({
     // The dialog only listens for Esc and Tab, bubbled from the controls inside it.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
+      ref={dialog}
       className="xmas-add-sheet"
       role="dialog"
       aria-modal="true"

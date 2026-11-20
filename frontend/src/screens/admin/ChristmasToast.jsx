@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Button } from '../../components/Button.jsx';
 
 /**
@@ -15,6 +15,14 @@ function ToastPill({ toast, undoRef, onUndo, onHold, onRelease }) {
     if (!before && after) onHold();
     if (before && !after) onRelease();
   };
+  // A pill that goes away while it holds the toast (focus was on its Undo when it was moved, and removing a focused
+  // button fires no blur) lets go, or the toast would never restart its timer.
+  useEffect(
+    () => () => {
+      if (on.current.pointer || on.current.focus) onRelease();
+    },
+    [onRelease],
+  );
   return (
     <div
       className="xmas-toast"

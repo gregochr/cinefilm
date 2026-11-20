@@ -68,9 +68,10 @@ function stateNow(id, included) {
     : STATES[id];
 }
 
-function serve({ get, put, states } = {}) {
+function serve({ get, put, states, session } = {}) {
   const included = new Set([104]);
   return installFetch((method, url, init) => {
+    if (session && method === 'POST' && url === '/api/session') return session(init);
     if (url.startsWith(`${BASE}/states`)) {
       const ids = new URL(url, 'http://x').searchParams.get('filmIds').split(',').map(Number);
       return states ? states(ids) : respond(ids.map((id) => stateNow(id, included)));
@@ -581,5 +582,57 @@ describe('Christmas films: adding a film on a phone', () => {
     // The Undo that moved with it still works.
     await user.click(within(toast()).getByRole('button', { name: 'Undo' }));
     expect(toast()).toHaveTextContent('Removed Batman.');
+  });
+
+  it('lets the toast time out after a widening that moved it while its Undo had focus', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    serve();
+    renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    const sheet = screen.getByRole('dialog', { name: 'Add a film' });
+    await user.keyboard('batman');
+    await user.click(await within(sheet).findByRole('button', { name: 'Add Batman' }));
+    await within(sheet).findByRole('button', { name: 'Remove Batman' });
+    for (let i = 0; i < 10; i += 1) {
+      if (document.activeElement?.textContent === 'Undo') break;
+      await user.tab();
+    }
+    expect(within(sheet).getByRole('button', { name: 'Undo' })).toHaveFocus();
+
+    media.change(false);
+    expect(toast()).toHaveTextContent('Added Batman.');
+    // The desktop panel is open on the same query; closing it releases the pin.
+    await user.keyboard('{Escape}');
+    await act(async () => vi.advanceTimersByTime(9000));
+    expect(toast()).not.toHaveTextContent('Added Batman.');
+  });
+
+  it('keeps focus inside the sheet after a sign-in that followed a 401', async () => {
+    const user = userEvent.setup();
+    let signedIn = false;
+    serve({
+      states: (ids) => (signedIn ? respond(ids.map((id) => STATES[id])) : respond(null, 401)),
+      session: (init) => {
+        signedIn = JSON.parse(init.body).password === 'right';
+        return respond(signedIn ? { authenticated: true } : null, signedIn ? 200 : 401);
+      },
+    });
+    renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    await user.click(screen.getByRole('button', { name: 'Add a film' }));
+    await user.keyboard('batman');
+    const card = await screen.findByRole('dialog', { name: 'Signed out' });
+    await user.type(within(card).getByLabelText('Password'), 'right');
+    await user.click(within(card).getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Signed out' })).not.toBeInTheDocument(),
+    );
+    const sheet = screen.getByRole('dialog', { name: 'Add a film' });
+    expect(sheet).toContainElement(document.activeElement);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Add a film' })).not.toBeInTheDocument();
   });
 });
