@@ -131,7 +131,8 @@ them from that one subtitle stream in the same offline container, by codec (the 
   one ends the open line.
 - **VobSub** (`dvd_subtitle`, DVD): the start and end come from each packet's own display commands (or the
   container's duration when it states one).
-- A line with no readable end ends at the next start, at most 10 s on; the report counts them.
+- A line with no readable end ends at the next start, at most 3 s on, as for the text tracks; the report counts
+  them.
  That read covers most of each file over SMB and is
 counted in the per-film cost. The 3 text tracks the app already read (`embedded_cue_starts`, `USABLE`) are used as
 well, whether or not the scan counted them; the report lists them and which films they are on. So:
@@ -190,12 +191,14 @@ well, whether or not the scan counted them; the report lists them and which film
 
   The player's clock shows whole seconds, so the owner does not listen in the player. For each file the kit cuts
   three **audio clips** from the same file, in the same offline container, from the start, middle and end of the
-  cues. Each clip's line is the **first line of a run**: no cue in the 3 s before it, so a fit shifted by a whole
-  line cannot land its click on other foreign speech unnoticed. Each clip runs from 6 s before to 4 s after the point
-  where the fit puts that line's speech (its raw time plus the fitted offset, the bias not applied, since the bias is
+  cues. Each clip's line **lands on speech** at the fitted offset and is the **first line of a run**: no cue in the
+  3 s before it, so a fit shifted by a whole
+  line cannot land its click on other foreign speech unnoticed. Each clip runs from 6 s before the point where the
+  fit puts that line's speech to 2 s after where it puts the line's end (its raw time plus the fitted offset, the bias not applied, since the bias is
   the gap between display and speech). One click marks where the line starts and a second where it ends, and each
-  clip is listed with the line's text. A file with fewer than three such lines is clipped on those it has (at least
-  one, since a file's first line always qualifies), stays in the draw, and is reported. The owner plays them on the
+  clip is listed with the line's text. A file with fewer than three such lines is clipped on those it has, stays in the draw,
+  and is reported; a file with none is left out of the draw before it is made, does not count toward the 10, and is
+  reported. The owner plays them on the
   Mac. A file is right only if, in every clip, the foreign speech begins on the first click, within about half a
   second, with no foreign speech in the 3 s before it, and stops near the second. The rule is strict on purpose: an
   unsubtitled foreign line just before a run makes a right fit fail, which can only make B fail, never pass.
@@ -208,7 +211,8 @@ well, whether or not the scan counted them; the report lists them and which film
   means B is unproven. Ten random files right bound B's error rate on `ALIGNED` fits below about 26% (one-sided
   95%), for errors the ear can catch (about 0.5 s), not the ±200 ms A is held to; the report says so, and the decoys
   and absolute answers carry the rest. A's ear-check, if A is ever considered, is a list drawn the same way from the
-  files whose A fit is `ALIGNED`. Files not heard keep the verdict the gate gives; 3d-3's trust question carries the
+  files whose A fit is `ALIGNED`, with the same rule: 10 random files heard and every file heard right, otherwise A
+  is unproven. Files not heard keep the verdict the gate gives; 3d-3's trust question carries the
   ear-check's bound.
 - **For information, not truth:** the five OpenSubtitles films and Taken 3 (spot-checked at 32–37 min), plus an
   optional accented-English film chosen at export.
@@ -320,7 +324,9 @@ The shape is fixed here. Details come from 3d-M's numbers.
 
 - **The fit.** As in "The fit" above, with 3d-M's thresholds.
 - **The source.** A new reference source, `SOUNDTRACK`, added by a migration that widens `reference_source`'s check.
-- **One row per sidecar.** When the sidecar's edition has a speech map, the row is the soundtrack fit. With no map yet,
+- **One row per sidecar.** When the sidecar's edition has a speech map, the row is the soundtrack fit, except when
+  the score built is B and `film.original_language` is set and not English: then the row stays as with no map
+  (3d-M never measured B there), with a test. If A is built, the exception does not apply. With no map yet,
   the row stays the OpenSubtitles fit. The OpenSubtitles result for an edition with a map is still logged.
 - **The key.** The map's fingerprint and versions plus `SoundtrackFit.RULES_VERSION`. The four key sites (`state`,
   `job`, `saveLocked`, `current`) are each tested.
