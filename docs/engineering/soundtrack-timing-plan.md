@@ -52,10 +52,10 @@ these films lack. It is superseded.
   one threshold works across films.
 - **Halves.** The first and second halves of the cues are fitted separately and must agree within 300 ms. This catches
   frame-rate drift and another cut, which a single offset cannot.
-- **Bias.** Cue starts lead or lag speech by a roughly constant amount. 3d-M takes it as the median of (cue start −
-  speech start) over the full-track films (below), assumed to carry over to forced files. That assumption is checked
-  against the `EMBEDDED` file and the owner-verified file, each within ±200 ms. If they disagree, no bias is
-  subtracted, and the report says so.
+- **Bias.** Cue times lead or lag speech by a roughly constant amount. For each score, 3d-M takes it as the median
+  fitted offset of the synthetic draws (below), leaving one film out. The starts-only bias is reported beside it, so
+  a dependence on the invented cue ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
+  Real forced files' cue ends are not tested by the draws.
 - **`ALIGNED`** requires all four:
   - the margin is over the threshold;
   - at least 8 cues land on speech (`TimingFit.MIN_CUES`);
@@ -124,7 +124,12 @@ answers are built from the films' own full English tracks. The owner exports the
     the next start, capped at 3 s.
   - **Score A** is judged on every draw.
   - **Score B** is judged on draws from non-English-original films, where the cues sit on foreign speech. On
-    English-original films a B fit must never come out `ALIGNED`, which makes those draws decoys for B.
+    English-original films a B fit must never come out `ALIGNED`, which makes those draws decoys for B. A decoy draw
+    that sits mostly on speech labelled foreign (a foreign scene the full track also subtitles) is left out.
+  - **What the draws cannot show.** In a non-English-original film nearly all speech is foreign, so these draws never
+    test B's penalty for English speech. That premise is tested only by Dances with Wolves and the English-original
+    decoys. B's accuracy counts only with draws from at least 5 films and at least 50 draws; below that it is
+    unproven, not passed.
 - **Absolute answers, each judged on its own** and held out of every threshold and bias choice:
   - **Dances with Wolves.** The fits of sidecars 2 and 48 must differ by 14 ± 0.3 s, sidecar 2 must come out within
     ±1 s of 0, and both must be `ALIGNED`.
@@ -155,15 +160,18 @@ answers are built from the films' own full English tracks. The owner exports the
 ### The gate for building
 
 - **Thresholds come first and are never tuned to raise coverage.**
-  - **Margin.** Chosen by leave-one-film-out (the held-out film left out on both sides) at 1.5× the largest margin of
-    any decoy or wrong pick.
+  - **Margin.** 1.25× the largest margin of any decoy or wrong pick, by leave-one-film-out (the held-out film left
+    out on both sides). Coverage is reported at 1.0×, 1.25× and 1.5×. A second-best peak's z-score is taken against
+    the same offsets as the best peak's, with ±2 s around both left out.
   - **p(en) and neutral band.** Chosen on the language labels.
   - **Held out.** The absolute answers are left out of all of these and judged once at the end.
 - **Accuracy, per score, only on items it can be scored on.** At least 90% of synthetic draws within ±200 ms, after
   the bias: all draws for A, non-English-original draws for B.
 - **Robustness:**
   - at least 90% of the drop and jitter changes within ±200 ms of b;
-  - at least 95% of the second-half moves `CHECK`.
+  - at least 95% of the second-half moves `CHECK`;
+  - **no false rejections by the halves rule:** at least 90% of synthetic draws (one cut, answer 0) have halves that
+    agree. The share of draws that come out `ALIGNED` is reported.
 - **Never confident and wrong:** zero `ALIGNED` results more than 1 s off. This counts:
   - the synthetic draws;
   - the robustness changes;
@@ -171,13 +179,15 @@ answers are built from the films' own full English tracks. The owner exports the
   - every ear-check the owner finds wrong.
 - **The absolute answers** each pass, as stated above.
 - **Useful coverage:** at least 70% of eligible real forced files come out `ALIGNED`. Eligible means 8 or more cues on
-  speech and the halves agreeing. This is reported beside the ear-check's precision.
+  speech. This is reported beside the ear-check's precision.
+- **Which score is built:** B only if its accuracy is proven (see above) and it passes the absolute answers and the
+  decoys; otherwise A, if A passes; otherwise neither.
 - **Cost (Python):** at most 15 minutes of one CPU per film, with peak RSS under 1.5 GB.
   - One film is timed first.
   - If the films with forced files and the full-track films together would take too long, the run covers the full-track films, the absolute
     answers and a seeded sample of the rest. The report says what that sample cannot show.
 
-If B passes and A does not, build B. If both pass, build B and log A. If neither passes, stop and report. The chosen
+If neither score passes, stop and report. The chosen
 thresholds and the bias are written into this plan before 3d-1a is briefed.
 
 ## Build (after the gate; each PR at most 1,500 changed lines)
