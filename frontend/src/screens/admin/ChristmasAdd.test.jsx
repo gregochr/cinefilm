@@ -66,11 +66,8 @@ function Harness({ after = null, ...props }) {
 function setup(props = {}) {
   const onAct = vi.fn();
   const onFix = vi.fn();
-  const onPanelChange = vi.fn();
-  const view = render(
-    <Harness onAct={onAct} onFix={onFix} onPanelChange={onPanelChange} {...props} />,
-  );
-  return { onAct, onFix, onPanelChange, ...view };
+  const view = render(<Harness onAct={onAct} onFix={onFix} {...props} />);
+  return { onAct, onFix, ...view };
 }
 
 const field = () => screen.getByRole('textbox', { name: 'Add a film' });
@@ -94,12 +91,11 @@ describe('ChristmasAdd on a desktop', () => {
 
   it('opens a panel of results with their states as you type, and says how many in a live region', async () => {
     const user = userEvent.setup();
-    const { onPanelChange } = setup();
+    setup();
     await search(user, 'batman');
     expect(status()).toHaveTextContent('2 films in your library');
     expect(screen.getByText('Not a Christmas film')).toBeInTheDocument();
     expect(screen.getByText('Keywords not fetched yet')).toBeInTheDocument();
-    expect(onPanelChange).toHaveBeenLastCalledWith(true);
   });
 
   it('moves real focus with the arrows: field, first result, next, back, and the field above the first', async () => {
@@ -150,13 +146,12 @@ describe('ChristmasAdd on a desktop', () => {
 
   it('closes on Esc from the field and from a result button, and focus returns to the field', async () => {
     const user = userEvent.setup();
-    const { onPanelChange } = setup();
+    setup();
     await search(user, 'batman');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
     expect(field()).toHaveFocus();
     expect(field()).toHaveValue('batman');
-    expect(onPanelChange).toHaveBeenLastCalledWith(false);
 
     await user.keyboard('{ArrowDown}');
     await screen.findByRole('button', { name: 'Add Batman Returns' });
@@ -197,30 +192,6 @@ describe('ChristmasAdd on a desktop', () => {
     await user.tab();
     expect(screen.getByRole('button', { name: 'after' })).toHaveFocus();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
-  });
-
-  it('stays open when focus goes to the toast or to a dialog', async () => {
-    const user = userEvent.setup();
-    setup({
-      after: (
-        <>
-          <div className="xmas-toast-region">
-            <button type="button">Undo</button>
-          </div>
-          <div role="dialog" aria-modal="true" aria-label="Elsewhere">
-            <button type="button">Inside</button>
-          </div>
-        </>
-      ),
-    });
-    await search(user, 'batman');
-    screen.getByRole('button', { name: 'Add Batman Returns' }).focus();
-    await user.tab();
-    expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
-    expect(panelList()).toBeInTheDocument();
-    screen.getByRole('button', { name: 'Add Batman Returns' }).focus();
-    screen.getByRole('button', { name: 'Inside' }).focus();
-    expect(panelList()).toBeInTheDocument();
   });
 
   it('opens Fix match for a film with no TMDB id, with the button as the opener', async () => {

@@ -73,9 +73,8 @@ function EmptyPanel({ kind, keywords, panelRef }) {
 export default function AdminChristmas() {
   const state = useChristmas();
   const { openFixMatch, changed } = useAdminContext();
-  const { data, version, loading, error, busy, toast, focusRequest, refresh, pinToast } = state;
+  const { data, version, loading, error, busy, toast, focusRequest, refresh } = state;
   const [tab, setTab] = useState('inWeek');
-  const [panelOpen, setPanelOpen] = useState(false);
   const buttons = useRef(new Map());
   const panelButtons = useRef(new Map());
   const panel = useRef(null);
@@ -90,11 +89,6 @@ export default function AdminChristmas() {
     if (node) panelButtons.current.set(filmId, node);
     else panelButtons.current.delete(filmId);
   };
-
-  // The toast stays up while the search panel is open: focus stays on the result, out of reach of its Undo.
-  useEffect(() => {
-    pinToast(panelOpen);
-  }, [panelOpen, pinToast]);
 
   // A saved match changes what the lists hold (the film now has a TMDB id), so they are read again, quietly.
   const changedAtStart = useRef(changed);
@@ -155,7 +149,6 @@ export default function AdminChristmas() {
               onFix={openFixMatch}
               registerButton={registerPanelButton}
               refreshKey={changed}
-              onPanelChange={setPanelOpen}
             />
           </div>
           <div

@@ -20,7 +20,7 @@ const DIALOG_OPEN = '[aria-modal="true"], .ee';
  * field. The panel also closes when focus leaves it for something else. An action goes through the screen's write
  * path (`onAct`), the row updates in place and the panel stays open. `onFix(film, opener)` opens Fix match for a film with
  * no TMDB id; `refreshKey` changes when a match was fixed; `version` and `issued` are the screen data's request
- * numbers (see `resultState`). `onPanelChange(open)` says when the panel opens or closes (the toast waits meanwhile).
+ * numbers (see `resultState`).
  */
 export default function ChristmasAdd({
   data,
@@ -31,7 +31,6 @@ export default function ChristmasAdd({
   onFix,
   registerButton,
   refreshKey,
-  onPanelChange,
 }) {
   const { index, status } = useSearchIndex();
   const uid = useId();
@@ -62,11 +61,6 @@ export default function ChristmasAdd({
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [showing, dispatch]);
-
-  useEffect(() => {
-    onPanelChange?.(showing);
-    return () => onPanelChange?.(false);
-  }, [showing, onPanelChange]);
 
   const act = useCallback(
     (row, opener) => {

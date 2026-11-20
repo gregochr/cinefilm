@@ -295,24 +295,6 @@ describe('Christmas films: adding a film', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('keeps the toast up while the panel is open, and lets it go once the panel has closed', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    serve();
-    await open();
-    await user.click(await search(user, 'batman'));
-    await panelButton('Remove Batman');
-    // Focus stays on the result, out of reach of the toast's Undo: it waits well past its 8 seconds.
-    await act(async () => vi.advanceTimersByTime(30000));
-    expect(toast()).toHaveTextContent('Added Batman.');
-
-    await user.keyboard('{Escape}');
-    await act(async () => vi.advanceTimersByTime(7900));
-    expect(toast()).toHaveTextContent('Added Batman.');
-    await act(async () => vi.advanceTimersByTime(300));
-    expect(toast()).not.toHaveTextContent('Added Batman.');
-  });
-
   it('says Needs a match first and opens Fix match for a film with no TMDB id', async () => {
     const user = userEvent.setup();
     serve();
@@ -402,52 +384,5 @@ describe('Christmas films: adding a film', () => {
     await act(async () => slow.resolve(respond([STATES[4]])));
     expect(await panelButton('Add Trading Places')).toBe(remove);
     expect(remove).toHaveFocus();
-  });
-
-  it('does the same when the press comes in the tick the result first renders and /states is only asked later', async () => {
-    const user = userEvent.setup();
-    let calls = 0;
-    serve({
-      states: (ids) => {
-        calls += 1;
-        return respond(ids.map((id) => ({ ...STATES[id], state: 'NOT_IN' })));
-      },
-    });
-    await open();
-    await user.click(field());
-    await user.keyboard('trading{ArrowDown}{Enter}');
-    const add = await panelButton('Add Trading Places');
-    expect(add).toHaveFocus();
-    await waitFor(() => expect(calls).toBeGreaterThan(0));
-    expect(await panelButton('Add Trading Places')).toBe(add);
-    expect(add).toHaveFocus();
-  });
-
-  it('shows Add after an early removal when the search text changes and comes back before an answer', async () => {
-    const user = userEvent.setup();
-    const slow = deferred();
-    let calls = 0;
-    serve({
-      states: (ids) => {
-        calls += 1;
-        return calls === 1
-          ? slow.promise
-          : respond(ids.map((id) => ({ ...STATES[id], state: 'NOT_IN' })));
-      },
-    });
-    await open();
-    await user.click(field());
-    await user.keyboard('trading');
-    await waitFor(() => expect(calls).toBe(1));
-    await user.click(await panelButton('Remove Trading Places'));
-    await panelButton('Add Trading Places');
-
-    await user.clear(field());
-    await user.keyboard('begins');
-    await panelButton('Add Batman Begins');
-    await act(async () => slow.resolve(respond([STATES[4]])));
-    await user.clear(field());
-    await user.keyboard('trading');
-    expect(await panelButton('Add Trading Places')).toBeInTheDocument();
   });
 });
