@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { SIGNED_IN_EVENT } from '../../api/client.js';
 import ChristmasPreviewSheet from './ChristmasPreviewSheet.jsx';
 
 function setup() {
@@ -45,6 +46,30 @@ describe('ChristmasPreviewSheet', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
     await user.tab({ shift: true });
     expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
+  });
+
+  it('does not close on the Esc that ends an input-method composition', () => {
+    const { onClose } = setup();
+    // userEvent cannot set `isComposing`, so this one keydown is synthetic.
+    fireEvent.keyDown(document.activeElement, {
+      key: 'Escape',
+      isComposing: true,
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('after a sign-in puts focus back inside only if it had left the sheet', async () => {
+    const user = userEvent.setup();
+    setup();
+    const signIn = () => act(() => window.dispatchEvent(new Event(SIGNED_IN_EVENT)));
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
+    signIn();
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
+    act(() => document.activeElement.blur());
+    expect(document.body).toHaveFocus();
+    signIn();
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
   });
 
   it('stops the page behind scrolling, and lets it again on close', () => {

@@ -687,8 +687,13 @@
 }
 /* Home's row at 12 columns; the poster is Home's own, so only its caption and title are trimmed to fit. */
 .row__grid--christmas {
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  /* 12 in one row while they fit; a poster never gets narrower than 44px (66px tall at 2:3), so a narrower row scrolls
+     sideways instead. The padding, undone by the margin, leaves room for the focus ring and its scale at the edges. */
+  grid-template-columns: repeat(12, minmax(44px, 1fr));
   gap: 8px;
+  overflow-x: auto;
+  padding: 8px;
+  margin: -8px;
 }
 .row__grid--christmas .poster__caption {
   display: none;

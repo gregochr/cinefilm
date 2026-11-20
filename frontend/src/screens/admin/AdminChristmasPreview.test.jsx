@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
@@ -133,6 +133,44 @@ describe('Christmas films: the preview and back link on a phone', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument();
     expect(document.body.style.overflow).not.toBe('hidden');
+  });
+
+  it('keeps focus inside the sheet after a sign-in that followed a 401 on Undo', async () => {
+    const user = userEvent.setup();
+    stubMedia(true);
+    let signedIn = false;
+    installFetch((method, url, init) => {
+      if (method === 'POST' && url === '/api/session') {
+        signedIn = JSON.parse(init.body).password === 'right';
+        return respond(signedIn ? { authenticated: true } : null, signedIn ? 200 : 401);
+      }
+      if (!url.startsWith(BASE)) return null;
+      if (method === 'GET') return respond(fresh());
+      const choice = JSON.parse(init.body).choice;
+      if (choice === null && !signedIn) return respond(null, 401);
+      const data = fresh();
+      const film = data.inWeek.find((f) => f.tmdbId === Number(url.slice(BASE.length + 1)));
+      if (choice === 'EXCLUDE' && film) {
+        data.inWeek = data.inWeek.filter((f) => f !== film);
+        data.leftOut.push({ ...film, taggedByTmdb: true });
+      }
+      return respond(data);
+    });
+    await open();
+    await user.click(screen.getByRole('button', { name: 'Leave out Gremlins' }));
+    await screen.findByText(/Left out Gremlins/);
+    await user.click(screen.getByRole('button', { name: OPEN }));
+    const sheet = screen.getByRole('dialog', { name: 'Home in Christmas week' });
+    await user.click(within(sheet).getByRole('button', { name: 'Undo' }));
+    const card = await screen.findByRole('dialog', { name: 'Signed out' });
+    await user.type(within(card).getByLabelText('Password'), 'right');
+    await user.click(within(card).getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Signed out' })).not.toBeInTheDocument(),
+    );
+    expect(sheet).toContainElement(document.activeElement);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   describe('Undo pressed inside the sheet', () => {

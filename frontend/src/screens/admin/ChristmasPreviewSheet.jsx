@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { containTab } from '../../components/useDialog.js';
 import { PREVIEW_LABEL } from '../../state/christmas.js';
+import { useSignInRecovery } from './useSignInRecovery.js';
 
 /**
  * The phone's Home preview: a full-screen sheet holding the row (`children`) and the screen's toast, so the toast's
@@ -8,11 +9,20 @@ import { PREVIEW_LABEL } from '../../state/christmas.js';
  * Close call `onClose` (the opener takes focus back there), Tab stays inside, and nothing behind scrolls.
  */
 export default function ChristmasPreviewSheet({ onClose, toast, children }) {
+  const dialog = useRef(null);
   const close = useRef(null);
+  const signedIn = useSignInRecovery();
 
   useLayoutEffect(() => {
-    close.current?.focus();
+    close.current.focus();
   }, []);
+
+  // After a 401 the sign-in card takes focus and then goes, leaving it on the page body: put it back inside the sheet,
+  // or Esc and the Tab trap would no longer reach it.
+  useEffect(() => {
+    if (signedIn === 0) return;
+    if (!dialog.current.contains(document.activeElement)) close.current.focus();
+  }, [signedIn]);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -23,7 +33,7 @@ export default function ChristmasPreviewSheet({ onClose, toast, children }) {
   }, []);
 
   const onKeyDown = (event) => {
-    if (event.key === 'Escape' && !event.nativeEvent?.isComposing) {
+    if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
       event.preventDefault();
       onClose();
       return;
@@ -35,6 +45,7 @@ export default function ChristmasPreviewSheet({ onClose, toast, children }) {
     // The dialog only listens for Esc and Tab, bubbled from the controls inside it.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
+      ref={dialog}
       className="xmas-preview-sheet"
       role="dialog"
       aria-modal="true"
