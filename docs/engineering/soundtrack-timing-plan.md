@@ -53,7 +53,8 @@ these films lack. It is superseded.
 - **Halves.** The first and second halves of the cues are fitted separately and must agree within 300 ms. This catches
   frame-rate drift and another cut, which a single offset cannot.
 - **Bias.** Cue times lead or lag speech by a roughly constant amount. For each score, 3d-M takes it as the median
-  fitted offset of the synthetic draws (below), leaving one film out. The starts-only bias is reported beside it, so
+  fitted offset of the synthetic draws (below) that the score is judged on (for B, only the non-English-original
+  draws, never its decoys), leaving one film out. The starts-only bias is reported beside it, so
   a dependence on the invented cue ends shows. The `EMBEDDED` and owner-verified files are a reported check only.
   Real forced files' cue ends are not tested by the draws.
 - **`ALIGNED`** requires all four:
@@ -107,7 +108,8 @@ This is **not** credits L4a's convention: L4a ran the released image, installed 
   - **Foreign:** speech under full-track cues in a film whose original language is not English. The track
     translates the dialogue, so most of that speech is foreign.
   - **English:** speech under full-track cues in an English-original film with no forced file.
-  - **Lakota:** Dances with Wolves' sidecar 2 cue spans at offset 0.
+  - **Lakota, reported only:** Dances with Wolves' sidecar 2 cue spans at offset 0. The film is an absolute answer,
+    so these spans never take part in choosing a threshold.
 
   These labels are approximate (an English-original film has some foreign lines, and the reverse), so they set the
   thresholds and are never a pass or fail gate.
