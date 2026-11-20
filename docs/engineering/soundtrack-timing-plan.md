@@ -133,7 +133,10 @@ answers are built from the films' own full English tracks. The owner exports the
     test B's penalty for English speech. That premise is tested only by Dances with Wolves and the English-original
     decoys. B's accuracy counts only with draws from at least 5 films and at least 50 draws; below that it is
     unproven, not passed.
-- **Absolute answers, each judged on its own** and held out of every threshold and bias choice:
+- **Absolute answers, each judged on its own.** The **films** of all three are left out entirely of everything that
+  chooses a threshold or the bias, on both sides: their synthetic draws, their language labels, the bias median, and
+  every decoy, whether as the forced file or as the audio (cross-film pairs included). Their results are still
+  reported.
   - **Dances with Wolves.** The fits of sidecars 2 and 48 must differ by 14 ± 0.3 s, sidecar 2 must come out within
     ±1 s of 0, and both must be `ALIGNED`.
   - **The one `EMBEDDED` `ALIGNED` file:** its fitted offset on the raw cues, ±200 ms.
