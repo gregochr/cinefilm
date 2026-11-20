@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useReducer, useState } from 'react';
-import { SIGNED_IN_EVENT } from '../api/client.js';
 import { getChristmasStates } from '../api/christmas.js';
 import { resultState } from './christmas.js';
 import { search } from './search.js';
@@ -24,17 +23,25 @@ const CAPS = { titles: RESULT_LIMIT };
  *
  * A film that was in a list when shown and has left every list since (a write made here) is remembered with the state
  * it had, so before any answer it reads as `NOT_IN` (`resultState` does the comparison) and its button changes in place
- * instead of disappearing. A sign-in after a 401 asks again for the ids on screen.
+ * instead of disappearing. `recovered` (a count the screen raises when a sign-in follows a 401) asks again for the ids on screen.
  *
  * Returns `{ state, dispatch, setQuery, query, status, rows, total, ready, statesFailed }`. A row is
  * `{ id, filmId, tmdbId, title, year, posterPath, state }`; `state` is null until an answer arrives (no button).
  * `total` is the matches before the cap; `ready` is false while the index is loading or failed.
  */
-export function useAddFilm({ index, status, data, version, issued, idPrefix, refreshKey }) {
+export function useAddFilm({
+  index,
+  status,
+  data,
+  version,
+  issued,
+  idPrefix,
+  refreshKey,
+  recovered = 0,
+}) {
   const [state, dispatch] = useReducer(comboboxReducer, INITIAL_COMBOBOX);
   const [answers, setAnswers] = useState(() => new Map());
   const [failedFor, setFailedFor] = useState(null);
-  const [recovered, setRecovered] = useState(0);
   const [listedBefore, setListedBefore] = useState(() => new Map());
   // Only the films are searched: a person's or collection's exact match must not stop the fuzzy title fallback.
   const filmsOnly = useMemo(
@@ -78,13 +85,6 @@ export function useAddFilm({ index, status, data, version, issued, idPrefix, ref
       controller.abort();
     };
   }, [idsKey, refreshKey, issued, recovered]);
-
-  // A 401 shows the sign-in card over this screen, which stays mounted: ask again once signed in.
-  useEffect(() => {
-    const onSignedIn = () => setRecovered((n) => n + 1);
-    window.addEventListener(SIGNED_IN_EVENT, onSignedIn);
-    return () => window.removeEventListener(SIGNED_IN_EVENT, onSignedIn);
-  }, []);
 
   // Remember each shown film that the lists hold, with the data's stamp, for the case of it leaving them.
   useEffect(() => {

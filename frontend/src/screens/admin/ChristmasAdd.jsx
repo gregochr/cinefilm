@@ -4,6 +4,7 @@ import { addResultRow } from '../../state/christmas.js';
 import { useSearchIndex } from '../../state/searchIndex.js';
 import { useAddFilm } from '../../state/useAddFilm.js';
 import { hasQuery } from '../../state/useSearchCombobox.js';
+import { useSignInRecovery } from './useSignInRecovery.js';
 import ChristmasAddResults, { headText } from './ChristmasAddResults.jsx';
 
 /** What the panel leaves open when a press or focus lands there: the toast (its Undo) and a dialog (Fix match). */
@@ -34,6 +35,7 @@ export default function ChristmasAdd({
 }) {
   const { index, status } = useSearchIndex();
   const uid = useId();
+  const recovered = useSignInRecovery();
   const add = useAddFilm({
     index,
     status,
@@ -42,6 +44,7 @@ export default function ChristmasAdd({
     issued,
     idPrefix: `${uid}-row`,
     refreshKey,
+    recovered,
   });
   const { state, dispatch, setQuery, rows } = add;
   const wrapper = useRef(null);

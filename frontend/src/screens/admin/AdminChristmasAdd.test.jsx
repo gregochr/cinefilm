@@ -384,4 +384,70 @@ describe('Christmas films: adding a film', () => {
     await act(async () => slow.resolve(respond([STATES[4]])));
     expect(await panelButton('Add Trading Places')).toHaveFocus();
   });
+
+  it('keeps the pressed button in place as Add, with focus, when a keyboard Remove finishes before the first /states answer', async () => {
+    const user = userEvent.setup();
+    const slow = deferred();
+    serve({ states: () => slow.promise });
+    await open();
+    await user.click(field());
+    await user.keyboard('trading{ArrowDown}');
+    const remove = await panelButton('Remove Trading Places');
+    expect(remove).toHaveFocus();
+    await user.keyboard('{Enter}');
+    const add = await panelButton('Add Trading Places');
+    expect(add).toBe(remove);
+    expect(add).toHaveFocus();
+
+    await act(async () => slow.resolve(respond([STATES[4]])));
+    expect(await panelButton('Add Trading Places')).toBe(remove);
+    expect(remove).toHaveFocus();
+  });
+
+  it('does the same when the press comes in the tick the result first renders and /states is only asked later', async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    serve({
+      states: (ids) => {
+        calls += 1;
+        return respond(ids.map((id) => ({ ...STATES[id], state: 'NOT_IN' })));
+      },
+    });
+    await open();
+    await user.click(field());
+    await user.keyboard('trading{ArrowDown}{Enter}');
+    const add = await panelButton('Add Trading Places');
+    expect(add).toHaveFocus();
+    await waitFor(() => expect(calls).toBeGreaterThan(0));
+    expect(await panelButton('Add Trading Places')).toBe(add);
+    expect(add).toHaveFocus();
+  });
+
+  it('shows Add after an early removal when the search text changes and comes back before an answer', async () => {
+    const user = userEvent.setup();
+    const slow = deferred();
+    let calls = 0;
+    serve({
+      states: (ids) => {
+        calls += 1;
+        return calls === 1
+          ? slow.promise
+          : respond(ids.map((id) => ({ ...STATES[id], state: 'NOT_IN' })));
+      },
+    });
+    await open();
+    await user.click(field());
+    await user.keyboard('trading');
+    await waitFor(() => expect(calls).toBe(1));
+    await user.click(await panelButton('Remove Trading Places'));
+    await panelButton('Add Trading Places');
+
+    await user.clear(field());
+    await user.keyboard('begins');
+    await panelButton('Add Batman Begins');
+    await act(async () => slow.resolve(respond([STATES[4]])));
+    await user.clear(field());
+    await user.keyboard('trading');
+    expect(await panelButton('Add Trading Places')).toBeInTheDocument();
+  });
 });

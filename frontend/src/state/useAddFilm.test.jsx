@@ -1,6 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { announceSignedIn } from '../api/client.js';
 import { prepareIndex } from './searchIndex.js';
 import { STATES_DEBOUNCE_MS, useAddFilm } from './useAddFilm.js';
 
@@ -254,24 +253,20 @@ describe('useAddFilm', () => {
     expect(result.current.rows.map((r) => r.title)).toEqual(['The Martian']);
   });
 
-  it('asks again for the films on screen when a sign-in follows a 401', async () => {
+  it('asks again for the films on screen when the recovery count rises after a 401', async () => {
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 401 }));
     fetchMock.mockResolvedValueOnce(ok([{ filmId: 3, tmdbId: 103, state: 'NOT_IN' }]));
-    const { result, unmount } = setup();
+    const { result, rerender } = setup();
     act(() => result.current.setQuery('gremlins'));
     await settle();
     expect(result.current.statesFailed).toBe(true);
     expect(result.current.rows[0].state).toBeNull();
 
-    await act(async () => announceSignedIn());
+    rerender({ data: emptyData(), recovered: 1 });
     await settle();
     expect(asked()).toEqual(['3', '3']);
     expect(result.current.statesFailed).toBe(false);
     expect(result.current.rows[0].state).toBe('NOT_IN');
-
-    unmount();
-    announceSignedIn();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('keeps a film that left the lists before any answer as not in, until a newer answer says otherwise', async () => {

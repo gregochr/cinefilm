@@ -1,6 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { announceSignedIn } from '../../api/client.js';
 import { prepareIndex, useSearchIndex } from '../../state/searchIndex.js';
 import ChristmasAdd from './ChristmasAdd.jsx';
 import { STATES_FAILED_TEXT } from './ChristmasAddResults.jsx';
@@ -255,5 +256,22 @@ describe('ChristmasAdd on a desktop', () => {
     await user.keyboard('batman');
     await vi.waitFor(() => expect(status()).toHaveTextContent(STATES_FAILED_TEXT));
     expect(screen.queryByRole('button', { name: /^Add Batman/ })).not.toBeInTheDocument();
+  });
+
+  it('gives the results their buttons once a sign-in follows a 401 on /states', async () => {
+    const answer = vi.fn(async () => new Response(null, { status: 401 }));
+    vi.stubGlobal('fetch', answer);
+    const user = userEvent.setup();
+    setup();
+    await user.click(field());
+    await user.keyboard('batman');
+    await vi.waitFor(() => expect(status()).toHaveTextContent(STATES_FAILED_TEXT));
+    expect(screen.queryByRole('button', { name: /^Add Batman/ })).not.toBeInTheDocument();
+
+    answer.mockImplementation(
+      async () => new Response(JSON.stringify(ANSWER.slice(0, 2)), { status: 200 }),
+    );
+    act(() => announceSignedIn());
+    expect(await screen.findByRole('button', { name: 'Add Batman' })).toBeInTheDocument();
   });
 });
