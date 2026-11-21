@@ -1,206 +1,270 @@
-# Credits phase 3b: Admin "End credits" — plan
+# Credits phase 3b: the Admin "End credits" list — plan
 
-Written 2026-11-21, after 3a merged (#274, #276, #278) and 0.10.0 started applying `PLEX` markers. It specifies the 3b
-section of `credits-phase3-plan.md`. That plan's precedence, lock rules and the accepted in-progress behaviour stand
-unless this file says otherwise.
+Written 2026-11-21, after 3a merged (#274, #276, #278) and 0.10.0 started applying `PLEX` markers. Revised the same
+day after an adversarial review checked it against the code.
+
+This plan specifies the 3b section of `credits-phase3-plan.md`. That plan's precedence, lock rules and accepted
+in-progress behaviour stand unless this file says otherwise.
 
 ## What the owner gets
 
-Admin → Library gains an **End credits** card that links to a list of every edition with its end-credits marker:
-where the marker came from, the time, and why there is none when there isn't. Opening a row shows two stills, so a
-glance shows "credits" or "still the film". Two actions:
-- **Set** an owner time, source `OWNER`. Nothing automatic ever overrides it.
-- **Clear** an owner time, back to automatic. Today that means Plex's marker when one is usable, otherwise none.
+Admin → Library gains an **End credits** card. It links to a list of every edition and its end-credits marker: where
+the marker came from, the time, or why there is none. Opening a row shows two stills, so a glance tells "credits"
+from "still the film".
 
-The name is "End credits", not "Credits": Library's "Cast & crew" card already means TMDB's credits.
+Two actions:
+- **Set** an owner time. Its source is `OWNER`, and nothing automatic overrides it.
+- **Clear** an owner time, which goes back to automatic: Plex's marker when one is usable, otherwise none.
 
-## The test split stays untouched
+The name is "End credits", not "Credits", because Library's "Cast & crew" card already means TMDB's credits.
 
-Version 2's verdict, time and reasons appear only for editions whose last original part has **no `plex_credits_marker`
-row at all**. The API omits them for every other edition, with no flag for "hidden", and no still is ever requested at
-version 2's time for those editions.
+## No version 2 results in 3b
 
-The reason: the labelled set (development and test alike) is the files with a Plex row, so this rule never puts a
-version 2 result beside its Plex answer for any film, test side included. That holds whether or not the row's
-fingerprint still matches, and for films that join later. The database holds no split, and this rule doesn't need
-one. 3c's own gate rules are unchanged.
+`credits-detection-plan.md`'s Admin outline lists version 2's verdict and reasons. 3b leaves them out, together with
+any still at version 2's time.
 
-## 3b-1: the API (backend only)
+Phase 3's plan forbids showing any version 2 result for a film on the test side, including films added since the
+manifest. The product can't tell a film's side yet, and 3c's spec has to settle how. No per-edition rule substitutes
+for that: one edition of a film can have a Plex row while another has none, and a film with no row today may get one
+later.
+
+So version 2's verdict, reasons and **Use detected** all arrive with 3c.
+
+## How a row's Plex state is worked out
+
+`CreditsApply` gains a pure `plexStatus(parts, lastFingerprint, plexRow)`, computed whatever the edition's source.
+`apply`'s step 2 is rewritten to use it, so the list and the pass can never disagree.
+
+States, checked in the order `CreditsApply.plexMarker` checks them:
+
+1. `NONE`: no row.
+2. `NO_FINGERPRINT`: the last part has no fingerprint.
+3. `STALE`: the row's fingerprint differs from the last part's.
+4. `NO_TIMELINE`: `EditionTimeline.of` refuses the parts (no original part, or a part with no duration).
+5. `OUTSIDE`: `toGlobal` refuses the row's offset.
+6. `REFUSED`: `EditionGuard.plausible` fails.
+7. `USABLE`: none of the above.
+
+Only `REFUSED` and `USABLE` carry Plex's time, in edition time.
+
+## The API
 
 **`GET /api/admin/credits?filter=&page=&size=`**
-- `filter` takes four values:
-  - `none`, the default: editions with no marker;
-  - `plex`: source `PLEX`;
-  - `owner`: source `OWNER`;
-  - `all`.
-- `page` starts at 0; `size` defaults to 25, with a maximum of 100. Any other value of a parameter is a 400 (as
-  `PlaybackHealthController` does).
-- Order: the film's `sortTitle` (case-insensitive), then the film's year, then the edition's name and id.
-- Hidden editions (`hiddenFromBrowse()`) are left out of every filter and count.
-- Answer, in `CreditsAdminDtos`:
 
-  ```
-  CreditsList { counts: { none, plex, owner, all }, page, size, total, items: [CreditsRow] }
-  ```
+`filter` takes one of four values:
+- `none` (the default): editions whose source is null, whether or not a marker is set (a marker with no source yet
+  shows as "not settled yet");
+- `plex`: source `PLEX`;
+- `owner`: source `OWNER`;
+- `all`.
 
-  `total` is the count for the filter asked for.
-- **`CreditsRow`**:
-  - `editionId`, `filmId`, `title`, `year`, `editionName`;
-  - `runtimeMs`, the edition's timeline total (the same number the still endpoint and the guard use);
-  - `markerMs`, `source` (null and null when there is no marker);
-  - `plex` (`PlexStatus`):
-    - `state` is one of:
-      - `NONE`, no row;
-      - `STALE`, the fingerprint differs from the last part's current one;
-      - `OUTSIDE`, `toGlobal` refuses the offset;
-      - `REFUSED`, `EditionGuard.plausible` fails;
-      - `USABLE`;
-      - `NO_TIMELINE`, an original part with no duration, or a last part with no fingerprint;
-    - `markerMs`: Plex's edition time, set for `USABLE` and `REFUSED`, null for the other states;
-  - `detected` (`DetectedStatus`), present only when `plex.state` is `NONE` (see "The test split stays untouched"):
-    - `state` is one of:
-      - `CURRENT`, a `credits_detection` row for the last part with the current fingerprint and
-        `analysis_version` equal to `CreditsTuning.ANALYSIS_VERSION`;
-      - `OUT_OF_DATE`, a row exists but is not current;
-      - `NOT_ANALYSED`, no row;
-    - only when `CURRENT`: `verdict`, `markerMs` (edition time, through `EditionGuard.apply`, so a time the guard
-      refuses comes back without a time and with its reason) and `reasons` (the row's lines).
-- **Queries:** a fixed number per page, never one per edition: the page of edition ids, those editions with their files,
-  their Plex rows, their detection rows, and one grouped count query.
+The other parameters:
+- `page` is 0-based.
+- `size` defaults to 25, with a maximum of 100.
+- Any other value is a 400, as `PlaybackHealthController` answers.
+
+Ordering is by the film's `sortTitle` (case-insensitive), then the film's year, then the edition's name, then its id.
+
+**Hidden editions.** These are left out of every filter and every count, by a database predicate that matches
+`Edition.hiddenFromBrowse()`. The predicate is `NOT EXISTS` an original part that is any of these:
+- not present on disk;
+- not `PLAYABLE`;
+- part of a multi-part edition with a null or zero duration.
+
+The builder confirms the predicate against `hiddenFromBrowse()` and the integration test pins the two together.
+
+**The answer** goes in `CreditsAdminDtos`:
+
+```
+CreditsList { counts: { none, plex, owner, all }, page, size, total, items: [CreditsRow] }
+```
+
+- `total` is the chosen filter's count.
+- The four counts come from one grouped query, and `none + plex + owner = all`.
+
+**`CreditsRow`** has these fields:
+- `editionId`, `filmId`, `title`, `year`, `editionName`, `editionCount` (how many visible editions the film has);
+- `runtimeMs`: the edition's timeline total, or null when `EditionTimeline.of` refuses the parts;
+- `markerMs` and `source`;
+- `plex { state, markerMs }`.
+
+Each page costs a fixed number of queries, never one per edition: the page of ids, those editions with their files,
+their Plex rows, and the counts.
 
 **`PUT /api/admin/editions/{id}/credits` `{ markerMs }`**
-- `markerMs` must be whole seconds' worth, at least 1,000 ms and below the timeline total. Anything else is a 400
-  `{error}` saying the time is outside the film.
-- The guard does **not** apply: the owner may set any time inside the film.
-- On success it sets the marker and source `OWNER`, and answers the new `CreditsRow`.
+- `markerMs` must be whole seconds and must pass `EditionGuard.plausible` for the edition's timeline: at least 60% in,
+  and at least 60 s before the end.
+- That bound is the floor against a typo. "1:52" read as 1 min 52 s would otherwise make the film count as watched
+  on its first progress report.
+- Anything else is a 400 `{error}`:
+  - "That time is outside where end credits can start";
+  - "This film's length isn't known" (when there is no timeline).
+- On success it sets the marker with source `OWNER` (over a `PLEX` marker too) and answers the new `CreditsRow`.
 - 404 for an unknown or hidden edition.
-- 409 `busyText()` when the library lock is held. It takes the lock once with `tryAcquire(CREDITS)`, as every Admin
-  writer does, and never waits.
 
 **`DELETE /api/admin/editions/{id}/credits`**
-- Under the same single lock attempt, it runs `CreditsApply.apply` for that edition as though its source were null,
-  then writes both fields together.
-- It answers the new `CreditsRow`, and behaves the same whatever `cinefilm.credits.apply.enabled` says.
-- On a non-`OWNER` edition it changes nothing and answers the row. Running the pass's own rule keeps the two in step.
+- On an `OWNER` edition, it runs `CreditsApply.apply` as though the source were null and writes marker and source
+  together. This happens whatever `cinefilm.credits.apply.enabled` says.
+- On any other edition it writes nothing and answers the row as it is. A stale `PLEX` marker is left for the pass.
+- It answers the new `CreditsRow`.
+
+**Both writes**
+- Each takes the library lock once with `tryAcquire(LibraryLock.CREDITS)`, never waiting, and answers 409 with
+  `busyText()` when the lock is held.
+- `CREDITS` is the holder the detector and the applier use. Sharing it is deliberate: a write and a pass can never
+  overlap.
+- **Order:** take the lock, run a `TransactionTemplate` that reads, computes, writes and commits, then release the
+  lock in `finally` and build the answer. This is the pattern `ChristmasFilms.choose` uses.
+- The service method is never `@Transactional`: the lock must outlive the commit, or a pass waiting on the lock could
+  write a stale source over the owner's change.
 
 **Code shape**
-- `credits/CreditsAdminController`, thin, over `credits/CreditsAdminService`.
-- `CreditsApply` gains a pure `plexStatus(parts, lastFingerprint, plexRow)` that returns the state and time above.
-  `apply` uses it for step 2, so the list and the pass can never disagree.
-- One edition's apply is shared with `CreditsApplier.applyBatch` rather than copied: a package-visible static
-  `CreditsApply.forEdition(Edition, PlexCreditsMarker)`, or the builder's equivalent that both call.
-- No migration; `PlexCreditsMarker`'s Javadoc stops saying nothing applies it.
+- `credits/CreditsAdminController` stays thin, over `credits/CreditsAdminService`.
+- One edition's apply is shared with `CreditsApplier.applyBatch`, not copied.
+- `PlexCreditsMarker`'s Javadoc stops saying nothing applies it.
+- `docs/engineering/foundation-plan.md`'s API contract gains the three endpoints in the same PR (AGENTS.md rule 4).
 
-**Tests (Mockito unit, plus one integration)**
-- `CreditsApplyTest`: every `plexStatus` state, at the guard's bounds and one either side; `apply` still passes its
-  existing cases.
-- `CreditsAdminServiceTest`:
-  - each filter's selection and counts;
-  - hidden editions left out;
-  - `detected` present only when there is no Plex row: a `STALE` row hides it too;
-  - `OUT_OF_DATE` on either a fingerprint or a version mismatch;
-  - a guard-refused detected time;
-  - `PUT` at 999 / 1,000 ms, at total − 1,000 / total, a non-whole second, and an unknown or hidden edition;
-  - `DELETE` restoring `PLEX` from a usable row and clearing without one;
-  - both writes answering 409 without writing when the lock is held, and releasing it after a failure.
-  - Assert the saved marker and source, never repository call counts.
-- `CreditsAdminControllerTest` (MockMvc): parameter validation (each bad value a 400), the 400 and 409 bodies, and
-  the JSON field names the frontend reads.
-- `CreditsAdminIntegrationTest` (Testcontainers, CI): seeded editions in all four filters; order and paging across a
-  page boundary; a fixed statement count per page; a `PUT` then a `DELETE` round trip.
-
-## 3b-2: the screen (frontend)
+## The screen
 
 **Where**
-- Library gets an **End credits** card beside the Plex card, holding:
-  - three count tiles: "No marker", "From Plex", "Yours";
-  - a secondary button **Review end credits…**, which opens `/admin/library/credits`.
-- That page is a sub-list like the `FILE_LISTS` pages, with a back link to Library; `bareOnPhone` applies to it.
-  Its filter tabs use `AdminTabList`:
-  - No marker (the default);
-  - From Plex;
-  - Yours;
-  - All.
-  Each tab has its count, and the tab is in the URL (`?show=`).
-- 25 rows a page from the server, with Previous and Next and "Showing 26–50 of 212", as the grouping report pages.
+- Library gets an **End credits** card beside the Plex card, with three count tiles ("No marker", "From Plex",
+  "Yours") and a secondary button, **Review end credits…**, that opens `/admin/library/credits`.
+- That page is a sub-list like the `FILE_LISTS` pages: a back link to Library, and `bareOnPhone` applies.
+- Filter tabs use `AdminTabList`: No marker (the default), From Plex, Yours and All, each showing its count. The
+  chosen tab is in the URL as `?show=`.
+- The server sends 25 rows a page. The page has Previous and Next and a line like "Showing 26–50 of 212", paged as
+  the grouping report is.
+- If a write leaves the current page empty while `total` is above 0, the page steps back one.
 
-**A row** (rows `44px 1fr auto`, `RowText`: title, "· year", and the edition name when the film has more than one
-edition):
-- **Line two** says where the time came from, with the time in IBM Plex Mono, formatted by `formatResume`:
+**A row**
+- Layout is `44px 1fr auto`, with `RowText` showing the title and "· year", plus the edition's name when
+  `editionCount` is above 1.
+- **Line two** is the source and time, in IBM Plex Mono through `formatResume`:
   - "From Plex · 1:52:10";
   - "Yours · 1:52:10";
+  - "Not settled yet · 1:52:10";
   - "No marker · the end screen shows at 97%".
-- **Line three**, only for a row without a marker, says why:
-  - `STALE`: "Plex's marker is for an older copy of this file";
-  - `REFUSED`: "Plex's marker at 0:41:07 is too early or too late to trust";
+- **Line three**, only when there's no marker, gives the reason:
+  - `NONE`: "Plex has no marker for this film";
+  - `NO_FINGERPRINT` or `STALE`: "Plex's marker is for an older copy of this file";
   - `OUTSIDE`: "Plex's marker is past the end of this file";
-  - `NONE` with `detected`:
-    - "The detector found credits at 1:52:10", or "The detector wasn't sure", or "The detector found none";
-    - "Not checked by the detector yet";
-    - "The detector's check is out of date".
-  The exact strings live in `state/creditsAdminCopy.js`.
-- **The action** is one secondary pill, **Look and set…**, which opens the row's panel. Row actions are never amber.
+  - `REFUSED`: "Plex's marker at 0:41:07 is too early or too late to trust";
+  - `NO_TIMELINE`: "This film's length isn't known".
+- The strings live in `state/creditsAdminCopy.js`.
+- **The action** is one secondary pill, **Look and set…**, which opens the row's panel. It is never amber.
 
-**The row's panel** (inline under the row, one open at a time; opening another closes the first):
-- **Two stills** at the panel's time and 30 s earlier (floored at 0), from `editionsApi.stillUrl`, 16:9 boxes reserved,
-  `loading="lazy"`, a static skeleton until each loads.
-- **The panel's time** is the row's marker, else the detector's time, else 97% of the runtime.
-  - A 404 shows "No still for this file".
-  - A 503 shows "Still not ready" with a quiet **Try again**, which never retries by itself.
-  - No still is requested until a panel opens, so a page costs nothing on the server's ffmpeg limit of two at once.
-- **The detector's reasons**, when the row has them, as a plain list.
-- **A time field** ("End credits start at", `h:mm:ss` or `m:ss`, prefilled with the panel's time):
+**The row's panel**
+- It opens inline under its row. Only one panel is open at a time.
+- **The panel's time** is the marker, else Plex's `REFUSED` time, else 97% of `runtimeMs`.
+- **Two stills**, at the panel's time and 30 s earlier (floored at 0):
+  - from `editionsApi.stillUrl`, in reserved 16:9 boxes, with a static skeleton until each loads;
+  - no still is requested until a panel opens, so a page puts nothing on the server's two-at-a-time ffmpeg limit;
+  - a failed still (an `<img>` can't tell a 404 from a 503) shows "No still for this time" and a quiet
+    **Try again**, which never retries by itself.
+- **The time field** reads "End credits start at", takes `h:mm:ss` or `m:ss`, and is prefilled with the panel's time.
   - **Show stills** reloads both stills at the typed time.
-  - **Set this time** is the panel's one primary action, which is why it may be amber. It sends the `PUT`.
-  - A typed time that won't parse, or is outside the film, shows `p.admin__field-error` with `aria-invalid` and sends
-    nothing.
-- **Clear my time**, quiet, only on a "Yours" row. Its hint: "Goes back to Plex's marker, or none".
-  It sends the `DELETE`.
+  - **Set this time**, a secondary pill (the Admin button rule allows no other primary), sends the `PUT`.
+  - A time that won't parse, or falls outside the guard's range, shows `p.admin__field-error` with `aria-invalid`
+    and `aria-describedby`, and sends nothing. The range check is computed from `runtimeMs`, matching the server's.
+- **Clear my time** is a quiet button with the hint "Goes back to Plex's marker, or none", shown only on a "Yours"
+  row. It sends the `DELETE`.
+- With no `runtimeMs`, the panel shows line three's text and **Clear my time** where it applies. It has no stills and
+  no time field.
 
 **After a write**
-- A toast confirms the outcome: "End credits set" or "Your time cleared".
-- The page and counts are read again, because the row may leave the current tab.
-- Focus goes to the next row's button, or to the section title when no row is left, through `useFallbackFocus`.
-- A 409 shows the server's text in the panel through `lockText`, and the panel stays open with the typed time.
-- A 400 shows the server's text the same way.
+- A toast says "End credits set" or "Your time cleared", and the same text goes to a live region.
+- The page and its counts are read again.
+- Focus moves through `useFallbackFocus` to the row's own button if the row is still on the page, otherwise the next
+  row's button, otherwise the section title.
+- A 400 or 409 shows the server's text in the panel through `lockText`. The panel stays open and keeps the typed time.
 
-**States**
-- Loading the page: static skeleton rows.
-- A failed read: the inline error banner with **Check again**, as Library's other sections show one.
+**Other states**
+- Loading: static skeleton rows.
+- A failed read: the inline error banner with **Check again**, which reads again.
 - An empty tab: "No films here".
-- An announcement on a live region after a write.
 
 **Code shape**
-- `api/resources.js`: `adminApi.credits(filter, page)`, `setCredits(id, markerMs)`, `clearCredits(id)`. No JSX.
-- `state/creditsAdmin.js` (pure): `parseTime` (the first h:mm:ss parser here, whole seconds), the panel's time, the
-  line-two and line-three text, and the paging text.
-- `state/useCreditsAdmin.js`: the hook.
-- `screens/admin/EndCreditsCard.jsx`, `screens/admin/AdminEndCredits.jsx`, `screens/admin/EndCreditsPanel.jsx`.
-- The route goes beside the `FILE_LISTS` routes in `App.jsx`.
+- `api/resources.js` gains `adminApi.credits(filter, page)`, `setCredits(id, markerMs)` and `clearCredits(id)`.
+- `state/creditsAdmin.js` (pure, no JSX) holds:
+  - `parseTime`, whole seconds; it is the first h:mm:ss parser in the codebase;
+  - the guard range;
+  - the panel's time;
+  - the row text;
+  - the paging text and its step-back.
+- `state/useCreditsAdmin.js` is the hook.
+- `screens/admin/EndCreditsCard.jsx`, `AdminEndCredits.jsx` and `EndCreditsPanel.jsx` are the components.
+- The route sits beside the `FILE_LISTS` routes in `App.jsx`.
 
-**Tests (Vitest, 95/90 per file)**
-- `parseTime`:
-  - `1:52:10`, `52:10`, `0:59`;
-  - rejects `1:60:00`, `1:2:3:4`, empty input, negative times and letters;
-  - the bounds 1,000 ms and total − 1,000.
-- Every copy branch.
-- The panel's time choice.
-- Paging text at the first, a middle and the last page.
-- Components:
-  - opening a panel requests exactly two stills, and none before;
+## PRs (each under 1,500 lines, tests included)
+
+**3b-1a — `plexStatus` and the GET.**
+- `CreditsApplyTest`:
+  - every state in order, with a row and a null fingerprint, and a stale row with a null duration (which is `STALE`);
+  - the guard's bounds, one below, at and one above;
+  - `apply`'s existing cases unchanged.
+- `CreditsAdminServiceTest`:
+  - each filter's rows and the grouped counts adding up, with an unsettled marker counted under `none`;
+  - hidden editions left out;
+  - `runtimeMs` null without a timeline;
+  - `editionCount`.
+- `CreditsAdminControllerTest` (MockMvc): each bad parameter gives a 400, and the JSON field names the frontend
+  reads. No field outside `CreditsRow`'s list above, so no version 2 field.
+- `CreditsAdminIntegrationTest` (Testcontainers):
+  - seeded editions in every filter;
+  - the hidden predicate agreeing with `hiddenFromBrowse()` for each hidden case;
+  - order and paging across a page boundary;
+  - a fixed statement count per page.
+
+**3b-1b — PUT and DELETE.**
+- `CreditsAdminServiceTest`:
+  - PUT one second below, at and one second above both guard bounds, with a timeline total that isn't a whole
+    second (for example 7,200,500 ms);
+  - a non-whole second;
+  - no timeline;
+  - unknown and hidden editions;
+  - `OWNER` over `PLEX`;
+  - DELETE on `OWNER`: back to `PLEX` from a usable row, and cleared without one;
+  - DELETE on a stale `PLEX` edition, which is left alone;
+  - both writes answering 409 without writing when the lock is held, and releasing the lock after a failure.
+  - These assert saved marker and source, never repository call counts.
+- `CreditsAdminControllerTest`: the 400, 404 and 409 bodies.
+- `CreditsAdminIntegrationTest`: a PUT then DELETE round trip, and the lock released only after the commit (a second
+  thread's `tryAcquire` fails until the write has committed).
+
+**3b-2a — the card and the read-only list.**
+- `parseTime` isn't in this PR.
+- Pure tests:
+  - the row text for every state and source;
+  - the panel's time choice;
+  - the paging text at the first, a middle and the last page;
+  - the step-back.
+- Component tests:
+  - the card's tiles and link;
+  - tabs with their roles and `?show=`;
+  - Previous and Next;
+  - the skeleton, the failed read and Check again re-reading;
+  - the empty tab;
+  - opening a panel requests exactly two stills, and no still is requested before;
   - one panel open at a time;
-  - 404 and 503 stills, with Try again;
-  - Set, Clear and their 400 and 409 paths;
-  - the focus target after a write empties the tab;
-  - the tab in the URL;
-  - Clear shown only on a "Yours" row.
+  - a failed still and Try again;
+  - no stills without `runtimeMs`.
 
-**Split if over 1,500 lines:** 3b-2a, the card, the list and the panel with its stills (read-only); 3b-2b, the
-time field, Set and Clear.
+**3b-2b — the time field, Set and Clear.**
+- `parseTime`:
+  - accepts `1:52:10`, `52:10` and `0:59`;
+  - refuses `1:60:00`, `1:2:3:4`, empty input, negative values and letters.
+- The guard range one second either side of both bounds, with a non-whole-second runtime.
+- Component tests:
+  - Set and Clear with the toast and live-region text;
+  - 400 and 409 keeping the panel and the typed time;
+  - `aria-invalid` and the error description;
+  - focus landing on the row's button, the next row's, or the section title;
+  - Clear only on a "Yours" row;
+  - the page stepping back after the last row leaves.
 
 ## Not in this plan
 
-- **Use detected** (back to `AUTO`) arrives with 3c.
+- Version 2's verdict, reasons and **Use detected**, all with 3c.
 - Re-evaluating in-progress states when a marker changes, as 3a accepted.
-- A dedicated "Admin: End credits" screen in the handover. Admin "can be plain" (handover §3), and the Admin redesign's
-  button, row and card rules above are the reference.
+- A handover screen for this list. Admin "can be plain" (handover §3), and the Admin redesign's button, row and card
+  rules are the reference.
