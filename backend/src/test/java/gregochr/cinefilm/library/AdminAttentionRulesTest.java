@@ -52,9 +52,12 @@ class AdminAttentionRulesTest extends ApiTestBase {
             groupingChanges, editions);
     }
 
+    private long nextTmdbId = 500;
+
     /** One film with one edition per path, each 100 minutes (or the given runtime) long. */
     private Film filmOf(String title, boolean confirmed, long[] runtimesMin, String... paths) {
         Film film = film(null, title, 2000, NOW);
+        film.setTmdbId(nextTmdbId++);
         film.setEditionsConfirmed(confirmed);
         for (int i = 0; i < paths.length; i++) {
             long minutes = runtimesMin.length > i ? runtimesMin[i] : 100;
@@ -88,6 +91,7 @@ class AdminAttentionRulesTest extends ApiTestBase {
     @Test
     void aSplitFilmJoinedIntoOneEditionIsNotListed() {
         Film towers = film(null, "The Two Towers", 2002, NOW);
+        towers.setTmdbId(nextTmdbId++);
         Edition edition = edition(towers, null, "Original", 200 * MIN, null);
         file(edition, "The Two Towers pt1.m4v").setPartNumber(1);
         file(edition, "The Two Towers pt2.m4v").setPartNumber(2);
@@ -214,6 +218,7 @@ class AdminAttentionRulesTest extends ApiTestBase {
 
     private Film twoPartFilm(boolean confirmed, String secondCodec, String secondFormat) {
         Film film = film(null, "The Two Towers", 2002, NOW);
+        film.setTmdbId(nextTmdbId++);
         film.setEditionsConfirmed(confirmed);
         Edition edition = edition(film, null, "Original", 200 * MIN, null);
         MediaFile one = file(edition, "The Two Towers pt1.m4v");

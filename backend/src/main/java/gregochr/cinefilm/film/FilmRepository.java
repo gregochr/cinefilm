@@ -53,6 +53,22 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /** Films in the given match state. */
     List<Film> findByMatchStatusOrderBySortTitle(MatchStatus status);
 
+    /**
+     * Films the owner has to match: those marked {@code NEEDS_MATCH}, and any other film with no TMDB id (a Plex import
+     * can leave one {@code MATCHED} without an id). A {@code PENDING} film with no id is waiting for the next scan's
+     * lookup, so it is left out. Sorted by title.
+     */
+    @org.springframework.data.jpa.repository.Query("select f from Film f where f.matchStatus = "
+        + "gregochr.cinefilm.film.MatchStatus.NEEDS_MATCH or (f.tmdbId is null and f.matchStatus <> "
+        + "gregochr.cinefilm.film.MatchStatus.PENDING) order by f.sortTitle")
+    List<Film> findNeedingMatch();
+
+    /** How many films {@link #findNeedingMatch()} lists. */
+    @org.springframework.data.jpa.repository.Query("select count(f) from Film f where f.matchStatus = "
+        + "gregochr.cinefilm.film.MatchStatus.NEEDS_MATCH or (f.tmdbId is null and f.matchStatus <> "
+        + "gregochr.cinefilm.film.MatchStatus.PENDING)")
+    long countNeedingMatch();
+
     /** Ids of films whose ratings were never fetched or were fetched before the cutoff: never first, then oldest. */
     @org.springframework.data.jpa.repository.Query(
         "select f.id from Film f where f.ratingsFetchedAt is null or f.ratingsFetchedAt < :cutoff "

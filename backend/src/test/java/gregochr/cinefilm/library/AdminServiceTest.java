@@ -57,6 +57,7 @@ class AdminServiceTest extends ApiTestBase {
     @Autowired
     private EntityManager em;
 
+    private long nextTmdbId = 700;
     private ScanService scans;
     private RatingsRefresher ratings;
     private OpenSubtitlesRefresher subtitleSearch;
@@ -150,14 +151,23 @@ class AdminServiceTest extends ApiTestBase {
                        Presence presence) {
         Film film = film(null, title, year, NOW);
         film.setMatchStatus(status);
+        if (status == MatchStatus.MATCHED) {
+            film.setTmdbId(nextTmdbId++);
+        }
         MediaFile file = file(edition(film, null, "Original", 100 * MIN, null), path);
         file.setPlayability(playability);
         file.setPresence(presence);
         return save(film);
     }
 
+    private Film withTmdbId(Film film) {
+        film.setTmdbId(nextTmdbId++);
+        return film;
+    }
+
     private Film split(String title, String secondCodec) {
         Film film = film(null, title, 2002, NOW);
+        film.setTmdbId(nextTmdbId++);
         Edition edition = edition(film, null, "Original", 200 * MIN, null);
         file(edition, title + " pt1.m4v").setPartNumber(1);
         MediaFile two = file(edition, title + " pt2.m4v");
@@ -168,10 +178,30 @@ class AdminServiceTest extends ApiTestBase {
 
     private Film twoCopies(String title, boolean confirmed) {
         Film film = film(null, title, 2000, NOW);
+        film.setTmdbId(nextTmdbId++);
         film.setEditionsConfirmed(confirmed);
         file(edition(film, null, "A", 100 * MIN, null), "a/" + title + ".m4v");
         file(edition(film, null, "B", 100 * MIN, null), "b/" + title + ".m4v");
         return save(film);
+    }
+
+    @Test
+    void aFilmWithNoTmdbIdNeedsAMatchWhateverItsStatusAndAFilmWithOneDoesNot() {
+        Film noId = saved("No id", 2008, "noid.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        noId.setTmdbId(null);
+        films.save(noId);
+        saved("With id", 2009, "id.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        saved("Flagged", 2010, "flag.m4v", MatchStatus.NEEDS_MATCH, Playability.PLAYABLE, Presence.PRESENT);
+        saved("Waiting", 2011, "wait.m4v", MatchStatus.PENDING, Playability.PLAYABLE, Presence.PRESENT);
+        em.flush();
+        em.clear();
+
+        List<String> titles = admin.attention().items().stream().filter(i -> i.kind().equals("needs-match"))
+            .map(AttentionItem::title).toList();
+
+        assertThat(titles).containsExactly("Flagged", "No id");
+        assertThat(admin.summaryFigures().needsMatch()).isEqualTo(2);
+        assertThat(admin.status().counts().needsMatch()).isEqualTo(2);
     }
 
     @Test
@@ -183,8 +213,8 @@ class AdminServiceTest extends ApiTestBase {
         twoCopies("Alien", true);
         split("Towers", "H264");
         saved("Gone", 1999, "gone.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.MISSING);
-        save(film(null, "Bare", 2001, NOW));
-        edition(save(film(null, "Empty edition", 2003, NOW)), null, "Original", 100 * MIN, null);
+        save(withTmdbId(film(null, "Bare", 2001, NOW)));
+        edition(save(withTmdbId(film(null, "Empty edition", 2003, NOW))), null, "Original", 100 * MIN, null);
         run(NOW.minus(Duration.ofHours(5)), NOW.minus(Duration.ofHours(5)).plusSeconds(90), 12, 3, 1, "a note");
         em.flush();
         em.clear();

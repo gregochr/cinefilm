@@ -377,6 +377,31 @@ class PlexFilmWriterUnitTest {
     }
 
     @Test
+    void aPlexFilmWithNoTmdbIdLeavesAPendingFilmPendingSoTheScanRetriesItsLookup() {
+        first.setTmdbId(null);
+        first.setMatchStatus(MatchStatus.PENDING);
+        survivorAfterwards(first);
+
+        writer.apply(write(plex(null), List.of(100L), null, null, null));
+
+        assertThat(first.getTitle()).isEqualTo("Heat (Plex)");
+        assertThat(first.getMatchStatus()).isEqualTo(MatchStatus.PENDING);
+    }
+
+    @Test
+    void aPlexFilmWithNoTmdbIdLeavesANeedsMatchFilmAndItsCandidates() {
+        first.setTmdbId(null);
+        first.setMatchStatus(MatchStatus.NEEDS_MATCH);
+        first.setMatchCandidates("[{}]");
+        survivorAfterwards(first);
+
+        writer.apply(write(plex(null), List.of(100L), null, null, null));
+
+        assertThat(first.getMatchStatus()).isEqualTo(MatchStatus.NEEDS_MATCH);
+        assertThat(first.getMatchCandidates()).isEqualTo("[{}]");
+    }
+
+    @Test
     void aBarePlexFilmChangesNothingButTheMatch() {
         first.setMatchStatus(MatchStatus.PENDING);
         when(films.findByTmdbIdOrderByIdAsc(949L)).thenReturn(List.of(first));
