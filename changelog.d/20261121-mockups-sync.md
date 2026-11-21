@@ -1,0 +1,1 @@
+- The design mock-ups show the current Home caption ("A new theme each week") and the Christmas period to 25 Dec.
