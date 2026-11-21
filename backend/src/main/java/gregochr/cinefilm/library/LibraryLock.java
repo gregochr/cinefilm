@@ -41,7 +41,8 @@ public class LibraryLock {
     /**
      * Takes the lock if it is free.
      *
-     * @param who {@link #SCAN}, {@link #IMPORT} or {@link #MATCH}
+     * @param who the holder's name: {@link #SCAN}, {@link #IMPORT}, {@link #MATCH}, {@link #EDIT},
+     *     {@link #SUBTITLE}, {@link #CREDITS}, {@link #PLEX_CREDITS} or {@link #CHRISTMAS}
      * @return true when the caller now holds it
      */
     public boolean tryAcquire(String who) {

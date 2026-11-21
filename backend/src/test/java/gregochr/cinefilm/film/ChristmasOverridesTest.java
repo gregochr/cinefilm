@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -30,35 +29,13 @@ class ChristmasOverridesTest {
     }
 
     @Test
-    void includesAndExcludesAreTheTmdbIdsOfTheRowsWithThatChoice() {
-        when(repository.findByChoice(ChristmasChoice.INCLUDE)).thenReturn(List.of(
-            new ChristmasOverride(1572L, ChristmasChoice.INCLUDE, NOW),
-            new ChristmasOverride(5555L, ChristmasChoice.INCLUDE, NOW)));
-        when(repository.findByChoice(ChristmasChoice.EXCLUDE)).thenReturn(List.of(
-            new ChristmasOverride(562L, ChristmasChoice.EXCLUDE, NOW)));
+    void anEmptyTableGivesAnEmptySnapshot() {
+        when(repository.findAll()).thenReturn(List.of());
 
-        assertThat(service().includes()).containsExactlyInAnyOrder(1572L, 5555L);
-        assertThat(service().excludes()).containsExactly(562L);
-    }
+        ChristmasOverrides.Snapshot snapshot = service().snapshot();
 
-    @Test
-    void anEmptyTableGivesEmptySets() {
-        when(repository.findByChoice(ChristmasChoice.INCLUDE)).thenReturn(List.of());
-        when(repository.findByChoice(ChristmasChoice.EXCLUDE)).thenReturn(List.of());
-
-        assertThat(service().includes()).isEmpty();
-        assertThat(service().excludes()).isEmpty();
-    }
-
-    @Test
-    void theSetsCannotBeChangedByTheCaller() {
-        when(repository.findByChoice(ChristmasChoice.INCLUDE)).thenReturn(List.of(
-            new ChristmasOverride(1L, ChristmasChoice.INCLUDE, NOW)));
-
-        Set<Long> includes = service().includes();
-
-        assertThatThrownBy(() -> includes.add(2L))
-            .isInstanceOf(UnsupportedOperationException.class);
+        assertThat(snapshot.include()).isEmpty();
+        assertThat(snapshot.exclude()).isEmpty();
     }
 
     @Test
@@ -99,5 +76,19 @@ class ChristmasOverridesTest {
         service().remove(700L);
 
         verify(repository).deleteById(700L);
+    }
+
+    @Test
+    void aSnapshotSplitsOneReadOfTheTableIntoBothSets() {
+        when(repository.findAll()).thenReturn(List.of(
+            new ChristmasOverride(1572L, ChristmasChoice.INCLUDE, NOW),
+            new ChristmasOverride(562L, ChristmasChoice.EXCLUDE, NOW),
+            new ChristmasOverride(5555L, ChristmasChoice.INCLUDE, NOW)));
+
+        ChristmasOverrides.Snapshot snapshot = service().snapshot();
+
+        assertThat(snapshot.include()).containsExactlyInAnyOrder(1572L, 5555L);
+        assertThat(snapshot.exclude()).containsExactly(562L);
+        assertThatThrownBy(() -> snapshot.include().add(1L)).isInstanceOf(UnsupportedOperationException.class);
     }
 }

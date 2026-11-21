@@ -299,4 +299,36 @@ class KeywordsRefresherTest {
     private KeywordsRefresher synchronous() {
         return new KeywordsRefresher(tmdb, films, store, CLOCK, Runnable::run);
     }
+
+    @Test
+    void aRunThatFinishesCleanlyIsNotIncompleteAndAnOutageOrAFailureIs() {
+        when(films.findWithoutKeywords()).thenReturn(List.of(HEAT));
+        when(tmdb.keywords(949)).thenThrow(new TmdbUnavailableException("TMDB is down", null));
+        startAndRun();
+        assertThat(refresher.lastRunIncomplete()).as("outage").isTrue();
+
+        queued.clear();
+        when(films.findWithoutKeywords()).thenReturn(List.of());
+        startAndRun();
+        assertThat(refresher.lastRunIncomplete()).as("clean run after it").isFalse();
+
+        queued.clear();
+        when(films.findWithoutKeywords()).thenReturn(List.of(AMELIE));
+        when(tmdb.keywords(194)).thenThrow(new IllegalStateException("bad json"));
+        startAndRun();
+        assertThat(refresher.lastRunIncomplete()).as("a film that fails").isTrue();
+
+        queued.clear();
+        when(films.findWithoutKeywords()).thenThrow(new IllegalStateException("database down"));
+        startAndRun();
+        assertThat(refresher.lastRunIncomplete()).as("listing fails").isTrue();
+    }
+
+    @Test
+    void isEnabledSaysWhetherATmdbTokenIsConfigured() {
+        when(tmdb.enabled()).thenReturn(false, true);
+
+        assertThat(refresher.isEnabled()).isFalse();
+        assertThat(refresher.isEnabled()).isTrue();
+    }
 }

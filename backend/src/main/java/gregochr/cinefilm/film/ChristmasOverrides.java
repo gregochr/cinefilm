@@ -1,8 +1,8 @@
 package gregochr.cinefilm.film;
 
 import java.time.Clock;
+import java.util.HashSet;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,16 +23,19 @@ public class ChristmasOverrides {
         this.clock = clock;
     }
 
-    /** The TMDB ids of the films the owner included. */
-    @Transactional(readOnly = true)
-    public Set<Long> includes() {
-        return ids(ChristmasChoice.INCLUDE);
+    /** Both sets of the owner's choices, read together. */
+    public record Snapshot(Set<Long> include, Set<Long> exclude) {
     }
 
-    /** The TMDB ids of the films the owner excluded. */
+    /** Both sets from one read of the table (Home asks on every load, so it is one query, not two). */
     @Transactional(readOnly = true)
-    public Set<Long> excludes() {
-        return ids(ChristmasChoice.EXCLUDE);
+    public Snapshot snapshot() {
+        Set<Long> include = new HashSet<>();
+        Set<Long> exclude = new HashSet<>();
+        for (ChristmasOverride row : repository.findAll()) {
+            (row.getChoice() == ChristmasChoice.INCLUDE ? include : exclude).add(row.getTmdbId());
+        }
+        return new Snapshot(Set.copyOf(include), Set.copyOf(exclude));
     }
 
     /**
@@ -49,10 +52,5 @@ public class ChristmasOverrides {
     @Transactional
     public void remove(long tmdbId) {
         repository.deleteById(tmdbId);
-    }
-
-    private Set<Long> ids(ChristmasChoice choice) {
-        return repository.findByChoice(choice).stream().map(ChristmasOverride::getTmdbId)
-            .collect(Collectors.toUnmodifiableSet());
     }
 }

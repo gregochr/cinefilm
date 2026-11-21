@@ -47,9 +47,6 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     @org.springframework.data.jpa.repository.Query("select f from Film f where size(f.editions) > 1 order by f.id")
     List<Film> findWithSeveralEditions();
 
-    /** How many films are in the given match state. */
-    long countByMatchStatus(MatchStatus status);
-
     /** Films in the given match state. */
     List<Film> findByMatchStatusOrderBySortTitle(MatchStatus status);
 

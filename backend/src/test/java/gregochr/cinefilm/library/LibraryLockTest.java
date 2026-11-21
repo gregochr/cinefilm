@@ -75,7 +75,7 @@ class LibraryLockTest {
         ScanService scans = scans();
 
         assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
-            .hasMessage("A subtitle is being changed");
+            .hasMessage("Subtitles are being changed or checked; try again in a moment");
 
         assertThat(queued).isEmpty();
         assertThat(lock.heldBy(LibraryLock.SUBTITLE)).isTrue();
@@ -87,7 +87,7 @@ class LibraryLockTest {
         ScanService scans = scans();
 
         assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
-            .hasMessage("Credits are being saved");
+            .hasMessage("Credits are being saved; try again in a moment");
 
         assertThat(queued).isEmpty();
         assertThat(lock.heldBy(LibraryLock.CREDITS)).isTrue();
@@ -99,7 +99,7 @@ class LibraryLockTest {
         ScanService scans = scans();
 
         assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
-            .hasMessage("Credits from Plex are being saved");
+            .hasMessage("Plex credits are being imported; try again in a moment");
 
         assertThat(queued).isEmpty();
         assertThat(lock.heldBy(LibraryLock.PLEX_CREDITS)).isTrue();
@@ -111,7 +111,7 @@ class LibraryLockTest {
         ScanService scans = scans();
 
         assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
-            .hasMessage("A match is being fixed");
+            .hasMessage("A film match is being fixed; try again in a moment");
 
         assertThat(queued).isEmpty();
         assertThat(lock.heldBy(LibraryLock.MATCH)).isTrue();
@@ -123,7 +123,7 @@ class LibraryLockTest {
         ScanService scans = scans();
 
         assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
-            .hasMessage("Christmas films are being changed");
+            .hasMessage("Christmas films are being changed; try again in a moment");
 
         assertThat(queued).isEmpty();
         assertThat(lock.heldBy(LibraryLock.CHRISTMAS)).isTrue();
@@ -145,7 +145,7 @@ class LibraryLockTest {
         ScanService scans = scans();
 
         assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
-            .hasMessage("Editions are being edited");
+            .hasMessage("Editions are being edited; try again in a moment");
 
         assertThat(queued).isEmpty();
         assertThat(lock.heldBy(LibraryLock.EDIT)).isTrue();

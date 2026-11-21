@@ -198,10 +198,7 @@ public class FixMatch {
         locked(() -> {
             tx.executeWithoutResult(status -> {
                 Film film = films.findById(filmId).orElseThrow(() -> new NotFoundException("No film " + filmId));
-                MatchStatus now = film.getMatchStatus();
-                boolean listed = now == MatchStatus.NEEDS_MATCH || (film.getTmdbId() == null
-                    && now != MatchStatus.PENDING && now != MatchStatus.LEFT_UNMATCHED);
-                if (!listed) {
+                if (!film.needsMatch()) {
                     throw new ConflictException("This film is not waiting for a match");
                 }
                 film.setMatchStatus(MatchStatus.LEFT_UNMATCHED);

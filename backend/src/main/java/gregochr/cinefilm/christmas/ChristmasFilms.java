@@ -129,36 +129,37 @@ public class ChristmasFilms {
     /**
      * Each film's Christmas state, in the order asked; ids that match no film are left out.
      *
-     * @throws BadRequestException when more than {@link #MAX_STATES} ids are asked for
+     * @throws BadRequestException when more than {@link #MAX_STATES} ids are asked for, or an id is blank
      */
     public List<FilmState> states(List<Long> filmIds) {
+        if (filmIds.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new BadRequestException("Each film id must be a number");
+        }
         Set<Long> ids = new LinkedHashSet<>(filmIds);
         if (ids.size() > MAX_STATES) {
             throw new BadRequestException("Ask for at most " + MAX_STATES + " films at a time");
         }
         return readTx.execute(status -> {
-            Set<Long> include = overrides.includes();
-            Set<Long> exclude = overrides.excludes();
+            ChristmasOverrides.Snapshot choices = overrides.snapshot();
             Map<Long, Film> byId = new HashMap<>();
             films.findAllById(ids).stream().filter(Film::browsable).forEach(f -> byId.put(f.getId(), f));
             return ids.stream().map(byId::get).filter(Objects::nonNull)
-                .map(f -> new FilmState(f.getId(), f.getTmdbId(), stateOf(f, include, exclude))).toList();
+                .map(f -> new FilmState(f.getId(), f.getTmdbId(),
+                    stateOf(f, choices.include(), choices.exclude()))).toList();
         });
     }
 
+    /** Membership is {@link WeeklyThemeSelector#isChristmas}, the rule Home uses; this only words the answer. */
     private static State stateOf(Film film, Set<Long> include, Set<Long> exclude) {
+        if (WeeklyThemeSelector.isChristmas(film, include, exclude)) {
+            return tagged(film) ? State.IN_KEYWORD : State.IN_ADDED;
+        }
         Long tmdbId = film.getTmdbId();
         if (tmdbId == null) {
             return State.NO_TMDB_ID;
         }
         if (exclude.contains(tmdbId)) {
             return State.LEFT_OUT;
-        }
-        if (tagged(film)) {
-            return State.IN_KEYWORD;
-        }
-        if (include.contains(tmdbId)) {
-            return State.IN_ADDED;
         }
         return film.getKeywordsFetchedAt() == null ? State.KEYWORDS_PENDING : State.NOT_IN;
     }
@@ -169,7 +170,7 @@ public class ChristmasFilms {
      * holding the id carries the keyword; otherwise the untagged one still needs it.
      */
     private void dropRedundantIncludes() {
-        Set<Long> included = overrides.includes();
+        Set<Long> included = overrides.snapshot().include();
         if (included.isEmpty()) {
             return;
         }
@@ -183,9 +184,9 @@ public class ChristmasFilms {
 
     private ChristmasView build() {
         List<Film> library = loader.loadAll().stream().map(FilmView::film).toList();
-        Set<Long> include = overrides.includes();
-        Set<Long> exclude = overrides.excludes();
-        List<Item> inWeek = WeeklyThemeSelector.christmasFilms(library, include, exclude).stream()
+        ChristmasOverrides.Snapshot choices = overrides.snapshot();
+        Set<Long> exclude = choices.exclude();
+        List<Item> inWeek = WeeklyThemeSelector.christmasFilms(library, choices.include(), exclude).stream()
             .map(f -> item(f, tagged(f) ? Reason.KEYWORD : Reason.ADDED)).toList();
         List<Item> added = inWeek.stream().filter(i -> i.reason() == Reason.ADDED).toList();
         List<LeftOutItem> leftOut = library.stream()
@@ -194,11 +195,18 @@ public class ChristmasFilms {
             .map(f -> new LeftOutItem(f.getId(), f.getTmdbId(), f.getTitle(), f.getYear(), f.getPosterPath(),
                 tagged(f)))
             .toList();
+        long fetched = films.countByTmdbIdIsNotNullAndKeywordsFetchedAtIsNotNull();
+        long total = films.countByTmdbIdIsNotNull();
+        boolean running = keywords.isRunning();
+        boolean enabled = keywords.isEnabled();
+        boolean incomplete = keywords.lastRunIncomplete();
+        // Stalled: films are waiting, nothing is running, and nothing will fetch them (TMDB off, or the last run fell
+        // short).
+        boolean stalled = !running && fetched < total && (!enabled || incomplete);
         HolidayWeeks.Week week = HolidayWeeks.christmasWeekFrom(LocalDate.now(clock));
         return new ChristmasView(new WeekDto(week.start(), week.end()),
             new Limits(WeeklyThemeSelector.MAX_FILMS, WeeklyThemeSelector.MIN_FILMS),
-            new Keywords(films.countByTmdbIdIsNotNullAndKeywordsFetchedAtIsNotNull(), films.countByTmdbIdIsNotNull(),
-                keywords.isRunning()),
+            new Keywords(fetched, total, running, enabled, stalled),
             inWeek, added, leftOut, inWeek.size() < WeeklyThemeSelector.MIN_FILMS);
     }
 
@@ -208,6 +216,6 @@ public class ChristmasFilms {
     }
 
     private static boolean tagged(Film film) {
-        return film.getKeywords().contains(WeeklyThemeSelector.CHRISTMAS_KEYWORD);
+        return WeeklyThemeSelector.hasChristmasKeyword(film);
     }
 }
