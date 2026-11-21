@@ -168,18 +168,21 @@ describe('ChristmasList: the row actions', () => {
   it('calls onAct with the row on a click, and on Enter from the keyboard', async () => {
     const data = christmasFixture();
     const { onAct } = setup({ rows: data.inWeek });
-    await userEvent.click(screen.getByRole('button', { name: 'Leave out Die Hard' }));
-    expect(onAct).toHaveBeenLastCalledWith(data.inWeek[5]);
-    screen.getByRole('button', { name: 'Leave out Gremlins' }).focus();
+    const die = screen.getByRole('button', { name: 'Leave out Die Hard' });
+    await userEvent.click(die);
+    // The row, the pressed button, and whether the press came from the keyboard (not a pointer).
+    expect(onAct).toHaveBeenLastCalledWith(data.inWeek[5], die, false);
+    const gremlins = screen.getByRole('button', { name: 'Leave out Gremlins' });
+    gremlins.focus();
     await userEvent.keyboard('{Enter}');
-    expect(onAct).toHaveBeenLastCalledWith(data.inWeek[4]);
+    expect(onAct).toHaveBeenLastCalledWith(data.inWeek[4], gremlins, true);
   });
 
   it('still works on the dimmed rows below the cut', async () => {
     const data = christmasFixture();
     const { onAct } = setup({ rows: data.inWeek });
     await userEvent.click(screen.getByRole('button', { name: 'Leave out Arthur Christmas' }));
-    expect(onAct).toHaveBeenCalledWith(data.inWeek[13]);
+    expect(onAct).toHaveBeenCalledWith(data.inWeek[13], expect.any(HTMLElement), false);
   });
 
   it('holds only the busy row: it is aria-disabled and a click does nothing', async () => {

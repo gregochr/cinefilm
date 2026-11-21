@@ -438,6 +438,58 @@ describe('Christmas films: changes and undo', () => {
     expect(toast()).toBeEmptyDOMElement();
   });
 
+  it('after a keyboard row action holds the toast while focus rests on the moved-to button, and counts 8 seconds from Tab', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const original = fresh();
+    serve({ put: () => respond(leftOut(original, 106)) });
+    await open();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await user.keyboard('{Enter}');
+    const next = await screen.findByRole('button', { name: 'Leave out Scrooged' });
+    await waitFor(() => expect(next).toHaveFocus());
+
+    act(() => vi.advanceTimersByTime(20000));
+    expect(toast()).toHaveTextContent('Left out Die Hard.');
+    await user.tab();
+    expect(next).not.toHaveFocus();
+    act(() => vi.advanceTimersByTime(7900));
+    expect(toast()).toHaveTextContent('Left out Die Hard.');
+    act(() => vi.advanceTimersByTime(200));
+    expect(toast()).toBeEmptyDOMElement();
+  });
+
+  it('leaves focus alone when the owner moved it before the answer came', async () => {
+    const original = fresh();
+    const gate = deferred();
+    serve({
+      get: () => original,
+      put: () => gate.promise,
+    });
+    await open();
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await userEvent.keyboard('{Enter}');
+    const tab = screen.getByRole('tab', { name: /Added by me/ });
+    tab.focus();
+    await act(async () => gate.resolve(respond(leftOut(original, 106))));
+    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'Die Hard' })).toBeNull());
+    expect(tab).toHaveFocus();
+  });
+
+  it('leaves focus in the search field when the owner went there before the answer came', async () => {
+    const original = fresh();
+    const gate = deferred();
+    serve({ put: () => gate.promise });
+    await open();
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await userEvent.keyboard('{Enter}');
+    const field = screen.getByRole('combobox');
+    field.focus();
+    await act(async () => gate.resolve(respond(leftOut(original, 106))));
+    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'Die Hard' })).toBeNull());
+    expect(field).toHaveFocus();
+  });
+
   it('replaces the toast with a newer action, and it goes after 8 seconds', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const original = fresh();

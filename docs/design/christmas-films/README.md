@@ -186,8 +186,11 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 - The empty state ("No Christmas films yet") shows only when In Christmas week, Added by me **and** Left out by me are all empty, not when In and Added alone are. A film left out must stay reachable, with its Put back button.
 - After Leave out, Put back or Remove on a list row, focus goes to the same row's button if it is still listed, else the
   next row's button, else the tab panel. It does not go to the toast's Undo (that sent a keyboard user back through the
-  whole list after every change, and held the toast while focus stayed on Undo). Undo stays reachable by Tab and the
-  pointer, and using it returns focus to the row. The search panel and sheet keep their own focus behaviour.
+  whole list after every change). Undo stays reachable because the toast is held while focus is on the button focus was
+  moved to, and counts down its 8 seconds once focus leaves it (the pointer keeps the plain 8 seconds); using Undo
+  returns focus to the row. Focus moves only if it is still on the pressed button (or lost with its row): if the owner
+  switched tab or went to the search field meanwhile, it stays there. The search panel and sheet keep their own focus
+  behaviour.
 - On a phone the rank number sits inline before the title (design `05`), not in its own column; the year is muted in
   list and search rows.
 - Singular wording: "This 1 is in, but won't fit" / "This 1 won't fit" and "The other 1 is on its way". When the

@@ -49,7 +49,7 @@ function ChristmasRow({ row, number, cut, tab, busy, onAct, buttonRef }) {
         className="xmas-row__action"
         aria-label={`${action.label} ${row.title}`}
         aria-disabled={busy || undefined}
-        onClick={busy ? undefined : () => onAct(row)}
+        onClick={busy ? undefined : (event) => onAct(row, event.currentTarget, event.detail === 0)}
       >
         {action.label}
       </Button>

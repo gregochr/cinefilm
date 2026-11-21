@@ -188,13 +188,14 @@
 }
 .xmas-row__num-inline {
   display: none;
-  margin-right: 8px;
+  margin-right: 6px;
   font-family: var(--cf-font-mono);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--cf-text-muted);
 }
 .xmas-year {
   color: var(--cf-text-muted);
+  font-weight: 400;
 }
 .xmas-row__poster {
   width: 40px;

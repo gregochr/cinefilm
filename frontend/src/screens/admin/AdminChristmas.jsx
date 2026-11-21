@@ -77,6 +77,7 @@ function EmptyPanel({ kind, keywords, panelRef }) {
  */
 export default function AdminChristmas() {
   const state = useChristmas();
+  const { keepToast } = state;
   const { openFixMatch, changed } = useAdminContext();
   const { data, version, loading, error, busy, toast, focusRequest, refresh, pinToast } = state;
   const [tab, setTab] = useState('inWeek');
@@ -150,10 +151,29 @@ export default function AdminChristmas() {
       return;
     }
     if (focusRequest.undo) {
-      const ids = followingRows.current.get(focusRequest.filmId) ?? [focusRequest.filmId];
+      const entry = followingRows.current.get(focusRequest.filmId);
+      const ids = entry?.ids ?? [focusRequest.filmId];
       followingRows.current.delete(focusRequest.filmId);
-      const next = ids.map((id) => buttons.current.get(id)).find(Boolean);
-      (next ?? panel.current)?.focus();
+      // Focus moves on only if it is still where the press left it (or was lost with the row); anything the owner
+      // did meanwhile (another tab, the search field) keeps it.
+      const pressed = entry?.opener;
+      if (!(lost || active === pressed)) return;
+      const target = ids.map((id) => buttons.current.get(id)).find(Boolean) ?? panel.current;
+      if (!target) return;
+      target.focus();
+      if (!entry?.keyboard) return;
+      // Undo sits after the whole list: after a keyboard press the toast waits while focus rests here, and counts down once it leaves.
+      keepToast(true);
+      const leave = () => {
+        document.removeEventListener('focusin', onIn);
+        target.removeEventListener('blur', leave);
+        keepToast(false);
+      };
+      const onIn = (event) => {
+        if (event.target !== target) leave();
+      };
+      target.addEventListener('blur', leave);
+      document.addEventListener('focusin', onIn);
       return;
     }
     const button =
@@ -165,7 +185,7 @@ export default function AdminChristmas() {
       return;
     }
     if (lost) (sheetField ?? panel.current)?.focus();
-  }, [focusRequest]);
+  }, [focusRequest, keepToast]);
 
   // The preview sheet goes when the window is widened or the lists empty. Its open state goes with it, so it does not
   // come back unasked when the window narrows again, and focus (it was on the sheet) moves to a live element.
@@ -193,12 +213,13 @@ export default function AdminChristmas() {
   if (data) {
     const empty = emptyKind(data);
     const rows = empty ? [] : tabRows(data, tab);
-    const act = (row) => {
+    const act = (row, opener, keyboard) => {
       const at = rows.findIndex((r) => r.filmId === row.filmId);
-      followingRows.current.set(
-        row.filmId,
-        rows.slice(Math.max(at, 0)).map((r) => r.filmId),
-      );
+      followingRows.current.set(row.filmId, {
+        ids: rows.slice(Math.max(at, 0)).map((r) => r.filmId),
+        opener: opener ?? null,
+        keyboard: keyboard === true,
+      });
       return state.change(row);
     };
     // The controls row is in the same place with or without lists, so adding the first film from the empty screen
