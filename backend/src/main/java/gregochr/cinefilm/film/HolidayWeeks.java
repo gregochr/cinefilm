@@ -7,9 +7,10 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Optional;
 
 /**
- * The two holiday periods of the Home weekly theme. Each starts on a Monday, so the theme still changes on a Monday,
- * and runs until the day itself: Halloween from the Monday on or before 24 October through 31 October, Christmas from
- * the Monday on or before 18 December through 25 December (both ends included; 8 to 14 days).
+ * The two holiday periods of the Home weekly theme. Each starts on a Monday and runs until the day itself (so the
+ * ordinary rotation returns on 1 Nov and 26 Dec, which need not be a Monday): Halloween from the Monday on or before
+ * 24 October through 31 October, Christmas from the Monday on or before 18 December through 25 December (both ends
+ * included; 8 to 14 days).
  */
 public final class HolidayWeeks {
 

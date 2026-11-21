@@ -14,7 +14,7 @@ Christmas is the hard part (Die Hard, Gremlins, Trading Places, Home Alone...).
    keyword (id 207317), unless the owner excludes it, or it is on the owner's include list. Die Hard carries the tag.
 2. **Periods: from the Monday on or before 24 Oct (Halloween) and 18 Dec (Christmas)**, each running to the day
    itself (31 Oct, 25 Dec; see the 2026-11-21 update, which replaced Monday to Sunday). In 2026: Mon 19 Oct and
-   Mon 14 Dec. Each starts on a Monday, so the Monday rollover and the caption stay true.
+   Mon 14 Dec. Each starts on a Monday; the ordinary rotation returns on 1 Nov / 26 Dec, so the theme no longer always changes on a Monday.
    Rationale: the theme shows before the day, so there is time to watch.
 
 Horror needs no new data: the `Horror` genre already exists on `Film.genres`.
@@ -76,7 +76,8 @@ removed with no seed. See `christmas-films-plan.md`.
 
 - **The period runs until the day itself.** Halloween: the Monday on or before 24 Oct through 31 Oct inclusive.
   Christmas: the Monday on or before 18 Dec through 25 Dec inclusive (8 to 14 days). The Sunday no longer ends it, so
-  Home keeps the holiday row on 21 to 25 Dec. The Monday start is unchanged, so the caption stays true.
+  Home keeps the holiday row on 21 to 25 Dec. Each period still starts on a Monday, but the ordinary rotation now returns on 1 Nov and 26 Dec, so the theme no
+  longer always changes on a Monday (Home's caption is left as it is, pending the owner).
   `HolidayWeeks.christmasWeekFrom` reports next year's period from 26 Dec.
 - **Christmas order:** films the owner added by hand (an include, not excluded) first in `ROW_ORDER`, then every other
   Christmas film in a shuffle seeded by the London date's epoch day, applied to the `ROW_ORDER` list. Stable all day

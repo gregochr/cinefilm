@@ -168,8 +168,10 @@ public class ChristmasFilms {
         List<Film> library = loader.loadAll().stream().map(FilmView::film).toList();
         ChristmasOverrides.Snapshot choices = overrides.snapshot();
         Set<Long> exclude = choices.exclude();
-        LocalDate today = LocalDate.now(clock);
-        List<Item> inWeek = WeeklyThemeSelector.christmasFilms(library, choices.include(), exclude, today).stream()
+        HolidayWeeks.Week week = HolidayWeeks.christmasWeekFrom(LocalDate.now(clock));
+        // Inside the period this is today (Home's date); before it, the first day, so the screen previews Home's row.
+        LocalDate shownOn = LocalDate.now(clock).isBefore(week.start()) ? week.start() : LocalDate.now(clock);
+        List<Item> inWeek = WeeklyThemeSelector.christmasFilms(library, choices.include(), exclude, shownOn).stream()
             .map(f -> item(f, tagged(f) ? Reason.KEYWORD : Reason.ADDED, choices)).toList();
         List<Item> added = inWeek.stream().filter(i -> i.reason() == Reason.ADDED).toList();
         List<LeftOutItem> leftOut = library.stream()
@@ -186,7 +188,6 @@ public class ChristmasFilms {
         // Stalled: films are waiting, nothing is running, and nothing will fetch them (TMDB off, or the last run fell
         // short).
         boolean stalled = !running && fetched < total && (!enabled || incomplete);
-        HolidayWeeks.Week week = HolidayWeeks.christmasWeekFrom(today);
         return new ChristmasView(new WeekDto(week.start(), week.end()),
             new Limits(WeeklyThemeSelector.MAX_FILMS, WeeklyThemeSelector.MIN_FILMS),
             new Keywords(fetched, total, running, enabled, stalled),

@@ -2,7 +2,7 @@
 
 In Christmas week, Home's weekly theme becomes "This week: Christmas". PRs #227 and #228 built the rule:
 - `HolidayWeeks`: the Monday on or before 18 Dec, through Sunday (changed 2026-11-21: now through 25 Dec; see Deviations).
-- `WeeklyThemeSelector`: TMDB keyword `christmas`, at most 12 films (`MAX_FILMS`), falling back to the usual theme when fewer than 5 (`MIN_FILMS`). Sorted by year, then sort title.
+- `WeeklyThemeSelector`: TMDB keyword `christmas`, at most 12 films (`MAX_FILMS`), falling back to the usual theme when fewer than 5 (`MIN_FILMS`). Sorted by year, then sort title (since 2026-11-21: the owner's added films first in that order, then a shuffle seeded by the London date).
 - The owner's overrides were TMDB ids in a `HolidayOverrides` record set by the `CINEFILM_HOLIDAY_CHRISTMAS_INCLUDE` / `_EXCLUDE` environment variables; that mechanism was removed (see Deviations in the build). Exclude beats include, and include beats the keyword.
 
 Editing environment variables and restarting isn't something I want to do in December. I need a screen to:
@@ -95,7 +95,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
    - **On the right, the search field** "Add a film" (340px wide, 44px tall).
 5. **List card:**
    - **Rows** are 76px. Columns: number (mono, only in the "In" tab), poster 40×60, "Title · year", reason chip, one action button (≥ 44px tall, min 104px wide).
-   - **The cut line** goes after row 12: "Home shows 12. These {k} are in, but won't fit. Leave out an older film to make room." Rows below it use the dimmed `#120F0C` background and `#8A8173` text, but still work.
+   - **The cut line** goes after row 12: "Home shows 12 a day. These {k} aren't in today's dozen; they come up on other days." (changed 2026-11-21: the daily shuffle brings them up on other days; when the owner's own films fill the 12 it says "Home shows 12. These {k} will never show: your own films fill the 12.") Rows below it use the dimmed `#120F0C` background and `#8A8173` text, but still work.
    - **Chips (outline, 12px, 24px tall):**
      - "TMDB keyword": `#4A4339` border, `#A39A8B` text.
      - "Added by me": `rgba(237,230,218,.45)` border, `#EDE6DA` text.
@@ -194,7 +194,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
   behaviour.
 - On a phone the rank number sits inline before the title (design `05`), not in its own column; the year is muted in
   list and search rows.
-- Singular wording: "This 1 is in, but won't fit" / "This 1 won't fit" and "The other 1 is on its way". When the
+- Singular wording: "This 1 isn't in today's dozen; it comes up on other days" / "This 1 isn't in today's dozen" and "The other 1 is on its way". When the
   server says keywords are not being fetched (`keywords.stalled` true or `keywords.enabled` false), the strip and the
   empty copy say "Keywords aren't being fetched right now." instead of promising they are on their way; with the
   fields absent nothing changes.

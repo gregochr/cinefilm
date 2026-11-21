@@ -12,6 +12,7 @@ import {
   chipFor,
   cutIndex,
   cutText,
+  ownerFillsRow,
   emptyKind,
   emptyPendingText,
   PREVIEW_CAPTION,
@@ -91,15 +92,34 @@ describe('tabs and the cut', () => {
 
   it('says "This 1" for one film over the limit and "These n" for more', () => {
     expect(cutText(12, 1)).toBe(
-      "Home shows 12. This 1 is in, but won't fit. Leave out an older film to make room.",
+      "Home shows 12 a day. This 1 isn't in today's dozen; it comes up on other days.",
     );
-    expect(cutText(12, 1, true)).toBe("Home shows 12. This 1 won't fit.");
+    expect(cutText(12, 1, true)).toBe("Home shows 12 a day. This 1 isn't in today's dozen.");
   });
 
   it('writes the cut line', () => {
     expect(cutText(12, 2)).toBe(
-      "Home shows 12. These 2 are in, but won't fit. Leave out an older film to make room.",
+      "Home shows 12 a day. These 2 aren't in today's dozen; they come up on other days.",
     );
+  });
+
+  it('warns that the rest never show when the owner’s own films fill the row', () => {
+    expect(cutText(12, 2, false, true)).toBe(
+      'Home shows 12. These 2 will never show: your own films fill the 12.',
+    );
+    expect(cutText(12, 1, true, true)).toBe('Home shows 12. This 1 will never show.');
+  });
+
+  it('knows when the owner’s INCLUDE films alone fill the row', () => {
+    const rows = (included) =>
+      Array.from({ length: 14 }, (_, i) => ({
+        filmId: i,
+        override: i < included ? 'INCLUDE' : null,
+      }));
+    expect(ownerFillsRow(rows(11), 12)).toBe(false);
+    expect(ownerFillsRow(rows(12), 12)).toBe(true);
+    expect(ownerFillsRow(rows(14), 12)).toBe(true);
+    expect(ownerFillsRow(rows(0), 12)).toBe(false);
   });
 });
 
@@ -442,6 +462,6 @@ describe('the Home preview', () => {
   });
 
   it('writes the phone’s short cut line', () => {
-    expect(cutText(12, 2, true)).toBe("Home shows 12. These 2 won't fit.");
+    expect(cutText(12, 2, true)).toBe("Home shows 12 a day. These 2 aren't in today's dozen.");
   });
 });

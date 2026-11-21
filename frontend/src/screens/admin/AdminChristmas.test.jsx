@@ -122,7 +122,7 @@ describe('Christmas films: the page', () => {
     const items = within(screen.getByRole('tabpanel')).getAllByRole('listitem');
     expect(items).toHaveLength(15);
     expect(items[12]).toHaveTextContent(
-      "Home shows 12. These 2 are in, but won't fit. Leave out an older film to make room.",
+      "Home shows 12 a day. These 2 aren't in today's dozen; they come up on other days.",
     );
     expect(row('Elf')).not.toHaveClass('xmas-row--cut');
     expect(row('Love Actually')).toHaveClass('xmas-row--cut');

@@ -142,6 +142,22 @@ class ChristmasApiTest extends ApiTestBase {
     }
 
     @Test
+    void beforeThePeriodTheScreenListsWhatHomeShowsOnItsFirstDay() throws Exception {
+        for (int i = 0; i < 20; i++) {
+            add("Tagged " + (char) ('A' + i), 1950 + i, 100L + i, "christmas");
+        }
+        reload();
+        today("2026-11-21T09:00:00Z");
+        List<String> november = titles("/api/admin/christmas", "$.inWeek[*].title");
+        mvc.perform(get("/api/admin/christmas")).andExpect(jsonPath("$.week.start").value("2026-12-14"));
+
+        today("2026-12-14T09:00:00Z");
+
+        assertThat(november).hasSize(20).startsWith(
+            titles("/api/home", "$.weeklyTheme.films[*].title").toArray(String[]::new));
+    }
+
+    @Test
     void fewerThanFiveChristmasFilmsStillFallsBackOnChristmasDay() throws Exception {
         for (int i = 0; i < 4; i++) {
             add("Tagged " + i, 1950 + i, 100L + i, "christmas");
