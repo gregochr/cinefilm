@@ -30,4 +30,13 @@ public interface PlaybackStateRepository extends JpaRepository<PlaybackState, Lo
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from PlaybackState s where s.editionId in :ids")
     int deleteByEditionIds(Collection<Long> ids);
+
+    /**
+     * How many of the given editions have a state in progress (a position past 0, not removed from Continue watching)
+     * whose saved position is at or past the edition's credits marker.
+     */
+    @Query("select count(s) from PlaybackState s join Edition e on e.id = s.editionId "
+        + "where e.id in :editionIds and e.creditsMarkerMs is not null and s.positionMs > 0 "
+        + "and s.hiddenFromContinueWatching = false and s.positionMs >= e.creditsMarkerMs")
+    long countInProgressAtOrPastMarker(Collection<Long> editionIds);
 }
