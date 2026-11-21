@@ -547,8 +547,10 @@ public class PlexFilmWriter {
         if (write.backdropPath() != null) {
             film.setBackdropPath(write.backdropPath());
         }
-        film.setMatchStatus(MatchStatus.MATCHED);
-        film.setMatchCandidates(null);
+        if (film.getTmdbId() != null) {
+            film.setMatchStatus(MatchStatus.MATCHED);
+            film.setMatchCandidates(null);
+        }
     }
 
     private Applied watching(PlexFilm plex, List<Edition> paired, Long firstEditionId, Instant importTime, int merged,
