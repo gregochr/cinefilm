@@ -17,7 +17,7 @@ class KeywordsSchedulerTest {
     private final TmdbApi tmdb = mock(TmdbApi.class);
     private final List<Runnable> queued = new ArrayList<>();
     private final KeywordsRefresher refresher = new KeywordsRefresher(tmdb, mock(FilmRepository.class),
-        mock(FilmKeywords.class), CLOCK, queued::add, 30);
+        mock(FilmKeywords.class), CLOCK, queued::add, 30, true);
 
     @Test
     void theNightlyRunStartsAKeywordsPass() {

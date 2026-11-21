@@ -64,7 +64,8 @@ const ACTIONS = {
  * `added` is the screen's Added list. Two library films can share a TMDB id (a keyword-tagged film and an untagged one
  * the owner included); the server keeps the one INCLUDE row for the untagged one, so leaving the tagged one out
  * replaces that INCLUDE and an Undo must restore it, not delete the choice. The previous choice therefore comes from
- * the data for that TMDB id, not from the clicked row's reason alone.
+ * the row's stored `override` (the server says when a keyword film also has an INCLUDE row: the main reason), and, as
+ * a second source, from the Added list for that TMDB id; never from the clicked row's reason alone.
  */
 export function rowAction(row, added = []) {
   const action = ACTIONS[rowKind(row)];

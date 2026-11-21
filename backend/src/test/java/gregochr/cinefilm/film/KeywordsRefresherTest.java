@@ -4,8 +4,12 @@ import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.inOrder;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -19,7 +23,9 @@ import gregochr.cinefilm.plex.PlexImportFinished;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbUnavailableException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.RejectedExecutionException;
@@ -27,7 +33,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
@@ -56,7 +62,7 @@ class KeywordsRefresherTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new KeywordsRefresher(tmdb, films, store, CLOCK, queued::add, 30);
+        refresher = new KeywordsRefresher(tmdb, films, store, CLOCK, queued::add, 30, true);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -107,21 +113,54 @@ class KeywordsRefresherTest {
 
         startAndRun();
 
-        InOrder order = inOrder(tmdb);
-        order.verify(tmdb).keywords(949);
-        order.verify(tmdb).keywords(194);
-        order.verify(tmdb).keywords(8681);
+        ArgumentCaptor<Long> ids = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Long> tmdbIds = ArgumentCaptor.forClass(Long.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<String>> tags = ArgumentCaptor.forClass(Collection.class);
+        ArgumentCaptor<Instant> stamps = ArgumentCaptor.forClass(Instant.class);
+        verify(store, times(3)).save(ids.capture(), tmdbIds.capture(), tags.capture(), stamps.capture());
+        assertThat(ids.getAllValues()).containsExactly(1L, 2L, 3L);
+        assertThat(tmdbIds.getAllValues()).containsExactly(949L, 194L, 8681L);
+        assertThat(tags.getAllValues()).containsExactly(List.of("heist"), List.of("paris", "christmas"), List.of());
+        assertThat(stamps.getAllValues()).containsOnly(NOW);
         assertThat(messages()).contains("Keywords refresh finished: 3 saved, 0 changed meanwhile, 0 failed");
     }
 
     @Test
-    void theRefetchAgeFollowsTheConfiguredDays() {
-        KeywordsRefresher tenDays = new KeywordsRefresher(tmdb, films, store, CLOCK, Runnable::run, 10);
+    void theRefetchAgeFollowsTheConfiguredDaysAndTheStaleFilmIsSavedWithItsExactArguments() {
+        KeywordsRefresher tenDays = new KeywordsRefresher(tmdb, films, store, CLOCK, Runnable::run, 10, true);
         when(tmdb.enabled()).thenReturn(true);
+        when(films.findWithStaleKeywords(NOW.minus(Duration.ofDays(10)))).thenReturn(List.of(AMELIE));
+        when(tmdb.keywords(194)).thenReturn(Optional.of(List.of("paris")));
+        when(store.save(2L, 194L, List.of("paris"), NOW)).thenReturn(true);
 
         tenDays.startDue();
 
-        verify(films).findWithStaleKeywords(NOW.minus(Duration.ofDays(10)));
+        verify(store).save(2L, 194L, List.of("paris"), NOW);
+        verify(films, never()).findWithStaleKeywords(NOW.minus(Duration.ofDays(30)));
+    }
+
+    @Test
+    void withTheRefreshSwitchedOffNeverFetchedFilmsAreStillFetchedButStaleOnesAreNotLookedUp() {
+        KeywordsRefresher off = new KeywordsRefresher(tmdb, films, store, CLOCK, Runnable::run, 30, false);
+        when(tmdb.enabled()).thenReturn(true);
+        when(films.findWithoutKeywords()).thenReturn(List.of(HEAT));
+        when(tmdb.keywords(949)).thenReturn(Optional.of(List.of("heist")));
+        when(store.save(1L, 949L, List.of("heist"), NOW)).thenReturn(true);
+
+        off.startDue();
+
+        verify(store).save(1L, 949L, List.of("heist"), NOW);
+        verify(films, never()).findWithStaleKeywords(any());
+    }
+
+    @Test
+    void aRefetchAgeBelowOneDayFailsFastWithAClearMessage() {
+        assertThatThrownBy(() -> new KeywordsRefresher(tmdb, films, store, CLOCK, Runnable::run, 0, true))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("cinefilm.keywords.refresh-days must be at least 1, but is 0");
+        assertThatThrownBy(() -> new KeywordsRefresher(tmdb, films, store, CLOCK, Runnable::run, -5, true))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -133,8 +172,8 @@ class KeywordsRefresherTest {
 
         startAndRun();
 
-        verify(store, never()).save(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.anyLong(),
-            org.mockito.ArgumentMatchers.anyCollection(), org.mockito.ArgumentMatchers.any());
+        verify(store, never()).save(eq(1L), anyLong(),
+            anyCollection(), any());
         assertThat(refresher.lastRunIncomplete()).isTrue();
     }
 
@@ -146,8 +185,8 @@ class KeywordsRefresherTest {
         startAndRun();
 
         verify(tmdb, never()).keywords(194);
-        verify(store, never()).save(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(),
-            org.mockito.ArgumentMatchers.anyCollection(), org.mockito.ArgumentMatchers.any());
+        verify(store, never()).save(anyLong(), anyLong(),
+            anyCollection(), any());
         assertThat(refresher.lastRunIncomplete()).isTrue();
     }
 
@@ -336,7 +375,7 @@ class KeywordsRefresherTest {
         refresher.onStartup();
         assertThat(queued).hasSize(1);
 
-        KeywordsRefresher off = new KeywordsRefresher(tmdb, films, store, CLOCK, queued::add, 30);
+        KeywordsRefresher off = new KeywordsRefresher(tmdb, films, store, CLOCK, queued::add, 30, true);
         when(tmdb.enabled()).thenReturn(false);
         off.onStartup();
 
@@ -347,7 +386,7 @@ class KeywordsRefresherTest {
     void aRejectedExecutorGivesTheRunBackAndTheErrorReachesTheCaller() {
         KeywordsRefresher rejecting = new KeywordsRefresher(tmdb, films, store, CLOCK, r -> {
             throw new RejectedExecutionException("full");
-        }, 30);
+        }, 30, true);
         when(tmdb.enabled()).thenReturn(true);
 
         assertThatThrownBy(rejecting::startDue).isInstanceOf(RejectedExecutionException.class);
@@ -357,7 +396,7 @@ class KeywordsRefresherTest {
 
     /** The refresher on an executor that runs the work at once, so a trigger can arrive from inside a run. */
     private KeywordsRefresher synchronous() {
-        return new KeywordsRefresher(tmdb, films, store, CLOCK, Runnable::run, 30);
+        return new KeywordsRefresher(tmdb, films, store, CLOCK, Runnable::run, 30, true);
     }
 
     @Test

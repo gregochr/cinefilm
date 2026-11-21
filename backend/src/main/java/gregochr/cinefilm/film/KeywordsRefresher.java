@@ -29,7 +29,8 @@ import org.springframework.stereotype.Service;
  * again; a film TMDB no longer has is stamped with no keywords so it is not asked every time. A film whose keywords
  * were fetched more than {@code cinefilm.keywords.refresh-days} (default 30) ago is asked again, after the unfetched
  * ones and the stalest first, so tags TMDB adds or removes later arrive ({@link KeywordsScheduler} starts that pass
- * nightly; the other triggers pick stale films up too). A refetch replaces the keywords and the stamp in one
+ * nightly; the other triggers pick stale films up too; {@code cinefilm.keywords.refresh-enabled=false} stops
+ * the refetch everywhere, never-fetched films are still fetched). A refetch replaces the keywords and the stamp in one
  * transaction, and a film that fails keeps its old keywords and old stamp. Nothing here throws to its caller.
  */
 @Service
@@ -43,23 +44,31 @@ public class KeywordsRefresher {
     private final Clock clock;
     private final Executor executor;
     private final Duration refreshAfter;
+    private final boolean refreshStale;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
     private final AtomicBoolean lastRunIncomplete = new AtomicBoolean();
 
     /**
      * Creates the service; the executor is {@code keywordsExecutor}, the age at which keywords are refetched is
-     * {@code cinefilm.keywords.refresh-days}.
+     * {@code cinefilm.keywords.refresh-days} (at least 1) and whether stale films are refetched at all is
+     * {@code cinefilm.keywords.refresh-enabled}.
      */
     public KeywordsRefresher(TmdbApi tmdb, FilmRepository films, FilmKeywords store, Clock clock,
                               @Qualifier("keywordsExecutor") Executor executor,
-                              @Value("${cinefilm.keywords.refresh-days:30}") int refreshDays) {
+                              @Value("${cinefilm.keywords.refresh-days:30}") int refreshDays,
+                              @Value("${cinefilm.keywords.refresh-enabled:true}") boolean refreshEnabled) {
+        if (refreshDays < 1) {
+            throw new IllegalArgumentException(
+                "cinefilm.keywords.refresh-days must be at least 1, but is " + refreshDays);
+        }
         this.tmdb = tmdb;
         this.films = films;
         this.store = store;
         this.clock = clock;
         this.executor = executor;
         this.refreshAfter = Duration.ofDays(refreshDays);
+        this.refreshStale = refreshEnabled;
     }
 
     /** True while a refresh is running. */
@@ -155,7 +164,9 @@ public class KeywordsRefresher {
         boolean stopped = false;
         try {
             List<TmdbRef> due = new ArrayList<>(films.findWithoutKeywords());
-            due.addAll(films.findWithStaleKeywords(clock.instant().minus(refreshAfter)));
+            if (refreshStale) {
+                due.addAll(films.findWithStaleKeywords(clock.instant().minus(refreshAfter)));
+            }
             for (TmdbRef ref : due) {
                 try {
                     if (refresh(ref)) {

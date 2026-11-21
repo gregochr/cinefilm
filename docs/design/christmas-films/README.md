@@ -181,7 +181,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 
 - **No environment-variable seed.** The variables were never released or set, so there was nothing to migrate; `HolidayOverrides`, `HolidayConfig` and the two properties were removed (owner, 2026-11-19).
 - **The add search is a plain textbox with a plain list of result buttons**, not a combobox/listbox, because each result row holds a button (recorded in `christmas-films-plan.md`).
-- **A redundant INCLUDE row is never deleted** (the first build deleted it on the next write, which no Undo could restore and which would drop a film TMDB later un-tags); the reason, KEYWORD or ADDED, is decided on every read.
+- **A redundant INCLUDE row is never deleted** (the first build deleted it on the next write, which no Undo could restore and which would drop a film TMDB later un-tags); the reason, KEYWORD or ADDED, is decided on every read. Known and accepted: Leave out then Put back on a keyword film that also has a hidden INCLUDE row loses that row (Put back deletes it); Undo of the Leave out restores it, Put back does not.
 - **The 409 can name any holder of the library lock** (a scan, a Plex import, a credits save), not only a scan; `/states` accepts at most 50 distinct ids and leaves out films that browse hides; `PUT` answers 404 when no browsable film has the TMDB id (`foundation-plan.md`).
 - The empty state ("No Christmas films yet") shows only when In Christmas week, Added by me **and** Left out by me are all empty, not when In and Added alone are. A film left out must stay reachable, with its Put back button.
 - After Leave out, Put back or Remove on a list row, focus goes to the same row's button if it is still listed, else the

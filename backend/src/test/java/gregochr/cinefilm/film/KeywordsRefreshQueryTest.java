@@ -39,11 +39,11 @@ class KeywordsRefreshQueryTest extends ApiTestBase {
 
     @Test
     void onlyMatchedFilmsFetchedBeforeTheCutoffAreDueStalestFirst() {
-        Film newer = saved("Older than cutoff, newer", 1L, CUTOFF.minus(Duration.ofDays(1)));
+        Film justBefore = saved("One millisecond before the cutoff", 1L, CUTOFF.minusMillis(1));
         Film stalest = saved("Stalest", 2L, CUTOFF.minus(Duration.ofDays(200)));
         Film tieFirst = saved("Tie first", 3L, CUTOFF.minus(Duration.ofDays(5)));
         Film tieSecond = saved("Tie second", 4L, CUTOFF.minus(Duration.ofDays(5)));
-        Film fresh = saved("Fresh", 5L, CUTOFF.plus(Duration.ofDays(1)));
+        Film justAfter = saved("One millisecond after the cutoff", 5L, CUTOFF.plusMillis(1));
         Film atCutoff = saved("At the cutoff", 6L, CUTOFF);
         Film never = saved("Never fetched", 7L, null);
         Film unmatched = saved("Unmatched", null, CUTOFF.minus(Duration.ofDays(400)));
@@ -51,15 +51,15 @@ class KeywordsRefreshQueryTest extends ApiTestBase {
         List<TmdbRef> due = films.findWithStaleKeywords(CUTOFF);
 
         assertThat(due).extracting(TmdbRef::id)
-            .containsExactly(stalest.getId(), tieFirst.getId(), tieSecond.getId(), newer.getId())
-            .doesNotContain(fresh.getId(), atCutoff.getId(), never.getId(), unmatched.getId());
+            .containsExactly(stalest.getId(), tieFirst.getId(), tieSecond.getId(), justBefore.getId())
+            .doesNotContain(justAfter.getId(), atCutoff.getId(), never.getId(), unmatched.getId());
     }
 
     @Test
-    void aRefetchReplacesTheKeywordsWholeAndRestampsWhileAFailedFilmKeepsItsOldOnes() {
+    void aRefetchReplacesTheKeywordsWholeAndRestampsOnlyThatFilm() {
         Instant old = CUTOFF.minus(Duration.ofDays(10));
         Film refetched = saved("Refetched", 11L, old, "christmas", "snow");
-        Film failed = saved("Failed", 12L, old, "christmas");
+        Film other = saved("Other", 12L, old, "christmas");
         reload();
 
         boolean saved = keywords.save(refetched.getId(), 11L, List.of("snow", "winter"), NOW);
@@ -69,10 +69,10 @@ class KeywordsRefreshQueryTest extends ApiTestBase {
         Film after = films.findById(refetched.getId()).orElseThrow();
         assertThat(after.getKeywords()).containsExactlyInAnyOrder("snow", "winter");
         assertThat(after.getKeywordsFetchedAt()).isEqualTo(NOW);
-        Film untouched = films.findById(failed.getId()).orElseThrow();
+        Film untouched = films.findById(other.getId()).orElseThrow();
         assertThat(untouched.getKeywords()).containsExactly("christmas");
         assertThat(untouched.getKeywordsFetchedAt()).isEqualTo(old);
-        assertThat(films.findWithStaleKeywords(CUTOFF)).extracting(TmdbRef::id).containsExactly(failed.getId());
+        assertThat(films.findWithStaleKeywords(CUTOFF)).extracting(TmdbRef::id).containsExactly(other.getId());
     }
 
     @Test
