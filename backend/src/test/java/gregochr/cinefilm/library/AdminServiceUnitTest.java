@@ -87,7 +87,7 @@ class AdminServiceUnitTest {
     }
 
     private List<AttentionItem> attentionFor(Film... unmatched) {
-        when(films.findByMatchStatusOrderBySortTitle(MatchStatus.NEEDS_MATCH)).thenReturn(List.of(unmatched));
+        when(films.findNeedingMatch()).thenReturn(List.of(unmatched));
         when(files.findOriginals(Presence.PRESENT, Playability.PROTECTED)).thenReturn(List.of());
         when(files.findOriginals(Presence.PRESENT, Playability.NEEDS_CONVERSION)).thenReturn(List.of());
         when(files.findOriginals(Presence.PRESENT, Playability.UNREADABLE)).thenReturn(List.of());
@@ -107,6 +107,20 @@ class AdminServiceUnitTest {
                 org.assertj.core.api.Assertions.tuple("Unsure", false));
         assertThat(items.get(0).candidates()).extracting(CandidateDto::score).containsExactly(85, 70);
         assertThat(items.get(1).candidates()).extracting(CandidateDto::score).containsExactly(80, 75);
+    }
+
+    @Test
+    void aMatchedFilmWithNoTmdbIdIsListedAsNeedingAMatchWithNoCandidates() {
+        Film noId = film(7L, "Slum Dog Millionaire", 2008, NOW);
+        noId.setMatchStatus(MatchStatus.MATCHED);
+
+        List<AttentionItem> items = attentionFor(noId);
+
+        assertThat(items).singleElement().satisfies(item -> {
+            assertThat(item.kind()).isEqualTo("needs-match");
+            assertThat(item.detail()).isEqualTo("No match found on TMDB");
+            assertThat(item.candidates()).isEmpty();
+        });
     }
 
     @Test
@@ -141,7 +155,7 @@ class AdminServiceUnitTest {
     void everyOtherKindIsNotConfident() {
         MediaFile drm = file(edition(film(5L, "Drm", 2002, NOW), 50L, "Original", 100, null), "/media/films/Drm.m4v");
         drm.setPresence(Presence.PRESENT);
-        when(films.findByMatchStatusOrderBySortTitle(MatchStatus.NEEDS_MATCH)).thenReturn(List.of());
+        when(films.findNeedingMatch()).thenReturn(List.of());
         when(files.findOriginals(Presence.PRESENT, Playability.PROTECTED)).thenReturn(List.of(drm));
         when(files.findOriginals(Presence.PRESENT, Playability.NEEDS_CONVERSION)).thenReturn(List.of());
         when(files.findOriginals(Presence.PRESENT, Playability.UNREADABLE)).thenReturn(List.of());
@@ -179,7 +193,7 @@ class AdminServiceUnitTest {
     /** Stubs every read the old computation ({@code attention()} and {@code status()}) and the cheap one make. */
     private void library(List<Film> all) {
         long unmatched = all.stream().filter(f -> f.getMatchStatus() == MatchStatus.NEEDS_MATCH).count();
-        when(films.countByMatchStatus(MatchStatus.NEEDS_MATCH)).thenReturn(unmatched);
+        when(films.countNeedingMatch()).thenReturn(unmatched);
         when(films.count()).thenReturn((long) all.size());
         List<Edition> every = all.stream().flatMap(f -> f.getEditions().stream()).toList();
         when(editions.findAllWithFilesLeavingFilmLazy()).thenReturn(every);
@@ -187,11 +201,11 @@ class AdminServiceUnitTest {
             .map(e -> new EditionOwner(e.getId(), e.getFilm().getId(), e.getFilm().isEditionsConfirmed())).toList());
     }
 
-    /** Stubs the reads {@code attention()} and {@code status()} make, for the parity tests. */
+    /** Stubs the reads {@code attention()} and {@code status()} make beyond {@link #library}, for the parity tests. */
     private void oldComputation(List<Film> all) {
         when(films.findAll()).thenReturn(all);
-        when(films.findByMatchStatusOrderBySortTitle(MatchStatus.NEEDS_MATCH))
-            .thenReturn(all.stream().filter(f -> f.getMatchStatus() == MatchStatus.NEEDS_MATCH).toList());
+        List<Film> needing = all.stream().filter(f -> f.getMatchStatus() == MatchStatus.NEEDS_MATCH).toList();
+        when(films.findNeedingMatch()).thenReturn(needing);
     }
 
     private static long count(List<AttentionItem> items, String... kinds) {
@@ -240,7 +254,7 @@ class AdminServiceUnitTest {
     @Test
     void theLastFinishedScanIsReadDirectlyAndIsWhatTheStatusReports() {
         library(List.of());
-        oldComputation(List.of());
+        when(films.findAll()).thenReturn(List.of());
         ScanRun run = new ScanRun();
         run.setStartedAt(NOW.minusSeconds(60));
         run.setFinishedAt(NOW);
@@ -280,7 +294,7 @@ class AdminServiceUnitTest {
         oneShown.getEditions().get(0).getMediaFiles().get(0).setPresence(Presence.MISSING);
         List<Film> all = List.of(oneShown, hidden(2, "Gone"));
         library(all);
-        oldComputation(all);
+        when(films.findAll()).thenReturn(all);
 
         assertThat(admin.summaryFigures().browsableFilms()).isEqualTo(1)
             .isEqualTo(admin.status().counts().films());
@@ -289,7 +303,7 @@ class AdminServiceUnitTest {
     @Test
     void anEditionAddedBetweenTheTwoReadsHasNoOwnerYetAndIsLeftOut() {
         Film film = filmOf(1, "New", false, "a/New.m4v");
-        when(films.countByMatchStatus(MatchStatus.NEEDS_MATCH)).thenReturn(0L);
+        when(films.countNeedingMatch()).thenReturn(0L);
         when(films.count()).thenReturn(1L);
         when(editions.findAllWithFilesLeavingFilmLazy()).thenReturn(film.getEditions());
         when(editions.findEditionOwners()).thenReturn(List.of());
@@ -306,7 +320,7 @@ class AdminServiceUnitTest {
 
         admin.summaryFigures();
 
-        verify(films).countByMatchStatus(MatchStatus.NEEDS_MATCH);
+        verify(films).countNeedingMatch();
         verify(films).count();
         verifyNoMoreInteractions(films);
         verify(editions).findAllWithFilesLeavingFilmLazy();

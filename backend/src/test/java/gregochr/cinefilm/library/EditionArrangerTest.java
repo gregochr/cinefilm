@@ -247,6 +247,7 @@ class EditionArrangerTest extends ApiTestBase {
     @Test
     void aFileNotThisFilmBecomesAnUnmatchedFilmAndTheKeptFileKeepsItsResumePosition() {
         Film built = film(null, "Rocky IV", 1985, NOW);
+        built.setTmdbId(1001L);
         Edition both = edition(built, null, "Original", 91 * MIN, null);
         file(both, "Rocky IV.m4v");
         MediaFile intruder = file(both, "Rocky V (1990).m4v");

@@ -6,7 +6,6 @@ import gregochr.cinefilm.film.EditionRepository.EditionOwner;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.GroupingChangeRepository;
-import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.Playability;
@@ -89,7 +88,7 @@ public class AdminService {
         CountsDto counts = new CountsDto(browsableFilms.size(), last == null ? 0 : last.newFiles(),
             files.countOriginals(Presence.MISSING), files.countPresent(Playability.PROTECTED),
             files.countPresent(Playability.NEEDS_CONVERSION),
-            films.findByMatchStatusOrderBySortTitle(MatchStatus.NEEDS_MATCH).size(),
+            films.countNeedingMatch(),
             files.countPresent(Playability.UNREADABLE), withCredits);
         return new ScanStatusDto(scans.isRunning(), root.root().toString(),
             progress == null ? null : new ProgressDto(progress.processed(), progress.total(), progress.current()),
@@ -151,7 +150,7 @@ public class AdminService {
                 }
             }
         }
-        return new SummaryFigures(films.countByMatchStatus(MatchStatus.NEEDS_MATCH), severalFiles,
+        return new SummaryFigures(films.countNeedingMatch(), severalFiles,
             films.count() - hidden, lastScan());
     }
 
@@ -162,7 +161,7 @@ public class AdminService {
     @Transactional(readOnly = true)
     public Attention attention() {
         List<AttentionItem> items = new ArrayList<>();
-        for (Film film : films.findByMatchStatusOrderBySortTitle(MatchStatus.NEEDS_MATCH)) {
+        for (Film film : films.findNeedingMatch()) {
             List<CandidateDto> candidates = candidates(film);
             String detail = candidates.isEmpty() ? "No match found on TMDB"
                 : candidates.size() + (candidates.size() == 1 ? " possible match" : " possible matches");
