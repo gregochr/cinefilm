@@ -27,12 +27,12 @@ class CreditsSchedulerTest {
     }
 
     @Test
-    void theHourlyNudgeAsksTheApplierForAPass() {
+    void theHourlyNudgeHasTheApplierRetryARefusedPass() {
         CreditsApplier applier = mock(CreditsApplier.class);
 
         new CreditsScheduler(mock(CreditsRefresher.class), applier).hourly();
 
-        verify(applier).requestPass();
+        verify(applier).retryIfRefused();
         verifyNoMoreInteractions(applier);
     }
 

@@ -148,6 +148,16 @@ public class CreditsApplier {
         launch();
     }
 
+    /**
+     * The hourly nudge: starts a pass only when the last one could not take the library lock and left its request
+     * pending. After a pass that ran, nothing is pending and this does nothing.
+     */
+    public void retryIfRefused() {
+        if (enabled && pending.get()) {
+            launch();
+        }
+    }
+
     private void launch() {
         if (!running.compareAndSet(false, true)) {
             return;
@@ -169,9 +179,10 @@ public class CreditsApplier {
                 } catch (RuntimeException e) {
                     LOG.error("Credits apply pass failed", e);
                 }
-                if (refused) {
-                    // Left set for the next trigger or the hourly nudge; looping would only wait for the lock again.
-                    pending.set(true);
+                if (refused && pending.getAndSet(true)) {
+                    // pending was cleared when this pass began, so a request arrived while it waited for the lock
+                    // (a scan or import publishes its event while still holding it): give it one more pass.
+                    refused = false;
                 }
             }
         } finally {

@@ -23,10 +23,12 @@ import gregochr.cinefilm.plex.PlexCreditsImportFinished;
 import gregochr.cinefilm.plex.PlexCreditsMarker;
 import gregochr.cinefilm.plex.PlexCreditsMarkerRepository;
 import gregochr.cinefilm.plex.PlexImportFinished;
+import gregochr.cinefilm.search.LibraryChanged;
 import gregochr.cinefilm.tmdb.Sleeper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
@@ -38,6 +40,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** One pass of the credits apply: the lock wait, what is written, and what is counted. */
@@ -443,5 +447,118 @@ class CreditsApplierTest {
 
         assertThat(result.lockTaken()).isTrue();
         verify(editions).findAllIds();
+    }
+
+    @Test
+    void aRequestThatArrivesWhileThePassWaitsForTheLockGivesOneMorePassWhenItGivesUp() {
+        lock.tryAcquire(LibraryLock.SCAN);
+        CreditsApplier applier = applier();
+        AtomicInteger sleepsSeen = new AtomicInteger();
+        sleeper = d -> {
+            int n = sleepsSeen.incrementAndGet();
+            if (n == 1) {
+                applier.requestPass();
+            }
+            if (n == CreditsApplier.LOCK_ATTEMPTS) {
+                lock.release();
+            }
+        };
+        emptyLibrary();
+
+        applier.requestPass();
+
+        verify(editions).findAllIds();
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aRequestDuringTheWaitIsOnlyHonouredOnce() {
+        lock.tryAcquire(LibraryLock.SCAN);
+        CreditsApplier applier = applier();
+        AtomicInteger sleepsSeen = new AtomicInteger();
+        sleeper = d -> {
+            if (sleepsSeen.incrementAndGet() == 1) {
+                applier.requestPass();
+            }
+        };
+
+        applier.requestPass();
+
+        assertThat(sleepsSeen).hasValue(2 * CreditsApplier.LOCK_ATTEMPTS);
+        verifyNoInteractions(editions);
+    }
+
+    @Test
+    void theNudgeRetriesARefusedPassOnce() {
+        AtomicInteger executed = new AtomicInteger();
+        executor = command -> {
+            executed.incrementAndGet();
+            command.run();
+        };
+        lock.tryAcquire(LibraryLock.SCAN);
+        CreditsApplier applier = applier();
+        applier.requestPass();
+        lock.release();
+        emptyLibrary();
+
+        applier.retryIfRefused();
+        applier.retryIfRefused();
+
+        assertThat(executed).hasValue(2);
+        verify(editions).findAllIds();
+    }
+
+    @Test
+    void theNudgeStartsNothingWhenNoPassWasRefused() {
+        AtomicInteger queued = new AtomicInteger();
+        executor = command -> {
+            queued.incrementAndGet();
+            command.run();
+        };
+        emptyLibrary();
+        CreditsApplier applier = applier();
+
+        applier.retryIfRefused();
+        assertThat(queued).hasValue(0);
+
+        applier.requestPass();
+        applier.retryIfRefused();
+
+        assertThat(queued).as("only the request itself").hasValue(1);
+        verify(editions).findAllIds();
+    }
+
+    @Test
+    void withThePropertyOffTheNudgeStartsNothing() {
+        AtomicInteger queued = new AtomicInteger();
+        executor = command -> queued.incrementAndGet();
+        lock.tryAcquire(LibraryLock.SCAN);
+        CreditsApplier off = applier(false);
+
+        off.retryIfRefused();
+
+        assertThat(queued).hasValue(0);
+        verifyNoInteractions(editions);
+    }
+
+    @Test
+    void theTriggersAreEventListenersAndStartUpListensForApplicationReady() throws NoSuchMethodException {
+        assertThat(CreditsApplier.class.getMethod("onStartup").getAnnotation(EventListener.class).value())
+            .containsExactly(ApplicationReadyEvent.class);
+        assertThat(CreditsApplier.class.getMethod("onScanFinished", ScanFinished.class)
+            .isAnnotationPresent(EventListener.class)).isTrue();
+        assertThat(CreditsApplier.class.getMethod("onPlexImportFinished", PlexImportFinished.class)
+            .isAnnotationPresent(EventListener.class)).isTrue();
+        assertThat(CreditsApplier.class.getMethod("onPlexCreditsImportFinished", PlexCreditsImportFinished.class)
+            .isAnnotationPresent(EventListener.class)).isTrue();
+        assertThat(CreditsApplier.class.getMethod("onEditionsArranged", EditionsArranged.class)
+            .isAnnotationPresent(EventListener.class)).isTrue();
+    }
+
+    @Test
+    void noMethodListensForLibraryChanged() {
+        assertThat(Arrays.stream(CreditsApplier.class.getDeclaredMethods())
+            .flatMap(method -> Arrays.stream(method.getParameterTypes())))
+            .doesNotContain(LibraryChanged.class);
     }
 }
