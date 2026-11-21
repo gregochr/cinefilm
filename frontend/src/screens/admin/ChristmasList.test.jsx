@@ -68,7 +68,7 @@ describe('ChristmasList: the In tab', () => {
     const items = screen.getAllByRole('listitem');
     expect(items).toHaveLength(15);
     expect(items[12]).toHaveTextContent(
-      "Home shows 12. These 2 are in, but won't fit. Leave out an older film to make room.",
+      "Home shows 12 a day. These 2 aren't in today's dozen; they come up on other days.",
     );
     expect(row('Elf')).not.toHaveClass('xmas-row--cut');
     expect(row('Love Actually')).toHaveClass('xmas-row--cut');
@@ -78,15 +78,15 @@ describe('ChristmasList: the In tab', () => {
   it('uses the short cut line on a phone', () => {
     render(<List rows={christmasFixture().inWeek} tab="inWeek" max={12} short />);
     expect(screen.getAllByRole('listitem')[12]).toHaveTextContent(
-      "Home shows 12. These 2 won't fit.",
+      "Home shows 12 a day. These 2 aren't in today's dozen.",
     );
-    expect(screen.queryByText(/Leave out an older film/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/come up on other days/)).not.toBeInTheDocument();
   });
 
   it('counts a single film over the limit', () => {
     const rows = christmasFixture().inWeek.slice(0, 13);
     render(<List rows={rows} tab="inWeek" max={12} />);
-    expect(screen.getByText(/This 1 is in, but won't fit/)).toBeInTheDocument();
+    expect(screen.getByText(/This 1 isn't in today's dozen/)).toBeInTheDocument();
     expect(screen.queryByText(/These 1/)).not.toBeInTheDocument();
   });
 });

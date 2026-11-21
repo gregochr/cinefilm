@@ -4,6 +4,7 @@ import {
   chipFor,
   cutIndex,
   cutText,
+  ownerFillsRow,
   rowAction,
   rowNote,
   yearSuffix,
@@ -80,7 +81,7 @@ export default function ChristmasList({
       items.push(
         <li key="cut" className="xmas-cut">
           <span className="xmas-cut__rule" aria-hidden="true" />
-          <span>{cutText(max, cutCount, short)}</span>
+          <span>{cutText(max, cutCount, short, ownerFillsRow(rows, max))}</span>
         </li>,
       );
     }

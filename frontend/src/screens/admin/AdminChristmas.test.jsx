@@ -78,9 +78,9 @@ describe('Christmas films: the page', () => {
     ).toBeInTheDocument();
     const card = screen.getByRole('region', { name: 'Christmas week status' });
     expect(within(card).getByText('14 films')).toBeInTheDocument();
-    expect(card).toHaveTextContent('will show in Christmas week (Mon 14 Dec to Sun 20 Dec).');
+    expect(card).toHaveTextContent('will show in Christmas week (Mon 14 Dec to Fri 25 Dec).');
     expect(card).toHaveTextContent(
-      'Home shows up to 12, oldest first. Under 5 and it falls back to the usual weekly theme.',
+      'Home shows up to 12: films you added first, then a different mix each day. Under 5 and it falls back to the usual weekly theme.',
     );
     expect(card).toHaveTextContent('12 places on Home');
     expect(card).toHaveTextContent('2 over');
@@ -122,7 +122,7 @@ describe('Christmas films: the page', () => {
     const items = within(screen.getByRole('tabpanel')).getAllByRole('listitem');
     expect(items).toHaveLength(15);
     expect(items[12]).toHaveTextContent(
-      "Home shows 12. These 2 are in, but won't fit. Leave out an older film to make room.",
+      "Home shows 12 a day. These 2 aren't in today's dozen; they come up on other days.",
     );
     expect(row('Elf')).not.toHaveClass('xmas-row--cut');
     expect(row('Love Actually')).toHaveClass('xmas-row--cut');

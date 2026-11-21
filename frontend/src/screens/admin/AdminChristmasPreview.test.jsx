@@ -64,7 +64,7 @@ describe('Christmas films: the preview on a desktop', () => {
     expect(within(card).getAllByRole('link')).toHaveLength(12);
     expect(screen.queryByRole('link', { name: '‹ Admin' })).not.toBeInTheDocument();
     expect(
-      screen.getByText(/These 2 are in, but won't fit\. Leave out an older film/),
+      screen.getByText(/These 2 aren't in today's dozen; they come up on other days/),
     ).toBeInTheDocument();
   });
 });
@@ -78,7 +78,9 @@ describe('Christmas films: the preview and back link on a phone', () => {
     expect(back).toHaveAttribute('href', '/admin');
     const title = screen.getByRole('heading', { level: 1, name: 'Christmas films' });
     expect(back.compareDocumentPosition(title)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(screen.getByText("Home shows 12. These 2 won't fit.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Home shows 12 a day. These 2 aren't in today's dozen."),
+    ).toBeInTheDocument();
   });
 
   it('opens the preview in a sheet and Esc returns focus to its button', async () => {

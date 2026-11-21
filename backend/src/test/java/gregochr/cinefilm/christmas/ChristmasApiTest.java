@@ -8,6 +8,7 @@ import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -22,6 +23,7 @@ import gregochr.cinefilm.library.LibraryLock;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -98,6 +100,74 @@ class ChristmasApiTest extends ApiTestBase {
         assertThat(listTitles.get(0)).isEqualTo("Added");
     }
 
+    private List<String> titles(String path, String json) throws Exception {
+        String body = mvc.perform(get(path)).andExpect(status().isOk()).andReturn().getResponse()
+            .getContentAsString();
+        return JsonPath.read(body, json);
+    }
+
+    private void today(String instant) {
+        doReturn(Instant.parse(instant)).when(clock).instant();
+    }
+
+    @Test
+    void homeAndTheScreenAgreeEachDayUpToChristmasDayWithTheOwnersFilmsFirstAndADifferentMixEachDay()
+        throws Exception {
+        for (int i = 0; i < 20; i++) {
+            add("Tagged " + (char) ('A' + i), 1950 + i, 100L + i, "christmas");
+        }
+        add("Added late", 2001, 900L);
+        add("Added early", 1949, 901L);
+        overrides.set(900L, ChristmasChoice.INCLUDE);
+        overrides.set(901L, ChristmasChoice.INCLUDE);
+        reload();
+
+        List<List<String>> homes = new ArrayList<>();
+        for (String day : List.of("2026-12-21", "2026-12-22", "2026-12-25")) {
+            today(day + "T09:00:00Z");
+            List<String> home = titles("/api/home", "$.weeklyTheme.films[*].title");
+            List<String> screen = titles("/api/admin/christmas", "$.inWeek[*].title");
+
+            assertThat(screen).as(day).hasSize(22).startsWith(home.toArray(String[]::new));
+            assertThat(home).as(day).hasSize(12).startsWith("Added early", "Added late");
+            assertThat(titles("/api/home", "$.weeklyTheme.films[*].title")).as(day + " again").isEqualTo(home);
+            homes.add(home);
+        }
+        assertThat(homes.get(0)).isNotEqualTo(homes.get(1));
+        assertThat(homes.get(1)).isNotEqualTo(homes.get(2));
+        today("2026-12-26T09:00:00Z");
+        mvc.perform(get("/api/home")).andExpect(jsonPath("$.weeklyTheme.title").value(not("This week: Christmas")));
+        mvc.perform(get("/api/admin/christmas")).andExpect(jsonPath("$.week.start").value("2027-12-13"))
+            .andExpect(jsonPath("$.week.end").value("2027-12-25"));
+    }
+
+    @Test
+    void beforeThePeriodTheScreenListsWhatHomeShowsOnItsFirstDay() throws Exception {
+        for (int i = 0; i < 20; i++) {
+            add("Tagged " + (char) ('A' + i), 1950 + i, 100L + i, "christmas");
+        }
+        reload();
+        today("2026-11-21T09:00:00Z");
+        List<String> november = titles("/api/admin/christmas", "$.inWeek[*].title");
+        mvc.perform(get("/api/admin/christmas")).andExpect(jsonPath("$.week.start").value("2026-12-14"));
+
+        today("2026-12-14T09:00:00Z");
+
+        assertThat(november).hasSize(20).startsWith(
+            titles("/api/home", "$.weeklyTheme.films[*].title").toArray(String[]::new));
+    }
+
+    @Test
+    void fewerThanFiveChristmasFilmsStillFallsBackOnChristmasDay() throws Exception {
+        for (int i = 0; i < 4; i++) {
+            add("Tagged " + i, 1950 + i, 100L + i, "christmas");
+        }
+        today("2026-12-25T09:00:00Z");
+
+        mvc.perform(get("/api/home")).andExpect(jsonPath("$.weeklyTheme.title").value(not("This week: Christmas")));
+        mvc.perform(get("/api/admin/christmas")).andExpect(jsonPath("$.fallsBack").value(true));
+    }
+
     @Test
     void getAnswersWeekLimitsKeywordsAndTheThreeLists() throws Exception {
         add("Tagged", 1988, 1L, "christmas");
@@ -113,7 +183,7 @@ class ChristmasApiTest extends ApiTestBase {
         mvc.perform(get("/api/admin/christmas"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.week.start").value("2026-12-14"))
-            .andExpect(jsonPath("$.week.end").value("2026-12-20"))
+            .andExpect(jsonPath("$.week.end").value("2026-12-25"))
             .andExpect(jsonPath("$.limits.max").value(12))
             .andExpect(jsonPath("$.limits.min").value(5))
             .andExpect(jsonPath("$.keywords.total").value(4))

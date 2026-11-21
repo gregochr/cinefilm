@@ -12,6 +12,7 @@ import {
   chipFor,
   cutIndex,
   cutText,
+  ownerFillsRow,
   emptyKind,
   emptyPendingText,
   PREVIEW_CAPTION,
@@ -40,7 +41,7 @@ import {
   weekText,
 } from './christmas.js';
 
-const week = { start: '2026-12-14', end: '2026-12-20' };
+const week = { start: '2026-12-14', end: '2026-12-25' };
 const films = (n) =>
   Array.from({ length: n }, (_, i) => ({ tmdbId: i, title: `F${i}`, reason: 'KEYWORD' }));
 const body = (over = {}) => ({
@@ -55,8 +56,8 @@ const body = (over = {}) => ({
 });
 
 describe('week and counts wording', () => {
-  it('writes the week as Mon 14 Dec to Sun 20 Dec', () => {
-    expect(weekText(week)).toBe('Mon 14 Dec to Sun 20 Dec');
+  it('writes the week as Mon 14 Dec to Fri 25 Dec', () => {
+    expect(weekText(week)).toBe('Mon 14 Dec to Fri 25 Dec');
   });
 
   it('reads an ISO date as a calendar day across a year end', () => {
@@ -91,15 +92,34 @@ describe('tabs and the cut', () => {
 
   it('says "This 1" for one film over the limit and "These n" for more', () => {
     expect(cutText(12, 1)).toBe(
-      "Home shows 12. This 1 is in, but won't fit. Leave out an older film to make room.",
+      "Home shows 12 a day. This 1 isn't in today's dozen; it comes up on other days.",
     );
-    expect(cutText(12, 1, true)).toBe("Home shows 12. This 1 won't fit.");
+    expect(cutText(12, 1, true)).toBe("Home shows 12 a day. This 1 isn't in today's dozen.");
   });
 
   it('writes the cut line', () => {
     expect(cutText(12, 2)).toBe(
-      "Home shows 12. These 2 are in, but won't fit. Leave out an older film to make room.",
+      "Home shows 12 a day. These 2 aren't in today's dozen; they come up on other days.",
     );
+  });
+
+  it('warns that the rest never show when the owner’s own films fill the row', () => {
+    expect(cutText(12, 2, false, true)).toBe(
+      'Home shows 12. These 2 will never show: your own films fill the 12.',
+    );
+    expect(cutText(12, 1, true, true)).toBe('Home shows 12. This 1 will never show.');
+  });
+
+  it('knows when the owner’s INCLUDE films alone fill the row', () => {
+    const rows = (included) =>
+      Array.from({ length: 14 }, (_, i) => ({
+        filmId: i,
+        override: i < included ? 'INCLUDE' : null,
+      }));
+    expect(ownerFillsRow(rows(11), 12)).toBe(false);
+    expect(ownerFillsRow(rows(12), 12)).toBe(true);
+    expect(ownerFillsRow(rows(14), 12)).toBe(true);
+    expect(ownerFillsRow(rows(0), 12)).toBe(false);
   });
 });
 
@@ -209,8 +229,8 @@ describe('status card', () => {
   it('says how many films show and when', () => {
     expect(statusText(body())).toEqual({
       bold: '14 films',
-      rest: ' will show in Christmas week (Mon 14 Dec to Sun 20 Dec).',
-      hint: 'Home shows up to 12, oldest first. Under 5 and it falls back to the usual weekly theme.',
+      rest: ' will show in Christmas week (Mon 14 Dec to Fri 25 Dec).',
+      hint: 'Home shows up to 12: films you added first, then a different mix each day. Under 5 and it falls back to the usual weekly theme.',
     });
   });
 
@@ -422,7 +442,7 @@ describe('the Home preview', () => {
 
   it('says what Home says', () => {
     expect(PREVIEW_TITLE).toBe('This week: Christmas');
-    expect(PREVIEW_CAPTION).toBe('A new theme every Monday');
+    expect(PREVIEW_CAPTION).toBe('A new theme each week');
     expect(PREVIEW_LABEL).toBe('Preview · Home in Christmas week');
     expect(fallbackText(5)).toBe(
       'Christmas week will show the usual weekly theme — under 5 Christmas films.',
@@ -442,6 +462,6 @@ describe('the Home preview', () => {
   });
 
   it('writes the phone’s short cut line', () => {
-    expect(cutText(12, 2, true)).toBe("Home shows 12. These 2 won't fit.");
+    expect(cutText(12, 2, true)).toBe("Home shows 12 a day. These 2 aren't in today's dozen.");
   });
 });

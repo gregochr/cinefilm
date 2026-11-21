@@ -35,7 +35,7 @@ public final class ChristmasDtos {
         NO_TMDB_ID
     }
 
-    /** Christmas week, Monday to Sunday. */
+    /** The Christmas period: a Monday to 25 December, both ends included. */
     public record WeekDto(LocalDate start, LocalDate end) {
     }
 

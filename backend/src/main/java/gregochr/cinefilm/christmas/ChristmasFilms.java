@@ -36,7 +36,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * The Christmas films Admin screen: which films Home's Christmas week counts, and the owner's say over them. The list
+ * The Christmas films Admin screen: which films Home's Christmas period counts, and the owner's say over them. The list
  * is built by {@link WeeklyThemeSelector#christmasFilms}, the code Home uses, so the screen and Home cannot disagree
  * (Home shows the first {@link WeeklyThemeSelector#MAX_FILMS}). The reason a film counts (TMDB keyword or added by
  * the owner) is decided at read time from the film's keywords, never stored. Writes one at a time, so two quick
@@ -168,7 +168,10 @@ public class ChristmasFilms {
         List<Film> library = loader.loadAll().stream().map(FilmView::film).toList();
         ChristmasOverrides.Snapshot choices = overrides.snapshot();
         Set<Long> exclude = choices.exclude();
-        List<Item> inWeek = WeeklyThemeSelector.christmasFilms(library, choices.include(), exclude).stream()
+        HolidayWeeks.Week week = HolidayWeeks.christmasWeekFrom(LocalDate.now(clock));
+        // Inside the period this is today (Home's date); before it, the first day, so the screen previews Home's row.
+        LocalDate shownOn = LocalDate.now(clock).isBefore(week.start()) ? week.start() : LocalDate.now(clock);
+        List<Item> inWeek = WeeklyThemeSelector.christmasFilms(library, choices.include(), exclude, shownOn).stream()
             .map(f -> item(f, tagged(f) ? Reason.KEYWORD : Reason.ADDED, choices)).toList();
         List<Item> added = inWeek.stream().filter(i -> i.reason() == Reason.ADDED).toList();
         List<LeftOutItem> leftOut = library.stream()
@@ -185,7 +188,6 @@ public class ChristmasFilms {
         // Stalled: films are waiting, nothing is running, and nothing will fetch them (TMDB off, or the last run fell
         // short).
         boolean stalled = !running && fetched < total && (!enabled || incomplete);
-        HolidayWeeks.Week week = HolidayWeeks.christmasWeekFrom(LocalDate.now(clock));
         return new ChristmasView(new WeekDto(week.start(), week.end()),
             new Limits(WeeklyThemeSelector.MAX_FILMS, WeeklyThemeSelector.MIN_FILMS),
             new Keywords(fetched, total, running, enabled, stalled),

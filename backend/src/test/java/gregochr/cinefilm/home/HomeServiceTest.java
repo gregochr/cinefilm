@@ -113,7 +113,7 @@ class HomeServiceTest {
         assertThat(home.weeklyTheme().title()).isEqualTo(monday.title());
         assertThat(home.weeklyTheme().kind()).isEqualTo(monday.kind());
         assertThat(home.weeklyTheme().value()).isEqualTo(monday.value());
-        assertThat(home.weeklyTheme().caption()).isEqualTo("A new theme every Monday");
+        assertThat(home.weeklyTheme().caption()).isEqualTo("A new theme each week");
         assertThat(home.weeklyTheme().films()).extracting(FilmCard::id)
             .containsExactlyElementsOf(monday.films().stream().map(Film::getId).toList());
     }
@@ -170,7 +170,7 @@ class HomeServiceTest {
         assertThat(home.weeklyTheme().kind()).isEqualTo("holiday");
         assertThat(home.weeklyTheme().value()).isEqualTo("halloween");
         assertThat(home.weeklyTheme().title()).isEqualTo("This week: Halloween");
-        assertThat(home.weeklyTheme().caption()).isEqualTo("A new theme every Monday");
+        assertThat(home.weeklyTheme().caption()).isEqualTo("A new theme each week");
         assertThat(home.weeklyTheme().films()).extracting(FilmCard::title)
             .containsExactly("Holiday 0", "Holiday 1", "Holiday 2", "Holiday 3", "Holiday 4", "Holiday 5");
     }
