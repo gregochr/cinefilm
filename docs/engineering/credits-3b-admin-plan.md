@@ -30,6 +30,9 @@ later.
 
 So version 2's verdict, reasons and **Use detected** all arrive with 3c.
 
+Stills at Plex's time or the owner's time are allowed for every film, test side included. The classifier plan's
+"stills review" rule (development films only) is about judging a model's results. These stills show no model result.
+
 ## How a row's Plex state is worked out
 
 `CreditsApply` gains a pure `plexStatus(parts, lastFingerprint, plexRow)`, computed whatever the edition's source.
@@ -52,8 +55,8 @@ Only `REFUSED` and `USABLE` carry Plex's time, in edition time.
 **`GET /api/admin/credits?filter=&page=&size=`**
 
 `filter` takes one of four values:
-- `none` (the default): editions whose source is null, whether or not a marker is set (a marker with no source yet
-  shows as "not settled yet");
+- `none` (the default; the screen calls it "Needs a look"): editions whose source is null, whether or not a marker
+  is set. A marker with no source yet shows as "not settled yet".
 - `plex`: source `PLEX`;
 - `owner`: source `OWNER`;
 - `all`.
@@ -92,15 +95,16 @@ Each page costs a fixed number of queries, never one per edition: the page of id
 their Plex rows, and the counts.
 
 **`PUT /api/admin/editions/{id}/credits` `{ markerMs }`**
-- `markerMs` must be whole seconds and must pass `EditionGuard.plausible` for the edition's timeline: at least 60% in,
-  and at least 60 s before the end.
+- `markerMs` must be whole seconds and must pass `EditionGuard.plausible` for the edition's timeline: at least 60%
+  in, and at least 60 s before the end.
 - That bound is the floor against a typo. "1:52" read as 1 min 52 s would otherwise make the film count as watched
   on its first progress report.
-- Anything else is a 400 `{error}`:
-  - "That time is outside where end credits can start";
-  - "This film's length isn't known" (when there is no timeline).
+- The body is checked in this order, each failure a 400 `{error}`:
+  1. a missing or unreadable body, or a `markerMs` that is missing, null, negative, non-numeric or not whole seconds:
+     `Invalid request` (the Christmas PUT's convention);
+  2. no timeline: "This film's length isn't known";
+  3. outside the guard: "That time is outside where end credits can start".
 - On success it sets the marker with source `OWNER` (over a `PLEX` marker too) and answers the new `CreditsRow`.
-- 404 for an unknown or hidden edition.
 
 **`DELETE /api/admin/editions/{id}/credits`**
 - On an `OWNER` edition, it runs `CreditsApply.apply` as though the source were null and writes marker and source
@@ -109,6 +113,7 @@ their Plex rows, and the counts.
 - It answers the new `CreditsRow`.
 
 **Both writes**
+- 404 `{error}` "No such edition" for an unknown or hidden edition, checked before the body's range.
 - Each takes the library lock once with `tryAcquire(LibraryLock.CREDITS)`, never waiting, and answers 409 with
   `busyText()` when the lock is held.
 - `CREDITS` is the holder the detector and the applier use. Sharing it is deliberate: a write and a pass can never
@@ -122,18 +127,21 @@ their Plex rows, and the counts.
 - `credits/CreditsAdminController` stays thin, over `credits/CreditsAdminService`.
 - One edition's apply is shared with `CreditsApplier.applyBatch`, not copied.
 - `PlexCreditsMarker`'s Javadoc stops saying nothing applies it.
-- `docs/engineering/foundation-plan.md`'s API contract gains the three endpoints in the same PR (AGENTS.md rule 4).
+- `docs/engineering/foundation-plan.md`'s API contract follows the code (AGENTS.md rule 4): 3b-1a adds the GET with
+  `CreditsList` and `CreditsRow`, and 3b-1b adds PUT and DELETE with their 400, 404 and 409 texts.
 
 ## The screen
 
 **Where**
-- Library gets an **End credits** card beside the Plex card, with three count tiles ("No marker", "From Plex",
+- Library gets an **End credits** card beside the Plex card, with three count tiles ("Needs a look", "From Plex",
   "Yours") and a secondary button, **Review end credits…**, that opens `/admin/library/credits`.
-- That page is a sub-list like the `FILE_LISTS` pages: a back link to Library, and `bareOnPhone` applies.
-- Filter tabs use `AdminTabList`: No marker (the default), From Plex, Yours and All, each showing its count. The
+- That page is a sub-list like the `FILE_LISTS` pages: a back link to Library and its own `SectionTitle`, as
+  `AdminLibraryFiles.jsx` renders. `bareOnPhone` (`state/adminRoutes.js`) matches only `ADMIN_SECTIONS` and
+  `FILE_LISTS` paths today, so the new path is added to it, with a test in `adminRoutes.test.js`.
+- Filter tabs use `AdminTabList`: Needs a look (the default), From Plex, Yours and All, each showing its count. The
   chosen tab is in the URL as `?show=`.
-- The server sends 25 rows a page. The page has Previous and Next and a line like "Showing 26–50 of 212", paged as
-  the grouping report is.
+- The server sends 25 rows a page. This is the frontend's first server-paged list with Previous and Next. Its range
+  line, "Showing 26–50 of 212", sits in `state/creditsAdminCopy.js` beside `adminCopy.js`'s `showing`.
 - If a write leaves the current page empty while `total` is above 0, the page steps back one.
 
 **A row**
@@ -146,7 +154,10 @@ their Plex rows, and the counts.
   - "No marker · the end screen shows at 97%".
 - **Line three**, only when there's no marker, gives the reason:
   - `NONE`: "Plex has no marker for this film";
-  - `NO_FINGERPRINT` or `STALE`: "Plex's marker is for an older copy of this file";
+  - `NO_FINGERPRINT`: "This file hasn't been fully scanned, so Plex's marker can't be matched to it";
+  - `STALE`: "Plex's marker is for an older copy of this file";
+  - `USABLE` (no pass has run since, for example with `cinefilm.credits.apply.enabled` off or the lock busy):
+    "Plex's marker at 1:52:10 applies on the next pass";
   - `OUTSIDE`: "Plex's marker is past the end of this file";
   - `REFUSED`: "Plex's marker at 0:41:07 is too early or too late to trust";
   - `NO_TIMELINE`: "This film's length isn't known".
@@ -172,16 +183,19 @@ their Plex rows, and the counts.
   no time field.
 
 **After a write**
-- A toast says "End credits set" or "Your time cleared", and the same text goes to a live region.
+- A toast says "End credits set" or "Your time cleared", through the shell's `showToast` only. The Toast is already
+  a `role="status"` region, so no second live region is added.
 - The page and its counts are read again.
-- Focus moves through `useFallbackFocus` to the row's own button if the row is still on the page, otherwise the next
-  row's button, otherwise the section title.
+- After the reload, the page itself moves focus, by id: to the row's own button if the row is still on the page,
+  otherwise the next row's button. `useFallbackFocus` (armed with `armFocusFallback()` before the write) handles
+  only the last case, the section title, when no row is left.
 - A 400 or 409 shows the server's text in the panel through `lockText`. The panel stays open and keeps the typed time.
 
 **Other states**
 - Loading: static skeleton rows.
 - A failed read: the inline error banner with **Check again**, which reads again.
 - An empty tab: "No films here".
+- A 401 on the read or on a write brings up the sign-in card, as the rest of Admin does (`useSignInRecovery`).
 
 **Code shape**
 - `api/resources.js` gains `adminApi.credits(filter, page)`, `setCredits(id, markerMs)` and `clearCredits(id)`.
@@ -202,13 +216,18 @@ their Plex rows, and the counts.
   - every state in order, with a row and a null fingerprint, and a stale row with a null duration (which is `STALE`);
   - the guard's bounds, one below, at and one above;
   - `apply`'s existing cases unchanged.
-- `CreditsAdminServiceTest`:
+- `CreditsAdminServiceTest` (Mockito, the pure mapping only): `runtimeMs` null without a timeline, `plexStatus`
+  wired into the row, the size cap.
+- `CreditsAdminApiTest` (`ApiTestBase`, H2, runs locally): these behaviours live in the database predicates, so
+  they're tested through it:
   - each filter's rows and the grouped counts adding up, with an unsettled marker counted under `none`;
   - hidden editions left out;
-  - `runtimeMs` null without a timeline;
   - `editionCount`.
-- `CreditsAdminControllerTest` (MockMvc): each bad parameter gives a 400, and the JSON field names the frontend
-  reads. No field outside `CreditsRow`'s list above, so no version 2 field.
+- `CreditsAdminControllerTest` (MockMvc):
+  - each bad parameter gives a 400 with its `$.error`;
+  - 401 when signed out;
+  - the JSON field names the frontend reads, and no field outside `CreditsRow`'s list above, so no version 2
+    field.
 - `CreditsAdminIntegrationTest` (Testcontainers):
   - seeded editions in every filter;
   - the hidden predicate agreeing with `hiddenFromBrowse()` for each hidden case;
@@ -221,13 +240,14 @@ their Plex rows, and the counts.
     second (for example 7,200,500 ms);
   - a non-whole second;
   - no timeline;
-  - unknown and hidden editions;
+  - unknown and hidden editions, for PUT and DELETE;
   - `OWNER` over `PLEX`;
   - DELETE on `OWNER`: back to `PLEX` from a usable row, and cleared without one;
   - DELETE on a stale `PLEX` edition, which is left alone;
   - both writes answering 409 without writing when the lock is held, and releasing the lock after a failure.
   - These assert saved marker and source, never repository call counts.
-- `CreditsAdminControllerTest`: the 400, 404 and 409 bodies.
+- `CreditsAdminControllerTest`: each 400 text in the check order, the 404 and 409 bodies, 401 when signed out, and
+  the missing-CSRF-header case for PUT and DELETE. Every 4xx assertion checks `$.error`.
 - `CreditsAdminIntegrationTest`: a PUT then DELETE round trip, and the lock released only after the commit (a second
   thread's `tryAcquire` fails until the write has committed).
 
@@ -244,6 +264,7 @@ their Plex rows, and the counts.
   - Previous and Next;
   - the skeleton, the failed read and Check again re-reading;
   - the empty tab;
+  - a 401 on the read bringing up the sign-in card;
   - opening a panel requests exactly two stills, and no still is requested before;
   - one panel open at a time;
   - a failed still and Try again;
@@ -255,7 +276,8 @@ their Plex rows, and the counts.
   - refuses `1:60:00`, `1:2:3:4`, empty input, negative values and letters.
 - The guard range one second either side of both bounds, with a non-whole-second runtime.
 - Component tests:
-  - Set and Clear with the toast and live-region text;
+  - Set and Clear with the toast text inside the Toast's `role="status"`;
+  - a 401 on a write bringing up the sign-in card;
   - 400 and 409 keeping the panel and the typed time;
   - `aria-invalid` and the error description;
   - focus landing on the row's button, the next row's, or the section title;
