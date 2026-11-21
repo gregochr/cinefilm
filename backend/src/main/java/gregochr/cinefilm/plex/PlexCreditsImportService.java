@@ -37,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -44,8 +45,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * The one-off import of Plex's credits markers (phase 2c): pairs every Plex film with CineFilm's files exactly as the
  * Plex import does, asks Plex for each matched film's markers, one request at a time, and stores a marker for each
- * file it can trust (see {@link PlexCreditsRules}). Read-only towards Plex (GET requests only) and it applies
- * nothing: no edition, player or watched rule reads the rows.
+ * file it can trust (see {@link PlexCreditsRules}). Read-only towards Plex (GET requests only). It applies nothing
+ * itself: when an import finishes it publishes {@link PlexCreditsImportFinished}, and the credits applier applies the
+ * rows to editions.
  *
  * <p>The roughly 1,100 requests are made without the {@link LibraryLock}, so a scan is never kept waiting; the rows are
  * then written in one short step under the lock, each only if its file still has the fingerprint it had when Plex was
@@ -71,6 +73,7 @@ public class PlexCreditsImportService {
     private final Sleeper sleeper;
     private final String prefix;
     private final TransactionTemplate tx;
+    private final ApplicationEventPublisher events;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicReference<PlexCreditsProgress> progress = new AtomicReference<>();
     private final AtomicReference<LastCreditsImport> last = new AtomicReference<>();
@@ -80,7 +83,7 @@ public class PlexCreditsImportService {
                                     PlexCreditsMarkerRepository markers, LibraryLock lock,
                                     @Qualifier("plexCreditsExecutor") Executor executor, Clock clock,
                                     Sleeper sleeper, @Value("${cinefilm.plex.path-prefix}") String pathPrefix,
-                                    PlatformTransactionManager transactions) {
+                                    PlatformTransactionManager transactions, ApplicationEventPublisher events) {
         this.plex = plex;
         this.ingest = ingest;
         this.files = files;
@@ -91,6 +94,7 @@ public class PlexCreditsImportService {
         this.sleeper = sleeper;
         this.prefix = PlexRules.prefix(pathPrefix);
         this.tx = new TransactionTemplate(transactions);
+        this.events = events;
     }
 
     /** True while an import is running. */
@@ -150,6 +154,9 @@ public class PlexCreditsImportService {
             LOG.error("Plex credits import failed", e);
         }
         last.set(new LastCreditsImport(startedAt, clock.instant(), error, report));
+        if (error == null) {
+            events.publishEvent(new PlexCreditsImportFinished());
+        }
     }
 
     /** A Plex film and the CineFilm files its list entry paired with. */
