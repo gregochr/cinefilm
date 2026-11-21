@@ -120,6 +120,7 @@ class CreditsApplierIntegrationTest extends IntegrationTestBase {
         states.save(inProgress(justBefore, 4_999_999, false));
         states.save(inProgress(hidden, 5_200_000, true));
         states.save(inProgress(toClear, 5_200_000, false));
+        states.save(inProgress(same, 5_200_000, false));
 
         PassResult first = applier.runPass();
 
