@@ -71,11 +71,13 @@ class CreditsApplyTest {
     void sixtyPercentIntoTheEditionIsTheEarliestPlexMarkerAllowed() {
         assertThat(plex(ONE_PART, 3_600_000)).isEqualTo(new Applied(3_600_000L, CreditsMarkerSource.PLEX));
         assertThat(plex(ONE_PART, 3_599_999)).isEqualTo(NONE);
+        assertThat(plex(ONE_PART, 3_600_001)).isEqualTo(new Applied(3_600_001L, CreditsMarkerSource.PLEX));
     }
 
     @Test
     void sixtySecondsBeforeTheEndIsTheLatestPlexMarkerAllowed() {
         assertThat(plex(ONE_PART, 5_940_000)).isEqualTo(new Applied(5_940_000L, CreditsMarkerSource.PLEX));
+        assertThat(plex(ONE_PART, 5_939_999)).isEqualTo(new Applied(5_939_999L, CreditsMarkerSource.PLEX));
         assertThat(plex(ONE_PART, 5_940_001)).isEqualTo(NONE);
     }
 
