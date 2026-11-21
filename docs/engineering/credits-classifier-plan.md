@@ -1462,7 +1462,8 @@ What it shows:
 stays 2. The test split has been looked at once; its second and last look is the version 3 gate, so any new design is
 chosen on development films only and judged there. The gate and phase 3's `AUTO` wait with L6a, because the gate
 reads version 3 rows (with their `opening_type` and `margin_band`) and phase 3's `AUTO` waits on the gate. Phase 3 itself
-is not built yet, so today no marker is applied and every film uses the 97% fallback. Model B's code is not deleted while L6a is held (L6b is held with it).
+is not built yet, so today no marker is applied: every film's end overlay
+appears at 97% of its runtime, and it counts as watched at 92%. Model B's code is not deleted while L6a is held (L6b is held with it).
 
 ## L3c specification (written 2026-11-19)
 
