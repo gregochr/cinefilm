@@ -218,6 +218,7 @@ class CreditsAdminApiTest extends ApiTestBase {
     @Test
     void signedOutIs401() throws Exception {
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/admin/credits"))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
     }
 }

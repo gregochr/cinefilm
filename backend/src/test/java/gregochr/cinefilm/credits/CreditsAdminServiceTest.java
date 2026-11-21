@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsList;
@@ -159,6 +160,21 @@ class CreditsAdminServiceTest {
         assertThat(items.get(1).runtimeMs()).isNull();
         assertThat(items.get(1).plex().state()).isEqualTo(PlexState.NONE);
         assertThat(items.get(1).editionCount()).isZero();
+    }
+
+    @Test
+    void aPageOfOnlyFilelessEditionsNeverAsksForPlexRowsAndEveryRowIsPlexNone() {
+        Edition noFile = seeded(2, "No File", 2000, null, null);
+        noFile.getMediaFiles().clear();
+        page(List.of(noFile));
+        when(editions.countVisibleBySource()).thenReturn(List.of());
+        when(editions.countVisibleByFilmIdIn(anyCollection())).thenReturn(List.of());
+
+        List<CreditsRow> items = service().list(CreditsFilter.ALL, 0, 25).items();
+
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).plex().state()).isEqualTo(PlexState.NONE);
+        verifyNoInteractions(markers);
     }
 
     @Test
