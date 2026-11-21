@@ -387,6 +387,12 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
     filmId, joined }`. If another film already has that TMDB id, this film is joined into it (the lowest id; the owner's
     explicit choice, so the different-film guard is not applied), the survivor is confirmed, `filmId` is the survivor's
     and `joined` is true; a `join` line is written to the grouping report. Takes the library lock.
+  - `POST /api/admin/films/{id}/leave-unmatched` (no body) sets the film's `match_status` to `LEFT_UNMATCHED` and clears
+    its stored candidates, answering 204. To do and the "Need a match" count leave it out (`findNeedingMatch`), no scan
+    retries it, and a later Fix match or a Plex import that supplies a TMDB id still makes it `MATCHED`. Only a film
+    that To do lists as needing a match may be left (`NEEDS_MATCH`, or no TMDB id and not `PENDING`): any other is a
+    409 "This film is not waiting for a match". Takes the library lock; 404 unknown film; 409 with the lock holder's text
+    while a scan, import or match holds it.
   - Errors (`{ error }`): 400 blank query or missing `tmdbId`; 404 unknown film, or TMDB does not know the id; 409
     409 with the lock holder's text, "A scan is running" for a scan (apply only, when the library lock is held); 503 TMDB unavailable.
 - **Edit editions** (`EditionArranger`, owner-only; the panel is `docs/design/handover/edit-editions/README.md`):

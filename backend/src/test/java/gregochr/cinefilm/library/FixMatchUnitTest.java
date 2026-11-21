@@ -26,6 +26,7 @@ import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
+import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
 import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
@@ -351,6 +352,73 @@ class FixMatchUnitTest {
             .hasMessage("A Plex import is running");
         verify(tmdb, never()).movie(5);
         assertThat(lock.holder()).isEqualTo(LibraryLock.IMPORT);
+    }
+
+    @Test
+    void leaveUnmatchedMarksANeedsMatchFilmAndClearsItsCandidates() {
+        Film target = film(FILM_ID, "Home video");
+        target.setMatchStatus(MatchStatus.NEEDS_MATCH);
+        target.setMatchCandidates("[{\"tmdbId\":1}]");
+        when(films.findById(FILM_ID)).thenReturn(Optional.of(target));
+
+        fix.leaveUnmatched(FILM_ID);
+
+        assertThat(target.getMatchStatus()).isEqualTo(MatchStatus.LEFT_UNMATCHED);
+        assertThat(target.getMatchCandidates()).isNull();
+        verify(films).save(target);
+        assertThat(lock.holder()).isNull();
+        // Leaving writes: its transaction is not read-only.
+        verify(transactions).getTransaction(argThat(definition -> !definition.isReadOnly()));
+    }
+
+    @Test
+    void leaveUnmatchedAcceptsAMatchedFilmWithNoTmdbIdButNotOneWithAnId() {
+        Film noId = film(FILM_ID, "Slum Dog");
+        noId.setMatchStatus(MatchStatus.MATCHED);
+        noId.setTmdbId(null);
+        when(films.findById(FILM_ID)).thenReturn(Optional.of(noId));
+
+        fix.leaveUnmatched(FILM_ID);
+        assertThat(noId.getMatchStatus()).isEqualTo(MatchStatus.LEFT_UNMATCHED);
+
+        Film withId = film(8L, "Dune");
+        withId.setMatchStatus(MatchStatus.MATCHED);
+        withId.setTmdbId(438631L);
+        when(films.findById(8L)).thenReturn(Optional.of(withId));
+        assertThatThrownBy(() -> fix.leaveUnmatched(8L)).isInstanceOf(ConflictException.class)
+            .hasMessage("This film is not waiting for a match");
+        assertThat(withId.getMatchStatus()).isEqualTo(MatchStatus.MATCHED);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void leaveUnmatchedRefusesAPendingFilmEvenWithNoId() {
+        Film pending = film(FILM_ID, "Waiting");
+        pending.setMatchStatus(MatchStatus.PENDING);
+        pending.setTmdbId(null);
+        when(films.findById(FILM_ID)).thenReturn(Optional.of(pending));
+
+        assertThatThrownBy(() -> fix.leaveUnmatched(FILM_ID)).isInstanceOf(ConflictException.class)
+            .hasMessage("This film is not waiting for a match");
+        assertThat(pending.getMatchStatus()).isEqualTo(MatchStatus.PENDING);
+        verify(films, never()).save(pending);
+    }
+
+    @Test
+    void leaveUnmatchedForAnUnknownFilmIs404AndReleasesTheLock() {
+        assertThatThrownBy(() -> fix.leaveUnmatched(99L)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No film 99");
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void leaveUnmatchedWhileAScanRunsIs409AndTouchesNothing() {
+        lock.tryAcquire(LibraryLock.SCAN);
+
+        assertThatThrownBy(() -> fix.leaveUnmatched(FILM_ID)).isInstanceOf(ConflictException.class)
+            .hasMessage("A scan is running");
+        verifyNoInteractions(films);
+        assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
     }
 
     @Test

@@ -16,6 +16,7 @@ function renderGroup(group, props = {}) {
   const handlers = {
     onConfirm: vi.fn(),
     onFindFilm: vi.fn(),
+    onLeave: vi.fn(),
     onSortOut: vi.fn(),
     onFindSubtitles: vi.fn(),
     onChooseFull: vi.fn(),
@@ -143,6 +144,60 @@ describe('AdminTodoGroup: Pick the right film', () => {
     const fewer = screen.getByRole('button', { name: 'Show fewer' });
     expect(fewer).toHaveAttribute('aria-expanded', 'true');
     expect(fewer).toHaveAttribute('aria-controls', screen.getByRole('list').id);
+  });
+});
+
+describe('AdminTodoGroup: Leave unmatched', () => {
+  it('is on every match row, after "Find the film…", with its hint shown', () => {
+    renderGroup(find(film, 'pickFilm'));
+
+    for (const row of screen.getAllByRole('listitem')) {
+      const buttons = within(row).getAllByRole('button');
+      expect(buttons.at(-1)).toHaveAccessibleName('Leave unmatched');
+      expect(buttons.at(-2)).toHaveAccessibleName('Find the film…');
+      expect(
+        within(row).getByText(
+          'Stop listing this film here. It stays in your library, and you can still match it later from Fix match.',
+        ),
+      ).toBeVisible();
+    }
+  });
+
+  it('passes the item and the button to onLeave', async () => {
+    const { onLeave, onFindFilm } = renderGroup(find(film, 'pickFilm'));
+    const suspiria = screen.getAllByRole('listitem')[1];
+    const button = within(suspiria).getByRole('button', { name: 'Leave unmatched' });
+
+    await userEvent.click(button);
+
+    expect(onLeave).toHaveBeenCalledWith(
+      attention.items.find((i) => i.filmId === 34),
+      button,
+    );
+    expect(onFindFilm).not.toHaveBeenCalled();
+  });
+
+  it('is described by the hint and the row title, and is quiet like "Find the film…"', () => {
+    renderGroup(find(film, 'pickFilm'));
+    const suspiria = screen.getAllByRole('listitem')[1];
+    const button = within(suspiria).getByRole('button', { name: 'Leave unmatched' });
+
+    expect(button).toHaveAccessibleDescription(/Stop listing this film here.*Suspiria/s);
+    expect(button).toHaveClass('admin__todo-quiet');
+  });
+
+  it('marks the button aria-disabled while the row is busy and ignores a click then', async () => {
+    const { onLeave } = renderGroup(find(film, 'pickFilm'), { confirming: [34] });
+    const [wicker, suspiria] = screen.getAllByRole('listitem');
+    const button = within(suspiria).getByRole('button', { name: 'Leave unmatched' });
+
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(button);
+
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(within(wicker).getByRole('button', { name: 'Leave unmatched' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
   });
 });
 

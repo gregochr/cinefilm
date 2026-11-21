@@ -428,3 +428,153 @@ describe('useAdminTodo: the full list’s owner choices', () => {
     expect(result.current.groups.find((g) => g.key === 'fullMissing').rows).toHaveLength(1);
   });
 });
+
+describe('useAdminTodo: leaveUnmatched', () => {
+  const LEAVE = '/api/admin/films/34/leave-unmatched';
+  const leaves = (fetchMock) => posts(fetchMock).filter(([url]) => url === LEAVE);
+
+  it('posts to the leave route with no body, hides the row, reports the change and does not touch search', async () => {
+    const fetchMock = installFetch((m, url) =>
+      m === 'POST' && url === LEAVE ? respond(null, 204) : null,
+    );
+    const changed = vi.fn();
+    window.addEventListener(LIBRARY_CHANGED_EVENT, changed);
+    try {
+      const { result, onChanged } = mount();
+      const onHidden = vi.fn();
+      await waitFor(() => expect(result.current.allRead).toBe(true));
+
+      await act(() => result.current.leaveUnmatched(SUSPIRIA, { onHidden }));
+
+      expect(leaves(fetchMock)).toHaveLength(1);
+      expect(leaves(fetchMock)[0][1].body).toBeUndefined();
+      expect(result.current.groups[0].rows.map((r) => r.filmId)).toEqual([31]);
+      expect(onHidden).toHaveBeenCalledTimes(1);
+      expect(onChanged).toHaveBeenCalledTimes(1);
+      expect(result.current.confirming).toEqual([]);
+      expect(result.current.problems[34]).toBeNull();
+      expect(changed).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
+    }
+  });
+
+  it('works for a film with no candidate at all', async () => {
+    const fetchMock = installFetch((m, url) =>
+      m === 'POST' && url === LEAVE ? respond(null, 204) : null,
+    );
+    const { result } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+
+    await act(() => result.current.leaveUnmatched({ ...SUSPIRIA, candidates: [] }));
+
+    expect(leaves(fetchMock)).toHaveLength(1);
+  });
+
+  it('ignores a second call for the same film while its post is in flight, even a confirm', async () => {
+    let release;
+    const fetchMock = installFetch((m, url) =>
+      m === 'POST' && url === LEAVE
+        ? new Promise((resolve) => {
+            release = () => resolve(respond(null, 204));
+          })
+        : null,
+    );
+    const { result, onChanged } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+
+    let first;
+    act(() => {
+      first = result.current.leaveUnmatched(SUSPIRIA);
+    });
+    await act(() => result.current.leaveUnmatched(SUSPIRIA));
+    await act(() => result.current.confirm(SUSPIRIA));
+    expect(result.current.confirming).toEqual([34]);
+
+    await act(async () => {
+      release();
+      await first;
+    });
+
+    expect(posts(fetchMock)).toHaveLength(1);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    expect(result.current.confirming).toEqual([]);
+  });
+
+  it('keeps the row and says so when the post fails, then clears the problem on a retry', async () => {
+    let fail = true;
+    installFetch((m, url) => {
+      if (m !== 'POST' || url !== LEAVE) return null;
+      return fail ? respond({ error: 'x' }, 500) : respond(null, 204);
+    });
+    const { result, onChanged } = mount();
+    const onHidden = vi.fn();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+
+    await act(() => result.current.leaveUnmatched(SUSPIRIA, { onHidden }));
+
+    expect(result.current.problems[34]).toBe('Couldn’t leave it — try again.');
+    expect(result.current.groups[0].rows).toHaveLength(2);
+    expect(onChanged).not.toHaveBeenCalled();
+    expect(onHidden).not.toHaveBeenCalled();
+    expect(result.current.confirming).toEqual([]);
+    fail = false;
+
+    await act(() => result.current.leaveUnmatched(SUSPIRIA));
+
+    expect(result.current.problems[34]).toBeNull();
+    expect(result.current.groups[0].rows).toHaveLength(1);
+  });
+
+  it('says a scan is running on the 409 for the bare scan line', async () => {
+    installFetch((m, url) =>
+      m === 'POST' && url === LEAVE ? respond({ error: 'A scan is running' }, 409) : null,
+    );
+    const { result, onChanged } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+
+    await act(() => result.current.leaveUnmatched(SUSPIRIA));
+
+    expect(result.current.problems[34]).toBe('A scan is running — try again when it finishes.');
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it('reads the lists again on a 404, the film being gone', async () => {
+    installFetch((m, url) => (m === 'POST' && url === LEAVE ? respond({ error: 'x' }, 404) : null));
+    const { result, onChanged } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+
+    await act(() => result.current.leaveUnmatched(SUSPIRIA));
+
+    expect(result.current.problems[34]).toBe(
+      'That film is no longer in the library. The list is being updated.',
+    );
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    expect(result.current.groups[0].rows).toHaveLength(2);
+  });
+
+  it('does not set state after the page has gone, but still reports the change', async () => {
+    let release;
+    installFetch((m, url) =>
+      m === 'POST' && url === LEAVE
+        ? new Promise((resolve) => {
+            release = () => resolve(respond(null, 204));
+          })
+        : null,
+    );
+    const { result, unmount, onChanged } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+    const onHidden = vi.fn();
+    let pending;
+    act(() => {
+      pending = result.current.leaveUnmatched(SUSPIRIA, { onHidden });
+    });
+
+    unmount();
+    release();
+    await pending;
+
+    expect(onHidden).not.toHaveBeenCalled();
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+});

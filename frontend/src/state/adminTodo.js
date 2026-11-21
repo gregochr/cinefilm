@@ -111,3 +111,15 @@ export function confirmProblem(failure) {
   if (status === 503) return { message: copy.tmdb, gone: false };
   return { message: copy.other, gone: false };
 }
+
+/**
+ * What a failed "Leave unmatched" says on its row. A 404 (the film is gone) asks for a re-read, as for a confirm; a
+ * 409 says what holds the library lock (the bare scan line gets this screen's own words).
+ */
+export function leaveProblem(failure) {
+  const status = failure instanceof ApiError ? failure.status : 0;
+  if (status === 404) return { message: todoRow.confirmProblems.gone, gone: true };
+  if (status === 409)
+    return { message: lockText(failure, todoRow.leaveProblems.scan), gone: false };
+  return { message: todoRow.leaveProblems.other, gone: false };
+}

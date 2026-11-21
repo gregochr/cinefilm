@@ -59,8 +59,10 @@ const CASES = [
     path: '/admin',
     buttons: [
       'Find the film…',
+      'Leave unmatched',
       'Yes, it’s Suspiria (1977)',
       'Find the film…',
+      'Leave unmatched',
       'Sort out editions…',
       'Sort out editions…',
       'Search for English subtitles…',
