@@ -1,5 +1,6 @@
 package gregochr.cinefilm.library;
 
+import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.library.StateFolding.Source;
 import gregochr.cinefilm.library.StateFolding.State;
@@ -32,8 +33,10 @@ final class StateCarry {
      * @param durations those files' timeline durations
      * @param state its playback state, or null
      * @param markerMs its credits marker, or null
+     * @param markerSource where that marker came from; null exactly when the marker is
      */
-    record Old(List<Long> fileIds, List<Long> durations, State state, Long markerMs) {
+    record Old(List<Long> fileIds, List<Long> durations, State state, Long markerMs,
+               CreditsMarkerSource markerSource) {
     }
 
     /**
@@ -46,12 +49,19 @@ final class StateCarry {
      * @param markerOffsetMs the marker's offset inside that file
      * @param rewatch true for the resume position of an edition that is watched and being watched again: it is
      *     carried beside the watched flag, never folded into it
+     * @param markerSource where the marker came from, for a marker piece; null otherwise
      */
-    record Piece(State state, List<Long> fileIds, Long markerFileId, Long markerOffsetMs, boolean rewatch) {
+    record Piece(State state, List<Long> fileIds, Long markerFileId, Long markerOffsetMs, boolean rewatch,
+                 CreditsMarkerSource markerSource) {
 
-        /** A piece that is not a rewatch position. */
+        /** A state piece that is not a rewatch position. */
         Piece(State state, List<Long> fileIds, Long markerFileId, Long markerOffsetMs) {
-            this(state, fileIds, markerFileId, markerOffsetMs, false);
+            this(state, fileIds, markerFileId, markerOffsetMs, false, null);
+        }
+
+        /** A state piece that may be a rewatch position. */
+        Piece(State state, List<Long> fileIds, Long markerFileId, Long markerOffsetMs, boolean rewatch) {
+            this(state, fileIds, markerFileId, markerOffsetMs, rewatch, null);
         }
     }
 
@@ -60,8 +70,9 @@ final class StateCarry {
      *
      * @param state its state, or null for none
      * @param markerMs its credits marker, or null
+     * @param markerSource where that marker came from; null exactly when the marker is
      */
-    record Result(State state, Long markerMs) {
+    record Result(State state, Long markerMs, CreditsMarkerSource markerSource) {
     }
 
     /**
@@ -94,7 +105,8 @@ final class StateCarry {
             if (old.markerMs() != null) {
                 EditionTimeline.Position at = timeline.locate(old.markerMs());
                 Long file = old.fileIds().get(at.partIndex());
-                add(pieces, targetOfFile.get(file), new Piece(null, List.of(file), file, at.offsetMs()));
+                add(pieces, targetOfFile.get(file),
+                    new Piece(null, List.of(file), file, at.offsetMs(), false, old.markerSource()));
             }
         }
         return pieces;
@@ -166,6 +178,7 @@ final class StateCarry {
         int lastIndex = orderedFileIds.size() - 1;
         List<Source> sources = new ArrayList<>();
         Long marker = null;
+        CreditsMarkerSource markerSource = null;
         State rewatch = null;
         long rewatchAt = 0;
         for (Piece piece : pieces) {
@@ -182,6 +195,7 @@ final class StateCarry {
                 int at = orderedFileIds.indexOf(piece.markerFileId());
                 if (at == lastIndex) {
                     marker = timeline.partStartMs(at) + piece.markerOffsetMs();
+                    markerSource = piece.markerSource();
                 }
                 continue;
             }
@@ -199,7 +213,7 @@ final class StateCarry {
             folded = new State(Math.min(rewatchAt, timeline.totalMs()), true, folded.watchedAt(),
                 folded.lastPlayedAt(), folded.hidden(), folded.hiddenAt());
         }
-        return new Result(folded, marker);
+        return new Result(folded, marker, markerSource);
     }
 
     private static boolean later(State a, State b) {

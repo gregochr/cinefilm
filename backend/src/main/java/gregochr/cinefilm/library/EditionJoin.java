@@ -1,6 +1,7 @@
 package gregochr.cinefilm.library;
 
 import gregochr.cinefilm.film.AudioStream;
+import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.EditionTimeline;
@@ -63,7 +64,8 @@ public class EditionJoin {
     }
 
     /** One edition going into a join, as it was before anything moved. */
-    private record Piece(Long editionId, int first, int last, Long marker, State state) {
+    private record Piece(Long editionId, int first, int last, Long marker, CreditsMarkerSource markerSource,
+                         State state) {
     }
 
     /**
@@ -105,6 +107,7 @@ public class EditionJoin {
         }
         Long marker = lastHolder.marker() == null ? null
             : lastHolder.marker() + timeline.partStartMs(lastHolder.first());
+        CreditsMarkerSource markerSource = marker == null ? null : lastHolder.markerSource();
 
         // 1. Films first (this clears the persistence context).
         Long filmId = mergeFilms(filmIds);
@@ -121,6 +124,7 @@ public class EditionJoin {
         }
         survivor.recomputeRuntime();
         survivor.setCreditsMarkerMs(marker);
+        survivor.setCreditsMarkerSource(markerSource);
         // 4. Fold the playback state onto the survivor and save it.
         State folded = StateFolding.fold(sources, timeline.totalMs());
         if (folded != null) {
@@ -191,6 +195,7 @@ public class EditionJoin {
             orderedIds.add(group.stream().map(i -> parts.get(i).getId()).toList());
         }
         Long markerMs = edition.getCreditsMarkerMs();
+        CreditsMarkerSource markerSource = edition.getCreditsMarkerSource();
         State prior = states.findById(editionId).map(EditionJoin::stateOf).orElse(null);
         Film film = edition.getFilm();
         List<Long> ids = new ArrayList<>();
@@ -215,7 +220,9 @@ public class EditionJoin {
                 byId.get(orderedIds.get(g).get(i)).setPartNumber(i + 1);
             }
             target.recomputeRuntime();
-            target.setCreditsMarkerMs(marker != null && marker.group() == g ? marker.positionMs() : null);
+            boolean holdsMarker = marker != null && marker.group() == g;
+            target.setCreditsMarkerMs(holdsMarker ? marker.positionMs() : null);
+            target.setCreditsMarkerSource(holdsMarker ? markerSource : null);
         }
         List<State> split = StateFolding.unfold(prior, durations, groups);
         for (int g = 0; g < groups.size(); g++) {
@@ -297,7 +304,8 @@ public class EditionJoin {
         for (Map.Entry<Long, int[]> entry : span.entrySet()) {
             Edition edition = editions.findById(entry.getKey()).orElseThrow();
             pieces.add(new Piece(entry.getKey(), entry.getValue()[0], entry.getValue()[1],
-                edition.getCreditsMarkerMs(), states.findById(entry.getKey()).map(EditionJoin::stateOf).orElse(null)));
+                edition.getCreditsMarkerMs(), edition.getCreditsMarkerSource(),
+                states.findById(entry.getKey()).map(EditionJoin::stateOf).orElse(null)));
         }
         return pieces;
     }

@@ -4,6 +4,7 @@ import gregochr.cinefilm.collection.FilmCollection;
 import gregochr.cinefilm.film.AudioStream;
 import gregochr.cinefilm.film.Credit;
 import gregochr.cinefilm.film.CreditRole;
+import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmView;
@@ -59,6 +60,7 @@ public final class TestData {
         edition.setYear(film.getYear());
         edition.setRuntimeMs(runtimeMs);
         edition.setCreditsMarkerMs(marker);
+        edition.setCreditsMarkerSource(marker == null ? null : CreditsMarkerSource.AUTO);
         film.getEditions().add(edition);
         return edition;
     }

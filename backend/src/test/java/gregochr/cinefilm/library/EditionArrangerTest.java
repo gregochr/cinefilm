@@ -15,6 +15,7 @@ import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.FieldError;
 import gregochr.cinefilm.config.FieldErrorsException;
 import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
@@ -205,9 +206,11 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(joined.originalParts()).extracting(MediaFile::getPartNumber).containsExactly(1, 2);
         assertThat(joined.getRuntimeMs()).isEqualTo(235 * MIN);
         assertThat(joined.getCreditsMarkerMs()).as("a time on the old timeline").isNull();
+        assertThat(joined.getCreditsMarkerSource()).as("cleared with the marker").isNull();
         Edition other = saved.getEditions().get(1);
         assertThat(other.getName()).isEqualTo("Theatrical Cut");
         assertThat(other.getCreditsMarkerMs()).as("its files did not change").isEqualTo(160 * MIN);
+        assertThat(other.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
         assertThat(other.originalParts().get(0).getPartNumber()).isEqualTo(1);
         assertThat(states.findById(extended)).get().extracting(PlaybackState::getPositionMs).isEqualTo(20 * MIN);
         assertThat(states.findById(theatrical)).get().extracting(PlaybackState::isWatched).isEqualTo(true);
@@ -508,8 +511,9 @@ class EditionArrangerTest extends ApiTestBase {
 
         arranger.save(film.getId(), joined(film));
 
-        assertThat(editions.findById(editionId(film, 0)).orElseThrow().getCreditsMarkerMs())
-            .isEqualTo(114 * MIN + 100 * MIN);
+        Edition joined = editions.findById(editionId(film, 0)).orElseThrow();
+        assertThat(joined.getCreditsMarkerMs()).isEqualTo(114 * MIN + 100 * MIN);
+        assertThat(joined.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
     }
 
     @Test
@@ -537,7 +541,9 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(states.findById(two.getId())).get().extracting(PlaybackState::getPositionMs)
             .isEqualTo(36 * MIN);
         assertThat(one.getCreditsMarkerMs()).isNull();
+        assertThat(one.getCreditsMarkerSource()).as("no marker, no source").isNull();
         assertThat(two.getCreditsMarkerMs()).isEqualTo(86 * MIN);
+        assertThat(two.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
     }
 
     @Test
@@ -610,8 +616,9 @@ class EditionArrangerTest extends ApiTestBase {
         arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
             f(fileId(film, 0), 1), f(fileId(film, 1), 2))), List.of()));
 
-        assertThat(editions.findById(editionId(film, 0)).orElseThrow().getCreditsMarkerMs())
-            .isEqualTo(170 * MIN);
+        Edition joined = editions.findById(editionId(film, 0)).orElseThrow();
+        assertThat(joined.getCreditsMarkerMs()).isEqualTo(170 * MIN);
+        assertThat(joined.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
     }
 
     @Test
@@ -817,7 +824,9 @@ class EditionArrangerTest extends ApiTestBase {
             assertThat(state.getPositionMs()).isEqualTo(40 * MIN);
             assertThat(state.getWatchedAt()).isEqualTo(NOW.minusSeconds(3600));
         });
-        assertThat(editions.findById(editionId(film, 0)).orElseThrow().getCreditsMarkerMs()).isEqualTo(90 * MIN);
+        Edition kept = editions.findById(editionId(film, 0)).orElseThrow();
+        assertThat(kept.getCreditsMarkerMs()).isEqualTo(90 * MIN);
+        assertThat(kept.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
     }
 
     @Test

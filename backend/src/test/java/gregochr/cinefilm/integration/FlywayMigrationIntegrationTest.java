@@ -90,6 +90,22 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theCreditsMarkerSourceColumnIsAnExpandOnlyNullableVarcharWithACheckSoExistingRowsStayNull() {
+        List<String> columns = jdbc.queryForList(
+            "SELECT column_name || ':' || data_type || ':' || is_nullable || ':' || coalesce(column_default, '') "
+                + "FROM information_schema.columns WHERE table_name = 'edition' "
+                + "AND column_name = 'credits_marker_source'", String.class);
+        assertThat(columns).as("nullable with no default: rows that exist keep a null source")
+            .containsExactly("credits_marker_source:character varying:YES:");
+        String check = jdbc.queryForObject(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                + "WHERE conname = 'edition_credits_marker_source_check'", String.class);
+        assertThat(check).contains("AUTO", "PLEX", "OWNER");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM edition WHERE credits_marker_source IS NOT NULL",
+            Integer.class)).isZero();
+    }
+
+    @Test
     void instantsAreStoredWithTimeZone() {
         String type = jdbc.queryForObject(
             "SELECT data_type FROM information_schema.columns WHERE table_name = 'film' AND column_name = 'added_at'",
