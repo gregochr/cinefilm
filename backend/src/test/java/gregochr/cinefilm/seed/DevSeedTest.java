@@ -10,6 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.collection.FilmCollectionRepository;
+import gregochr.cinefilm.film.CreditsMarkerSource;
+import gregochr.cinefilm.film.Edition;
+import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +34,9 @@ class DevSeedTest {
 
     @Autowired
     private FilmRepository films;
+
+    @Autowired
+    private EditionRepository editionRepository;
 
     @Autowired
     private FilmCollectionRepository collections;
@@ -61,6 +67,16 @@ class DevSeedTest {
         mvc.perform(get("/api/films").param("decade", "1970").with(user("owner")))
             .andExpect(jsonPath("$.total", greaterThanOrEqualTo(5)));
         assertThat(films.count()).isGreaterThanOrEqualTo(24);
+    }
+
+    @Test
+    void everySeededCreditsMarkerIsTheOwnersSoNoLaterPassClearsIt() {
+        java.util.List<Edition> seeded = editionRepository.findAll();
+
+        assertThat(seeded).filteredOn(e -> e.getCreditsMarkerMs() != null).isNotEmpty()
+            .allSatisfy(e -> assertThat(e.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.OWNER));
+        assertThat(seeded).filteredOn(e -> e.getCreditsMarkerMs() == null)
+            .allSatisfy(e -> assertThat(e.getCreditsMarkerSource()).isNull());
     }
 
     @Test

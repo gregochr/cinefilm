@@ -6,6 +6,7 @@ import gregochr.cinefilm.collection.FilmCollectionRepository;
 import gregochr.cinefilm.film.AudioStream;
 import gregochr.cinefilm.film.Credit;
 import gregochr.cinefilm.film.CreditRole;
+import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
@@ -280,6 +281,7 @@ public class DevSeed implements ApplicationRunner {
         edition.setRuntimeMs(minutes * MINUTE);
         edition.setNote(note);
         edition.setCreditsMarkerMs(marker);
+        edition.setCreditsMarkerSource(marker == null ? null : CreditsMarkerSource.OWNER);
         MediaFile file = new MediaFile();
         file.setEdition(edition);
         file.setPath(mediaPath(film, edition));

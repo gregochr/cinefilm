@@ -90,6 +90,16 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theCreditsMarkerSourceColumnIsAnExpandOnlyNullableVarchar() {
+        List<String> columns = jdbc.queryForList(
+            "SELECT column_name || ':' || data_type || ':' || is_nullable || ':' || coalesce(column_default, '') "
+                + "FROM information_schema.columns WHERE table_name = 'edition' "
+                + "AND column_name = 'credits_marker_source'", String.class);
+        assertThat(columns).as("nullable with no default")
+            .containsExactly("credits_marker_source:character varying:YES:");
+    }
+
+    @Test
     void instantsAreStoredWithTimeZone() {
         String type = jdbc.queryForObject(
             "SELECT data_type FROM information_schema.columns WHERE table_name = 'film' AND column_name = 'added_at'",

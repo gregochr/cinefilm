@@ -4,6 +4,7 @@ import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.library.StateCarry.Old;
 import gregochr.cinefilm.library.StateCarry.Piece;
 import gregochr.cinefilm.library.StateCarry.Result;
@@ -28,7 +29,8 @@ class StateCarryTest {
     }
 
     private static Old ab(State state, Long marker) {
-        return new Old(List.of(1L, 2L), List.of(100 * MIN, 50 * MIN), state, marker);
+        return new Old(List.of(1L, 2L), List.of(100 * MIN, 50 * MIN), state, marker,
+            marker == null ? null : CreditsMarkerSource.PLEX);
     }
 
     @Test
@@ -73,7 +75,7 @@ class StateCarryTest {
     @Test
     void filesInterleavedFromTwoEditionsEachBringTheirOwnPosition() {
         Old other = new Old(List.of(3L), List.of(80 * MIN), new State(10 * MIN, false, null, NOW.minusSeconds(60),
-            false, null), null);
+            false, null), null, null);
         Map<Long, Long> times = Map.of(1L, 100 * MIN, 2L, 50 * MIN, 3L, 80 * MIN);
 
         Map<Long, List<Piece>> pieces = StateCarry.split(List.of(ab(resume(120 * MIN), null), other),
@@ -86,14 +88,16 @@ class StateCarryTest {
 
     @Test
     void aMarkerIsPlacedByItsFileAndKeptOnlyInTheLastFile() {
-        Old other = new Old(List.of(3L), List.of(80 * MIN), null, 70 * MIN);
+        Old other = new Old(List.of(3L), List.of(80 * MIN), null, 70 * MIN, CreditsMarkerSource.OWNER);
         Map<Long, Long> times = Map.of(1L, 100 * MIN, 2L, 50 * MIN, 3L, 80 * MIN);
         Map<Long, List<Piece>> pieces = StateCarry.split(List.of(other), Map.of(3L, 9L));
 
-        assertThat(pieces.get(9L)).containsExactly(new Piece(null, List.of(3L), 3L, 70 * MIN));
+        assertThat(pieces.get(9L))
+            .containsExactly(new Piece(null, List.of(3L), 3L, 70 * MIN, false, CreditsMarkerSource.OWNER));
         assertThat(StateCarry.land(pieces.get(9L), List.of(1L, 2L, 3L), times))
-            .isEqualTo(new Result(null, 220 * MIN));
-        assertThat(StateCarry.land(pieces.get(9L), List.of(1L, 3L, 2L), times)).isEqualTo(new Result(null, null));
+            .isEqualTo(new Result(null, 220 * MIN, CreditsMarkerSource.OWNER));
+        assertThat(StateCarry.land(pieces.get(9L), List.of(1L, 3L, 2L), times))
+            .as("not in the last file: the marker and its source both go").isEqualTo(new Result(null, null, null));
     }
 
     @Test
@@ -127,9 +131,10 @@ class StateCarryTest {
 
     @Test
     void theEditionsThatReceiveFilesFromAnUncarriableEditionAreReported() {
-        Old unknown = new Old(List.of(1L, 3L), Arrays.asList(100 * MIN, null), resume(40 * MIN), null);
-        Old markerOnly = new Old(List.of(4L), Arrays.asList((Long) null), null, MIN);
-        Old nothing = new Old(List.of(5L), Arrays.asList((Long) null), null, null);
+        Old unknown = new Old(List.of(1L, 3L), Arrays.asList(100 * MIN, null), resume(40 * MIN), null, null);
+        Old markerOnly = new Old(List.of(4L), Arrays.asList((Long) null), null, MIN,
+            CreditsMarkerSource.AUTO);
+        Old nothing = new Old(List.of(5L), Arrays.asList((Long) null), null, null, null);
         Old fine = ab(resume(MIN), null);
         HashMap<Long, Long> targets = new HashMap<>();
         targets.put(1L, 8L);
@@ -192,8 +197,8 @@ class StateCarryTest {
 
     @Test
     void anEditionWithAFileOfUnknownDurationIsNotCarried() {
-        Old unknown = new Old(List.of(1L, 3L), Arrays.asList(100 * MIN, null), resume(MIN), null);
-        Old zero = new Old(List.of(1L, 3L), List.of(100 * MIN, 0L), resume(MIN), null);
+        Old unknown = new Old(List.of(1L, 3L), Arrays.asList(100 * MIN, null), resume(MIN), null, null);
+        Old zero = new Old(List.of(1L, 3L), List.of(100 * MIN, 0L), resume(MIN), null, null);
 
         assertThat(StateCarry.split(List.of(unknown, zero), Map.of(1L, 8L, 3L, 8L))).isEmpty();
         assertThat(StateCarry.land(List.of(), List.of(1L, 3L), TIMES)).isNull();
@@ -201,7 +206,7 @@ class StateCarryTest {
 
     @Test
     void nothingToLandGivesNoStateAndNoMarker() {
-        assertThat(StateCarry.land(List.of(), List.of(1L), TIMES)).isEqualTo(new Result(null, null));
+        assertThat(StateCarry.land(List.of(), List.of(1L), TIMES)).isEqualTo(new Result(null, null, null));
     }
 
     @Test
