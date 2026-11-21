@@ -344,14 +344,15 @@ class CreditsApplierTest {
             command.run();
         };
         lock.tryAcquire(LibraryLock.SCAN);
+        markedLibrary();
         CreditsApplier applier = applier();
 
         applier.requestPass();
 
         assertThat(executed).hasValue(1);
         assertThat(sleeps).hasSize(CreditsApplier.LOCK_ATTEMPTS);
+        assertThat(served).isEmpty();
         lock.release();
-        markedLibrary();
 
         applier.requestPass();
 
