@@ -48,6 +48,14 @@ describe('ChristmasPreview on a desktop', () => {
     expect(toggle('Hide preview')).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('points the toggle at the row it shows', () => {
+    show();
+    const id = toggle('Hide preview').getAttribute('aria-controls');
+    expect(document.getElementById(id)).toContainElement(
+      screen.getByRole('heading', { name: 'This week: Christmas' }),
+    );
+  });
+
   it('reserves each poster’s 2:3 art and loads its image lazily', () => {
     show();
     const first = screen.getByRole('link', { name: /Wonderful Life/ });
@@ -120,6 +128,17 @@ describe('ChristmasPreview on a phone', () => {
     expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Hide preview' })).not.toBeInTheDocument();
     expect(posters()).toHaveLength(0);
+  });
+
+  it('points the button at the sheet it opens', async () => {
+    const user = userEvent.setup();
+    show(christmasFixture(), true);
+    const opener = screen.getByRole('button', { name: OPEN });
+    await user.click(opener);
+    expect(screen.getByRole('dialog', { name: 'Home in Christmas week' })).toHaveAttribute(
+      'id',
+      opener.getAttribute('aria-controls'),
+    );
   });
 
   it('opens the row in a sheet, and Esc closes it and returns focus to the button', async () => {

@@ -46,6 +46,26 @@ describe('ChristmasStatusCard', () => {
     expect(screen.getByTestId('keyword-fill')).toHaveStyle({ width: '97%' });
   });
 
+  it.each([{ stalled: true }, { enabled: false }])(
+    'says keywords are not being fetched when the server reports %j',
+    (flags) => {
+      const data = christmasFixture();
+      data.keywords = { ...data.keywords, ...flags };
+      render(<ChristmasStatusCard data={data} />);
+      expect(screen.getByRole('status')).toHaveTextContent(
+        "Keywords aren't being fetched right now.",
+      );
+      expect(card()).not.toHaveTextContent('on their way');
+    },
+  );
+
+  it('keeps the usual strip when the server reports healthy fetching', () => {
+    const data = christmasFixture();
+    data.keywords = { ...data.keywords, enabled: true, stalled: false };
+    render(<ChristmasStatusCard data={data} />);
+    expect(card()).toHaveTextContent('The other 38 are on their way');
+  });
+
   it('announces keyword progress politely, as a status message', () => {
     render(<ChristmasStatusCard data={christmasFixture()} />);
     expect(screen.getByRole('status')).toHaveTextContent('Keywords fetched for 1,374 of 1,412');

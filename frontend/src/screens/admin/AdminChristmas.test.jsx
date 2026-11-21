@@ -174,8 +174,9 @@ describe('Christmas films: changes and undo', () => {
     expect(toast()).toHaveTextContent("Left out Die Hard. It won't show at Christmas.");
     expect(screen.getByRole('tab', { name: 'In Christmas week, 13' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Left out by me, 4' })).toBeInTheDocument();
-    // The row's button is gone, and the toast sits after the list: focus goes straight to Undo.
-    expect(within(toast()).getByRole('button', { name: 'Undo' })).toHaveFocus();
+    // The row's button is gone: focus goes to the next row's button, not to the toast after the list.
+    expect(screen.getByRole('button', { name: 'Leave out Scrooged' })).toHaveFocus();
+    expect(within(toast()).getByRole('button', { name: 'Undo' })).not.toHaveFocus();
     const [url, init] = putCalls(fetchMock)[0];
     expect(url).toBe('/api/admin/christmas/106');
     expect(init.headers['X-CineFilm']).toBe('1');
@@ -389,7 +390,8 @@ describe('Christmas films: changes and undo', () => {
     const undo = await within(toast()).findByRole('button', { name: 'Undo' });
     const empty = screen.getByRole('region', { name: 'No Christmas films' });
     expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument();
-    expect(undo).toHaveFocus();
+    expect(empty).toHaveFocus();
+    undo.focus();
 
     fail = true;
     await userEvent.click(undo);
@@ -397,7 +399,27 @@ describe('Christmas films: changes and undo', () => {
     expect(empty).toHaveFocus();
   });
 
-  it('puts focus on Undo after a change and keeps the toast while it holds focus, then counts 8 seconds from when focus leaves', async () => {
+  it('moves focus on to the same row when it is still listed, else the next row, else the list', async () => {
+    const original = fresh();
+    let answer = original;
+    serve({ put: () => respond(answer) });
+    await open();
+
+    // The answer still lists the row: focus stays on its button.
+    await userEvent.click(screen.getByRole('button', { name: 'Leave out Die Hard' }));
+    await within(toast()).findByRole('button', { name: 'Undo' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Leave out Die Hard' })).toHaveFocus(),
+    );
+
+    // The last row goes with nothing after it: the tab panel.
+    const last = original.inWeek[original.inWeek.length - 1];
+    answer = { ...original, inWeek: original.inWeek.filter((f) => f.filmId !== last.filmId) };
+    await userEvent.click(screen.getByRole('button', { name: `Leave out ${last.title}` }));
+    await waitFor(() => expect(screen.getByRole('tabpanel')).toHaveFocus());
+  });
+
+  it('keeps the toast while Undo holds focus, then counts 8 seconds from when focus leaves', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const original = fresh();
     serve({ put: () => respond(leftOut(original, 106)) });
@@ -405,7 +427,8 @@ describe('Christmas films: changes and undo', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Leave out Die Hard' }));
     const undo = await within(toast()).findByRole('button', { name: 'Undo' });
 
-    expect(undo).toHaveFocus();
+    expect(undo).not.toHaveFocus();
+    undo.focus();
     act(() => vi.advanceTimersByTime(20000));
     expect(toast()).toHaveTextContent('Left out Die Hard.');
     act(() => undo.blur());
@@ -427,10 +450,8 @@ describe('Christmas films: changes and undo', () => {
     await waitFor(() => expect(toast()).toHaveTextContent('Left out Gremlins.'));
     expect(toast()).not.toHaveTextContent('Die Hard');
 
-    // Focus is on the new Undo, which holds the toast; it counts down once focus leaves.
-    const undo = within(toast()).getByRole('button', { name: 'Undo' });
-    expect(undo).toHaveFocus();
-    act(() => undo.blur());
+    // Focus is on a row, not on Undo, so nothing holds the toast: it counts down at once.
+    expect(within(toast()).getByRole('button', { name: 'Undo' })).not.toHaveFocus();
     act(() => vi.advanceTimersByTime(7900));
     expect(toast()).toHaveTextContent('Left out Gremlins.');
     act(() => vi.advanceTimersByTime(200));

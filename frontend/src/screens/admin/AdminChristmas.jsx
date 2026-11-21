@@ -93,6 +93,8 @@ export default function AdminChristmas() {
   const panelButtons = useRef(new Map());
   const panel = useRef(null);
   const undoButton = useRef(null);
+  // Per film id: the ids of that row and the rows after it, as listed when its button was pressed (where focus goes next).
+  const followingRows = useRef(new Map());
 
   const registerButton = (filmId) => (node) => {
     if (node) buttons.current.set(filmId, node);
@@ -116,11 +118,11 @@ export default function AdminChristmas() {
   }, [changed, refresh]);
 
   // After a change lands: for one made in the search panel (or its Undo) the result's button keeps focus by itself, so
-  // focus is set only if it was lost (an Undo press takes the toast's button away): then back onto that button. Else
-  // onto the toast's Undo button (the row's button is gone, and the toast sits after the whole list, so a keyboard user
-  // could not reach Undo within its 8 seconds; the toast waits while it has focus), back onto the row's button (after
-  // an Undo), or, when focus was lost with a row or the toast, onto the list so the keyboard is not left on the page
-  // body.
+  // focus is set only if it was lost (an Undo press takes the toast's button away): then back onto that button. For a
+  // change made from a list row: onto the same row's button if it is still there, else the next row's, else the list
+  // (Undo stays reachable by Tab and the pointer; focus is not taken to it, which sent a keyboard user back through the
+  // whole list after every change). After an Undo: onto the row's button, or, when focus was lost with a row or the
+  // toast, onto the list so the keyboard is not left on the page body.
   useEffect(() => {
     if (!focusRequest) return;
     const active = document.activeElement;
@@ -147,8 +149,11 @@ export default function AdminChristmas() {
         )?.focus();
       return;
     }
-    if (focusRequest.undo && undoButton.current) {
-      undoButton.current.focus();
+    if (focusRequest.undo) {
+      const ids = followingRows.current.get(focusRequest.filmId) ?? [focusRequest.filmId];
+      followingRows.current.delete(focusRequest.filmId);
+      const next = ids.map((id) => buttons.current.get(id)).find(Boolean);
+      (next ?? panel.current)?.focus();
       return;
     }
     const button =
@@ -188,6 +193,14 @@ export default function AdminChristmas() {
   if (data) {
     const empty = emptyKind(data);
     const rows = empty ? [] : tabRows(data, tab);
+    const act = (row) => {
+      const at = rows.findIndex((r) => r.filmId === row.filmId);
+      followingRows.current.set(
+        row.filmId,
+        rows.slice(Math.max(at, 0)).map((r) => r.filmId),
+      );
+      return state.change(row);
+    };
     // The controls row is in the same place with or without lists, so adding the first film from the empty screen
     // does not rebuild the search field (and close its panel) under the owner.
     body = (
@@ -239,7 +252,7 @@ export default function AdminChristmas() {
                 max={data.limits.max}
                 short={phone}
                 busy={busy}
-                onAct={state.change}
+                onAct={act}
                 registerButton={registerButton}
               />
             ) : (

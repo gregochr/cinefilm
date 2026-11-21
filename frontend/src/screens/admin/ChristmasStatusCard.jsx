@@ -1,5 +1,7 @@
 import {
+  KEYWORDS_NOT_FETCHING_TEXT,
   keywordLine,
+  keywordsStalled,
   keywordPercent,
   keywordsPending,
   meterCaption,
@@ -64,7 +66,11 @@ export default function ChristmasStatusCard({
             />
           </span>
           {/* Polite: the 30-second polls change this sentence only when more keywords have arrived. */}
-          <p role="status">{keywordLine(data.keywords)}</p>
+          <p role="status">
+            {keywordsStalled(data.keywords)
+              ? KEYWORDS_NOT_FETCHING_TEXT
+              : keywordLine(data.keywords)}
+          </p>
         </div>
       ) : null}
       <ChristmasPreview

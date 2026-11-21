@@ -21,9 +21,9 @@ import {
  * Returns `{ data, version, issued, pinToast, loading, error, reload, refresh, busy, toast, change, undo, focusRequest, holdToast, releaseToast }`.
  * `toast` is `{ message, undo: { tmdbId, filmId, title, choice, kind, panel } | null }` or null; it clears after 8 seconds unless it is
  * held (the pointer or the keyboard is on it); each toast carries a counter `id`. `focusRequest` is
- * `{ filmId, undo, panel, n }` after a change lands or fails: `undo` is true after a change that left an Undo (focus goes to
- * the toast's Undo button, which a keyboard user would otherwise reach only after every row), `filmId` is the row to
- * focus (after an Undo), and with neither the screen settles focus itself.
+ * `{ filmId, undo, panel, n }` after a change lands or fails: `undo` is true after a change from a list row that left an
+ * Undo (the screen then moves focus on to that row's button, else the next row's, else the list; Undo stays reachable by
+ * Tab and the pointer), `filmId` is the row the change was for, and with neither the screen settles focus itself.
  */
 export function useChristmas() {
   const [data, setData] = useState(null);
@@ -171,7 +171,7 @@ export function useChristmas() {
           undo: withUndo ? { tmdbId, filmId, title, choice: previous, kind, panel } : null,
         });
         // A change made from the search panel keeps focus on that result's button: the panel stays open.
-        ask(withUndo && !panel ? null : filmId, withUndo && !panel);
+        ask(filmId, withUndo && !panel);
       } catch (failure) {
         if (!live.current) return;
         const status = failure instanceof ApiError ? failure.status : 0;

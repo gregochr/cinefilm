@@ -86,7 +86,23 @@ describe('ChristmasList: the In tab', () => {
   it('counts a single film over the limit', () => {
     const rows = christmasFixture().inWeek.slice(0, 13);
     render(<List rows={rows} tab="inWeek" max={12} />);
-    expect(screen.getByText(/These 1 are in/)).toBeInTheDocument();
+    expect(screen.getByText(/This 1 is in, but won't fit/)).toBeInTheDocument();
+    expect(screen.queryByText(/These 1/)).not.toBeInTheDocument();
+  });
+});
+
+describe('ChristmasList: the year', () => {
+  it('sets the year in its own muted span, after the title', () => {
+    render(<List rows={christmasFixture().inWeek} tab="inWeek" />);
+    const year = within(row('Die Hard')).getByText('· 1988');
+    expect(year).toHaveClass('xmas-year');
+  });
+
+  it('shows the rank inline in the title for the phone layout, hidden from assistive tech', () => {
+    render(<List rows={christmasFixture().inWeek} tab="inWeek" />);
+    const inline = within(row('Die Hard')).getByTestId('rank-inline');
+    expect(inline).toHaveTextContent('6');
+    expect(inline).toHaveAttribute('aria-hidden', 'true');
   });
 });
 
