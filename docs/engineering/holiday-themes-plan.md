@@ -55,7 +55,7 @@ Horror needs no new data: the `Horror` genre already exists on `Film.genres`.
 ## Tests that matter
 
 - Date edges: 18 Dec on each weekday (the Monday-on-or-before shifts); 24 Oct likewise; Sun 13 Dec is not Christmas,
-  Mon 14 Dec is; Sun 20 Dec is the last Christmas day.
+  Mon 14 Dec is; Fri 25 Dec is the last Christmas day and Sat 26 Dec the first of the ordinary theme.
 - A film with only the keyword, only on the include list, on both include and exclude, and with horror genre in
   Halloween week; the 12-film cap and ordering.
 - `TestClockConfig` already pins the clock; the selector takes a date so no new clock plumbing.
