@@ -82,17 +82,17 @@ class CreditsMarkerSourceMigrationIntegrationTest extends IntegrationTestBase {
     void theColumnAcceptsTheThreeSourcesAndRefusesAnythingElse() throws Exception {
         flyway("latest").migrate();
         try (Connection connection = connection()) {
-            insertEdition(connection, 9_600_000L, "PLEX", true);
+            for (String source : new String[] {"AUTO", "PLEX", "OWNER"}) {
+                insertEdition(connection, 9_600_000L, source, true);
+            }
 
-            assertThatThrownBy(() -> insertEdition(connection, 9_600_000L, "BOGUS", true))
-                .isInstanceOf(SQLException.class).hasMessageContaining("edition_credits_marker_source_check");
-            try (ResultSet check = connection.createStatement().executeQuery(
-                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
-                    + "WHERE conname = 'edition_credits_marker_source_check'")) {
-                assertThat(check.next()).isTrue();
-                assertThat(check.getString(1)).isEqualTo("CHECK (((credits_marker_source)::text = ANY "
-                    + "((ARRAY['AUTO'::character varying, 'PLEX'::character varying, "
-                    + "'OWNER'::character varying])::text[])))");
+            for (String refused : new String[] {"BOGUS", "plex"}) {
+                assertThatThrownBy(() -> insertEdition(connection, 9_600_000L, refused, true))
+                    .isInstanceOf(SQLException.class).hasMessageContaining("edition_credits_marker_source_check");
+            }
+            try (ResultSet count = connection.createStatement().executeQuery("SELECT count(*) FROM edition")) {
+                assertThat(count.next()).isTrue();
+                assertThat(count.getInt(1)).as("only the three accepted rows were stored").isEqualTo(3);
             }
         }
     }
