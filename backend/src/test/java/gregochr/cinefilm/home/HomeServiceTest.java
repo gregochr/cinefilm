@@ -8,6 +8,9 @@ import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.state;
 import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.Edition;
@@ -15,6 +18,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.ChristmasOverrides;
+import gregochr.cinefilm.film.ChristmasOverrides.Snapshot;
 import gregochr.cinefilm.film.LibraryLoader;
 import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.film.WeeklyTheme;
@@ -177,8 +181,9 @@ class HomeServiceTest {
     void inChristmasWeekTheThemeIsChristmasFilmsAndTheExcludeListApplies() {
         libraryIs(libraryWithSix("Comedy", "christmas"));
 
+        when(christmasOverrides.snapshot()).thenReturn(new Snapshot(Set.of(), Set.of()));
         Home withKeyword = service(at("2026-12-14T00:30:00Z")).home();
-        when(christmasOverrides.excludes()).thenReturn(Set.of(1000L));
+        when(christmasOverrides.snapshot()).thenReturn(new Snapshot(Set.of(), Set.of(1000L)));
         Home withExclude = service(at("2026-12-14T00:30:00Z")).home();
 
         assertThat(withKeyword.weeklyTheme().value()).isEqualTo("christmas");
@@ -187,6 +192,19 @@ class HomeServiceTest {
         assertThat(withExclude.weeklyTheme().kind()).as("five films left, so still the holiday").isEqualTo("holiday");
         assertThat(withExclude.weeklyTheme().films()).extracting(FilmCard::title).doesNotContain("Holiday 0")
             .hasSize(5);
+    }
+
+    @Test
+    void theOwnersChoicesAreReadOnceInChristmasWeekAndNotAtAllOtherWeeks() {
+        libraryIs(libraryWithSix("Comedy", "christmas"));
+        when(christmasOverrides.snapshot()).thenReturn(new Snapshot(Set.of(), Set.of()));
+
+        service(at("2026-12-14T00:30:00Z")).home();
+        service(at("2026-12-14T00:30:00Z")).home();
+        service(at("2026-11-17T00:30:00Z")).home();
+
+        verify(christmasOverrides, times(2)).snapshot();
+        verifyNoMoreInteractions(christmasOverrides);
     }
 
     @Test

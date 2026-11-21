@@ -1,6 +1,7 @@
 package gregochr.cinefilm.film;
 
 import java.time.Clock;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,21 @@ public class ChristmasOverrides {
     public ChristmasOverrides(ChristmasOverrideRepository repository, Clock clock) {
         this.repository = repository;
         this.clock = clock;
+    }
+
+    /** Both sets of the owner's choices, read together. */
+    public record Snapshot(Set<Long> include, Set<Long> exclude) {
+    }
+
+    /** Both sets from one read of the table (Home asks on every load, so it is one query, not two). */
+    @Transactional(readOnly = true)
+    public Snapshot snapshot() {
+        Set<Long> include = new HashSet<>();
+        Set<Long> exclude = new HashSet<>();
+        for (ChristmasOverride row : repository.findAll()) {
+            (row.getChoice() == ChristmasChoice.INCLUDE ? include : exclude).add(row.getTmdbId());
+        }
+        return new Snapshot(Set.copyOf(include), Set.copyOf(exclude));
     }
 
     /** The TMDB ids of the films the owner included. */

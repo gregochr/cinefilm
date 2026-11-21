@@ -119,6 +119,8 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.keywords.total").value(4))
             .andExpect(jsonPath("$.keywords.fetched").value(1))
             .andExpect(jsonPath("$.keywords.running").value(false))
+            .andExpect(jsonPath("$.keywords.enabled").isBoolean())
+            .andExpect(jsonPath("$.keywords.stalled").isBoolean())
             .andExpect(jsonPath("$.inWeek[*].title", contains("Added", "Tagged")))
             .andExpect(jsonPath("$.inWeek[0].reason").value("ADDED"))
             .andExpect(jsonPath("$.inWeek[1].reason").value("KEYWORD"))
@@ -244,6 +246,40 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("Invalid request"));
         assertThat(overrides.includes()).isEmpty();
+    }
+
+    @Test
+    void aBodyWithoutTheChoiceFieldIs400AndKeepsTheOverride() throws Exception {
+        add("Plain", 1970, 5L);
+        overrides.set(5L, ChristmasChoice.INCLUDE);
+
+        for (String body : List.of("{}", "{\"Choice\":\"EXCLUDE\"}", "{\"choise\":null}")) {
+            mvc.perform(put("/api/admin/christmas/5").content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request"));
+        }
+        assertThat(overrides.includes()).containsExactly(5L);
+        assertThat(overrides.excludes()).isEmpty();
+    }
+
+    @Test
+    void anExplicitNullChoiceStillForgetsTheOverride() throws Exception {
+        add("Plain", 1970, 5L);
+        overrides.set(5L, ChristmasChoice.EXCLUDE);
+
+        mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":null}")).andExpect(status().isOk());
+
+        assertThat(overrides.excludes()).isEmpty();
+    }
+
+    @Test
+    void aBlankEntryInTheStatesIdsIs400() throws Exception {
+        add("Plain", 1970, 5L);
+
+        mvc.perform(get("/api/admin/christmas/states").param("filmIds", "1,,2"))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/admin/christmas/states").param("filmIds", "1,x"))
+            .andExpect(status().isBadRequest());
     }
 
     @Test

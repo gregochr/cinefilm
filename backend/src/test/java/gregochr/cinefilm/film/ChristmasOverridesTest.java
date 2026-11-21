@@ -5,7 +5,9 @@ import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -99,5 +101,21 @@ class ChristmasOverridesTest {
         service().remove(700L);
 
         verify(repository).deleteById(700L);
+    }
+
+    @Test
+    void aSnapshotSplitsOneReadOfTheTableIntoBothSets() {
+        when(repository.findAll()).thenReturn(List.of(
+            new ChristmasOverride(1572L, ChristmasChoice.INCLUDE, NOW),
+            new ChristmasOverride(562L, ChristmasChoice.EXCLUDE, NOW),
+            new ChristmasOverride(5555L, ChristmasChoice.INCLUDE, NOW)));
+
+        ChristmasOverrides.Snapshot snapshot = service().snapshot();
+
+        assertThat(snapshot.include()).containsExactlyInAnyOrder(1572L, 5555L);
+        assertThat(snapshot.exclude()).containsExactly(562L);
+        verify(repository, times(1)).findAll();
+        verifyNoMoreInteractions(repository);
+        assertThatThrownBy(() -> snapshot.include().add(1L)).isInstanceOf(UnsupportedOperationException.class);
     }
 }

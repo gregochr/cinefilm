@@ -6,6 +6,7 @@ import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmMapper;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.ChristmasOverrides;
+import gregochr.cinefilm.film.HolidayWeeks;
 import gregochr.cinefilm.film.LibraryLoader;
 import gregochr.cinefilm.film.WeeklyTheme;
 import gregochr.cinefilm.film.WeeklyThemeSelector;
@@ -16,6 +17,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -57,9 +59,12 @@ public class HomeService {
         List<FilmView> library = loader.loadAll();
         long minMs = settings.minWatchMs();
         List<FilmCard> continueWatching = cards(BrowseRules.continueWatching(library, minMs), minMs);
-        WeeklyTheme theme = WeeklyThemeSelector.choose(LocalDate.now(clock),
-            library.stream().map(FilmView::film).toList(), christmasOverrides.includes(),
-            christmasOverrides.excludes());
+        LocalDate today = LocalDate.now(clock);
+        boolean christmas = HolidayWeeks.holidayFor(today).filter(h -> h == HolidayWeeks.Holiday.CHRISTMAS).isPresent();
+        ChristmasOverrides.Snapshot overrides = christmas ? christmasOverrides.snapshot()
+            : new ChristmasOverrides.Snapshot(Set.of(), Set.of());
+        WeeklyTheme theme = WeeklyThemeSelector.choose(today, library.stream().map(FilmView::film).toList(),
+            overrides.include(), overrides.exclude());
         Map<Long, FilmView> byId = library.stream()
             .collect(Collectors.toMap(v -> v.film().getId(), Function.identity()));
         List<FilmCard> themeFilms = theme.films().stream().map(Film::getId).map(byId::get)

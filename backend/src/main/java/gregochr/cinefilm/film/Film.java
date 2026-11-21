@@ -227,6 +227,16 @@ public class Film {
         this.tmdbId = newTmdbId;
     }
 
+    /**
+     * True when Admin's To do lists the film as needing a match: it is {@code NEEDS_MATCH}, or it has no TMDB id and
+     * is neither still being matched ({@code PENDING}) nor left alone by the owner ({@code LEFT_UNMATCHED}). The
+     * {@code FilmRepository} queries {@code findNeedingMatch} and {@code countNeedingMatch} say the same in JPQL.
+     */
+    public boolean needsMatch() {
+        return matchStatus == MatchStatus.NEEDS_MATCH
+            || tmdbId == null && matchStatus != MatchStatus.PENDING && matchStatus != MatchStatus.LEFT_UNMATCHED;
+    }
+
     /** A film shows in browse unless every one of its editions is missing from disk or cannot be played. */
     public boolean browsable() {
         return browsable(editions);

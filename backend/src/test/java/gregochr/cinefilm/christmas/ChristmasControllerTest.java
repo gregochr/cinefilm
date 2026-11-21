@@ -37,7 +37,7 @@ class ChristmasControllerTest {
 
     private static final ChristmasView VIEW = new ChristmasView(
         new WeekDto(LocalDate.of(2026, 12, 14), LocalDate.of(2026, 12, 20)), new Limits(12, 5),
-        new Keywords(3, 4, true),
+        new Keywords(3, 4, true, true, false),
         List.of(new Item(1L, 11L, "Kept", 1988, "/k.jpg", Reason.KEYWORD),
             new Item(2L, 12L, "Added", null, null, Reason.ADDED)),
         List.of(new Item(2L, 12L, "Added", null, null, Reason.ADDED)),
