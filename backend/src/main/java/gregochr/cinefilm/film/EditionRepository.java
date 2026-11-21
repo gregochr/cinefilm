@@ -85,4 +85,15 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
     @Query("select new gregochr.cinefilm.film.EditionRepository$EditionOwner(e.id, e.film.id, "
         + "e.film.editionsConfirmed) from Edition e")
     List<EditionOwner> findEditionOwners();
+
+    /** Every edition's id in id order, for a pass that reads the editions in batches. */
+    @Query("select e.id from Edition e order by e.id")
+    List<Long> findAllIds();
+
+    /**
+     * The given editions with their files (an edition with no file row too) and nothing else loaded: the film stays
+     * a lazy reference that is never touched. One statement however many ids, for the credits apply pass.
+     */
+    @Query("select e from Edition e left join fetch e.mediaFiles where e.id in :ids")
+    List<Edition> findWithFilesByIdIn(Collection<Long> ids);
 }
