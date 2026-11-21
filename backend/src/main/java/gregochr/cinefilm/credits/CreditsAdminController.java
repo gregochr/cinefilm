@@ -23,8 +23,8 @@ public class CreditsAdminController {
     /**
      * One page of editions with their credits markers. {@code filter} is {@code none} (the default), {@code plex},
      * {@code owner} or {@code all}; {@code page} is 0-based (default 0); {@code size} is 1 to
-     * {@link CreditsAdminService#MAX_SIZE} (default 25). A parameter that is present must be valid: anything else is a
-     * 400 {@code Invalid request}.
+     * {@link CreditsAdminService#MAX_SIZE} (default 25). A parameter that is present must be valid: anything
+     * else, or a page whose first row would sit past {@link Integer#MAX_VALUE}, is a 400 {@code Invalid request}.
      */
     @GetMapping("/api/admin/credits")
     CreditsList list(@RequestParam Map<String, String> params) {
@@ -32,7 +32,7 @@ public class CreditsAdminController {
             : CreditsFilter.NONE;
         int page = number(params, "page", 0, 0, Integer.MAX_VALUE);
         int size = number(params, "size", DEFAULT_SIZE, 1, CreditsAdminService.MAX_SIZE);
-        if (filter == null) {
+        if (filter == null || (long) page * size > Integer.MAX_VALUE) {
             throw new BadRequestException("Invalid request");
         }
         return credits.list(filter, page, size);

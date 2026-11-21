@@ -107,13 +107,21 @@ class CreditsAdminControllerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"filter=", "filter=None", "filter=auto", "filter=all,plex", "page=-1", "page=", "page=x",
-        "page=1.5", "page=99999999999", "size=0", "size=101", "size=-5", "size=", "size=ten"})
+        "page=1.5", "page=99999999999", "page=21474837&size=100", "size=0", "size=101", "size=-5", "size=", "size=ten"})
     void aParameterThatIsPresentButInvalidIs400(String query) throws Exception {
         mvc.perform(get("/api/admin/credits?" + query).with(user("owner")))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("Invalid request"));
 
         verifyNoInteractions(credits);
+    }
+
+    @Test
+    void thePageAtTheLastOffsetAnIntCanHoldIsAccepted() throws Exception {
+        when(credits.list(CreditsFilter.NONE, 21_474_836, 100)).thenReturn(LIST);
+
+        mvc.perform(get("/api/admin/credits?page=21474836&size=100").with(user("owner")))
+            .andExpect(status().isOk());
     }
 
     @Test
