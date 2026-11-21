@@ -254,6 +254,43 @@ describe('useChristmas: changes', () => {
     expect(result.current.focusRequest).toMatchObject({ filmId: 99, undo: false });
   });
 
+  it('undoes a Leave out on a KEYWORD row whose stored override is INCLUDE by sending INCLUDE, else null', async () => {
+    const body = christmasFixture();
+    body.inWeek.find((r) => r.tmdbId === 106).override = 'INCLUDE';
+    const fetchMock = serve(() => reply(200, body), body);
+    const { result } = await ready();
+
+    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    expect(result.current.toast.undo).toMatchObject({ tmdbId: 106, choice: 'INCLUDE' });
+    await act(async () => result.current.undo(result.current.toast.undo));
+    expect(JSON.parse(puts(fetchMock)[1][1].body)).toEqual({ choice: 'INCLUDE' });
+
+    const other = rowOf(result.current.data, 105);
+    await act(async () => result.current.change({ ...other, override: null }));
+    expect(result.current.toast.undo.choice).toBeNull();
+    await act(async () => result.current.undo(result.current.toast.undo));
+    expect(JSON.parse(puts(fetchMock)[3][1].body)).toEqual({ choice: null });
+  });
+
+  it('undoes a search result Leave out with INCLUDE when the film row carries that override', async () => {
+    const body = christmasFixture();
+    const row = body.inWeek.find((r) => r.tmdbId === 106);
+    row.override = 'INCLUDE';
+    serve(() => reply(200, body), body);
+    const { result } = await ready();
+
+    await act(async () =>
+      result.current.changeResult({
+        filmId: row.filmId,
+        tmdbId: 106,
+        title: row.title,
+        state: 'IN_KEYWORD',
+      }),
+    );
+
+    expect(result.current.toast.undo).toMatchObject({ tmdbId: 106, choice: 'INCLUDE' });
+  });
+
   it('undoes with the previous choice, says the opposite without an Undo, and asks for that row focus', async () => {
     const fetchMock = serve(() => reply(200, christmasFixture()));
     const { result } = await ready();

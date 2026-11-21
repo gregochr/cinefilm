@@ -46,10 +46,10 @@ The titles and years are sample data. Which films TMDB actually tags will decide
   - **`added`:** included films that TMDB doesn't tag.
   - **`leftOut`:** excluded films, with `taggedByTmdb` so the row can say "TMDB tags it “christmas”".
   - **`fallsBack`:** true when `inWeek` has fewer than `min`.
-- **`PUT /api/admin/christmas/{tmdbId}`** with `{ choice: 'INCLUDE' | 'EXCLUDE' | null }`. `null` deletes the override, which is what both "Put back" and "Remove" do. Return the same body as `GET`, so the screen redraws from one response. **Undo** is just another `PUT` with the previous choice.
+- **`PUT /api/admin/christmas/{tmdbId}`** with `{ choice: 'INCLUDE' | 'EXCLUDE' | null }`. `null` deletes the override, which is what both "Put back" and "Remove" do. Each list item carries `override` (the stored choice: `INCLUDE`, `EXCLUDE` or `null`); Undo of Leave out on a keyword row whose `override` is `INCLUDE` sends `INCLUDE`, not `null`. Return the same body as `GET`, so the screen redraws from one response. **Undo** is just another `PUT` with the previous choice.
 - **Library search:** reuse the existing search (the `searchIndex` / search work) if it can return poster, title, year and `tmdbId`. Each result also needs its Christmas state: `IN_KEYWORD`, `IN_ADDED`, `LEFT_OUT`, `NOT_IN`, or `KEYWORDS_PENDING` (has a TMDB id but no `keywordsFetchedAt`) and `NO_TMDB_ID`.
   - **A film with no TMDB id can't be added,** because overrides are by TMDB id. Show it with a muted "Needs a match first" and a "Find the film…" button that opens Fix match, instead of Add.
-- **Edge case:** a film that's added *and* later gets tagged by TMDB shows as "TMDB keyword", and the redundant INCLUDE row is deleted on the next write (not at start-up). Leaving it out sets EXCLUDE.
+- **Edge case:** a film that's added *and* later gets tagged by TMDB shows as "TMDB keyword" while the tag lasts. Its INCLUDE row is kept, never deleted: the reason is decided on every read, so if TMDB later removes the tag the film shows as "Added" again with no write. Leaving it out replaces the row with EXCLUDE; Put back deletes the row, and the keyword (if any) counts the film again.
 - **409 from the scan lock:** if writes are refused while a scan runs, say "A scan is running — try again when it finishes" in the toast, and don't change the list.
 
 ### 3. Tests (backend)
@@ -181,7 +181,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 
 - **No environment-variable seed.** The variables were never released or set, so there was nothing to migrate; `HolidayOverrides`, `HolidayConfig` and the two properties were removed (owner, 2026-11-19).
 - **The add search is a plain textbox with a plain list of result buttons**, not a combobox/listbox, because each result row holds a button (recorded in `christmas-films-plan.md`).
-- **A redundant INCLUDE row is deleted on the next write only**, not at start-up.
+- **A redundant INCLUDE row is never deleted** (the first build deleted it on the next write, which no Undo could restore and which would drop a film TMDB later un-tags); the reason, KEYWORD or ADDED, is decided on every read. Known and accepted: Leave out then Put back on a keyword film that also has a hidden INCLUDE row loses that row (Put back deletes it); Undo of the Leave out restores it, Put back does not.
 - **The 409 can name any holder of the library lock** (a scan, a Plex import, a credits save), not only a scan; `/states` accepts at most 50 distinct ids and leaves out films that browse hides; `PUT` answers 404 when no browsable film has the TMDB id (`foundation-plan.md`).
 - The empty state ("No Christmas films yet") shows only when In Christmas week, Added by me **and** Left out by me are all empty, not when In and Added alone are. A film left out must stay reachable, with its Put back button.
 - After Leave out, Put back or Remove on a list row, focus goes to the same row's button if it is still listed, else the

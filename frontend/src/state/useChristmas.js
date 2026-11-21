@@ -229,7 +229,9 @@ export function useChristmas() {
    */
   const changeResult = useCallback(
     (result) => {
-      const action = resultWrite(result.state, result.tmdbId, data?.added);
+      // A keyword film's stored INCLUDE (if any) is on its In-week row: the Undo of Leave out must restore it.
+      const override = data?.inWeek.find((film) => film.filmId === result.filmId)?.override ?? null;
+      const action = resultWrite(result.state, result.tmdbId, data?.added, override);
       if (!action) return Promise.resolve();
       return write(result.tmdbId, result.filmId, result.title, action.choice, {
         kind: action.toast,

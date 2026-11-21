@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,8 +38,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * The Christmas films Admin screen: which films Home's Christmas week counts, and the owner's say over them. The list
  * is built by {@link WeeklyThemeSelector#christmasFilms}, the code Home uses, so the screen and Home cannot disagree
- * (Home shows the first {@link WeeklyThemeSelector#MAX_FILMS}). Writes one at a time, so two quick changes to one
- * film are last-write-wins on its one row.
+ * (Home shows the first {@link WeeklyThemeSelector#MAX_FILMS}). The reason a film counts (TMDB keyword or added by
+ * the owner) is decided at read time from the film's keywords, never stored. Writes one at a time, so two quick
+ * changes to one film are last-write-wins on its one row.
  */
 @Service
 public class ChristmasFilms {
@@ -82,8 +82,9 @@ public class ChristmasFilms {
     }
 
     /**
-     * Sets, changes or (with {@code null}) forgets the owner's choice for a film, then deletes INCLUDE rows for films
-     * TMDB tags anyway, and returns the screen.
+     * Sets, changes or (with {@code null}) forgets the owner's choice for a film and returns the screen. No other row
+     * is touched: an INCLUDE row for a film TMDB also tags is kept (it shows as {@link Reason#KEYWORD} while the tag
+     * lasts and as {@link Reason#ADDED} the moment TMDB drops it), because the reason is decided on every read.
      *
      * @throws ConflictException when a scan is running; nothing changes
      * @throws NotFoundException when no film in the library has that TMDB id
@@ -122,7 +123,6 @@ public class ChristmasFilms {
             } else {
                 overrides.set(tmdbId, choice);
             }
-            dropRedundantIncludes();
         });
     }
 
@@ -164,36 +164,18 @@ public class ChristmasFilms {
         return film.getKeywordsFetchedAt() == null ? State.KEYWORDS_PENDING : State.NOT_IN;
     }
 
-    /**
-     * An INCLUDE row is redundant once TMDB tags the film: the keyword counts it, so the row goes. Two film rows can
-     * share a TMDB id (a refused merge), and the keyword is fetched per row, so the row goes only when every film
-     * holding the id carries the keyword; otherwise the untagged one still needs it.
-     */
-    private void dropRedundantIncludes() {
-        Set<Long> included = overrides.snapshot().include();
-        if (included.isEmpty()) {
-            return;
-        }
-        films.findByTmdbIdIn(included).stream().collect(Collectors.groupingBy(Film::getTmdbId)).forEach(
-            (id, rows) -> {
-                if (rows.stream().allMatch(ChristmasFilms::tagged)) {
-                    overrides.remove(id);
-                }
-            });
-    }
-
     private ChristmasView build() {
         List<Film> library = loader.loadAll().stream().map(FilmView::film).toList();
         ChristmasOverrides.Snapshot choices = overrides.snapshot();
         Set<Long> exclude = choices.exclude();
         List<Item> inWeek = WeeklyThemeSelector.christmasFilms(library, choices.include(), exclude).stream()
-            .map(f -> item(f, tagged(f) ? Reason.KEYWORD : Reason.ADDED)).toList();
+            .map(f -> item(f, tagged(f) ? Reason.KEYWORD : Reason.ADDED, choices)).toList();
         List<Item> added = inWeek.stream().filter(i -> i.reason() == Reason.ADDED).toList();
         List<LeftOutItem> leftOut = library.stream()
             .filter(f -> f.getTmdbId() != null && exclude.contains(f.getTmdbId()))
             .sorted(WeeklyThemeSelector.ROW_ORDER)
             .map(f -> new LeftOutItem(f.getId(), f.getTmdbId(), f.getTitle(), f.getYear(), f.getPosterPath(),
-                tagged(f)))
+                tagged(f), overrideOf(f.getTmdbId(), choices)))
             .toList();
         long fetched = films.countByTmdbIdIsNotNullAndKeywordsFetchedAtIsNotNull();
         long total = films.countByTmdbIdIsNotNull();
@@ -210,9 +192,20 @@ public class ChristmasFilms {
             inWeek, added, leftOut, inWeek.size() < WeeklyThemeSelector.MIN_FILMS);
     }
 
-    private static Item item(Film film, Reason reason) {
+    private static Item item(Film film, Reason reason, ChristmasOverrides.Snapshot choices) {
         return new Item(film.getId(), film.getTmdbId(), film.getTitle(), film.getYear(), film.getPosterPath(),
-            reason);
+            reason, overrideOf(film.getTmdbId(), choices));
+    }
+
+    /** The owner's stored choice for a TMDB id, or null. */
+    private static ChristmasChoice overrideOf(Long tmdbId, ChristmasOverrides.Snapshot choices) {
+        if (tmdbId == null) {
+            return null;
+        }
+        if (choices.exclude().contains(tmdbId)) {
+            return ChristmasChoice.EXCLUDE;
+        }
+        return choices.include().contains(tmdbId) ? ChristmasChoice.INCLUDE : null;
     }
 
     private static boolean tagged(Film film) {

@@ -40,9 +40,6 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /** How many films with a TMDB id have had their keywords fetched. */
     long countByTmdbIdIsNotNullAndKeywordsFetchedAtIsNotNull();
 
-    /** Every film (all rows, whatever their files) holding one of these TMDB ids. */
-    List<Film> findByTmdbIdIn(java.util.Collection<Long> tmdbIds);
-
     /** Films with more than one edition (the ones that have a default to choose). */
     @org.springframework.data.jpa.repository.Query("select f from Film f where size(f.editions) > 1 order by f.id")
     List<Film> findWithSeveralEditions();
@@ -100,6 +97,17 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
         "select new gregochr.cinefilm.film.FilmRepository$TmdbRef(f.id, f.tmdbId) from Film f "
             + "where f.tmdbId is not null and f.keywordsFetchedAt is null order by f.id")
     List<TmdbRef> findWithoutKeywords();
+
+    /**
+     * Films matched to TMDB whose keywords were fetched before the cutoff, the stalest first (the stamp, then the id
+     * for a tie). Films never fetched are {@link #findWithoutKeywords}'s.
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$TmdbRef(f.id, f.tmdbId) from Film f "
+            + "where f.tmdbId is not null and f.keywordsFetchedAt < :cutoff "
+            + "order by f.keywordsFetchedAt asc, f.id asc")
+    List<TmdbRef> findWithStaleKeywords(
+        @org.springframework.data.repository.query.Param("cutoff") java.time.Instant cutoff);
 
     /**
      * Stamps a film's keywords as fetched, only while it still has the TMDB id they were fetched for. The update takes

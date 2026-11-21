@@ -38,10 +38,10 @@ class ChristmasControllerTest {
     private static final ChristmasView VIEW = new ChristmasView(
         new WeekDto(LocalDate.of(2026, 12, 14), LocalDate.of(2026, 12, 20)), new Limits(12, 5),
         new Keywords(3, 4, true, true, false),
-        List.of(new Item(1L, 11L, "Kept", 1988, "/k.jpg", Reason.KEYWORD),
-            new Item(2L, 12L, "Added", null, null, Reason.ADDED)),
-        List.of(new Item(2L, 12L, "Added", null, null, Reason.ADDED)),
-        List.of(new LeftOutItem(3L, 13L, "Out", 1990, "/o.jpg", true)), true);
+        List.of(new Item(1L, 11L, "Kept", 1988, "/k.jpg", Reason.KEYWORD, ChristmasChoice.INCLUDE),
+            new Item(2L, 12L, "Added", null, null, Reason.ADDED, ChristmasChoice.INCLUDE)),
+        List.of(new Item(2L, 12L, "Added", null, null, Reason.ADDED, ChristmasChoice.INCLUDE)),
+        List.of(new LeftOutItem(3L, 13L, "Out", 1990, "/o.jpg", true, ChristmasChoice.EXCLUDE)), true);
 
     @Autowired
     private MockMvc mvc;
@@ -70,6 +70,8 @@ class ChristmasControllerTest {
             .andExpect(jsonPath("$.inWeek[0].reason").value("KEYWORD"))
             .andExpect(jsonPath("$.inWeek[1].reason").value("ADDED"))
             .andExpect(jsonPath("$.added[0].filmId").value(2))
+            .andExpect(jsonPath("$.inWeek[0].override").value("INCLUDE"))
+            .andExpect(jsonPath("$.leftOut[0].override").value("EXCLUDE"))
             .andExpect(jsonPath("$.leftOut[0].taggedByTmdb").value(true))
             .andExpect(jsonPath("$.fallsBack").value(true));
     }
