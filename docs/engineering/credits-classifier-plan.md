@@ -664,7 +664,10 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
   - excluded and unlabelled directories are never opened, with or without the flag. Exclusion is still checked before
     side (L3a-2b), and a fixture holds an excluded test-side record that is never opened under `--look=L5`;
   - `look.json` holds the flag, the UTC time, the git SHA and the count of test films, and no ids.
-- **The looks log** (the planner fills it in from each `look.json`): none yet.
+- **The looks log** (the planner fills it in from each `look.json`):
+  - **L5, 2026-11-21:** `eval-20261121T095028Z`, `CreditsEvaluateMain --look=L5 --baseline` over model A's three
+    runs, `toolGitCommit` `280593c`, 238 test films, on features run `features-20261120T224417Z` (also `--look=L5`,
+    238 test films). Results under "L5: what the models showed".
   - Two looks count: `CreditsEvaluateMain`'s run with `--look=L5`, and the gate's database query ("The gate,
     revised").
 - **L3c — `CreditsSegmenter`** (L3c-1, "L3c specification"). Tests:
@@ -721,15 +724,16 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
   split. One development-only evaluation per model type, compared on their held-out summaries ("Choosing"); then the
   single look, one `--look=L5 --baseline` evaluation of the winner alone (the `CreditsEmbedMain --look=L5` run only
   if B won). The results go into this file as "L5: what the models showed".
-- **L6a — the model in the product.**
+- **L6a — the model in the product.** **Held** (owner, 2026-11-21): v2 stays, see "L5: what the models showed".
   - The winner and the segmenter go in `CreditsDetectionService`.
   - The dense reader becomes 50 s, and the cue check moves.
   - `ANALYSIS_VERSION = 3`, with the model JSON committed.
   - If B won, the Dockerfile adds the encoder `ADD`.
   - The v2 snapshot is taken **before L6a merges**, so an unrelated release of `main` can't deploy version 3 first.
     The pre-release `pg_dump` is the backstop.
-- **L6b — removal:** the rule classes (once nothing uses the 2b flag), the losing model, and the dataset job.
-- **Then** the revised gate (the second look at the test split), then phase 3 of `credits-detection-plan.md`.
+- **L6b — removal:** **Held** with L6a (owner, 2026-11-21). It removes the rule classes (once nothing uses the 2b flag), the losing model, and the dataset job.
+- **Then** the revised gate (the second look at the test split), then phase 3 of `credits-detection-plan.md`. Both
+  wait with L6a (owner, 2026-11-21): the gate reads version 3 rows, which only L6a writes.
 
 ## L1 specification (settled in review round 5)
 
@@ -1418,6 +1422,48 @@ model A's. Development films only, with no look.
   (`train-20261119T144958Z`, `train-20261119T145507Z`, `train-20261119T145939Z`), on a features run made with
   `--look=L5`. Model B is never scored on test films, and no `CreditsEmbedMain --look=L5` run is made. Model B's code
   is deleted in L6b.
+
+### L5: what the models showed (2026-11-21, v0.9.2)
+
+The single look: `eval-20261121T095028Z`, model A's three runs, scored with `--look=L5 --baseline
+credits-detection-v2-2026-11-17.csv`. Its dataset and labels hashes equal model A's training runs' (the tool refuses
+a difference).
+
+- **The development half is unchanged:** its `summary.json` block equals `eval-20261119T213020Z`'s, field for field.
+- **The test split, 238 films.** Model A by the evaluation's own `summary.json`; v2 counted from `evaluation.csv`'s
+  `v2Verdict` and `v2Error` columns with the same thresholds (every test film has a v2 row):
+
+  | Test split | Model A | v2 |
+  |---|---|---|
+  | `FOUND` early by more than 15 s | 0 | 0 |
+  | `FOUND` early by more than 5 s | 0 | 7 (all dark) |
+  | Dark within ±10 s | 73 of 152 (48.0%) | 108 of 152 (71.1%) |
+  | Dark within ±60 s or not found | 136 (89.5%) | 133 (87.5%) |
+  | Plate within ±10 s / ±60 s or not found | 0 / 2 of 2 | 0 / 2 of 2 |
+  | Lit within ±10 s / ±60 s or not found | 0 / 36 of 84 | 1 / 34 of 84 |
+
+  Model A's early counts are by the opening at `t` and margin band; v2's by Plex's opening type. Model A's early error
+  is its worst case (`t − 5 s`) and v2's its stored offset, so the early rows favour v2 ("Goals and benchmark").
+  Seven test films carry `leading_island`; with no early test film, none is early.
+
+What it shows:
+
+- **The pre-registered test rule switches nothing off:** no test film is early by more than 15 s, in any opening type
+  or band.
+- **Model A is much worse than v2 where it matters most.** Dark openings within ±10 s: 48.0% against v2's 71.1%, and
+  both well short of the 90% goal. Model A is slightly better within ±60 s and is never early by more than 5 s, where
+  v2 is seven times; neither is early by more than 15 s.
+- **The breach is named beside it** ("Not looked at before L5"): the blended v2 count of 2026-11-15 covered test files
+  too. Nothing was tuned on it, and this comparison does not depend on it.
+- **The held-out development film early by more than 15 s** (dark, high band; "The split") is not decided, since
+  nothing ships.
+
+**The decision (owner, 2026-11-21): keep v2, and hold L6a.** Version 2 stays the product's detector and `ANALYSIS_VERSION`
+stays 2. The test split has been looked at once; its second and last look is the version 3 gate, so any new design is
+chosen on development films only and judged there. The gate and phase 3's `AUTO` wait with L6a, because the gate
+reads version 3 rows (with their `opening_type` and `margin_band`) and phase 3's `AUTO` waits on the gate. Phase 3 itself
+is not built yet, so today no marker is applied: every film's end overlay
+appears at 97% of its runtime, and it counts as watched at 92%. Model B's code is not deleted while L6a is held (L6b is held with it).
 
 ## L3c specification (written 2026-11-19)
 
