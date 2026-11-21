@@ -4,6 +4,8 @@ import { todoHeadingCount } from '../../state/adminSummaryFormat.js';
 import { useAdminContext } from '../../state/adminContext.js';
 import { pickerTarget } from '../../state/adminSubtitles.js';
 import { useAdminTodo } from '../../state/useAdminTodo.js';
+import { useLeftUnmatched } from '../../state/useLeftUnmatched.js';
+import AdminLeftUnmatched from './AdminLeftUnmatched.jsx';
 import AdminStatusStrip from './AdminStatusStrip.jsx';
 import AdminTodoGroup from './AdminTodoGroup.jsx';
 import AdminTodoNotice from './AdminTodoNotice.jsx';
@@ -53,6 +55,7 @@ export default function AdminTodo() {
     // save keeps the row and its focus, so nothing is armed for it.
     onFullSaved: armFocusFallback,
   });
+  const left = useLeftUnmatched({ settledAt, changed, onChanged: markChanged });
   const { attention, full, fullNeed, forced } = lists;
   // The rows on screen, so the fallback runs once a picked file's row has left (the opener goes with it).
   useFallbackFocus(
@@ -129,6 +132,12 @@ export default function AdminTodo() {
       {lists.allRead && lists.groups.length === 0 ? (
         <p className="admin__text">{todo.empty}</p>
       ) : null}
+      <AdminLeftUnmatched
+        rows={left.rows}
+        busy={left.busy}
+        problems={left.problems}
+        onPutBack={left.putBack}
+      />
     </>
   );
 }

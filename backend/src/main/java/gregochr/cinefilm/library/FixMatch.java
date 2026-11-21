@@ -13,6 +13,7 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.film.MatchStatus;
+import gregochr.cinefilm.library.AdminDtos.LeftUnmatchedDto;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
 import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
@@ -27,6 +28,8 @@ import gregochr.cinefilm.tmdb.TmdbUnavailableException;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -184,9 +187,9 @@ public class FixMatch {
     }
 
     /**
-     * The owner chooses to leave a film without a TMDB match: it is marked {@code LEFT_UNMATCHED} and its stored
-     * candidates are cleared, so To do stops listing it and no scan retries it. Fix match (by id) and a Plex-supplied
-     * TMDB id can still match it.
+     * The owner chooses to leave a film without a TMDB match: it is marked {@code LEFT_UNMATCHED} (its stored
+     * candidates are kept, so {@link #putBack} restores the row as it was), so To do stops listing it and no scan
+     * retries it. Fix match (by id) and a Plex-supplied TMDB id can still match it.
      * Only a film To do lists as needing a match may be left; takes the library lock like {@link #apply}.
      *
      * @param filmId the film to leave unmatched
@@ -195,14 +198,43 @@ public class FixMatch {
      *     the library lock
      */
     public void leaveUnmatched(Long filmId) {
+        changeUnderLock(filmId, Film::needsMatch, "This film is not waiting for a match",
+            film -> film.setMatchStatus(MatchStatus.LEFT_UNMATCHED));
+    }
+
+    /**
+     * The way back from {@link #leaveUnmatched}: a film left unmatched is marked {@code NEEDS_MATCH} again, so To do
+     * lists it. Only a {@code LEFT_UNMATCHED} film may be put back; takes the library lock like {@link #apply}.
+     *
+     * @param filmId the film to put back
+     * @throws NotFoundException when there is no such film
+     * @throws ConflictException when the film is not left unmatched, or a scan, import or another match holds the
+     *     library lock
+     */
+    public void putBack(Long filmId) {
+        changeUnderLock(filmId, film -> film.getMatchStatus() == MatchStatus.LEFT_UNMATCHED,
+            "This film is not left unmatched", film -> film.setMatchStatus(MatchStatus.NEEDS_MATCH));
+    }
+
+    /**
+     * The films the owner left unmatched, by title. Reads only, so it takes no lock.
+     *
+     * @return one entry per film, sorted by title
+     */
+    public List<LeftUnmatchedDto> leftUnmatched() {
+        return readTx.execute(status -> films.findByMatchStatusOrderBySortTitle(MatchStatus.LEFT_UNMATCHED).stream()
+            .map(f -> new LeftUnmatchedDto(f.getId(), f.getTitle(), f.getYear())).toList());
+    }
+
+    /** Takes the library lock, then changes one film in a transaction if it passes the guard. */
+    private void changeUnderLock(Long filmId, Predicate<Film> allowed, String refusal, Consumer<Film> change) {
         locked(() -> {
             tx.executeWithoutResult(status -> {
                 Film film = films.findById(filmId).orElseThrow(() -> new NotFoundException("No film " + filmId));
-                if (!film.needsMatch()) {
-                    throw new ConflictException("This film is not waiting for a match");
+                if (!allowed.test(film)) {
+                    throw new ConflictException(refusal);
                 }
-                film.setMatchStatus(MatchStatus.LEFT_UNMATCHED);
-                film.setMatchCandidates(null);
+                change.accept(film);
                 films.save(film);
             });
             return null;

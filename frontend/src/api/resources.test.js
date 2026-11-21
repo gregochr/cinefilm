@@ -168,6 +168,18 @@ describe('image URLs', () => {
     });
   });
 
+  it('lists the films left unmatched and puts one back with a bodiless POST', async () => {
+    const last = stubFetch();
+    await adminApi.leftUnmatched();
+    expect(last()).toMatchObject({ path: '/api/admin/films/left-unmatched', method: 'GET' });
+    await adminApi.putBack(34);
+    expect(last()).toEqual({
+      path: '/api/admin/films/34/put-back',
+      method: 'POST',
+      body: undefined,
+    });
+  });
+
   it('reads the transcoding state and stops a session with DELETE', async () => {
     const last = stubFetch();
     await adminApi.transcoding();

@@ -256,6 +256,25 @@ class FixMatchTest extends ApiTestBase {
     }
 
     @Test
+    void aFilmLeftUnmatchedIsListedAndPutBackReturnsItToToDo() {
+        Film film = unmatched("Home video", "Home video.m4v");
+        fix.leaveUnmatched(film.getId());
+
+        assertThat(fix.leftUnmatched()).singleElement().satisfies(left -> {
+            assertThat(left.id()).isEqualTo(film.getId());
+            assertThat(left.title()).isEqualTo("Home video");
+        });
+
+        fix.putBack(film.getId());
+
+        assertThat(fix.leftUnmatched()).isEmpty();
+        assertThat(films.findById(film.getId()).orElseThrow().getMatchStatus()).isEqualTo(MatchStatus.NEEDS_MATCH);
+        assertThat(films.findNeedingMatch()).extracting(Film::getId).containsExactly(film.getId());
+        assertThatThrownBy(() -> fix.putBack(film.getId())).isInstanceOf(ConflictException.class)
+            .hasMessage("This film is not left unmatched");
+    }
+
+    @Test
     void aFilmLeftUnmatchedIsNotListedAndFixMatchStillMatchesIt() {
         when(tmdb.movie(5)).thenReturn(Optional.of(movie(5, "Dune", 1984)));
         Film film = unmatched("Home video", "Home video.m4v");
@@ -264,7 +283,6 @@ class FixMatchTest extends ApiTestBase {
 
         Film left = films.findById(film.getId()).orElseThrow();
         assertThat(left.getMatchStatus()).isEqualTo(MatchStatus.LEFT_UNMATCHED);
-        assertThat(left.getMatchCandidates()).isNull();
         assertThat(films.findNeedingMatch()).isEmpty();
         assertThat(films.countNeedingMatch()).isZero();
 

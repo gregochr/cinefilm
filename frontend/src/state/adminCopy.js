@@ -21,6 +21,11 @@ export const buttons = {
     hint: 'Stop listing this film here. It stays in your library.',
     source: 'planner',
   },
+  putBack: {
+    label: 'Put back',
+    hint: 'List this film under To do again so you can match it.',
+    source: 'planner',
+  },
   sortEditions: {
     label: 'Sort out editions…',
     hint: 'Choose which file is which cut, the part order and the default.',
@@ -362,6 +367,17 @@ export const todoRow = {
     scan: 'A scan is running — try again when it finishes.',
     stale: 'That film is already settled. The list is being updated.',
     other: 'Couldn’t leave it — try again.',
+  },
+  // "Put back" failures (planner): a 404 is the same "gone" line.
+  putBackProblems: {
+    scan: 'A scan is running — try again when it finishes.',
+    stale: 'This film is no longer left unmatched. The list is being updated.',
+    other: 'Couldn’t put it back — try again.',
+  },
+  // The section below the groups for the films the owner left unmatched (planner).
+  leftUnmatched: {
+    heading: (n) => `Left unmatched (${n})`,
+    why: 'Films you chose not to match. Put one back to see it under To do again.',
   },
   retry: 'Try again',
   loadingLabel: 'Loading',

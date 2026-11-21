@@ -171,6 +171,16 @@ public final class AdminDtos {
     }
 
     /**
+     * A film the owner left unmatched, listed in Admin so it can be put back.
+     *
+     * @param id the film's id
+     * @param title the film's title
+     * @param year the release year, or null
+     */
+    public record LeftUnmatchedDto(Long id, String title, Integer year) {
+    }
+
+    /**
      * One line of the grouping report.
      *
      * @param happenedAt when it happened
