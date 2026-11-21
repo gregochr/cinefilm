@@ -39,8 +39,12 @@ owner's decision, because the 2026-11-21 decision says phase 3's `AUTO` waits wi
 
 ## 3a-2 — applying `PLEX` markers
 
-Two PRs: **3a-2a** is `CreditsApply`, the batched read and write (`runPass()`) and the integration test, with no
-trigger, so it is inert; **3a-2b** is the worker, its triggers, the property and the logs.
+Two PRs:
+- **3a-2a, inert:** `CreditsApply`; `CreditsApplier.runPass()` with its lock wait, batched read and write, log line
+  and in-progress count; `CreditsApplyTest`, `CreditsApplierTest` for `runPass` and the integration test. Nothing
+  calls `runPass` yet.
+- **3a-2b:** the worker (executor and flag), the triggers and their events, the property, the nudge, the
+  `PlexCreditsImportService` Javadoc; `CreditsApplierTest` gains the worker and trigger cases.
 
 - **`CreditsApply`, pure:** given an edition's ordered original parts (ids, durations), its last part's current
   fingerprint, its marker and source, and the last part's `plex_credits_marker` row, returns the marker and source:
@@ -53,7 +57,8 @@ trigger, so it is inert; **3a-2b** is the worker, its triggers, the property and
   Step 1 is checked first, so `OWNER` is kept whatever else is missing. Otherwise no `timelineDurationMs`, or a last
   part with no duration or fingerprint: step 4.
 - **`CreditsApplier`, the service,** shaped like `CreditsRefresher.startDue`/`worker`: its own single-thread
-  executor and a pending flag, so triggers that arrive during a pass ask for exactly one more pass. Each pass waits
+  executor and a pending flag (3a-2b), so triggers that arrive during a pass ask for exactly one more pass. Each pass
+  (`runPass()`, 3a-2a) waits
   for the `LibraryLock` holder `CREDITS` with bounded retries, as `PlexCreditsImportService.acquireLock` does
   (`LOCK_ATTEMPTS` × `LOCK_WAIT`); a pass that still can't take it gives up and leaves the flag set for the next
   trigger or nudge. Under the lock, in batches of short transactions, it reads the editions, their parts and the Plex
@@ -82,8 +87,9 @@ trigger, so it is inert; **3a-2b** is the worker, its triggers, the property and
     two-part edition (the marker lands at part 2's edition time); no timeline; `OWNER` kept with a Plex row present;
     `OWNER` kept with a null fingerprint and null durations.
   - `CreditsApplierTest` (Mockito; every service has its own unit test class, and the local coverage gate excludes
-    `integration/`): the lock wait, refusal and the flag left set; a trigger during a pass gives exactly one more pass;
-    only changed editions written; `OWNER` skipped; the log counts; each trigger; the property off, where triggers start nothing.
+    `integration/`). 3a-2a: `runPass`'s lock wait and refusal, only changed editions written, `OWNER` skipped, the
+    log counts and the in-progress count. 3a-2b: the flag left set after a refusal, a trigger during a pass gives
+    exactly one more pass, each trigger, the property off, where triggers start nothing.
   - `CreditsApplierIntegrationTest` (Testcontainers, CI): seeded editions and rows; a pass sets, clears and keeps;
     a second pass writes nothing; the query count per batch is fixed.
 
@@ -91,9 +97,10 @@ trigger, so it is inert; **3a-2b** is the worker, its triggers, the property and
 
 Specified after 3a-2 merges, against the handover's admin visual language, as `credits-detection-plan.md`'s "Admin
 (phase 3)": the list (film, edition, source, time, version 2's verdict and reasons, two stills), **Set** (`OWNER`),
-**Clear** (back to automatic: the source is cleared and a pass is asked for), and `GET /api/admin/credits`, `PUT` and
+**Clear** (back to automatic: under the same lock it runs `CreditsApply` for that edition with its source treated
+as cleared, so marker and source change together), and `GET /api/admin/credits`, `PUT` and
 `DELETE /api/admin/editions/{id}/credits`. Both writes take the lock once, as every Admin writer does, and answer 409
-with `busyText()` when it is held; then they ask for a pass. **Use detected** arrives
+with `busyText()` when it is held. **Use detected** arrives
 only with 3c.
 
 ## 3c — `AUTO` from version 2 (needs the owner's yes)
@@ -103,14 +110,15 @@ Not specified until the owner says yes: the 2026-11-21 decision has `AUTO` wait 
 
 - **Its gate is the classifier plan's revised gate applied to version 2:** zero version 2 `FOUND` rows more than 15 s
   before a matching Plex row, counted on development files and files outside the split only (test files: L5's figure,
-  0 of 238, stands; "Not looked at before L5" allows the baseline on the test split only within L5's look), and **every** version 2 `FOUND` row on a file with no matching Plex row checked by
-  stills (about 220 at most; those are the only films `AUTO` would ever mark), not a sample. Crawl and card results
+  0 of 238, stands; "Not looked at before L5" allows the baseline on the test split only within L5's look), and
+  **every** version 2 `FOUND` row on a file with no matching Plex row, outside the test split's films, checked by
+  stills (about 220 at most; those are the only files `AUTO` would ever mark), not a sample. Crawl and card results
   are reported apart; an early card result limits `AUTO` to crawls, an early crawl result blocks it. Counts only, no
   titles, in this file.
-- **Before writing the spec,** the planner reads the "more than 15 s early" bin of
-  `~/cinefilm-labels/breach-2026-11-15.txt` (all 847 files): if it is above zero, the Plex half may already fail.
-- **The test split is not looked at again:** no version 2 count, crawl/card breakdown or still of a test file. The
-  files without a Plex marker are not in the split, so the stills half touches none.
+- **The test split is not looked at again:** no version 2 count, crawl/card breakdown or still of any file of a
+  test-split film (the manifest is by film, so this covers a stale Plex row and a film's other editions). The
+  breach file is not read either: a development count subtracted from its blended bins would give the test split's.
+  `AUTO` never applies to a file of a test-split film; such a file with no matching Plex row keeps the fallback.
 - **Applying:** a version 2 `FOUND` row whose fingerprint matches, of a kind the gate cleared, at its edition time
   plus **20 s** (capped at the guard's 60 s before the end), source `AUTO`. `PLEX` still wins. The detector's row
   writes become a trigger, and **Use detected** joins Admin.
