@@ -90,6 +90,9 @@ Two PRs:
     `integration/`). 3a-2a: `runPass`'s lock wait and refusal, only changed editions written, `OWNER` skipped, the
     log counts and the in-progress count. 3a-2b: the flag left set after a refusal, a trigger during a pass gives
     exactly one more pass, each trigger, the property off, where triggers start nothing.
+  - Publishers and the nudge (3a-2b): `PlexCreditsImportServiceTest`, `PlexCreditsImportFinished` published when an
+    import finishes and not on a refusal or failure; `EditionArrangerTest`, `EditionsArranged` published after a save
+    and not on a 409; `CreditsSchedulerTest`, the nudge asks the applier for a pass.
   - `CreditsApplierIntegrationTest` (Testcontainers, CI): seeded editions and rows; a pass sets, clears and keeps;
     a second pass writes nothing; the query count per batch is fixed.
 
@@ -98,7 +101,7 @@ Two PRs:
 Specified after 3a-2 merges, against the handover's admin visual language, as `credits-detection-plan.md`'s "Admin
 (phase 3)": the list (film, edition, source, time, version 2's verdict and reasons, two stills), **Set** (`OWNER`),
 **Clear** (back to automatic: under the same lock it runs `CreditsApply` for that edition with its source treated
-as cleared, so marker and source change together), and `GET /api/admin/credits`, `PUT` and
+as cleared, so marker and source change together, whatever `cinefilm.credits.apply.enabled` says), and `GET /api/admin/credits`, `PUT` and
 `DELETE /api/admin/editions/{id}/credits`. Both writes take the lock once, as every Admin writer does, and answer 409
 with `busyText()` when it is held. **Use detected** arrives
 only with 3c.
@@ -106,22 +109,19 @@ only with 3c.
 ## 3c — `AUTO` from version 2 (needs the owner's yes)
 
 Not specified until the owner says yes: the 2026-11-21 decision has `AUTO` wait with L6a, and that PR edits both
-`credits-detection-plan.md` passages that tie `AUTO` to the classifier plan's gate. Settled now for when it is:
+`credits-detection-plan.md` passages that tie `AUTO` to the classifier plan's gate. What its spec must settle:
 
-- **Its gate is the classifier plan's revised gate applied to version 2:** zero version 2 `FOUND` rows more than 15 s
-  before a matching Plex row, counted on development files and files outside the split only (test files: L5's figure,
-  0 of 238, stands; "Not looked at before L5" allows the baseline on the test split only within L5's look), and
-  **every** version 2 `FOUND` row on a file with no matching Plex row, outside the test split's films, checked by
-  stills (about 220 at most; those are the only files `AUTO` would ever mark), not a sample. Crawl and card results
-  are reported apart; an early card result limits `AUTO` to crawls, an early crawl result blocks it. Counts only, no
-  titles, in this file.
-- **The test split is not looked at again:** no version 2 count, crawl/card breakdown or still of any file of a
-  test-split film (the manifest is by film, so this covers a stale Plex row and a film's other editions). The
-  breach file is not read either: a development count subtracted from its blended bins would give the test split's.
-  `AUTO` never applies to a file of a test-split film; such a file with no matching Plex row keeps the fallback.
-- **Applying:** a version 2 `FOUND` row whose fingerprint matches, of a kind the gate cleared, at its edition time
-  plus **20 s** (capped at the guard's 60 s before the end), source `AUTO`. `PLEX` still wins. The detector's row
-  writes become a trigger, and **Use detected** joins Admin.
+- **A gate of its own:** zero version 2 `FOUND` rows more than 15 s before a matching Plex row, and **every** `FOUND`
+  row it would mark checked by stills, not a sample (the classifier plan's revised gate, applied to version 2); crawl
+  and card results reported apart; counts only, no titles; and what happens to films added after the gate.
+- **The test split is never touched:** no version 2 count, breakdown or still of any file of a film the split rule
+  puts on the test side, including films added since the manifest (the carry-over rules in "The split"), and not the
+  breach file either (its blended bins minus a development count give the test split's). L5's figure, 0 of 238 test
+  films more than 15 s early, stands for them. The spec says how the product learns a film's side, since the
+  database holds none, and those films keep `PLEX` or the fallback.
+- **Applying:** a cleared `FOUND` row whose fingerprint matches, at its edition time plus **20 s** (capped at the
+  guard's 60 s before the end), source `AUTO`; `PLEX` still wins; the detector's row writes become a trigger, and
+  **Use detected** joins Admin.
 
 ## Not in this plan
 
