@@ -3,7 +3,6 @@ package gregochr.cinefilm.library;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,15 +22,26 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 /** {@link EditionJoin} on its own: mocked repositories, no Spring context. Covers how the credits marker travels. */
+@ExtendWith(MockitoExtension.class)
 class EditionJoinUnitTest {
 
+    @Mock
     private FilmRepository films;
+    @Mock
     private EditionRepository editions;
+    @Mock
     private MediaFileRepository files;
+    @Mock
     private PlaybackStateRepository states;
+    @Mock
     private FilmPreferenceRepository preferences;
+    @Mock
+    private LibraryIngest ingest;
     private EditionJoin join;
 
     private Edition first;
@@ -41,21 +51,13 @@ class EditionJoinUnitTest {
 
     @BeforeEach
     void setUp() {
-        films = mock(FilmRepository.class);
-        editions = mock(EditionRepository.class);
-        files = mock(MediaFileRepository.class);
-        states = mock(PlaybackStateRepository.class);
-        preferences = mock(FilmPreferenceRepository.class);
-        join = new EditionJoin(films, editions, files, states, preferences, mock(LibraryIngest.class));
+        join = new EditionJoin(films, editions, files, states, preferences, ingest);
 
         Film film = TestData.film(5L, "Towers", 2002, NOW);
         first = TestData.edition(film, 1L, "Extended", 90 * MIN, null);
         second = TestData.edition(film, 2L, "Extended", 110 * MIN, null);
         firstFile = file(first, 11L, "Towers - pt1.m4v", 90 * MIN);
         secondFile = file(second, 22L, "Towers - pt2.m4v", 110 * MIN);
-        when(states.findById(1L)).thenReturn(Optional.empty());
-        when(states.findById(2L)).thenReturn(Optional.empty());
-        when(preferences.findById(5L)).thenReturn(Optional.empty());
     }
 
     private static MediaFile file(Edition edition, long id, String path, long durationMs) {
@@ -70,6 +72,9 @@ class EditionJoinUnitTest {
         when(files.findAllById(List.of(11L, 22L))).thenReturn(List.of(firstFile, secondFile));
         when(editions.findById(1L)).thenReturn(Optional.of(first));
         when(editions.findById(2L)).thenReturn(Optional.of(second));
+        when(states.findById(1L)).thenReturn(Optional.empty());
+        when(states.findById(2L)).thenReturn(Optional.empty());
+        when(preferences.findById(5L)).thenReturn(Optional.empty());
         first.getMediaFiles().add(secondFile);
     }
 
@@ -111,6 +116,7 @@ class EditionJoinUnitTest {
         secondFile.setPartNumber(2);
         AtomicReference<Edition> created = new AtomicReference<>();
         when(editions.findById(1L)).thenReturn(Optional.of(first));
+        when(states.findById(1L)).thenReturn(Optional.empty());
         when(editions.saveAndFlush(org.mockito.ArgumentMatchers.any(Edition.class))).thenAnswer(call -> {
             Edition edition = call.getArgument(0);
             edition.setId(2L);

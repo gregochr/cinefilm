@@ -520,6 +520,7 @@ class EditionArrangerTest extends ApiTestBase {
     void splittingOneEditionRelocatesItsStateAndMarkerToTheEditionHoldingThatPart() {
         Film built = film(null, "The Two Towers", 2002, NOW);
         Edition whole = edition(built, null, "Extended", 235 * MIN, 200 * MIN);
+        whole.setCreditsMarkerSource(CreditsMarkerSource.OWNER);
         file(whole, PT1).setDurationMs(114 * MIN);
         MediaFile second = file(whole, PT2);
         second.setDurationMs(121 * MIN);
@@ -543,7 +544,8 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(one.getCreditsMarkerMs()).isNull();
         assertThat(one.getCreditsMarkerSource()).as("no marker, no source").isNull();
         assertThat(two.getCreditsMarkerMs()).isEqualTo(86 * MIN);
-        assertThat(two.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
+        assertThat(two.getCreditsMarkerSource()).as("the source follows the marker")
+            .isEqualTo(CreditsMarkerSource.OWNER);
     }
 
     @Test
@@ -610,7 +612,9 @@ class EditionArrangerTest extends ApiTestBase {
     void aCreditsMarkerInAMovedFileFollowsItToThePartStartOfTheLastPart() {
         Film built = film(null, "Heat", 1995, NOW);
         timed(edition(built, null, "Original", 100 * MIN, null), "Heat - pt1.m4v", 100, 1);
-        timed(edition(built, null, "Original", 80 * MIN, 70 * MIN), "Heat - pt2.m4v", 80, 1);
+        Edition last = edition(built, null, "Original", 80 * MIN, 70 * MIN);
+        last.setCreditsMarkerSource(CreditsMarkerSource.PLEX);
+        timed(last, "Heat - pt2.m4v", 80, 1);
         Film film = save(built);
 
         arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
@@ -618,7 +622,8 @@ class EditionArrangerTest extends ApiTestBase {
 
         Edition joined = editions.findById(editionId(film, 0)).orElseThrow();
         assertThat(joined.getCreditsMarkerMs()).isEqualTo(170 * MIN);
-        assertThat(joined.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
+        assertThat(joined.getCreditsMarkerSource()).as("the source follows the marker")
+            .isEqualTo(CreditsMarkerSource.PLEX);
     }
 
     @Test

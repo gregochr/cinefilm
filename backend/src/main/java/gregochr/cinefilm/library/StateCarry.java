@@ -33,7 +33,7 @@ final class StateCarry {
      * @param durations those files' timeline durations
      * @param state its playback state, or null
      * @param markerMs its credits marker, or null
-     * @param markerSource where that marker came from; null exactly when the marker is
+     * @param markerSource where that marker came from; set with the marker, null for one stored before V35
      */
     record Old(List<Long> fileIds, List<Long> durations, State state, Long markerMs,
                CreditsMarkerSource markerSource) {
@@ -70,7 +70,7 @@ final class StateCarry {
      *
      * @param state its state, or null for none
      * @param markerMs its credits marker, or null
-     * @param markerSource where that marker came from; null exactly when the marker is
+     * @param markerSource where that marker came from; set with the marker, null for one stored before V35
      */
     record Result(State state, Long markerMs, CreditsMarkerSource markerSource) {
     }
