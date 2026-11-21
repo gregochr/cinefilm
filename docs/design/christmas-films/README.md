@@ -35,7 +35,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
   - Key it on the TMDB id, as now, so a rematch or rescan doesn't lose a choice.
   - One row per film, so a film can't be both added and left out.
 - **(Dropped: see Deviations in the build.) The environment variables become a one-time seed:** on start-up, if the table is empty and either variable has ids, insert them, with exclude winning a clash, and log it. After that the database is the truth. Say this in `operations.md`.
-- **`WeeklyThemeSelector`** reads its `HolidayOverrides` from the table (a small service builds it), keeping the precedence and the `pick()` ordering exactly as they are. **The screen and Home must use the same code path.**
+- **`WeeklyThemeSelector`** reads its overrides (`ChristmasOverrides`) from the table (a small service builds it), keeping the precedence and the `pick()` ordering exactly as they are. **The screen and Home must use the same code path.**
 
 ### 2. API (under `/api/admin/christmas`, signed-in only)
 - **`GET`** returns:
@@ -53,7 +53,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 - **409 from the scan lock:** if writes are refused while a scan runs, say "A scan is running — try again when it finishes" in the toast, and don't change the list.
 
 ### 3. Tests (backend)
-- **The seed:** an empty table with variables set gets seeded, a non-empty table is ignored, and a clash makes exclude win.
+- **(Dropped: no seed.) The seed:** an empty table with variables set gets seeded, a non-empty table is ignored, and a clash makes exclude win.
 - **Precedence:** exclude beats include beats keyword.
 - **Same order as Home:** the `GET` order is the same as the selector's on the same library, including the year/sort-title tie-break (e.g. two 1988 films).
 - **Week dates:** across years, including the case where 18 Dec is a Monday.
@@ -171,7 +171,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
   - keyboard use of the tabs and the search results
 
 ## Suggested PRs
-1. **Overrides table:** the table, the seed and the selector reading from it. No UI; behaviour is unchanged.
+1. **Overrides table:** the table and the selector reading from it. No UI; behaviour is unchanged.
 2. **Christmas API:** the GET, the PUT and the search states.
 3. **The screen:** the list, tabs, toast and undo, plus the Admin entry point.
 4. **Adding:** the search panel and the phone sheet.
@@ -182,5 +182,5 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 - **No environment-variable seed.** The variables were never released or set, so there was nothing to migrate; `HolidayOverrides`, `HolidayConfig` and the two properties were removed (owner, 2026-11-19).
 - **The add search is a plain textbox with a plain list of result buttons**, not a combobox/listbox, because each result row holds a button (recorded in `christmas-films-plan.md`).
 - **A redundant INCLUDE row is deleted on the next write only**, not at start-up.
-- **The 409 can name any holder of the library lock** (a scan, a Plex import, a credits save), not only a scan; `/states` accepts at most 50 ids and a film that is not browsable answers 404 (`foundation-plan.md`).
+- **The 409 can name any holder of the library lock** (a scan, a Plex import, a credits save), not only a scan; `/states` accepts at most 50 distinct ids and leaves out films that browse hides; `PUT` answers 404 when no browsable film has the TMDB id (`foundation-plan.md`).
 - The empty state ("No Christmas films yet") shows only when In Christmas week, Added by me **and** Left out by me are all empty, not when In and Added alone are. A film left out must stay reachable, with its Put back button.

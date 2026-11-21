@@ -1,6 +1,6 @@
 # Christmas films admin screen plan
 
-Status: plan, owner request 2026-11-19. Builds on `holiday-themes-plan.md` (PRs #227, #228).
+Status: built (#231, #233, #235, #239, #243, #246, #259, #260, #261); owner request 2026-11-19. Builds on `holiday-themes-plan.md` (PRs #227, #228).
 
 ## What the owner wants
 
