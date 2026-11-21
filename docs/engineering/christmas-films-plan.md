@@ -52,8 +52,9 @@ missing-CSRF cases, AGENTS.md rule 5)
 - `PUT /{tmdbId}` `{choice:'INCLUDE'|'EXCLUDE'|null}`; null deletes the override ("Put back" and "Remove"). Returns the
   same body as `GET`.
 - `GET /states?filmIds=...` as in decision 4.
-- A film that is included and later tagged by TMDB shows as "TMDB keyword"; the redundant INCLUDE row is deleted on
-  the next write (not a startup job).
+- A film that is included and later tagged by TMDB shows as "TMDB keyword"; its INCLUDE row is kept (never
+  deleted; owner review 2026-11-21): the reason is decided at read time, so a tag TMDB later removes turns the film
+  back into "Added" with no write. Keywords are refetched every 30 days (`KeywordsScheduler`, 03:30 nightly).
 - Update `foundation-plan.md` (API contract) in the PR that adds the endpoints.
 
 ## Slices (each a PR of 1,500 changed lines or fewer; Sonnet builds, full gates, fresh reviewer, Codex on the PR)

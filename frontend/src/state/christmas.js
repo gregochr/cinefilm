@@ -64,12 +64,14 @@ const ACTIONS = {
  * `added` is the screen's Added list. Two library films can share a TMDB id (a keyword-tagged film and an untagged one
  * the owner included); the server keeps the one INCLUDE row for the untagged one, so leaving the tagged one out
  * replaces that INCLUDE and an Undo must restore it, not delete the choice. The previous choice therefore comes from
- * the data for that TMDB id, not from the clicked row's reason alone.
+ * the row's stored `override` (the server says when a keyword film also has an INCLUDE row: the main reason), and, as
+ * a second source, from the Added list for that TMDB id; never from the clicked row's reason alone.
  */
 export function rowAction(row, added = []) {
   const action = ACTIONS[rowKind(row)];
   if (action.toast !== 'leave') return action;
-  const included = added.some((film) => film.tmdbId === row.tmdbId);
+  // The row's own stored override (an INCLUDE row hidden behind the keyword), or a film sharing the TMDB id in Added.
+  const included = row.override === 'INCLUDE' || added.some((film) => film.tmdbId === row.tmdbId);
   return included ? { ...action, previous: 'INCLUDE' } : action;
 }
 
@@ -253,11 +255,11 @@ export function resultState(filmId, data, answer, version) {
 }
 
 /** The write a result's action makes: like `rowAction`, plus Add (INCLUDE; Undo deletes the choice). Null for `NO_TMDB_ID`. */
-export function resultWrite(state, tmdbId, added) {
+export function resultWrite(state, tmdbId, added, override = null) {
   if (state === 'NOT_IN' || state === 'KEYWORDS_PENDING') {
     return { choice: 'INCLUDE', previous: null, toast: 'add' };
   }
-  if (state === 'IN_KEYWORD') return rowAction({ tmdbId, reason: 'KEYWORD' }, added);
+  if (state === 'IN_KEYWORD') return rowAction({ tmdbId, reason: 'KEYWORD', override }, added);
   if (state === 'IN_ADDED') return rowAction({ tmdbId, reason: 'ADDED' }, added);
   if (state === 'LEFT_OUT') return rowAction({ tmdbId }, added);
   return null;

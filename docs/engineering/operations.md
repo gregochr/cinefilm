@@ -92,6 +92,16 @@ fetches each existing film's IMDb id from TMDB (`/3/movie/{id}/external_ids`), s
 days. **Refresh ratings** in Admin (Library scan card) refetches every film, oldest first, within the same daily
 budget.
 
+**TMDB keywords** (the Christmas films screen reads them) are fetched once per film with a TMDB id, after each scan, Plex
+import and Fix match and at start-up, and refetched when they are over 30 days old (`cinefilm.keywords.refresh-days`),
+unfetched films first and then the stalest. A nightly pass at 03:30 London starts the same run (`cinefilm.keywords.refresh-cron`,
+Spring cron, default `0 30 3 * * *`). `cinefilm.keywords.refresh-enabled=false` stops the 30-day refetch
+everywhere (the nightly pass is not scheduled and no scan, import or start-up run looks up stale films), while films never
+fetched are still fetched; `cinefilm.scan.schedule=false` only stops the nightly pass. `cinefilm.keywords.refresh-days`
+must be at least 1 (the app refuses to start otherwise). A refetch replaces a film's keywords and stamp together; a film whose fetch fails keeps
+its old keywords and stamp and is tried again next run, and a TMDB outage stops the run. A refetch that gets a TMDB 404 (the film is gone from TMDB) stores an empty list, which wipes
+the tags already known for it. Needs `TMDB_READ_TOKEN`.
+
 **Plex import settings** (all in `~/cinefilm/.env`; the import is off while `PLEX_URL` or `PLEX_TOKEN` is blank):
 
 ```bash

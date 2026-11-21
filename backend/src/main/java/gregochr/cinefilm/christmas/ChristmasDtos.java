@@ -51,13 +51,18 @@ public final class ChristmasDtos {
     public record Keywords(long fetched, long total, boolean running, boolean enabled, boolean stalled) {
     }
 
-    /** A film that counts for Christmas week (or was added). {@code posterUrl} is the stored poster path. */
-    public record Item(Long filmId, Long tmdbId, String title, Integer year, String posterUrl, Reason reason) {
+    /**
+     * A film that counts for Christmas week (or was added). {@code posterUrl} is the stored poster path;
+     * {@code override} is the owner's stored choice for its TMDB id (INCLUDE even when TMDB tags it too, so an Undo
+     * can restore it; null when there is none).
+     */
+    public record Item(Long filmId, Long tmdbId, String title, Integer year, String posterUrl, Reason reason,
+                       ChristmasChoice override) {
     }
 
-    /** A film the owner left out, and whether TMDB tags it anyway. */
+    /** A film the owner left out, and whether TMDB tags it anyway; {@code override} is its stored choice (EXCLUDE). */
     public record LeftOutItem(Long filmId, Long tmdbId, String title, Integer year, String posterUrl,
-                              boolean taggedByTmdb) {
+                              boolean taggedByTmdb, ChristmasChoice override) {
     }
 
     /** The whole Christmas films screen. {@code fallsBack} is true when Home would not use the Christmas theme. */
