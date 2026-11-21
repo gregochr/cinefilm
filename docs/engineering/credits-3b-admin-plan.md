@@ -70,7 +70,8 @@ The other parameters:
 - Any other value is a 400, as `PlaybackHealthController` answers.
 
 Ordering is by the film's `sortTitle` (case-insensitive), then `Film.year` with nulls last, then the edition's name
-with nulls last, then its id. Nulls are placed explicitly, because H2 and Postgres sort them differently.
+(NOT NULL in the schema), then its id. The year's nulls are placed explicitly, because H2 and Postgres sort them
+differently.
 
 **Hidden editions.** These are left out of every filter and every count, by a database predicate that matches
 `Edition.hiddenFromBrowse()`. The predicate is `NOT EXISTS` an original part that is any of these:
@@ -112,7 +113,8 @@ Each page costs a fixed number of queries, never one per edition:
 - The body is checked in this order, each failure a 400 `{error}`:
   1. a missing or unreadable body, or a `markerMs` that is missing, null, negative, non-numeric or not whole seconds:
      `Invalid request` (the Christmas PUT's convention). Jackson coerces `6720000.4` and `"6720000"` into a `Long` by
-     default, so the body is read as a `JsonNode` and `markerMs` must be an integral JSON number;
+     default, so the body is read as a `JsonNode` and `markerMs` must satisfy `isIntegralNumber() && canConvertToLong()`, as
+     `SettingsDtos` checks its numbers;
   2. no timeline: "This film's length isn't known";
   3. outside the guard: "That time is outside where end credits can start".
 - On success it sets the marker with source `OWNER` (over a `PLEX` marker too) and answers the new `CreditsRow`.
@@ -250,7 +252,7 @@ Each page costs a fixed number of queries, never one per edition:
 - `CreditsAdminIntegrationTest` (Testcontainers):
   - seeded editions in every filter;
   - the hidden predicate agreeing with `hiddenFromBrowse()` for each hidden case, a negative duration included;
-  - order and paging across a page boundary, with a null year and a null edition name;
+  - order and paging across a page boundary, with a null year;
   - a fixed statement count per page.
 
 **3b-1b — PUT and DELETE.**
@@ -265,8 +267,8 @@ Each page costs a fixed number of queries, never one per edition:
   - DELETE on a stale `PLEX` edition, which is left alone;
   - both writes answering 409 without writing when the lock is held, and releasing the lock after a failure.
   - These assert saved marker and source, never repository call counts.
-- `CreditsAdminControllerTest`: each 400 text in the check order (a fractional number, a numeric string and an
-  explicit `null` among them), the 404 and 409 bodies, 401 when signed out, and
+- `CreditsAdminControllerTest`: each 400 text in the check order (a fractional number, a numeric string, an explicit
+  `null` and a number too large for a long among them), the 404 and 409 bodies, 401 when signed out, and
   the missing-CSRF-header case for PUT and DELETE. Every 4xx assertion checks `$.error`.
 - `CreditsAdminIntegrationTest`: a PUT then DELETE round trip.
 
