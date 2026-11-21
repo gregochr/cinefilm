@@ -355,7 +355,7 @@ class FixMatchUnitTest {
     }
 
     @Test
-    void leaveUnmatchedMarksANeedsMatchFilmAndClearsItsCandidates() {
+    void leaveUnmatchedMarksANeedsMatchFilmAndKeepsItsCandidates() {
         Film target = film(FILM_ID, "Home video");
         target.setMatchStatus(MatchStatus.NEEDS_MATCH);
         target.setMatchCandidates("[{\"tmdbId\":1}]");
@@ -364,7 +364,7 @@ class FixMatchUnitTest {
         fix.leaveUnmatched(FILM_ID);
 
         assertThat(target.getMatchStatus()).isEqualTo(MatchStatus.LEFT_UNMATCHED);
-        assertThat(target.getMatchCandidates()).isNull();
+        assertThat(target.getMatchCandidates()).isEqualTo("[{\"tmdbId\":1}]");
         verify(films).save(target);
         assertThat(lock.holder()).isNull();
         // Leaving writes: its transaction is not read-only.
@@ -431,6 +431,61 @@ class FixMatchUnitTest {
             .hasMessage("A scan is running");
         verifyNoInteractions(films);
         assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
+    }
+
+    @Test
+    void putBackMarksALeftFilmNeedsMatchAndReleasesTheLock() {
+        Film left = film(FILM_ID, "Home video");
+        left.setMatchStatus(MatchStatus.LEFT_UNMATCHED);
+        when(films.findById(FILM_ID)).thenReturn(Optional.of(left));
+
+        fix.putBack(FILM_ID);
+
+        assertThat(left.getMatchStatus()).isEqualTo(MatchStatus.NEEDS_MATCH);
+        verify(films).save(left);
+        assertThat(lock.holder()).isNull();
+        verify(transactions).getTransaction(argThat(definition -> !definition.isReadOnly()));
+    }
+
+    @Test
+    void putBackRefusesAFilmThatIsNotLeftUnmatched() {
+        Film waiting = film(FILM_ID, "Waiting");
+        waiting.setMatchStatus(MatchStatus.NEEDS_MATCH);
+        when(films.findById(FILM_ID)).thenReturn(Optional.of(waiting));
+
+        assertThatThrownBy(() -> fix.putBack(FILM_ID)).isInstanceOf(ConflictException.class)
+            .hasMessage("This film is not left unmatched");
+        assertThat(waiting.getMatchStatus()).isEqualTo(MatchStatus.NEEDS_MATCH);
+        verify(films, never()).save(waiting);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void putBackForAnUnknownFilmIs404AndReleasesTheLock() {
+        assertThatThrownBy(() -> fix.putBack(99L)).isInstanceOf(NotFoundException.class).hasMessage("No film 99");
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void putBackWhileAScanRunsIs409AndTouchesNothing() {
+        lock.tryAcquire(LibraryLock.SCAN);
+
+        assertThatThrownBy(() -> fix.putBack(FILM_ID)).isInstanceOf(ConflictException.class)
+            .hasMessage("A scan is running");
+        verifyNoInteractions(films);
+        assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
+    }
+
+    @Test
+    void leftUnmatchedListsTheFilmsFromTheRepositoryInItsOrderInAReadOnlyTransaction() {
+        Film a = film(1L, "Alpha");
+        Film b = film(2L, "Beta");
+        b.setYear(null);
+        when(films.findByMatchStatusOrderBySortTitle(MatchStatus.LEFT_UNMATCHED)).thenReturn(List.of(a, b));
+
+        assertThat(fix.leftUnmatched()).containsExactly(
+            new AdminDtos.LeftUnmatchedDto(1L, "Alpha", 1973), new AdminDtos.LeftUnmatchedDto(2L, "Beta", null));
+        verify(transactions).getTransaction(argThat(TransactionDefinition::isReadOnly));
     }
 
     @Test

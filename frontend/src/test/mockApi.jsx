@@ -118,6 +118,8 @@ export function defaultRoute(method, url, init = {}) {
     return method === 'POST' ? json({ filmId: 31, joined: false }) : json(adminMatch);
   }
   if (/^\/api\/admin\/films\/\d+\/leave-unmatched$/.test(path)) return json(null, 204);
+  if (/^\/api\/admin\/films\/\d+\/put-back$/.test(path)) return json(null, 204);
+  if (path === '/api/admin/films/left-unmatched') return json([]);
   if (/^\/api\/admin\/films\/\d+\/editions$/.test(path)) {
     return method === 'PUT' ? json({ filmId: 40, newFilmIds: [] }) : json(adminEditions);
   }

@@ -129,3 +129,21 @@ export function leaveProblem(failure) {
   }
   return { message: todoRow.leaveProblems.other, gone: false };
 }
+
+/**
+ * What a failed "Put back" says on its row. A 404 (the film is gone) and the 409 "not left unmatched" (the row is stale:
+ * the film was put back or matched meanwhile) ask for a re-read; any other 409 says what holds the library lock (the
+ * bare scan line gets this screen's own words).
+ */
+export function putBackProblem(failure) {
+  const status = failure instanceof ApiError ? failure.status : 0;
+  const copy = todoRow.putBackProblems;
+  if (status === 404) return { message: todoRow.confirmProblems.gone, gone: true };
+  if (status === 409) {
+    if (serverText(failure) === 'This film is not left unmatched') {
+      return { message: copy.stale, gone: true };
+    }
+    return { message: lockText(failure, copy.scan), gone: false };
+  }
+  return { message: copy.other, gone: false };
+}
