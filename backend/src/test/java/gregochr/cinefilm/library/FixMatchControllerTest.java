@@ -146,4 +146,55 @@ class FixMatchControllerTest {
             .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
         verifyNoInteractions(fixMatch);
     }
+
+    @Test
+    void leftUnmatchedListsTheFilms() throws Exception {
+        when(fixMatch.leftUnmatched()).thenReturn(List.of(new AdminDtos.LeftUnmatchedDto(7L, "Home video", 1999),
+            new AdminDtos.LeftUnmatchedDto(8L, "Untitled", null)));
+
+        mvc.perform(get("/api/admin/films/left-unmatched").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(2))
+            .andExpect(jsonPath("$[0].id").value(7))
+            .andExpect(jsonPath("$[0].title").value("Home video"))
+            .andExpect(jsonPath("$[0].year").value(1999))
+            .andExpect(jsonPath("$[1].year").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void leftUnmatchedSignedOutIs401() throws Exception {
+        mvc.perform(get("/api/admin/films/left-unmatched"))
+            .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.error").value("Authentication required"));
+        verifyNoInteractions(fixMatch);
+    }
+
+    @Test
+    void putBackAnswers204AndPassesTheId() throws Exception {
+        mvc.perform(post("/api/admin/films/7/put-back").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isNoContent());
+        verify(fixMatch).putBack(7L);
+    }
+
+    @Test
+    void putBackErrorsMapToTheirStatusesAndTexts() throws Exception {
+        doThrow(new NotFoundException("No film 7")).when(fixMatch).putBack(7L);
+        doThrow(new ConflictException("A scan is running")).when(fixMatch).putBack(8L);
+        doThrow(new ConflictException("This film is not left unmatched")).when(fixMatch).putBack(9L);
+
+        mvc.perform(post("/api/admin/films/7/put-back").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("No film 7"));
+        mvc.perform(post("/api/admin/films/8/put-back").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.error").value("A scan is running"));
+        mvc.perform(post("/api/admin/films/9/put-back").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.error").value("This film is not left unmatched"));
+    }
+
+    @Test
+    void putBackSignedOutIs401AndWithoutTheHeaderIs403() throws Exception {
+        mvc.perform(post("/api/admin/films/7/put-back").header("X-CineFilm", "1"))
+            .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.error").value("Authentication required"));
+        mvc.perform(post("/api/admin/films/7/put-back").with(user("owner")))
+            .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+        verifyNoInteractions(fixMatch);
+    }
 }

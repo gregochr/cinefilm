@@ -494,4 +494,15 @@ describe('"Leave unmatched" (planner copy, on no board)', () => {
       other: 'Couldn’t leave it — try again.',
     });
   });
+
+  it('has the way back: its button, the section words and the put back failures', () => {
+    expect(buttons.putBack.label).toBe('Put back');
+    expect(buttons.putBack.hint).toBe('List this film under To do again so you can match it.');
+    expect(todoRow.leftUnmatched.heading(3)).toBe('Left unmatched (3)');
+    expect(todoRow.putBackProblems).toEqual({
+      scan: 'A scan is running — try again when it finishes.',
+      stale: 'This film is no longer left unmatched. The list is being updated.',
+      other: 'Couldn’t put it back — try again.',
+    });
+  });
 });

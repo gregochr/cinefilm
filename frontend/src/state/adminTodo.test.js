@@ -12,6 +12,7 @@ import {
   matchLine,
   confirmProblem,
   leaveProblem,
+  putBackProblem,
   rowTitle,
   visibleRows,
 } from './adminTodo.js';
@@ -301,6 +302,50 @@ describe('leaveProblem', () => {
   it('says it was not a network error for anything that is not an ApiError', () => {
     expect(leaveProblem(new Error('offline'))).toEqual({
       message: 'Couldn’t leave it — try again.',
+      gone: false,
+    });
+  });
+});
+
+describe('putBackProblem', () => {
+  it('says the film is gone for a 404, and asks for a re-read', () => {
+    expect(putBackProblem(new ApiError(404))).toEqual({
+      message: 'That film is no longer in the library. The list is being updated.',
+      gone: true,
+    });
+  });
+
+  it('treats "not left unmatched" as a stale row: says so and asks for a re-read', () => {
+    expect(
+      putBackProblem(new ApiError(409, undefined, { error: 'This film is not left unmatched' })),
+    ).toEqual({
+      message: 'This film is no longer left unmatched. The list is being updated.',
+      gone: true,
+    });
+  });
+
+  it('keeps its own words for the bare scan line and the server’s text for any other lock 409', () => {
+    expect(putBackProblem(new ApiError(409, undefined, { error: 'A scan is running' }))).toEqual({
+      message: 'A scan is running — try again when it finishes.',
+      gone: false,
+    });
+    expect(
+      putBackProblem(
+        new ApiError(409, undefined, { error: 'The library is busy; try again in a moment' }),
+      ),
+    ).toEqual({ message: 'The library is busy; try again in a moment.', gone: false });
+  });
+
+  it.each([400, 500, 503])('words a %i for the row without a re-read', (status) => {
+    expect(putBackProblem(new ApiError(status))).toEqual({
+      message: 'Couldn’t put it back — try again.',
+      gone: false,
+    });
+  });
+
+  it('words anything that is not an ApiError as a plain failure', () => {
+    expect(putBackProblem(new Error('offline'))).toEqual({
+      message: 'Couldn’t put it back — try again.',
       gone: false,
     });
   });

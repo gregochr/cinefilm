@@ -70,6 +70,7 @@ const WRITES = [
   ['adminApi.startRatingsRefresh', 'POST', '/api/admin/ratings/refresh', HELD],
   ['adminApi.applyMatch', 'POST', '/api/admin/films/:filmId/match', HELD],
   ['adminApi.leaveUnmatched', 'POST', '/api/admin/films/:filmId/leave-unmatched', HELD],
+  ['adminApi.putBack', 'POST', '/api/admin/films/:filmId/put-back', HELD],
   ['adminApi.saveEditions', 'PUT', '/api/admin/films/:filmId/editions', HELD],
   ['adminApi.startPlexImport', 'POST', '/api/admin/plex/import', HELD],
   ['adminApi.startPlexCreditsImport', 'POST', '/api/admin/plex/credits/import', HELD],

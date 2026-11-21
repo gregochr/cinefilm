@@ -1,8 +1,10 @@
 package gregochr.cinefilm.library;
 
+import gregochr.cinefilm.library.AdminDtos.LeftUnmatchedDto;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchRequest;
 import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,5 +40,16 @@ public class FixMatchController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void leaveUnmatched(@PathVariable Long id) {
         fixMatch.leaveUnmatched(id);
+    }
+
+    @GetMapping("/api/admin/films/left-unmatched")
+    List<LeftUnmatchedDto> leftUnmatched() {
+        return fixMatch.leftUnmatched();
+    }
+
+    @PostMapping("/api/admin/films/{id}/put-back")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void putBack(@PathVariable Long id) {
+        fixMatch.putBack(id);
     }
 }

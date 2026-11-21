@@ -396,6 +396,12 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
     `LEFT_UNMATCHED`): any other, an already-left film included, is a
     409 "This film is not waiting for a match". Takes the library lock; 404 unknown film; 409 with the lock holder's text
     while a scan, import or match holds it.
+  - `GET /api/admin/films/left-unmatched` answers the films with `match_status` `LEFT_UNMATCHED` sorted by title as
+    `[{ id, title, year }]` (`year` may be null). Reads only: no lock.
+  - `POST /api/admin/films/{id}/put-back` (no body) is the way back from leave-unmatched: it sets a `LEFT_UNMATCHED` film
+    to `NEEDS_MATCH`, so To do lists it again, answering 204. Takes the library lock; 404 unknown film; 409 "This film is
+    not left unmatched" for any other status; 409 with the lock holder's text while a scan, import or match holds it.
+    The Admin To do shows these films in a folded "Left unmatched (N)" section below the groups, drawn only when N > 0.
   - Errors (`{ error }`): 400 blank query or missing `tmdbId`; 404 unknown film, or TMDB does not know the id; 409
     409 with the lock holder's text, "A scan is running" for a scan (apply only, when the library lock is held); 503 TMDB unavailable.
 - **Edit editions** (`EditionArranger`, owner-only; the panel is `docs/design/handover/edit-editions/README.md`):

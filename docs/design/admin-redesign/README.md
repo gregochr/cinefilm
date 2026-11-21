@@ -61,6 +61,7 @@ Plan this as a multi-phase change with a plan doc in `docs/engineering/admin-red
   3. **English subtitles missing:** the first rows of the Subtitles "Foreign-language films" tab, with the same actions.
   4. **Forced subtitles: is there foreign dialogue?:** the first rows of the other tab, with the same actions.
 - **Hide a group with no rows.** When every group is empty, show a quiet "Nothing to do." with the status strip still above it.
+- **Left unmatched (planner, after #268):** below the groups, a folded "Left unmatched (N)" section, drawn only when N > 0, lists the films the owner chose not to match; each has a plain "Put back" button that lists it under To do again.
 - **Kinds `protected`, `needs-conversion` and `unreadable` are not To do items.** There's nothing to click. They appear as counts in the Library scan tiles ("Can't play (protected)"), and the tile links to a plain list.
 
 ## 2 · Subtitles (`/admin/subtitles`)
