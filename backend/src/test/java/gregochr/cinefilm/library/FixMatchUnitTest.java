@@ -355,7 +355,7 @@ class FixMatchUnitTest {
     }
 
     @Test
-    void leaveUnmatchedMarksANeedsMatchFilmAndClearsItsCandidates() {
+    void leaveUnmatchedMarksANeedsMatchFilmAndKeepsItsCandidates() {
         Film target = film(FILM_ID, "Home video");
         target.setMatchStatus(MatchStatus.NEEDS_MATCH);
         target.setMatchCandidates("[{\"tmdbId\":1}]");
@@ -364,7 +364,7 @@ class FixMatchUnitTest {
         fix.leaveUnmatched(FILM_ID);
 
         assertThat(target.getMatchStatus()).isEqualTo(MatchStatus.LEFT_UNMATCHED);
-        assertThat(target.getMatchCandidates()).isNull();
+        assertThat(target.getMatchCandidates()).isEqualTo("[{\"tmdbId\":1}]");
         verify(films).save(target);
         assertThat(lock.holder()).isNull();
         // Leaving writes: its transaction is not read-only.

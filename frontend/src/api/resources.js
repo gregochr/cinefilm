@@ -106,7 +106,7 @@ export const adminApi = {
   leaveUnmatched: (filmId) => post(`/api/admin/films/${filmId}/leave-unmatched`),
   /** The films the owner left unmatched, by title: `[{ id, title, year }]`. */
   leftUnmatched: (options) => get('/api/admin/films/left-unmatched', options),
-  /** "Put back": a left-unmatched film is listed as needing a match again (204; a 409 says a scan holds the lock). */
+  /** "Put back": a left-unmatched film is listed as needing a match again (204; a 409 says a scan holds the lock, or that the film is not left unmatched). */
   putBack: (filmId) => post(`/api/admin/films/${filmId}/put-back`),
   /** A film's files, editions and the suggested arrangement, for the Edit editions panel. */
   editions: (filmId, options) => get(`/api/admin/films/${filmId}/editions`, options),

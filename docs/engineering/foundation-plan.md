@@ -389,8 +389,8 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
     filmId, joined }`. If another film already has that TMDB id, this film is joined into it (the lowest id; the owner's
     explicit choice, so the different-film guard is not applied), the survivor is confirmed, `filmId` is the survivor's
     and `joined` is true; a `join` line is written to the grouping report. Takes the library lock.
-  - `POST /api/admin/films/{id}/leave-unmatched` (no body) sets the film's `match_status` to `LEFT_UNMATCHED` and clears
-    its stored candidates, answering 204. To do and the "Need a match" count leave it out (`findNeedingMatch`), no scan
+  - `POST /api/admin/films/{id}/leave-unmatched` (no body) sets the film's `match_status` to `LEFT_UNMATCHED` (its stored
+    candidates are kept, so put back restores the row), answering 204. To do and the "Need a match" count leave it out (`findNeedingMatch`), no scan
     retries it, and a Fix match by id or a Plex import that supplies a TMDB id still makes it `MATCHED`. Only a film
     that To do lists as needing a match may be left (`NEEDS_MATCH`, or no TMDB id and not `PENDING` or
     `LEFT_UNMATCHED`): any other, an already-left film included, is a

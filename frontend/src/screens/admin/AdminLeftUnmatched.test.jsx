@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import AdminLeftUnmatched from './AdminLeftUnmatched.jsx';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
 
 afterEach(() => {
@@ -214,5 +215,59 @@ describe('Admin To do: Left unmatched', () => {
     );
     expect(find).toHaveFocus();
     expect(elsewhere).not.toHaveFocus();
+  });
+});
+
+describe('AdminLeftUnmatched: where focus goes when a put back lands', () => {
+  const A = { id: 5, title: 'Home video', year: 1999 };
+  const B = { id: 6, title: 'Holiday', year: null };
+  const C = { id: 7, title: 'Wedding', year: 2001 };
+
+  function setup(rows) {
+    const landed = {};
+    const onPutBack = vi.fn((film, { onHidden }) => {
+      landed[film.id] = onHidden;
+    });
+    const view = (list) => (
+      <>
+        <h1 id="admin-section-title" tabIndex={-1}>
+          To do
+        </h1>
+        <AdminLeftUnmatched rows={list} busy={[]} problems={{}} onPutBack={onPutBack} />
+      </>
+    );
+    const { rerender } = render(view(rows));
+    return { landed, show: (list) => rerender(view(list)) };
+  }
+  const rowButton = (title) =>
+    within(screen.getAllByRole('listitem').find((li) => within(li).queryByText(title))).getByRole(
+      'button',
+      { name: 'Put back' },
+    );
+
+  it('sends focus to the page title once the last of two overlapping put backs lands', async () => {
+    const { landed, show } = setup([A, B]);
+    await userEvent.click(screen.getByRole('button', { name: 'Left unmatched (2)' }));
+    await userEvent.click(rowButton('Home video'));
+    await userEvent.click(rowButton('Holiday'));
+
+    landed[5]();
+    show([B]);
+    landed[6]();
+    show([]);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus();
+  });
+
+  it('keeps the section, and focus on its heading button, when a re-read added a film meanwhile', async () => {
+    const { landed, show } = setup([A]);
+    await userEvent.click(screen.getByRole('button', { name: 'Left unmatched (1)' }));
+    await userEvent.click(rowButton('Home video'));
+
+    show([A, C]);
+    landed[5]();
+    show([C]);
+
+    expect(screen.getByRole('button', { name: 'Left unmatched (1)' })).toHaveFocus();
   });
 });

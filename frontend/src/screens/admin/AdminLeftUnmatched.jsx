@@ -44,15 +44,25 @@ export default function AdminLeftUnmatched({ rows, busy, problems, onPutBack }) 
   const [open, setOpen] = useState(false);
   const toggle = useRef(null);
   const listId = useId();
+  // What is listed now, for the moment a put back lands: other put backs and re-reads may have changed it meanwhile.
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   if (rows.length === 0) return null;
   const heading = todoRow.leftUnmatched.heading(rows.length);
   const putBack = (film, opener) => {
-    const last = rows.length === 1;
     onPutBack(film, {
       onHidden: () => {
+        // Decided now, not at the click: the section leaves with its last film.
+        const last = rowsRef.current.every((f) => f.id === film.id);
         const active = document.activeElement;
         const row = opener?.closest('li');
-        if (active && active !== document.body && !row?.contains(active)) return;
+        // Focus on this row, nowhere, or (when the section is about to go) on its own heading button is ours to move.
+        const ours =
+          !active ||
+          active === document.body ||
+          row?.contains(active) ||
+          (last && active === toggle.current);
+        if (!ours) return;
         (last ? document.getElementById('admin-section-title') : toggle.current)?.focus();
       },
     });

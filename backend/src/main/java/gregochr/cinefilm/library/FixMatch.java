@@ -187,9 +187,9 @@ public class FixMatch {
     }
 
     /**
-     * The owner chooses to leave a film without a TMDB match: it is marked {@code LEFT_UNMATCHED} and its stored
-     * candidates are cleared, so To do stops listing it and no scan retries it. Fix match (by id) and a Plex-supplied
-     * TMDB id can still match it.
+     * The owner chooses to leave a film without a TMDB match: it is marked {@code LEFT_UNMATCHED} (its stored
+     * candidates are kept, so {@link #putBack} restores the row as it was), so To do stops listing it and no scan
+     * retries it. Fix match (by id) and a Plex-supplied TMDB id can still match it.
      * Only a film To do lists as needing a match may be left; takes the library lock like {@link #apply}.
      *
      * @param filmId the film to leave unmatched
@@ -198,10 +198,8 @@ public class FixMatch {
      *     the library lock
      */
     public void leaveUnmatched(Long filmId) {
-        changeUnderLock(filmId, Film::needsMatch, "This film is not waiting for a match", film -> {
-            film.setMatchStatus(MatchStatus.LEFT_UNMATCHED);
-            film.setMatchCandidates(null);
-        });
+        changeUnderLock(filmId, Film::needsMatch, "This film is not waiting for a match",
+            film -> film.setMatchStatus(MatchStatus.LEFT_UNMATCHED));
     }
 
     /**

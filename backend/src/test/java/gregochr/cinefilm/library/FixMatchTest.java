@@ -283,7 +283,6 @@ class FixMatchTest extends ApiTestBase {
 
         Film left = films.findById(film.getId()).orElseThrow();
         assertThat(left.getMatchStatus()).isEqualTo(MatchStatus.LEFT_UNMATCHED);
-        assertThat(left.getMatchCandidates()).isNull();
         assertThat(films.findNeedingMatch()).isEmpty();
         assertThat(films.countNeedingMatch()).isZero();
 
