@@ -454,6 +454,7 @@ class CreditsApplierTest {
         applier.onPlexCreditsImportFinished(new PlexCreditsImportFinished());
         applier.onEditionsArranged(new EditionsArranged());
         applier.requestPass();
+        applier.retryIfRefused();
 
         assertThat(queued).hasValue(0);
         verifyNoInteractions(editions, markers, states);
@@ -573,5 +574,21 @@ class CreditsApplierTest {
             .flatMap(listener -> java.util.stream.Stream.concat(Arrays.stream(listener.value()),
                 Arrays.stream(listener.classes()))))
             .doesNotContain(LibraryChanged.class);
+    }
+
+    @Test
+    void aNudgeDuringAPassAfterAnEarlierRefusalDoesNotGiveASecondPass() {
+        lock.tryAcquire(LibraryLock.SCAN);
+        CreditsApplier applier = applier();
+        applier.requestPass();
+        lock.release();
+        when(editions.findAllIds()).thenAnswer(invocation -> {
+            applier.retryIfRefused();
+            return List.of();
+        });
+
+        applier.requestPass();
+
+        verify(editions).findAllIds();
     }
 }

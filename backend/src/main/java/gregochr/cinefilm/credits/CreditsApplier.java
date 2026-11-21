@@ -43,9 +43,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>Passes run on the applier's own thread. A trigger (start-up, a finished scan, Plex import or Plex credits import,
  * a saved Edit editions arrangement) only {@link #requestPass() asks}: it sets {@code requested} and wakes the worker,
  * so it never runs inside the publisher's lock or transaction. A request that arrives during a pass gives exactly one
- * more pass. A pass that is refused (the lock stayed busy) or fails ends the loop and sets {@code owed}; a request that
- * arrived meanwhile still gives one more pass. The hourly nudge is not a trigger: {@link #retryIfRefused()} only
- * retries a pass that is owed.
+ * more pass, refused or not, so the loop is bounded by requests. A pass that is refused (the lock stayed busy) or
+ * fails sets {@code owed}, which is cleared when the next pass starts. The hourly nudge is not a trigger:
+ * {@link #retryIfRefused()} only retries a pass that is owed.
  * {@code LibraryChanged} is deliberately not a trigger (playback publishes it on every progress report). Off with
  * {@code cinefilm.credits.apply.enabled=false}, which stops the triggers and the nudge only.
  */
@@ -179,6 +179,7 @@ public class CreditsApplier {
     private void worker() {
         try {
             while (requested.getAndSet(false)) {
+                owed.set(false);
                 boolean done;
                 try {
                     done = runPass().lockTaken();
@@ -187,10 +188,6 @@ public class CreditsApplier {
                     done = false;
                 }
                 owed.set(!done);
-                if (!done) {
-                    // No spinning on a held lock; a request that arrived meanwhile is caught below.
-                    break;
-                }
             }
             beforeWorkerEnds.run();
         } finally {
