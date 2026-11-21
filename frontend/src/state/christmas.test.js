@@ -149,6 +149,14 @@ describe('rows', () => {
     expect(rowAction({ title: 'C', tmdbId: 104 }, [untagged]).previous).toBe('EXCLUDE');
   });
 
+  it('undoes a Leave out to INCLUDE when the keyword row carries a stored INCLUDE override, else to null', () => {
+    const hidden = { reason: 'KEYWORD', tmdbId: 7, title: 'A', override: 'INCLUDE' };
+    expect(rowAction(hidden, [])).toMatchObject({ choice: 'EXCLUDE', previous: 'INCLUDE' });
+    expect(rowAction({ ...hidden, override: null }, []).previous).toBeNull();
+    expect(resultWrite('IN_KEYWORD', 7, [], 'INCLUDE').previous).toBe('INCLUDE');
+    expect(resultWrite('IN_KEYWORD', 7, []).previous).toBeNull();
+  });
+
   it('chips each kind', () => {
     expect(chipFor(keyword)).toEqual({ label: 'TMDB keyword', variant: 'keyword' });
     expect(chipFor(added)).toEqual({ label: 'Added by me', variant: 'added' });

@@ -1,7 +1,17 @@
 {
-  "week": { "start": "2026-12-14", "end": "2026-12-20" },
-  "limits": { "max": 12, "min": 5 },
-  "keywords": { "fetched": 1374, "total": 1412, "running": false },
+  "week": {
+    "start": "2026-12-14",
+    "end": "2026-12-20"
+  },
+  "limits": {
+    "max": 12,
+    "min": 5
+  },
+  "keywords": {
+    "fetched": 1374,
+    "total": 1412,
+    "running": false
+  },
   "inWeek": [
     {
       "filmId": 1,
@@ -9,7 +19,8 @@
       "title": "It's a Wonderful Life",
       "year": 1946,
       "posterUrl": "/abc.jpg",
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 2,
@@ -17,7 +28,8 @@
       "title": "Miracle on 34th Street",
       "year": 1947,
       "posterUrl": "/api/art/abc123.jpg",
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 3,
@@ -25,7 +37,8 @@
       "title": "White Christmas",
       "year": 1954,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 4,
@@ -33,7 +46,8 @@
       "title": "Trading Places",
       "year": 1983,
       "posterUrl": null,
-      "reason": "ADDED"
+      "reason": "ADDED",
+      "override": "INCLUDE"
     },
     {
       "filmId": 5,
@@ -41,7 +55,8 @@
       "title": "Gremlins",
       "year": 1984,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 6,
@@ -49,7 +64,8 @@
       "title": "Die Hard",
       "year": 1988,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 7,
@@ -57,7 +73,8 @@
       "title": "Scrooged",
       "year": 1988,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 8,
@@ -65,7 +82,8 @@
       "title": "National Lampoon's Christmas Vacation",
       "year": 1989,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 9,
@@ -73,7 +91,8 @@
       "title": "Home Alone",
       "year": 1990,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 10,
@@ -81,7 +100,8 @@
       "title": "The Muppet Christmas Carol",
       "year": 1992,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 11,
@@ -89,7 +109,8 @@
       "title": "The Nightmare Before Christmas",
       "year": 1993,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 12,
@@ -97,7 +118,8 @@
       "title": "Elf",
       "year": 2003,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 13,
@@ -105,7 +127,8 @@
       "title": "Love Actually",
       "year": 2003,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     },
     {
       "filmId": 14,
@@ -113,7 +136,8 @@
       "title": "Arthur Christmas",
       "year": 2011,
       "posterUrl": null,
-      "reason": "KEYWORD"
+      "reason": "KEYWORD",
+      "override": null
     }
   ],
   "added": [
@@ -123,7 +147,8 @@
       "title": "Trading Places",
       "year": 1983,
       "posterUrl": null,
-      "reason": "ADDED"
+      "reason": "ADDED",
+      "override": "INCLUDE"
     }
   ],
   "leftOut": [
@@ -133,7 +158,8 @@
       "title": "Iron Man 3",
       "year": 2013,
       "posterUrl": null,
-      "taggedByTmdb": true
+      "taggedByTmdb": true,
+      "override": "EXCLUDE"
     },
     {
       "filmId": 21,
@@ -141,7 +167,8 @@
       "title": "Batman Returns",
       "year": 1992,
       "posterUrl": null,
-      "taggedByTmdb": true
+      "taggedByTmdb": true,
+      "override": "EXCLUDE"
     },
     {
       "filmId": 22,
@@ -149,7 +176,8 @@
       "title": "Rare Exports",
       "year": 2010,
       "posterUrl": null,
-      "taggedByTmdb": false
+      "taggedByTmdb": false,
+      "override": "EXCLUDE"
     }
   ],
   "fallsBack": false

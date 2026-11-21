@@ -69,7 +69,8 @@ const ACTIONS = {
 export function rowAction(row, added = []) {
   const action = ACTIONS[rowKind(row)];
   if (action.toast !== 'leave') return action;
-  const included = added.some((film) => film.tmdbId === row.tmdbId);
+  // The row's own stored override (an INCLUDE row hidden behind the keyword), or a film sharing the TMDB id in Added.
+  const included = row.override === 'INCLUDE' || added.some((film) => film.tmdbId === row.tmdbId);
   return included ? { ...action, previous: 'INCLUDE' } : action;
 }
 
@@ -253,11 +254,11 @@ export function resultState(filmId, data, answer, version) {
 }
 
 /** The write a result's action makes: like `rowAction`, plus Add (INCLUDE; Undo deletes the choice). Null for `NO_TMDB_ID`. */
-export function resultWrite(state, tmdbId, added) {
+export function resultWrite(state, tmdbId, added, override = null) {
   if (state === 'NOT_IN' || state === 'KEYWORDS_PENDING') {
     return { choice: 'INCLUDE', previous: null, toast: 'add' };
   }
-  if (state === 'IN_KEYWORD') return rowAction({ tmdbId, reason: 'KEYWORD' }, added);
+  if (state === 'IN_KEYWORD') return rowAction({ tmdbId, reason: 'KEYWORD', override }, added);
   if (state === 'IN_ADDED') return rowAction({ tmdbId, reason: 'ADDED' }, added);
   if (state === 'LEFT_OUT') return rowAction({ tmdbId }, added);
   return null;

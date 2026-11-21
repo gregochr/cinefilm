@@ -167,6 +167,7 @@ class ChristmasApiTest extends ApiTestBase {
         assertThat(overrides.snapshot().include()).containsExactlyInAnyOrder(5L, 6L);
         mvc.perform(get("/api/admin/christmas"))
             .andExpect(jsonPath("$.inWeek[?(@.tmdbId==5)].reason").value("KEYWORD"))
+            .andExpect(jsonPath("$.inWeek[?(@.tmdbId==5)].override").value("INCLUDE"))
             .andExpect(jsonPath("$.added[*].tmdbId", contains(6)));
     }
 

@@ -169,13 +169,13 @@ public class ChristmasFilms {
         ChristmasOverrides.Snapshot choices = overrides.snapshot();
         Set<Long> exclude = choices.exclude();
         List<Item> inWeek = WeeklyThemeSelector.christmasFilms(library, choices.include(), exclude).stream()
-            .map(f -> item(f, tagged(f) ? Reason.KEYWORD : Reason.ADDED)).toList();
+            .map(f -> item(f, tagged(f) ? Reason.KEYWORD : Reason.ADDED, choices)).toList();
         List<Item> added = inWeek.stream().filter(i -> i.reason() == Reason.ADDED).toList();
         List<LeftOutItem> leftOut = library.stream()
             .filter(f -> f.getTmdbId() != null && exclude.contains(f.getTmdbId()))
             .sorted(WeeklyThemeSelector.ROW_ORDER)
             .map(f -> new LeftOutItem(f.getId(), f.getTmdbId(), f.getTitle(), f.getYear(), f.getPosterPath(),
-                tagged(f)))
+                tagged(f), overrideOf(f.getTmdbId(), choices)))
             .toList();
         long fetched = films.countByTmdbIdIsNotNullAndKeywordsFetchedAtIsNotNull();
         long total = films.countByTmdbIdIsNotNull();
@@ -192,9 +192,20 @@ public class ChristmasFilms {
             inWeek, added, leftOut, inWeek.size() < WeeklyThemeSelector.MIN_FILMS);
     }
 
-    private static Item item(Film film, Reason reason) {
+    private static Item item(Film film, Reason reason, ChristmasOverrides.Snapshot choices) {
         return new Item(film.getId(), film.getTmdbId(), film.getTitle(), film.getYear(), film.getPosterPath(),
-            reason);
+            reason, overrideOf(film.getTmdbId(), choices));
+    }
+
+    /** The owner's stored choice for a TMDB id, or null. */
+    private static ChristmasChoice overrideOf(Long tmdbId, ChristmasOverrides.Snapshot choices) {
+        if (tmdbId == null) {
+            return null;
+        }
+        if (choices.exclude().contains(tmdbId)) {
+            return ChristmasChoice.EXCLUDE;
+        }
+        return choices.include().contains(tmdbId) ? ChristmasChoice.INCLUDE : null;
     }
 
     private static boolean tagged(Film film) {
