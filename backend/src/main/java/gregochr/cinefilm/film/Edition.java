@@ -51,6 +51,12 @@ public class Edition {
     /** Where the end credits start; null when unknown (then 92% of runtime applies). */
     private Long creditsMarkerMs;
 
+    /** Where {@link #creditsMarkerMs} came from: set with the marker; null for a marker stored before V35, until the
+     * credits apply pass settles it. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10)
+    private CreditsMarkerSource creditsMarkerSource;
+
     @OneToMany(mappedBy = "edition", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id")
     private List<MediaFile> mediaFiles = new ArrayList<>();

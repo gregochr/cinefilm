@@ -176,7 +176,7 @@ public class EditionArranger {
             filesBefore.put(edition.getId(), ids);
             olds.add(new StateCarry.Old(ids, durations,
                 states.findById(edition.getId()).map(EditionJoin::stateOf).orElse(null),
-                edition.getCreditsMarkerMs()));
+                edition.getCreditsMarkerMs(), edition.getCreditsMarkerSource()));
         }
         List<FieldError> errors = EditionRules.validate(request, originals.keySet());
         if (!errors.isEmpty()) {
@@ -336,6 +336,7 @@ public class EditionArranger {
         edition.recomputeRuntime();
         if (carried != null) {
             edition.setCreditsMarkerMs(carried.markerMs());
+            edition.setCreditsMarkerSource(carried.markerSource());
             if (carried.state() == null) {
                 states.deleteById(editionId);
             } else {
@@ -346,6 +347,7 @@ public class EditionArranger {
             List<Long> after = edition.originalParts().stream().map(MediaFile::getId).toList();
             if (!after.equals(before == null ? List.of() : before)) {
                 edition.setCreditsMarkerMs(null);
+                edition.setCreditsMarkerSource(null);
             }
             long runtime = edition.getRuntimeMs();
             states.findById(editionId).ifPresent(state -> clamp(state, runtime));

@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.film.AudioStream;
+import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
@@ -292,7 +293,9 @@ class EditionJoinTest extends ApiTestBase {
         Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
         Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);
         one.getEditions().get(0).setCreditsMarkerMs(80 * MIN);
+        one.getEditions().get(0).setCreditsMarkerSource(CreditsMarkerSource.AUTO);
         two.getEditions().get(0).setCreditsMarkerMs(100 * MIN);
+        two.getEditions().get(0).setCreditsMarkerSource(CreditsMarkerSource.PLEX);
         films.saveAndFlush(one);
         films.saveAndFlush(two);
         Long first = fileId(one);
@@ -302,7 +305,10 @@ class EditionJoinTest extends ApiTestBase {
         join.join(List.of(first, second));
         reset();
 
-        assertThat(editions.findById(editionId(one)).orElseThrow().getCreditsMarkerMs()).isEqualTo(190 * MIN);
+        Edition joined = editions.findById(editionId(one)).orElseThrow();
+        assertThat(joined.getCreditsMarkerMs()).isEqualTo(190 * MIN);
+        assertThat(joined.getCreditsMarkerSource()).as("the source of the marker that was kept")
+            .isEqualTo(CreditsMarkerSource.PLEX);
     }
 
     @Test
@@ -310,6 +316,7 @@ class EditionJoinTest extends ApiTestBase {
         Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
         Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);
         one.getEditions().get(0).setCreditsMarkerMs(80 * MIN);
+        one.getEditions().get(0).setCreditsMarkerSource(CreditsMarkerSource.OWNER);
         films.saveAndFlush(one);
         Long first = fileId(one);
         Long second = fileId(two);
@@ -318,7 +325,9 @@ class EditionJoinTest extends ApiTestBase {
         join.join(List.of(first, second));
         reset();
 
-        assertThat(editions.findById(editionId(one)).orElseThrow().getCreditsMarkerMs()).isNull();
+        Edition joined = editions.findById(editionId(one)).orElseThrow();
+        assertThat(joined.getCreditsMarkerMs()).isNull();
+        assertThat(joined.getCreditsMarkerSource()).as("cleared with the marker").isNull();
     }
 
     @Test
@@ -640,6 +649,7 @@ class EditionJoinTest extends ApiTestBase {
         edition.setRuntimeMs(200 * MIN);
         if (marker > 0) {
             edition.setCreditsMarkerMs(marker);
+            edition.setCreditsMarkerSource(CreditsMarkerSource.AUTO);
         }
         films.saveAndFlush(film);
         return edition;
@@ -668,7 +678,9 @@ class EditionJoinTest extends ApiTestBase {
         assertThat(created.getFilm().getId()).isEqualTo(film);
         assertThat(created.getName()).isEqualTo("Extended");
         assertThat(kept.getCreditsMarkerMs()).isNull();
+        assertThat(kept.getCreditsMarkerSource()).as("no marker, no source").isNull();
         assertThat(created.getCreditsMarkerMs()).isEqualTo(100 * MIN);
+        assertThat(created.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
     }
 
     @Test
@@ -690,7 +702,9 @@ class EditionJoinTest extends ApiTestBase {
 
         assertThat(states.findById(ids.get(0))).isEmpty();
         assertThat(states.findById(ids.get(1)).orElseThrow().getPositionMs()).isEqualTo(5_000);
-        assertThat(editions.findById(ids.get(1)).orElseThrow().getCreditsMarkerMs()).isEqualTo(101 * MIN);
+        Edition relocated = editions.findById(ids.get(1)).orElseThrow();
+        assertThat(relocated.getCreditsMarkerMs()).isEqualTo(101 * MIN);
+        assertThat(relocated.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
     }
 
     @Test
