@@ -14,7 +14,11 @@ function reducedMotion() {
   );
 }
 
-/** Keeps Tab and Shift+Tab inside `dialog`: wraps at either end and pulls stray focus back in. */
+/**
+ * Keeps Tab and Shift+Tab inside `dialog`: wraps at either end and pulls stray focus back in. Focus inside the dialog
+ * on something Tab does not stop at (a control disabled while it has focus keeps it until the browser's focus fixup
+ * runs, or the dialog element itself) moves on to the next stop in that direction, else wraps.
+ */
 export function containTab(event, dialog) {
   if (event.key !== 'Tab') return;
   const items = [...dialog.querySelectorAll(FOCUSABLE)];
@@ -22,15 +26,26 @@ export function containTab(event, dialog) {
   const first = items[0];
   const last = items[items.length - 1];
   const active = document.activeElement;
+  const back = event.shiftKey;
   if (!dialog.contains(active)) {
     event.preventDefault();
-    (event.shiftKey ? last : first).focus();
-  } else if (event.shiftKey && active === first) {
+    (back ? last : first).focus();
+  } else if (back && active === first) {
     event.preventDefault();
     last.focus();
-  } else if (!event.shiftKey && active === last) {
+  } else if (!back && active === last) {
     event.preventDefault();
     first.focus();
+  } else if (!items.includes(active)) {
+    event.preventDefault();
+    const next = back
+      ? items.findLast(
+          (item) => active.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_PRECEDING,
+        )
+      : items.find(
+          (item) => active.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+    (next ?? (back ? last : first)).focus();
   }
 }
 

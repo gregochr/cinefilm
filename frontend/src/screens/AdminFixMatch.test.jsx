@@ -460,7 +460,8 @@ describe('Admin: focus after an apply with motion on', () => {
     await user.tab();
     // The row is gone and the dialog still fades (the clock is held): focus is inside it, not on the heading behind it.
     expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
-    expect(dialog).toContainElement(document.activeElement);
+    // jsdom moves focus off the disabled button on its own real timer; either way the Tab lands on Close.
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();
     expect(heading()).not.toHaveFocus();
 
     await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
