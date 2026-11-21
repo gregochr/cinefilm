@@ -1,0 +1,3 @@
+### Changed — TMDB keywords refresh every 30 days; Christmas "Added" rows are no longer deleted
+
+Each film's TMDB keywords are now refetched when they are over 30 days old (nightly at 03:30 London, and after a scan or import), so a Christmas tag TMDB adds or removes later arrives without a rematch. Turn the pass off with `cinefilm.keywords.refresh-enabled=false`; change the time with `cinefilm.keywords.refresh-cron` and the age with `cinefilm.keywords.refresh-days`. On the Christmas films screen, a film you added is no longer quietly forgotten when TMDB also tags it: your choice is kept, the film shows as "TMDB keyword" while the tag lasts and as "Added" again if TMDB removes the tag.

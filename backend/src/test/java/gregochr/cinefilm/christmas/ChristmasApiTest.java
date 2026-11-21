@@ -156,7 +156,7 @@ class ChristmasApiTest extends ApiTestBase {
     }
 
     @Test
-    void anIncludeRowForAFilmTmdbTagsIsDeletedByTheNextWrite() throws Exception {
+    void anIncludeRowForAFilmTmdbTagsSurvivesAnotherWriteAndShowsAsAKeywordFilm() throws Exception {
         add("Tagged later", 1970, 5L, "christmas");
         add("Other", 1971, 6L);
         overrides.set(5L, ChristmasChoice.INCLUDE);
@@ -164,11 +164,53 @@ class ChristmasApiTest extends ApiTestBase {
 
         putChoice(6L, "\"INCLUDE\"");
 
-        assertThat(overrides.snapshot().include()).containsExactly(6L);
+        assertThat(overrides.snapshot().include()).containsExactlyInAnyOrder(5L, 6L);
+        mvc.perform(get("/api/admin/christmas"))
+            .andExpect(jsonPath("$.inWeek[?(@.tmdbId==5)].reason").value("KEYWORD"))
+            .andExpect(jsonPath("$.added[*].tmdbId", contains(6)));
     }
 
     @Test
-    void includingAFilmTmdbTagsLeavesNoRowAndItShowsAsAKeywordFilm() throws Exception {
+    void whenTmdbDropsTheTagAnIncludedFilmShowsAsAddedWithoutAnyWrite() throws Exception {
+        Film film = add("Untagged later", 1970, 5L, "christmas");
+        overrides.set(5L, ChristmasChoice.INCLUDE);
+        reload();
+        mvc.perform(get("/api/admin/christmas/states?filmIds=" + film.getId()))
+            .andExpect(jsonPath("$[0].state").value("IN_KEYWORD"));
+
+        Film stored = entityManager.find(Film.class, film.getId());
+        stored.getKeywords().clear();
+        reload();
+
+        mvc.perform(get("/api/admin/christmas"))
+            .andExpect(jsonPath("$.inWeek[0].reason").value("ADDED"))
+            .andExpect(jsonPath("$.added[*].tmdbId", contains(5)));
+        mvc.perform(get("/api/admin/christmas/states?filmIds=" + film.getId()))
+            .andExpect(jsonPath("$[0].state").value("IN_ADDED"));
+    }
+
+    @Test
+    void leavingOutATaggedFilmThatAlsoHasAnIncludeRowReplacesItAndPuttingBackLeavesTheKeywordToCountIt()
+        throws Exception {
+        add("Tagged", 1970, 5L, "christmas");
+        overrides.set(5L, ChristmasChoice.INCLUDE);
+        reload();
+
+        putChoice(5L, "\"EXCLUDE\"");
+        assertThat(overrides.snapshot().include()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).containsExactly(5L);
+
+        mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":null}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.leftOut", hasSize(0)))
+            .andExpect(jsonPath("$.inWeek[0].reason").value("KEYWORD"));
+        reload();
+        assertThat(overrides.snapshot().include()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).isEmpty();
+    }
+
+    @Test
+    void includingAFilmTmdbTagsKeepsTheRowAndItShowsAsAKeywordFilm() throws Exception {
         add("Tagged", 1970, 5L, "christmas");
 
         mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"INCLUDE\"}"))
@@ -177,12 +219,12 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.added", hasSize(0)));
         reload();
 
-        assertThat(overrides.snapshot().include()).isEmpty();
+        assertThat(overrides.snapshot().include()).containsExactly(5L);
         assertThat(overrides.snapshot().exclude()).isEmpty();
     }
 
     @Test
-    void puttingBackAnExcludedTaggedFilmWithIncludeLeavesNoRow() throws Exception {
+    void includingALeftOutTaggedFilmReplacesTheExcludeWithAnIncludeRow() throws Exception {
         add("Tagged", 1970, 5L, "christmas");
         putChoice(5L, "\"EXCLUDE\"");
         assertThat(overrides.snapshot().exclude()).containsExactly(5L);
@@ -193,7 +235,7 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.inWeek[0].reason").value("KEYWORD"));
         reload();
 
-        assertThat(overrides.snapshot().include()).isEmpty();
+        assertThat(overrides.snapshot().include()).containsExactly(5L);
         assertThat(overrides.snapshot().exclude()).isEmpty();
     }
 

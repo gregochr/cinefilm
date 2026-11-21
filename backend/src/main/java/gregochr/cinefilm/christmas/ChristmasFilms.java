@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,8 +38,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * The Christmas films Admin screen: which films Home's Christmas week counts, and the owner's say over them. The list
  * is built by {@link WeeklyThemeSelector#christmasFilms}, the code Home uses, so the screen and Home cannot disagree
- * (Home shows the first {@link WeeklyThemeSelector#MAX_FILMS}). Writes one at a time, so two quick changes to one
- * film are last-write-wins on its one row.
+ * (Home shows the first {@link WeeklyThemeSelector#MAX_FILMS}). The reason a film counts (TMDB keyword or added by
+ * the owner) is decided at read time from the film's keywords, never stored. Writes one at a time, so two quick
+ * changes to one film are last-write-wins on its one row.
  */
 @Service
 public class ChristmasFilms {
@@ -82,8 +82,9 @@ public class ChristmasFilms {
     }
 
     /**
-     * Sets, changes or (with {@code null}) forgets the owner's choice for a film, then deletes INCLUDE rows for films
-     * TMDB tags anyway, and returns the screen.
+     * Sets, changes or (with {@code null}) forgets the owner's choice for a film and returns the screen. No other row
+     * is touched: an INCLUDE row for a film TMDB also tags is kept (it shows as {@link Reason#KEYWORD} while the tag
+     * lasts and as {@link Reason#ADDED} the moment TMDB drops it), because the reason is decided on every read.
      *
      * @throws ConflictException when a scan is running; nothing changes
      * @throws NotFoundException when no film in the library has that TMDB id
@@ -122,7 +123,6 @@ public class ChristmasFilms {
             } else {
                 overrides.set(tmdbId, choice);
             }
-            dropRedundantIncludes();
         });
     }
 
@@ -162,24 +162,6 @@ public class ChristmasFilms {
             return State.LEFT_OUT;
         }
         return film.getKeywordsFetchedAt() == null ? State.KEYWORDS_PENDING : State.NOT_IN;
-    }
-
-    /**
-     * An INCLUDE row is redundant once TMDB tags the film: the keyword counts it, so the row goes. Two film rows can
-     * share a TMDB id (a refused merge), and the keyword is fetched per row, so the row goes only when every film
-     * holding the id carries the keyword; otherwise the untagged one still needs it.
-     */
-    private void dropRedundantIncludes() {
-        Set<Long> included = overrides.snapshot().include();
-        if (included.isEmpty()) {
-            return;
-        }
-        films.findByTmdbIdIn(included).stream().collect(Collectors.groupingBy(Film::getTmdbId)).forEach(
-            (id, rows) -> {
-                if (rows.stream().allMatch(ChristmasFilms::tagged)) {
-                    overrides.remove(id);
-                }
-            });
     }
 
     private ChristmasView build() {

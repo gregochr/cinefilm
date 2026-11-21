@@ -6,6 +6,8 @@ import gregochr.cinefilm.plex.PlexImportFinished;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbUnavailableException;
 import java.time.Clock;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -13,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -23,8 +26,11 @@ import org.springframework.stereotype.Service;
  * Plex import and at start-up. TMDB is paced by its client. Each result is saved in one transaction that only matches
  * while the film still has the TMDB id it was fetched for, so a film rematched meanwhile keeps what the rematch
  * wrote and is left for the next run. A TMDB outage stops the run without stamping anything, so the films are asked
- * again; a film TMDB no longer has is stamped with no keywords so it is not asked every time. Nothing here throws to
- * its caller.
+ * again; a film TMDB no longer has is stamped with no keywords so it is not asked every time. A film whose keywords
+ * were fetched more than {@code cinefilm.keywords.refresh-days} (default 30) ago is asked again, after the unfetched
+ * ones and the stalest first, so tags TMDB adds or removes later arrive ({@link KeywordsScheduler} starts that pass
+ * nightly; the other triggers pick stale films up too). A refetch replaces the keywords and the stamp in one
+ * transaction, and a film that fails keeps its old keywords and old stamp. Nothing here throws to its caller.
  */
 @Service
 public class KeywordsRefresher {
@@ -36,18 +42,24 @@ public class KeywordsRefresher {
     private final FilmKeywords store;
     private final Clock clock;
     private final Executor executor;
+    private final Duration refreshAfter;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
     private final AtomicBoolean lastRunIncomplete = new AtomicBoolean();
 
-    /** Creates the service; the executor is {@code keywordsExecutor}. */
+    /**
+     * Creates the service; the executor is {@code keywordsExecutor}, the age at which keywords are refetched is
+     * {@code cinefilm.keywords.refresh-days}.
+     */
     public KeywordsRefresher(TmdbApi tmdb, FilmRepository films, FilmKeywords store, Clock clock,
-                              @Qualifier("keywordsExecutor") Executor executor) {
+                              @Qualifier("keywordsExecutor") Executor executor,
+                              @Value("${cinefilm.keywords.refresh-days:30}") int refreshDays) {
         this.tmdb = tmdb;
         this.films = films;
         this.store = store;
         this.clock = clock;
         this.executor = executor;
+        this.refreshAfter = Duration.ofDays(refreshDays);
     }
 
     /** True while a refresh is running. */
@@ -135,14 +147,15 @@ public class KeywordsRefresher {
         }
     }
 
-    /** One pass over the films without keywords. */
+    /** One pass over the films without keywords, then those whose keywords are stale. */
     void run() {
         int saved = 0;
         int skipped = 0;
         int failed = 0;
         boolean stopped = false;
         try {
-            List<TmdbRef> due = films.findWithoutKeywords();
+            List<TmdbRef> due = new ArrayList<>(films.findWithoutKeywords());
+            due.addAll(films.findWithStaleKeywords(clock.instant().minus(refreshAfter)));
             for (TmdbRef ref : due) {
                 try {
                     if (refresh(ref)) {

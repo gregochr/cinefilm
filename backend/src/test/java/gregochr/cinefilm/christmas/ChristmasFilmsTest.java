@@ -234,7 +234,6 @@ class ChristmasFilmsTest {
     void choosingSavesTheChoiceAndAnswersTheScreen() {
         Film film = mk(1, "Added", 1999, 11L);
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
-        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(film));
         library(film);
         overrides(Set.of(11L), Set.of());
 
@@ -260,18 +259,34 @@ class ChristmasFilmsTest {
     }
 
     @Test
-    void anIncludeRowForAFilmTmdbTagsIsDeletedOnTheNextWrite() {
+    void anIncludeRowForAFilmTmdbTagsIsNeverDeletedByAWrite() {
         Film tagged = mk(1, "Tagged", 1980, 11L, "christmas");
         Film other = mk(2, "Other", 1990, 12L);
         when(films.findByTmdbIdOrderByIdAsc(12L)).thenReturn(List.of(other));
-        when(overrides.snapshot()).thenReturn(new Snapshot(Set.of(11L, 12L), Set.of()));
-        when(films.findByTmdbIdIn(Set.of(11L, 12L))).thenReturn(List.of(tagged, other));
         library(tagged, other);
+        overrides(Set.of(11L, 12L), Set.of());
 
-        service.choose(12L, ChristmasChoice.INCLUDE);
+        ChristmasView view = service.choose(12L, ChristmasChoice.INCLUDE);
 
-        verify(overrides).remove(11L);
+        verify(overrides, never()).remove(11L);
         verify(overrides, never()).remove(12L);
+        assertThat(view.inWeek()).extracting(Item::tmdbId, Item::reason)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple(11L, Reason.KEYWORD),
+                org.assertj.core.groups.Tuple.tuple(12L, Reason.ADDED));
+        assertThat(view.added()).extracting(Item::tmdbId).containsExactly(12L);
+    }
+
+    @Test
+    void theReasonFollowsTheKeywordOnEveryReadWithoutAWrite() {
+        Film film = mk(1, "Film", 1980, 11L, "christmas");
+        library(film);
+        overrides(Set.of(11L), Set.of());
+        assertThat(service.view().inWeek()).extracting(Item::reason).containsExactly(Reason.KEYWORD);
+
+        film.getKeywords().clear();
+
+        assertThat(service.view().inWeek()).extracting(Item::reason).containsExactly(Reason.ADDED);
+        assertThat(service.view().added()).extracting(Item::filmId).containsExactly(1L);
     }
 
     @Test
@@ -279,7 +294,6 @@ class ChristmasFilmsTest {
         Film tagged = mk(1, "Tagged twin", 1980, 11L, "christmas");
         Film untagged = mk(2, "Untagged twin", 1981, 11L);
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(tagged, untagged));
-        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(tagged, untagged));
         library(tagged, untagged);
         overrides(Set.of(11L), Set.of());
 
@@ -292,24 +306,9 @@ class ChristmasFilmsTest {
     }
 
     @Test
-    void twoFilmRowsWithOneTmdbIdLoseTheIncludeWhenBothAreTagged() {
-        Film one = mk(1, "Twin one", 1980, 11L, "christmas");
-        Film two = mk(2, "Twin two", 1981, 11L, "christmas");
-        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(one, two));
-        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(one, two));
-        library(one, two);
-        overrides(Set.of(11L), Set.of());
-
-        service.choose(11L, ChristmasChoice.INCLUDE);
-
-        verify(overrides).remove(11L);
-    }
-
-    @Test
     void theLibraryLockIsHeldForTheWholeWriteAndGivenBackAfterSuccess() throws Exception {
         Film film = mk(1, "Film", 1999, 11L);
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
-        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(film));
         library(film);
         overrides(Set.of(11L), Set.of());
         List<String> heldDuringWrite = new ArrayList<>();
@@ -396,7 +395,6 @@ class ChristmasFilmsTest {
         Film film = mk(1, "Film", 1999, 11L);
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
         doThrow(new IllegalStateException("db down")).doNothing().when(overrides).set(11L, ChristmasChoice.INCLUDE);
-        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(film));
         library(film);
         overrides(Set.of(11L), Set.of());
 
