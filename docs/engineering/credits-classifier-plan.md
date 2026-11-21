@@ -1461,8 +1461,8 @@ What it shows:
 **The decision (owner, 2026-11-21): keep v2, and hold L6a.** Version 2 stays the product's detector and `ANALYSIS_VERSION`
 stays 2. The test split has been looked at once; its second and last look is the version 3 gate, so any new design is
 chosen on development films only and judged there. The gate and phase 3's `AUTO` wait with L6a, because the gate
-reads version 3 rows (with their `opening_type` and `margin_band`) and phase 3's `AUTO` waits on the gate; until then
-only `OWNER` and `PLEX` markers are applied. Model B's code is not deleted while L6a is held (L6b is held with it).
+reads version 3 rows (with their `opening_type` and `margin_band`) and phase 3's `AUTO` waits on the gate. Phase 3 itself
+is not built yet, so today no marker is applied and every film uses the 97% fallback. Model B's code is not deleted while L6a is held (L6b is held with it).
 
 ## L3c specification (written 2026-11-19)
 
