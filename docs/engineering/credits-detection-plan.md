@@ -306,7 +306,8 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      blocks phase 3's `AUTO` step. Both checks report crawl and card results apart: **if any early row or early
      still is a card result, `AUTO` uses crawl results only** (cards stay report-only). The results go into this
      plan.
-3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying (the watched rule is unchanged:
+3. **Apply, source column, Admin.** **Revised by `credits-phase3-plan.md` (2026-11-21)**, which splits it into 3a-1, 3a-2a,
+   3a-2b (`PLEX` only), 3b (Admin) and 3c (`AUTO` from version 2, on the owner's yes). `credits_marker_source` and its carrying, applying (the watched rule is unchanged:
    watched at the marker, decided 2026-11-13), the Admin list and overrides. Precedence per edition: `OWNER`; then
    `PLEX` (the last part's `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a
    **20 s margin** (`AUTO`), applied only once `credits-classifier-plan.md`'s gate has passed, and only for the
