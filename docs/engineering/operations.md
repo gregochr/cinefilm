@@ -383,6 +383,17 @@ Changelog promotion (`changelog.d/` into `CHANGELOG.md`) is not automated yet.
 release is a failed release. **The database is never restored automatically**: migrations are expand-then-contract
 (`dev-and-testing.md`) so the previous image runs on the new schema.
 
+**A new enum value breaks an older image.** `film.match_status` is stored as text and the previous image fails to load
+a row holding a value it does not know, which takes down Home, Library and the Christmas films screen with 500s; the
+smoke test (`/api/home` answers 401) does not notice, so an automatic rollback would report success on a broken site.
+Before rolling back past **#268** (`LEFT_UNMATCHED`), run on the database, then roll back:
+
+```sql
+update film set match_status = 'NEEDS_MATCH' where match_status = 'LEFT_UNMATCHED';
+```
+
+(The films reappear in To do under "Need a match".) Any later release that adds an enum value adds its line here.
+
 **Manual image rollback.** On dockermacmini:
 
 ```bash

@@ -77,6 +77,10 @@ Every migration must be **expand-only** in the release that introduces it:
 - add columns nullable or with a default, add tables and indexes;
 - do not drop, rename or tighten (NOT NULL, narrower type) anything the previous release still uses.
 
+A **new value of a stored enum** (`@Enumerated(STRING)`) is a schema change too: the previous image cannot read a row that
+holds it (the load fails, and with it every screen that lists films). Say so in the PR, and give the rollback step in
+`operations.md` ("Roll back") before the release that introduces it.
+
 Contract (drop the old column, add the constraint) in a **later** release, once no running image reads the old shape.
 
 Why: the automatic rollback planned for deployment restores the previous *image*, never the database. The previous

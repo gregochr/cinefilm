@@ -1,0 +1,1 @@
+Docs: the Christmas films plan, design notes and holiday-themes plan now match what was built; the rollback section warns that a new enum value (`LEFT_UNMATCHED`) breaks an older image and gives the SQL step, and the migration policy says a new stored enum value is a schema change.
