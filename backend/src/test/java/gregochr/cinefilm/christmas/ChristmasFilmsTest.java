@@ -31,6 +31,7 @@ import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.ChristmasChoice;
 import gregochr.cinefilm.film.ChristmasOverrides;
+import gregochr.cinefilm.film.ChristmasOverrides.Snapshot;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.KeywordsRefresher;
@@ -102,8 +103,7 @@ class ChristmasFilmsTest {
     }
 
     private void overrides(Set<Long> include, Set<Long> exclude) {
-        when(overrides.includes()).thenReturn(include);
-        when(overrides.excludes()).thenReturn(exclude);
+        when(overrides.snapshot()).thenReturn(new Snapshot(include, exclude));
     }
 
     @Test
@@ -202,7 +202,7 @@ class ChristmasFilmsTest {
         when(films.countByTmdbIdIsNotNull()).thenReturn(9L);
         when(keywords.isRunning()).thenReturn(true);
 
-        assertThat(service.view().keywords()).isEqualTo(new Keywords(7, 9, true));
+        assertThat(service.view().keywords()).isEqualTo(new Keywords(7, 9, true, false, false));
     }
 
     @Test
@@ -264,8 +264,7 @@ class ChristmasFilmsTest {
         Film tagged = mk(1, "Tagged", 1980, 11L, "christmas");
         Film other = mk(2, "Other", 1990, 12L);
         when(films.findByTmdbIdOrderByIdAsc(12L)).thenReturn(List.of(other));
-        when(overrides.includes()).thenReturn(Set.of(11L, 12L));
-        when(overrides.excludes()).thenReturn(Set.of());
+        when(overrides.snapshot()).thenReturn(new Snapshot(Set.of(11L, 12L), Set.of()));
         when(films.findByTmdbIdIn(Set.of(11L, 12L))).thenReturn(List.of(tagged, other));
         library(tagged, other);
 
@@ -363,8 +362,7 @@ class ChristmasFilmsTest {
     void anExcludeRowForATaggedFilmIsKept() {
         Film tagged = mk(1, "Tagged", 1980, 11L, "christmas");
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(tagged));
-        when(overrides.includes()).thenReturn(Set.of());
-        when(overrides.excludes()).thenReturn(Set.of(11L));
+        when(overrides.snapshot()).thenReturn(new Snapshot(Set.of(), Set.of(11L)));
         library(tagged);
 
         ChristmasView view = service.choose(11L, ChristmasChoice.EXCLUDE);
@@ -421,8 +419,7 @@ class ChristmasFilmsTest {
     void aFilmWhoseEveryFileIsMissingHasNoStateAndCannotBeOverridden() {
         Film hiddenFilm = hidden(1, "Hidden", 11L, "christmas");
         Film shown = mk(2, "Shown", 1980, 12L, "christmas");
-        when(overrides.includes()).thenReturn(Set.of());
-        when(overrides.excludes()).thenReturn(Set.of());
+        when(overrides.snapshot()).thenReturn(new Snapshot(Set.of(), Set.of()));
         when(films.findAllById(Set.of(1L, 2L))).thenReturn(List.of(hiddenFilm, shown));
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(hiddenFilm));
 
@@ -455,8 +452,7 @@ class ChristmasFilmsTest {
         Film pending = mk(5, "Pending", 1980, 15L);
         Film noId = mk(6, "No id", 1980, null);
         Film includedPending = mk(7, "Included pending", 1980, 17L);
-        when(overrides.includes()).thenReturn(Set.of(12L, 13L, 17L));
-        when(overrides.excludes()).thenReturn(Set.of(13L));
+        when(overrides.snapshot()).thenReturn(new Snapshot(Set.of(12L, 13L, 17L), Set.of(13L)));
         when(films.findAllById(Set.of(6L, 5L, 4L, 3L, 2L, 1L, 7L, 404L)))
             .thenReturn(List.of(keyword, added, leftOut, notIn, pending, noId, includedPending));
 
@@ -475,8 +471,7 @@ class ChristmasFilmsTest {
     @Test
     void anIncludedFilmTmdbAlsoTagsIsInKeywordNotInAdded() {
         Film both = mk(1, "Both", 1980, 11L, "christmas");
-        when(overrides.includes()).thenReturn(Set.of(11L));
-        when(overrides.excludes()).thenReturn(Set.of());
+        when(overrides.snapshot()).thenReturn(new Snapshot(Set.of(11L), Set.of()));
         when(films.findAllById(Set.of(1L))).thenReturn(List.of(both));
 
         assertThat(service.states(List.of(1L))).containsExactly(new FilmState(1L, 11L, State.IN_KEYWORD));
@@ -485,8 +480,7 @@ class ChristmasFilmsTest {
     @Test
     void statesAcceptFiftyIdsAndRefuseFiftyOne() {
         List<Long> fifty = LongStream.rangeClosed(1, 50).boxed().toList();
-        when(overrides.includes()).thenReturn(Set.of());
-        when(overrides.excludes()).thenReturn(Set.of());
+        when(overrides.snapshot()).thenReturn(new Snapshot(Set.of(), Set.of()));
         when(films.findAllById(Set.copyOf(fifty))).thenReturn(List.of());
 
         assertThat(service.states(fifty)).isEmpty();
@@ -499,10 +493,74 @@ class ChristmasFilmsTest {
     void fiftyOneIdsThatAreMostlyDuplicatesAreStillWithinTheCap() {
         List<Long> ids = new ArrayList<>(LongStream.rangeClosed(1, 50).boxed().toList());
         ids.add(1L);
-        when(overrides.includes()).thenReturn(Set.of());
-        when(overrides.excludes()).thenReturn(Set.of());
+        when(overrides.snapshot()).thenReturn(new Snapshot(Set.of(), Set.of()));
         when(films.findAllById(Set.copyOf(ids))).thenReturn(List.of());
 
         assertThat(service.states(ids)).isEmpty();
+    }
+
+    @Test
+    void aBlankIdInStatesIsRefusedBeforeAnythingIsRead() {
+        assertThatThrownBy(() -> service.states(java.util.Arrays.asList(1L, null, 2L)))
+            .isInstanceOf(BadRequestException.class).hasMessage("Each film id must be a number");
+        verifyNoInteractions(overrides, films);
+    }
+
+    @Test
+    void aFilmIsInAStateOfInExactlyWhenItIsInTheChristmasFilms() {
+        boolean[] both = {false, true};
+        for (boolean hasId : both) {
+            for (boolean tagged : both) {
+                for (boolean included : both) {
+                    for (boolean excluded : both) {
+                        for (boolean fetched : both) {
+                            Film film = mk(1, "Film", 1980, hasId ? 11L : null, tagged ? new String[] {"christmas"}
+                                : new String[0]);
+                            film.setKeywordsFetchedAt(fetched ? NOW : null);
+                            Set<Long> include = hasId && included ? Set.of(11L) : Set.of();
+                            Set<Long> exclude = hasId && excluded ? Set.of(11L) : Set.of();
+                            library(film);
+                            overrides(include, exclude);
+                            when(films.findAllById(Set.of(1L))).thenReturn(List.of(film));
+                            String combo = "tmdbId=" + hasId + " tagged=" + tagged + " included=" + included
+                                + " excluded=" + excluded + " fetched=" + fetched;
+
+                            State state = service.states(List.of(1L)).get(0).state();
+                            boolean inFilms = !service.view().inWeek().isEmpty();
+
+                            assertThat(state == State.IN_KEYWORD || state == State.IN_ADDED).as(combo)
+                                .isEqualTo(inFilms);
+                            assertThat(state == State.IN_KEYWORD).as(combo + " keyword")
+                                .isEqualTo(inFilms && tagged);
+                            assertThat(!inFilms && !hasId).as(combo + " no id").isEqualTo(state == State.NO_TMDB_ID);
+                            assertThat(!inFilms && hasId && excluded).as(combo + " out")
+                                .isEqualTo(state == State.LEFT_OUT);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        // running, enabled, lastRunIncomplete, fetched, total, stalled
+        "false, true,  false, 3, 9, false",
+        "false, true,  true,  3, 9, true",
+        "false, false, false, 3, 9, true",
+        "true,  false, true,  3, 9, false",
+        "false, false, true,  9, 9, false",
+        "false, true,  true,  9, 9, false"})
+    void keywordsAreStalledOnlyWhenNothingIsRunningFilmsAreLeftAndNothingWillFetchThem(boolean running,
+            boolean enabled, boolean incomplete, long fetched, long total, boolean stalled) {
+        library();
+        overrides(Set.of(), Set.of());
+        when(films.countByTmdbIdIsNotNullAndKeywordsFetchedAtIsNotNull()).thenReturn(fetched);
+        when(films.countByTmdbIdIsNotNull()).thenReturn(total);
+        when(keywords.isRunning()).thenReturn(running);
+        when(keywords.isEnabled()).thenReturn(enabled);
+        when(keywords.lastRunIncomplete()).thenReturn(incomplete);
+
+        assertThat(service.view().keywords()).isEqualTo(new Keywords(fetched, total, running, enabled, stalled));
     }
 }

@@ -77,6 +77,7 @@ function EmptyPanel({ kind, keywords, panelRef }) {
  */
 export default function AdminChristmas() {
   const state = useChristmas();
+  const { keepToast } = state;
   const { openFixMatch, changed } = useAdminContext();
   const { data, version, loading, error, busy, toast, focusRequest, refresh, pinToast } = state;
   const [tab, setTab] = useState('inWeek');
@@ -93,6 +94,8 @@ export default function AdminChristmas() {
   const panelButtons = useRef(new Map());
   const panel = useRef(null);
   const undoButton = useRef(null);
+  // Per film id: the ids of that row and the rows after it, as listed when its button was pressed (where focus goes next).
+  const followingRows = useRef(new Map());
 
   const registerButton = (filmId) => (node) => {
     if (node) buttons.current.set(filmId, node);
@@ -116,11 +119,11 @@ export default function AdminChristmas() {
   }, [changed, refresh]);
 
   // After a change lands: for one made in the search panel (or its Undo) the result's button keeps focus by itself, so
-  // focus is set only if it was lost (an Undo press takes the toast's button away): then back onto that button. Else
-  // onto the toast's Undo button (the row's button is gone, and the toast sits after the whole list, so a keyboard user
-  // could not reach Undo within its 8 seconds; the toast waits while it has focus), back onto the row's button (after
-  // an Undo), or, when focus was lost with a row or the toast, onto the list so the keyboard is not left on the page
-  // body.
+  // focus is set only if it was lost (an Undo press takes the toast's button away): then back onto that button. For a
+  // change made from a list row: onto the same row's button if it is still there, else the next row's, else the list
+  // (Undo stays reachable by Tab and the pointer; focus is not taken to it, which sent a keyboard user back through the
+  // whole list after every change). After an Undo: onto the row's button, or, when focus was lost with a row or the
+  // toast, onto the list so the keyboard is not left on the page body.
   useEffect(() => {
     if (!focusRequest) return;
     const active = document.activeElement;
@@ -147,9 +150,31 @@ export default function AdminChristmas() {
         )?.focus();
       return;
     }
-    if (focusRequest.undo && undoButton.current) {
-      undoButton.current.focus();
-      return;
+    if (focusRequest.undo) {
+      // A change from a list row always went through `act`, which left the row, the rows after it and the button.
+      const { ids, opener, keyboard } = followingRows.current.get(focusRequest.filmId);
+      followingRows.current.delete(focusRequest.filmId);
+      // Focus moves on only if it is still where the press left it (or was lost with the row); anything the owner
+      // did meanwhile (another tab, the search field) keeps it.
+      if (!(lost || active === opener)) return;
+      const target = ids.map((id) => buttons.current.get(id)).find(Boolean) ?? panel.current;
+      target.focus();
+      if (!keyboard) return;
+      // Undo sits after the whole list: after a keyboard press the toast waits while focus rests here, and counts
+      // down once it leaves (focus goes elsewhere, the button goes with focus lost to the body and then elsewhere,
+      // or the screen goes).
+      keepToast(true);
+      const leave = () => {
+        document.removeEventListener('focusin', onIn);
+        target.removeEventListener('blur', leave);
+        keepToast(false);
+      };
+      const onIn = (event) => {
+        if (event.target !== target) leave();
+      };
+      target.addEventListener('blur', leave);
+      document.addEventListener('focusin', onIn);
+      return leave;
     }
     const button =
       focusRequest.filmId === null
@@ -160,7 +185,7 @@ export default function AdminChristmas() {
       return;
     }
     if (lost) (sheetField ?? panel.current)?.focus();
-  }, [focusRequest]);
+  }, [focusRequest, keepToast]);
 
   // The preview sheet goes when the window is widened or the lists empty. Its open state goes with it, so it does not
   // come back unasked when the window narrows again, and focus (it was on the sheet) moves to a live element.
@@ -188,6 +213,15 @@ export default function AdminChristmas() {
   if (data) {
     const empty = emptyKind(data);
     const rows = empty ? [] : tabRows(data, tab);
+    const act = (row, opener, keyboard) => {
+      const at = rows.findIndex((r) => r.filmId === row.filmId);
+      followingRows.current.set(row.filmId, {
+        ids: rows.slice(at).map((r) => r.filmId),
+        opener,
+        keyboard,
+      });
+      return state.change(row);
+    };
     // The controls row is in the same place with or without lists, so adding the first film from the empty screen
     // does not rebuild the search field (and close its panel) under the owner.
     body = (
@@ -239,7 +273,7 @@ export default function AdminChristmas() {
                 max={data.limits.max}
                 short={phone}
                 busy={busy}
-                onAct={state.change}
+                onAct={act}
                 registerButton={registerButton}
               />
             ) : (

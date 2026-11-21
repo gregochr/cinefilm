@@ -49,7 +49,8 @@ public final class WeeklyThemeSelector {
     /**
      * Picks the theme for the ISO week containing {@code date}. In a holiday week ({@link HolidayWeeks}) the theme is
      * that holiday's films, unless fewer than {@link #MIN_FILMS} match, when the normal rotation applies. In Christmas
-     * week {@code include} and {@code exclude} are the owner's TMDB ids ({@link ChristmasOverrides}).
+     * week {@code include} and {@code exclude} are the owner's TMDB ids ({@link ChristmasOverrides}). The Christmas row
+     * is {@link #christmasFilms} capped at {@link #MAX_FILMS}.
      */
     public static WeeklyTheme choose(LocalDate date, List<Film> library, Set<Long> include, Set<Long> exclude) {
         Optional<WeeklyTheme> holiday = HolidayWeeks.holidayFor(date)
@@ -82,17 +83,26 @@ public final class WeeklyThemeSelector {
             case HALLOWEEN -> new WeeklyTheme("holiday", "halloween", "This week: Halloween",
                 WeeklyTheme.STANDING_CAPTION, pick(library, f -> f.getGenres().contains("Horror")));
             case CHRISTMAS -> new WeeklyTheme("holiday", "christmas", "This week: Christmas",
-                WeeklyTheme.STANDING_CAPTION, pick(library, f -> isChristmas(f, include, exclude)));
+                WeeklyTheme.STANDING_CAPTION,
+                christmasFilms(library, include, exclude).stream().limit(MAX_FILMS).toList());
         };
     }
 
-    /** Not excluded, and either included or tagged with TMDB's {@code christmas} keyword. */
-    private static boolean isChristmas(Film film, Set<Long> include, Set<Long> exclude) {
+    /** True when TMDB tags the film with the {@code christmas} keyword. */
+    public static boolean hasChristmasKeyword(Film film) {
+        return film.getKeywords().contains(CHRISTMAS_KEYWORD);
+    }
+
+    /**
+     * The one Christmas rule: not excluded, and either included or tagged with TMDB's {@code christmas} keyword.
+     * Home's row, the Admin screen and every film's state are all decided by this.
+     */
+    public static boolean isChristmas(Film film, Set<Long> include, Set<Long> exclude) {
         Long tmdbId = film.getTmdbId();
         if (tmdbId != null && exclude.contains(tmdbId)) {
             return false;
         }
-        return tmdbId != null && include.contains(tmdbId) || film.getKeywords().contains(CHRISTMAS_KEYWORD);
+        return tmdbId != null && include.contains(tmdbId) || hasChristmasKeyword(film);
     }
 
     private static List<Film> pick(List<Film> library, Predicate<Film> matches) {

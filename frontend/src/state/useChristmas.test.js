@@ -195,13 +195,14 @@ describe('useChristmas: changes', () => {
     return hook;
   }
 
-  it('leaves a film out: sends EXCLUDE, takes the answer, toasts with an Undo, asks for no row focus', async () => {
+  it('leaves a film out: sends EXCLUDE, takes the answer, toasts with an Undo, asks to move focus on from that row', async () => {
     const out = christmasFixture();
     out.inWeek = out.inWeek.filter((r) => r.tmdbId !== 106);
     const fetchMock = serve(() => reply(200, out));
     const { result } = await ready();
 
-    await act(async () => result.current.change(rowOf(result.current.data, 106)));
+    const row = rowOf(result.current.data, 106);
+    await act(async () => result.current.change(row));
 
     const [url, init] = puts(fetchMock)[0];
     expect(url).toBe('/api/admin/christmas/106');
@@ -212,7 +213,7 @@ describe('useChristmas: changes', () => {
       message: "Left out Die Hard. It won't show at Christmas.",
       undo: { tmdbId: 106, title: 'Die Hard', choice: null, kind: 'leave' },
     });
-    expect(result.current.focusRequest).toMatchObject({ filmId: null, undo: true });
+    expect(result.current.focusRequest).toMatchObject({ filmId: row.filmId, undo: true });
     expect(result.current.busy.size).toBe(0);
   });
 

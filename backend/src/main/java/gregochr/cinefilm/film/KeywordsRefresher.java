@@ -38,6 +38,7 @@ public class KeywordsRefresher {
     private final Executor executor;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
+    private final AtomicBoolean lastRunIncomplete = new AtomicBoolean();
 
     /** Creates the service; the executor is {@code keywordsExecutor}. */
     public KeywordsRefresher(TmdbApi tmdb, FilmRepository films, FilmKeywords store, Clock clock,
@@ -52,6 +53,16 @@ public class KeywordsRefresher {
     /** True while a refresh is running. */
     public boolean isRunning() {
         return running.get();
+    }
+
+    /** True when a TMDB token is configured, so a backfill can run at all. */
+    public boolean isEnabled() {
+        return tmdb.enabled();
+    }
+
+    /** True when the last finished run stopped on a TMDB outage or could not refresh some film. */
+    public boolean lastRunIncomplete() {
+        return lastRunIncomplete.get();
     }
 
     /** Backfills at start-up, and says so when TMDB is off. */
@@ -129,6 +140,7 @@ public class KeywordsRefresher {
         int saved = 0;
         int skipped = 0;
         int failed = 0;
+        boolean stopped = false;
         try {
             List<TmdbRef> due = films.findWithoutKeywords();
             for (TmdbRef ref : due) {
@@ -140,6 +152,7 @@ public class KeywordsRefresher {
                     }
                 } catch (TmdbUnavailableException e) {
                     LOG.warn("Keywords refresh stopped: {}", e.getMessage());
+                    stopped = true;
                     break;
                 } catch (RuntimeException e) {
                     failed++;
@@ -147,8 +160,10 @@ public class KeywordsRefresher {
                 }
             }
             LOG.info("Keywords refresh finished: {} saved, {} changed meanwhile, {} failed", saved, skipped, failed);
+            lastRunIncomplete.set(stopped || failed > 0);
         } catch (RuntimeException e) {
             LOG.error("Keywords refresh failed", e);
+            lastRunIncomplete.set(true);
         }
     }
 

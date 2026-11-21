@@ -33,7 +33,9 @@ import {
   statusText,
   tabCounts,
   tabRows,
-  titleLine,
+  yearSuffix,
+  keywordsStalled,
+  KEYWORDS_NOT_FETCHING_TEXT,
   toastText,
   weekText,
 } from './christmas.js';
@@ -85,6 +87,13 @@ describe('tabs and the cut', () => {
     [0, 0],
   ])('with %i rows the cut is after %i', (n, expected) => {
     expect(cutIndex(films(n), 12)).toBe(expected);
+  });
+
+  it('says "This 1" for one film over the limit and "These n" for more', () => {
+    expect(cutText(12, 1)).toBe(
+      "Home shows 12. This 1 is in, but won't fit. Leave out an older film to make room.",
+    );
+    expect(cutText(12, 1, true)).toBe("Home shows 12. This 1 won't fit.");
   });
 
   it('writes the cut line', () => {
@@ -157,9 +166,9 @@ describe('rows', () => {
     );
   });
 
-  it('writes Title · year, leaving off a missing year', () => {
-    expect(titleLine(keyword)).toBe('A · 1990');
-    expect(titleLine(added)).toBe('B');
+  it('writes " · year", leaving off a missing year', () => {
+    expect(yearSuffix(keyword)).toBe(' · 1990');
+    expect(yearSuffix(added)).toBe('');
   });
 });
 
@@ -249,6 +258,22 @@ describe('keywords', () => {
     expect(keywordPercent({ fetched: 212, total: 1412 })).toBe(15);
     expect(keywordPercent({ fetched: 0, total: 0 })).toBe(0);
     expect(keywordPercent({ fetched: 5, total: 4 })).toBe(100);
+  });
+
+  it('says "The other 1 is" for one film left to fetch', () => {
+    expect(keywordLine({ fetched: 1411, total: 1412 })).toBe(
+      'Keywords fetched for 1,411 of 1,412 films. The other 1 is on its way, so this list may still grow.',
+    );
+  });
+
+  it('is stalled only when the server says so; absent fields change nothing', () => {
+    expect(keywordsStalled({ fetched: 1, total: 2 })).toBe(false);
+    expect(keywordsStalled({ stalled: false, enabled: true })).toBe(false);
+    expect(keywordsStalled({ stalled: true })).toBe(true);
+    expect(keywordsStalled({ enabled: false })).toBe(true);
+    expect(emptyPendingText({ fetched: 2, total: 9, stalled: true })).toBe(
+      `CineFilm finds them from TMDB keywords. ${KEYWORDS_NOT_FETCHING_TEXT} 2 of 9 films have them so far.`,
+    );
   });
 
   it('writes the strip and the empty copy', () => {

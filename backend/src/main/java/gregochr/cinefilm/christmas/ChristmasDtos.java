@@ -1,5 +1,6 @@
 package gregochr.cinefilm.christmas;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import gregochr.cinefilm.film.ChristmasChoice;
 import java.time.LocalDate;
 import java.util.List;
@@ -42,8 +43,12 @@ public final class ChristmasDtos {
     public record Limits(int max, int min) {
     }
 
-    /** Keyword backfill progress: films with a TMDB id, those already asked about, and whether a run is going. */
-    public record Keywords(long fetched, long total, boolean running) {
+    /**
+     * Keyword backfill progress: films with a TMDB id, those already asked about, whether a run is going, whether a
+     * TMDB token is configured, and whether the backfill has stopped short (not running, films left, and either TMDB
+     * is off or the last run could not finish).
+     */
+    public record Keywords(long fetched, long total, boolean running, boolean enabled, boolean stalled) {
     }
 
     /** A film that counts for Christmas week (or was added). {@code posterUrl} is the stored poster path. */
@@ -60,8 +65,11 @@ public final class ChristmasDtos {
                                 List<LeftOutItem> leftOut, boolean fallsBack) {
     }
 
-    /** The body of {@code PUT /{tmdbId}}: {@code null} forgets the owner's choice. */
-    public record ChoiceRequest(ChristmasChoice choice) {
+    /**
+     * The body of {@code PUT /{tmdbId}}: the {@code choice} field must be present; an explicit {@code null} forgets
+     * the owner's choice, while a missing or misspelled field is a 400 rather than a silent forget.
+     */
+    public record ChoiceRequest(@JsonProperty(value = "choice", required = true) ChristmasChoice choice) {
     }
 
     /** One film's Christmas state. */

@@ -9,7 +9,9 @@ import {
   previewRow,
 } from '../../state/christmas.js';
 import { readPreviewOpen, writePreviewOpen } from '../../state/christmasPreview.js';
-import ChristmasPreviewSheet from './ChristmasPreviewSheet.jsx';
+import ChristmasPreviewSheet, { PREVIEW_SHEET_ID } from './ChristmasPreviewSheet.jsx';
+
+const PREVIEW_ROW_ID = 'xmas-preview-row';
 
 /** Home's "This week" row as Christmas week would fill it, or the sentence that says it falls back. */
 function PreviewRow({ data, phone }) {
@@ -45,6 +47,7 @@ export default function ChristmasPreview({ data, phone, sheetOpen, onSheetOpenCh
           type="button"
           className="xmas-preview__open"
           aria-haspopup="dialog"
+          aria-controls={PREVIEW_SHEET_ID}
           onClick={() => onSheetOpenChange(true)}
         >
           <span>Preview Home in Christmas week</span>
@@ -71,12 +74,17 @@ export default function ChristmasPreview({ data, phone, sheetOpen, onSheetOpenCh
           type="button"
           className="xmas-preview__toggle"
           aria-expanded={open}
+          aria-controls={PREVIEW_ROW_ID}
           onClick={toggle}
         >
           {open ? 'Hide preview' : 'Show preview'}
         </button>
       </div>
-      {open ? <PreviewRow data={data} phone={false} /> : null}
+      {open ? (
+        <div id={PREVIEW_ROW_ID}>
+          <PreviewRow data={data} phone={false} />
+        </div>
+      ) : null}
     </div>
   );
 }

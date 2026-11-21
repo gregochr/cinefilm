@@ -102,15 +102,6 @@ public class ScanService {
     public void start(String trigger) {
         if (!lock.tryAcquire(LibraryLock.SCAN)) {
             throw lock.heldBy(LibraryLock.SCAN) ? new ScanAlreadyRunningException()
-                : lock.heldBy(LibraryLock.IMPORT) ? new ScanAlreadyRunningException("A Plex import is running")
-                : lock.heldBy(LibraryLock.EDIT) ? new ScanAlreadyRunningException("Editions are being edited")
-                : lock.heldBy(LibraryLock.SUBTITLE) ? new ScanAlreadyRunningException("A subtitle is being changed")
-                : lock.heldBy(LibraryLock.CREDITS) ? new ScanAlreadyRunningException("Credits are being saved")
-                : lock.heldBy(LibraryLock.PLEX_CREDITS)
-                    ? new ScanAlreadyRunningException("Credits from Plex are being saved")
-                : lock.heldBy(LibraryLock.MATCH) ? new ScanAlreadyRunningException("A match is being fixed")
-                : lock.heldBy(LibraryLock.CHRISTMAS)
-                    ? new ScanAlreadyRunningException("Christmas films are being changed")
                 : new ScanAlreadyRunningException(lock.busyText());
         }
         progress.set(new Progress(0, 0, null));

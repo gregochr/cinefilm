@@ -186,6 +186,17 @@
   text-align: right;
   color: var(--cf-text-muted);
 }
+.xmas-row__num-inline {
+  display: none;
+  margin-right: 6px;
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+.xmas-year {
+  color: var(--cf-text-muted);
+  font-weight: 400;
+}
 .xmas-row__poster {
   width: 40px;
   border-radius: 4px;
@@ -607,6 +618,9 @@
   }
   .xmas-row__num {
     display: none;
+  }
+  .xmas-row__num-inline {
+    display: inline;
   }
   .xmas-row__poster {
     grid-area: poster;
