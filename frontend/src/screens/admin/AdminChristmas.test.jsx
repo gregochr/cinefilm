@@ -174,8 +174,9 @@ describe('Christmas films: changes and undo', () => {
     expect(toast()).toHaveTextContent("Left out Die Hard. It won't show at Christmas.");
     expect(screen.getByRole('tab', { name: 'In Christmas week, 13' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Left out by me, 4' })).toBeInTheDocument();
-    // The row's button is gone, and the toast sits after the list: focus goes straight to Undo.
-    expect(within(toast()).getByRole('button', { name: 'Undo' })).toHaveFocus();
+    // The row's button is gone: focus goes to the next row's button, not to the toast after the list.
+    expect(screen.getByRole('button', { name: 'Leave out Scrooged' })).toHaveFocus();
+    expect(within(toast()).getByRole('button', { name: 'Undo' })).not.toHaveFocus();
     const [url, init] = putCalls(fetchMock)[0];
     expect(url).toBe('/api/admin/christmas/106');
     expect(init.headers['X-CineFilm']).toBe('1');
@@ -389,7 +390,8 @@ describe('Christmas films: changes and undo', () => {
     const undo = await within(toast()).findByRole('button', { name: 'Undo' });
     const empty = screen.getByRole('region', { name: 'No Christmas films' });
     expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument();
-    expect(undo).toHaveFocus();
+    expect(empty).toHaveFocus();
+    undo.focus();
 
     fail = true;
     await userEvent.click(undo);
@@ -397,7 +399,27 @@ describe('Christmas films: changes and undo', () => {
     expect(empty).toHaveFocus();
   });
 
-  it('puts focus on Undo after a change and keeps the toast while it holds focus, then counts 8 seconds from when focus leaves', async () => {
+  it('moves focus on to the same row when it is still listed, else the next row, else the list', async () => {
+    const original = fresh();
+    let answer = original;
+    serve({ put: () => respond(answer) });
+    await open();
+
+    // The answer still lists the row: focus stays on its button.
+    await userEvent.click(screen.getByRole('button', { name: 'Leave out Die Hard' }));
+    await within(toast()).findByRole('button', { name: 'Undo' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Leave out Die Hard' })).toHaveFocus(),
+    );
+
+    // The last row goes with nothing after it: the tab panel.
+    const last = original.inWeek[original.inWeek.length - 1];
+    answer = { ...original, inWeek: original.inWeek.filter((f) => f.filmId !== last.filmId) };
+    await userEvent.click(screen.getByRole('button', { name: `Leave out ${last.title}` }));
+    await waitFor(() => expect(screen.getByRole('tabpanel')).toHaveFocus());
+  });
+
+  it('keeps the toast while Undo holds focus, then counts 8 seconds from when focus leaves', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const original = fresh();
     serve({ put: () => respond(leftOut(original, 106)) });
@@ -405,7 +427,8 @@ describe('Christmas films: changes and undo', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Leave out Die Hard' }));
     const undo = await within(toast()).findByRole('button', { name: 'Undo' });
 
-    expect(undo).toHaveFocus();
+    expect(undo).not.toHaveFocus();
+    undo.focus();
     act(() => vi.advanceTimersByTime(20000));
     expect(toast()).toHaveTextContent('Left out Die Hard.');
     act(() => undo.blur());
@@ -413,6 +436,104 @@ describe('Christmas films: changes and undo', () => {
     expect(toast()).toHaveTextContent('Left out Die Hard.');
     act(() => vi.advanceTimersByTime(200));
     expect(toast()).toBeEmptyDOMElement();
+  });
+
+  it('after a keyboard row action holds the toast while focus rests on the moved-to button, and counts 8 seconds from Tab', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const original = fresh();
+    serve({ put: () => respond(leftOut(original, 106)) });
+    await open();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await user.keyboard('{Enter}');
+    const next = await screen.findByRole('button', { name: 'Leave out Scrooged' });
+    await waitFor(() => expect(next).toHaveFocus());
+
+    act(() => vi.advanceTimersByTime(20000));
+    expect(toast()).toHaveTextContent('Left out Die Hard.');
+    await user.tab();
+    expect(next).not.toHaveFocus();
+    act(() => vi.advanceTimersByTime(7900));
+    expect(toast()).toHaveTextContent('Left out Die Hard.');
+    act(() => vi.advanceTimersByTime(200));
+    expect(toast()).toBeEmptyDOMElement();
+  });
+
+  it('counts the 8 seconds once focus, lost with the held button, lands on another control', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const original = fresh();
+    serve({ put: () => respond(leftOut(original, 106)) });
+    await open();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await user.keyboard('{Enter}');
+    const held = await screen.findByRole('button', { name: 'Leave out Scrooged' });
+    await waitFor(() => expect(held).toHaveFocus());
+
+    // The button goes (a quiet re-read dropped its row): no blur is sent, focus falls to the page body.
+    act(() => held.remove());
+    expect(document.body).toHaveFocus();
+    act(() => vi.advanceTimersByTime(20000));
+    expect(toast()).toHaveTextContent('Left out Die Hard.');
+
+    act(() => screen.getByRole('combobox').focus());
+    act(() => vi.advanceTimersByTime(7900));
+    expect(toast()).toHaveTextContent('Left out Die Hard.');
+    act(() => vi.advanceTimersByTime(200));
+    expect(toast()).toBeEmptyDOMElement();
+  });
+
+  it('removes its listeners and starts no timer when the screen goes while it holds the toast', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const original = fresh();
+    serve({ put: () => respond(leftOut(original, 106)) });
+    const view = renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await user.keyboard('{Enter}');
+    const held = await screen.findByRole('button', { name: 'Leave out Scrooged' });
+    await waitFor(() => expect(held).toHaveFocus());
+
+    const removed = vi.spyOn(document, 'removeEventListener');
+    const timers = vi.getTimerCount();
+    view.unmount();
+    expect(removed).toHaveBeenCalledWith('focusin', expect.any(Function));
+    // Nothing is left to fire on the gone screen.
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(timers);
+    act(() => vi.advanceTimersByTime(20000));
+    removed.mockRestore();
+  });
+
+  it('leaves focus alone when the owner moved it before the answer came', async () => {
+    const original = fresh();
+    const gate = deferred();
+    serve({
+      get: () => original,
+      put: () => gate.promise,
+    });
+    await open();
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await userEvent.keyboard('{Enter}');
+    const tab = screen.getByRole('tab', { name: /Added by me/ });
+    tab.focus();
+    await act(async () => gate.resolve(respond(leftOut(original, 106))));
+    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'Die Hard' })).toBeNull());
+    expect(tab).toHaveFocus();
+  });
+
+  it('leaves focus in the search field when the owner went there before the answer came', async () => {
+    const original = fresh();
+    const gate = deferred();
+    serve({ put: () => gate.promise });
+    await open();
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await userEvent.keyboard('{Enter}');
+    const field = screen.getByRole('combobox');
+    field.focus();
+    await act(async () => gate.resolve(respond(leftOut(original, 106))));
+    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'Die Hard' })).toBeNull());
+    expect(field).toHaveFocus();
   });
 
   it('replaces the toast with a newer action, and it goes after 8 seconds', async () => {
@@ -427,10 +548,8 @@ describe('Christmas films: changes and undo', () => {
     await waitFor(() => expect(toast()).toHaveTextContent('Left out Gremlins.'));
     expect(toast()).not.toHaveTextContent('Die Hard');
 
-    // Focus is on the new Undo, which holds the toast; it counts down once focus leaves.
-    const undo = within(toast()).getByRole('button', { name: 'Undo' });
-    expect(undo).toHaveFocus();
-    act(() => undo.blur());
+    // Focus is on a row, not on Undo, so nothing holds the toast: it counts down at once.
+    expect(within(toast()).getByRole('button', { name: 'Undo' })).not.toHaveFocus();
     act(() => vi.advanceTimersByTime(7900));
     expect(toast()).toHaveTextContent('Left out Gremlins.');
     act(() => vi.advanceTimersByTime(200));

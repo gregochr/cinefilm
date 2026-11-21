@@ -115,14 +115,14 @@ export function rowNote(row, tab) {
   return null;
 }
 
-/** "Title · year" (the year is left off when unknown). */
-export const titleLine = (row) => (row.year ? `${row.title} · ${row.year}` : row.title);
+/** " · year" for the muted span after a title (empty when the year is unknown). */
+export const yearSuffix = (row) => (row.year ? ` · ${row.year}` : '');
 
 /** The cut line's words; the phone's is the short form (design `05`). */
-export const cutText = (max, count, short = false) =>
-  short
-    ? `Home shows ${max}. These ${count} won't fit.`
-    : `Home shows ${max}. These ${count} are in, but won't fit. Leave out an older film to make room.`;
+export const cutText = (max, count, short = false) => {
+  if (short) return `Home shows ${max}. ${count === 1 ? 'This' : 'These'} ${count} won't fit.`;
+  return `Home shows ${max}. ${count === 1 ? 'This 1 is' : `These ${count} are`} in, but won't fit. Leave out an older film to make room.`;
+};
 
 /** The status card's sentences: the bold count, the rest of the headline, and the line under it. */
 export function statusText(data) {
@@ -166,8 +166,18 @@ export const keywordPercent = ({ fetched, total }) =>
   total > 0 ? Math.min(100, Math.round((fetched / total) * 100)) : 0;
 
 /** The keyword strip's sentence. */
-export const keywordLine = ({ fetched, total }) =>
-  `Keywords fetched for ${formatCount(fetched)} of ${formatCount(total)} films. The other ${formatCount(total - fetched)} are on their way, so this list may still grow.`;
+export const keywordLine = ({ fetched, total }) => {
+  const left = total - fetched;
+  const rest =
+    left === 1 ? 'The other 1 is on its way' : `The other ${formatCount(left)} are on their way`;
+  return `Keywords fetched for ${formatCount(fetched)} of ${formatCount(total)} films. ${rest}, so this list may still grow.`;
+};
+
+/** True when the server says keywords are not being fetched (no TMDB token, or the fetch has stalled). Absent fields: false. */
+export const keywordsStalled = (keywords) =>
+  keywords.stalled === true || keywords.enabled === false;
+
+export const KEYWORDS_NOT_FETCHING_TEXT = "Keywords aren't being fetched right now.";
 
 /** Which empty copy applies: null when there is something to list. */
 export function emptyKind(data) {
@@ -176,8 +186,10 @@ export function emptyKind(data) {
 }
 
 /** The empty panel's body for the keywords-still-arriving case. */
-export const emptyPendingText = ({ fetched, total }) =>
-  `CineFilm finds them from TMDB keywords, and it's still fetching those: ${formatCount(fetched)} of ${formatCount(total)} films so far. Films appear here as their keywords arrive, usually within the hour.`;
+export const emptyPendingText = ({ fetched, total, ...flags }) =>
+  keywordsStalled(flags)
+    ? `CineFilm finds them from TMDB keywords. ${KEYWORDS_NOT_FETCHING_TEXT} ${formatCount(fetched)} of ${formatCount(total)} films have them so far.`
+    : `CineFilm finds them from TMDB keywords, and it's still fetching those: ${formatCount(fetched)} of ${formatCount(total)} films so far. Films appear here as their keywords arrive, usually within the hour.`;
 
 export const EMPTY_NONE_TEXT = 'No films in your library are tagged Christmas. Add any you count.';
 

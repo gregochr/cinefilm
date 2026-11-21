@@ -6,7 +6,7 @@ import {
   cutText,
   rowAction,
   rowNote,
-  titleLine,
+  yearSuffix,
 } from '../../state/christmas.js';
 
 function ChristmasRow({ row, number, cut, tab, busy, onAct, buttonRef }) {
@@ -32,7 +32,15 @@ function ChristmasRow({ row, number, cut, tab, busy, onAct, buttonRef }) {
         className="xmas-row__poster"
       />
       <div className="xmas-row__text">
-        <p className="xmas-row__title">{titleLine(row)}</p>
+        <p className="xmas-row__title">
+          {number ? (
+            <span className="xmas-row__num-inline" aria-hidden="true" data-testid="rank-inline">
+              {number}
+            </span>
+          ) : null}
+          {row.title}
+          {row.year ? <span className="xmas-year">{yearSuffix(row)}</span> : null}
+        </p>
         {note ? <p className="xmas-row__note">{note}</p> : null}
       </div>
       <span className={`xmas-chip xmas-chip--${chip.variant}`}>{chip.label}</span>
@@ -41,7 +49,7 @@ function ChristmasRow({ row, number, cut, tab, busy, onAct, buttonRef }) {
         className="xmas-row__action"
         aria-label={`${action.label} ${row.title}`}
         aria-disabled={busy || undefined}
-        onClick={busy ? undefined : () => onAct(row)}
+        onClick={busy ? undefined : (event) => onAct(row, event.currentTarget, event.detail === 0)}
       >
         {action.label}
       </Button>

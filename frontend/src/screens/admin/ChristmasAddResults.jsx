@@ -1,7 +1,7 @@
 import { POSTER_SIZE_THUMB } from '../../api/images.js';
 import Art from '../../components/Art.jsx';
 import { Button } from '../../components/Button.jsx';
-import { addResultRow, titleLine } from '../../state/christmas.js';
+import { addResultRow, yearSuffix } from '../../state/christmas.js';
 import { filmCount } from '../../state/useSearchCombobox.js';
 
 export const SEARCH_LOADING_TEXT = 'Loading…';
@@ -33,7 +33,10 @@ function ResultRow({ row, busy, onAct, buttonRef }) {
         className="xmas-add-row__poster"
       />
       <div className="xmas-add-row__text">
-        <p className="xmas-add-row__title">{titleLine(row)}</p>
+        <p className="xmas-add-row__title">
+          {row.title}
+          {row.year ? <span className="xmas-year">{yearSuffix(row)}</span> : null}
+        </p>
         {view?.chip ? (
           <span className={`xmas-chip xmas-chip--${view.chip.variant}`}>{view.chip.label}</span>
         ) : null}

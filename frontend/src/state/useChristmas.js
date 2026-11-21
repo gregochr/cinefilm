@@ -18,12 +18,12 @@ import {
  * was dropped as stale (two rows changed at once: the server may have handled them in either order, so the newest
  * answer may lack the older change) the screen reads once more as soon as no write is in flight.
  *
- * Returns `{ data, version, issued, pinToast, loading, error, reload, refresh, busy, toast, change, undo, focusRequest, holdToast, releaseToast }`.
+ * Returns `{ data, version, issued, pinToast, loading, error, reload, refresh, busy, toast, change, undo, focusRequest, holdToast, releaseToast, keepToast }`.
  * `toast` is `{ message, undo: { tmdbId, filmId, title, choice, kind, panel } | null }` or null; it clears after 8 seconds unless it is
  * held (the pointer or the keyboard is on it); each toast carries a counter `id`. `focusRequest` is
- * `{ filmId, undo, panel, n }` after a change lands or fails: `undo` is true after a change that left an Undo (focus goes to
- * the toast's Undo button, which a keyboard user would otherwise reach only after every row), `filmId` is the row to
- * focus (after an Undo), and with neither the screen settles focus itself.
+ * `{ filmId, undo, panel, n }` after a change lands or fails: `undo` is true after a change from a list row that left an
+ * Undo (the screen then moves focus on to that row's button, else the next row's, else the list; Undo stays reachable by
+ * Tab and the pointer), `filmId` is the row the change was for, and with neither the screen settles focus itself.
  */
 export function useChristmas() {
   const [data, setData] = useState(null);
@@ -40,6 +40,7 @@ export function useChristmas() {
   const toastTimer = useRef(null);
   const pinned = useRef(false);
   const held = useRef(false);
+  const kept = useRef(false);
   const shownVersion = useRef(0);
   const live = useRef(true);
   const focusCount = useRef(0);
@@ -55,7 +56,8 @@ export function useChristmas() {
 
   const armToast = useCallback(() => {
     clearTimeout(toastTimer.current);
-    if (!pinned.current && !held.current)
+    if (!live.current) return;
+    if (!pinned.current && !held.current && !kept.current)
       toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
   }, []);
 
@@ -64,6 +66,7 @@ export function useChristmas() {
       toastCount.current += 1;
       // A new toast is a new pill: whatever held the old one let go with it.
       held.current = false;
+      kept.current = false;
       setToast({ ...next, id: toastCount.current });
       armToast();
     },
@@ -78,6 +81,19 @@ export function useChristmas() {
     held.current = false;
     armToast();
   }, [armToast]);
+
+  /**
+   * Keeps the toast up while keyboard focus rests on the button the screen moved it to after a row action: Undo sits
+   * after the whole list, so Tab could not reach it inside the 8 seconds. `keepToast(false)` starts the countdown.
+   */
+  const keepToast = useCallback(
+    (on) => {
+      kept.current = on;
+      if (on) clearTimeout(toastTimer.current);
+      else armToast();
+    },
+    [armToast],
+  );
 
   /** Keeps the toast up while the search panel is open (its Undo is then out of keyboard reach); released on close. */
   const pinToast = useCallback(
@@ -171,7 +187,7 @@ export function useChristmas() {
           undo: withUndo ? { tmdbId, filmId, title, choice: previous, kind, panel } : null,
         });
         // A change made from the search panel keeps focus on that result's button: the panel stays open.
-        ask(withUndo && !panel ? null : filmId, withUndo && !panel);
+        ask(filmId, withUndo && !panel);
       } catch (failure) {
         if (!live.current) return;
         const status = failure instanceof ApiError ? failure.status : 0;
@@ -255,5 +271,6 @@ export function useChristmas() {
     focusRequest,
     holdToast,
     releaseToast,
+    keepToast,
   };
 }

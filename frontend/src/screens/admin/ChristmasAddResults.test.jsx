@@ -42,9 +42,7 @@ function setup(props = {}) {
 }
 
 const option = (title) =>
-  screen
-    .getAllByRole('listitem')
-    .find((item) => within(item).queryByText(new RegExp(`^${title} · `)));
+  screen.getAllByRole('listitem').find((item) => new RegExp(`^${title} · `).test(item.textContent));
 
 describe('ChristmasAddResults', () => {
   it('shows each state as a chip or muted line and its one button', () => {

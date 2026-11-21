@@ -8,6 +8,8 @@ import { useSignInRecovery } from './useSignInRecovery.js';
  * Undo stays reachable while it is up (a modal dialog hides what is outside it). Focus goes to Close on open; Esc and
  * Close call `onClose` (the opener takes focus back there), Tab stays inside, and nothing behind scrolls.
  */
+export const PREVIEW_SHEET_ID = 'xmas-preview-sheet';
+
 export default function ChristmasPreviewSheet({ onClose, toast, children }) {
   const dialog = useRef(null);
   const close = useRef(null);
@@ -46,6 +48,7 @@ export default function ChristmasPreviewSheet({ onClose, toast, children }) {
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       ref={dialog}
+      id={PREVIEW_SHEET_ID}
       className="xmas-preview-sheet"
       role="dialog"
       aria-modal="true"
