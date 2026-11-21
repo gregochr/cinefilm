@@ -95,4 +95,15 @@ describe('ActionWithHint', () => {
     );
     expect(screen.getByRole('button', { name: 'Do it' })).toHaveAccessibleDescription('Heat');
   });
+
+  it('puts buttonClassName on the button and className on the wrapper', () => {
+    render(
+      <ActionWithHint hint="Hint." className="wrap" buttonClassName="quiet">
+        Go
+      </ActionWithHint>,
+    );
+    const button = screen.getByRole('button', { name: 'Go' });
+    expect(button).toHaveClass('quiet');
+    expect(button).not.toHaveClass('wrap');
+  });
 });

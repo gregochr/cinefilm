@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
-import { bestGuess, buildTodoGroups, confirmProblem } from './adminTodo.js';
+import { bestGuess, buildTodoGroups, confirmProblem, leaveProblem } from './adminTodo.js';
 import { useAttention } from './useAdmin.js';
 import { useFullNeed } from './useFullNeed.js';
 import { useResource } from './useResource.js';
@@ -22,6 +22,9 @@ import { useResource } from './useResource.js';
  * on screen when they were set: a read that replaces it forgets them, so a row the server still lists shows again,
  * and a read that fails leaves the answer, and so the hiding, as it was. On failure the row stays with `problems[filmId]`
  * (a 404, the film gone, also reads the lists again).
+ *
+ * `leaveUnmatched(item, { onHidden })` is "Leave unmatched": the same busy, hiding, focus and failure handling, but it
+ * posts the leave route and tells the global search nothing (the film stays in the library as it was).
  */
 export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged, onFullSaved }) {
   const attention = useAttention(`${settledAt}|${changed}`);
@@ -59,18 +62,17 @@ export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged, 
     }));
   }, []);
 
-  const confirm = useCallback(
-    async (item, { onHidden } = {}) => {
-      const guess = bestGuess(item);
-      const { filmId } = item;
-      if (!guess || inFlight.current.has(filmId)) return;
+  // One row action: a post for the film, its failure words, and what a success does. Shared by both row buttons.
+  const act = useCallback(
+    async (filmId, { send, problemFor, announce, onHidden }) => {
+      if (inFlight.current.has(filmId)) return;
       inFlight.current.add(filmId);
       setConfirming((ids) => [...ids, filmId]);
       setProblem(filmId, null);
       try {
-        await adminApi.applyMatch(filmId, guess.tmdbId);
+        await send();
       } catch (failure) {
-        const { message, gone } = confirmProblem(failure);
+        const { message, gone } = problemFor(failure);
         if (mounted.current) setProblem(filmId, message);
         if (gone) onChanged();
         return;
@@ -78,8 +80,7 @@ export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged, 
         inFlight.current.delete(filmId);
         if (mounted.current) setConfirming((ids) => ids.filter((id) => id !== filmId));
       }
-      // Global search keeps its pre-match index otherwise, and the layout outlives this page.
-      announceLibraryChanged();
+      if (announce) announceLibraryChanged();
       if (mounted.current) {
         const list = latestAttention.current;
         setHidden((h) => ({ list, ids: h.list === list ? [...h.ids, filmId] : [filmId] }));
@@ -88,6 +89,32 @@ export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged, 
       onChanged();
     },
     [onChanged, setProblem],
+  );
+
+  const confirm = useCallback(
+    async (item, { onHidden } = {}) => {
+      const guess = bestGuess(item);
+      if (!guess) return;
+      // Global search keeps its pre-match index otherwise, and the layout outlives this page.
+      await act(item.filmId, {
+        send: () => adminApi.applyMatch(item.filmId, guess.tmdbId),
+        problemFor: confirmProblem,
+        announce: true,
+        onHidden,
+      });
+    },
+    [act],
+  );
+
+  const leaveUnmatched = useCallback(
+    (item, { onHidden } = {}) =>
+      act(item.filmId, {
+        send: () => adminApi.leaveUnmatched(item.filmId),
+        problemFor: leaveProblem,
+        announce: false,
+        onHidden,
+      }),
+    [act],
   );
 
   const hiddenIds = hidden.list === attention.data ? hidden.ids : [];
@@ -104,5 +131,16 @@ export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged, 
   // "Nothing to do." only once every list has been read: a list that failed or has not answered says nothing.
   const allRead = attentionItems !== null && fullRows !== null && forcedRows !== null;
 
-  return { attention, full, fullNeed, forced, groups, allRead, confirm, confirming, problems };
+  return {
+    attention,
+    full,
+    fullNeed,
+    forced,
+    groups,
+    allRead,
+    confirm,
+    leaveUnmatched,
+    confirming,
+    problems,
+  };
 }

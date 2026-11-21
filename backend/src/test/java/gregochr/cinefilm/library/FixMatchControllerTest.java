@@ -1,6 +1,8 @@
 package gregochr.cinefilm.library;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -112,5 +114,36 @@ class FixMatchControllerTest {
     @Test
     void searchSignedOutIs401() throws Exception {
         mvc.perform(get("/api/admin/films/7/match").param("query", "Dune")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void leaveUnmatchedAnswers204AndPassesTheId() throws Exception {
+        mvc.perform(post("/api/admin/films/7/leave-unmatched").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isNoContent());
+        verify(fixMatch).leaveUnmatched(7L);
+    }
+
+    @Test
+    void leaveUnmatchedErrorsMapToTheirStatusesAndTexts() throws Exception {
+        doThrow(new NotFoundException("No film 7")).when(fixMatch).leaveUnmatched(7L);
+        doThrow(new ConflictException("A scan is running")).when(fixMatch).leaveUnmatched(8L);
+        doThrow(new ConflictException("This film is not waiting for a match")).when(fixMatch).leaveUnmatched(9L);
+
+        mvc.perform(post("/api/admin/films/7/leave-unmatched").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("No film 7"));
+        mvc.perform(post("/api/admin/films/8/leave-unmatched").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.error").value("A scan is running"));
+        mvc.perform(post("/api/admin/films/9/leave-unmatched").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("This film is not waiting for a match"));
+    }
+
+    @Test
+    void leaveUnmatchedSignedOutIs401AndWithoutTheHeaderIs403() throws Exception {
+        mvc.perform(post("/api/admin/films/7/leave-unmatched").header("X-CineFilm", "1"))
+            .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.error").value("Authentication required"));
+        mvc.perform(post("/api/admin/films/7/leave-unmatched").with(user("owner")))
+            .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+        verifyNoInteractions(fixMatch);
     }
 }

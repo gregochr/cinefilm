@@ -193,6 +193,10 @@ class AdminServiceTest extends ApiTestBase {
         saved("With id", 2009, "id.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
         saved("Flagged", 2010, "flag.m4v", MatchStatus.NEEDS_MATCH, Playability.PLAYABLE, Presence.PRESENT);
         saved("Waiting", 2011, "wait.m4v", MatchStatus.PENDING, Playability.PLAYABLE, Presence.PRESENT);
+        Film left = saved("Left", 2012, "left.m4v", MatchStatus.LEFT_UNMATCHED, Playability.PLAYABLE,
+            Presence.PRESENT);
+        left.setTmdbId(null);
+        films.save(left);
         em.flush();
         em.clear();
 

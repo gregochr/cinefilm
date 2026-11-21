@@ -12,6 +12,7 @@ import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
+import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
 import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
@@ -179,6 +180,35 @@ public class FixMatch {
             events.publishEvent(new LibraryChanged());
             events.publishEvent(new FilmMatchFixed());
             return applied;
+        });
+    }
+
+    /**
+     * The owner chooses to leave a film without a TMDB match: it is marked {@code LEFT_UNMATCHED} and its stored
+     * candidates are cleared, so To do stops listing it and no scan retries it. Fix match (by id) and a Plex-supplied
+     * TMDB id can still match it.
+     * Only a film To do lists as needing a match may be left; takes the library lock like {@link #apply}.
+     *
+     * @param filmId the film to leave unmatched
+     * @throws NotFoundException when there is no such film
+     * @throws ConflictException when the film is not waiting for a match, or a scan, import or another match holds
+     *     the library lock
+     */
+    public void leaveUnmatched(Long filmId) {
+        locked(() -> {
+            tx.executeWithoutResult(status -> {
+                Film film = films.findById(filmId).orElseThrow(() -> new NotFoundException("No film " + filmId));
+                MatchStatus now = film.getMatchStatus();
+                boolean listed = now == MatchStatus.NEEDS_MATCH || (film.getTmdbId() == null
+                    && now != MatchStatus.PENDING && now != MatchStatus.LEFT_UNMATCHED);
+                if (!listed) {
+                    throw new ConflictException("This film is not waiting for a match");
+                }
+                film.setMatchStatus(MatchStatus.LEFT_UNMATCHED);
+                film.setMatchCandidates(null);
+                films.save(film);
+            });
+            return null;
         });
     }
 

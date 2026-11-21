@@ -494,6 +494,111 @@ describe('Admin To do: Yes, it’s … on the row', () => {
   });
 });
 
+describe('Admin To do: Leave unmatched', () => {
+  const LEAVE = '/api/admin/films/34/leave-unmatched';
+  const leaveButton = (pick) =>
+    within(rowOf(pick, 'Suspiria')).getByRole('button', { name: 'Leave unmatched' });
+
+  it('posts to the leave route, the row leaves and focus goes to the section title', async () => {
+    let left = false;
+    const fetchMock = installFetch((m, url) => {
+      if (m === 'POST' && url === LEAVE) {
+        left = true;
+        return respond(null, 204);
+      }
+      // Once left the server no longer lists the film, so the re-read agrees with the hiding.
+      if (url === ATTENTION && left) {
+        return respond({ items: fixtures.adminAttention.items.filter((i) => i.filmId !== 34) });
+      }
+      return null;
+    });
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+
+    await userEvent.click(leaveButton(pick));
+
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus();
+    expect(
+      fetchMock.mock.calls.filter(([url, init]) => url === LEAVE && init?.method === 'POST'),
+    ).toHaveLength(1);
+  });
+
+  it('does nothing on a second click while the post is in flight', async () => {
+    let release;
+    const fetchMock = installFetch((m, url) =>
+      m === 'POST' && url === LEAVE
+        ? new Promise((resolve) => {
+            release = () => resolve(respond(null, 204));
+          })
+        : null,
+    );
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+    const button = leaveButton(pick);
+
+    await userEvent.click(button);
+    await userEvent.click(button);
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    release();
+
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
+    expect(
+      fetchMock.mock.calls.filter(([url, init]) => url === LEAVE && init?.method === 'POST'),
+    ).toHaveLength(1);
+  });
+
+  it('keeps the row and shows an alert in it when the post fails', async () => {
+    installFetch((m, url) => (m === 'POST' && url === LEAVE ? respond({ error: 'x' }, 500) : null));
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+
+    await userEvent.click(leaveButton(pick));
+
+    expect(await within(rowOf(pick, 'Suspiria')).findByRole('alert')).toHaveTextContent(
+      'Couldn’t leave it — try again.',
+    );
+    expect(leaveButton(pick)).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('says a scan is running on a 409 and keeps the row', async () => {
+    installFetch((m, url) =>
+      m === 'POST' && url === LEAVE ? respond({ error: 'A scan is running' }, 409) : null,
+    );
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+
+    await userEvent.click(leaveButton(pick));
+
+    expect(await within(rowOf(pick, 'Suspiria')).findByRole('alert')).toHaveTextContent(
+      'A scan is running — try again when it finishes.',
+    );
+  });
+
+  it('leaves focus alone when it had already moved off the row', async () => {
+    let release;
+    installFetch((m, url) =>
+      m === 'POST' && url === LEAVE
+        ? new Promise((resolve) => {
+            release = () => resolve(respond(null, 204));
+          })
+        : null,
+    );
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+    await userEvent.click(leaveButton(pick));
+    const elsewhere = within(rowOf(pick, 'The Wicker Man')).getByRole('button', {
+      name: 'Find the film…',
+    });
+    elsewhere.focus();
+
+    release();
+
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
+    expect(elsewhere).toHaveFocus();
+  });
+});
+
 describe('Admin To do: more than five rows', () => {
   it('caps each group at five, with the footers: Show all for the film groups, All in Subtitles for the others', async () => {
     installFetch(many);

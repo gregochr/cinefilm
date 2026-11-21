@@ -3,11 +3,13 @@ package gregochr.cinefilm.library;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchRequest;
 import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Admin: Fix match, the owner's choice of TMDB film for a film that needs one. */
@@ -30,5 +32,11 @@ public class FixMatchController {
     @PostMapping("/api/admin/films/{id}/match")
     MatchApplied apply(@PathVariable Long id, @RequestBody MatchRequest request) {
         return fixMatch.apply(id, request.tmdbId());
+    }
+
+    @PostMapping("/api/admin/films/{id}/leave-unmatched")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void leaveUnmatched(@PathVariable Long id) {
+        fixMatch.leaveUnmatched(id);
     }
 }

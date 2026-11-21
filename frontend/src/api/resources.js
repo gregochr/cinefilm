@@ -102,6 +102,8 @@ export const adminApi = {
     return get(`/api/admin/films/${filmId}/match?${params}`, options);
   },
   applyMatch: (filmId, tmdbId) => post(`/api/admin/films/${filmId}/match`, { tmdbId }),
+  /** "Leave unmatched": the film stops being listed as needing a match (204; a 409 says a scan holds the lock). */
+  leaveUnmatched: (filmId) => post(`/api/admin/films/${filmId}/leave-unmatched`),
   /** A film's files, editions and the suggested arrangement, for the Edit editions panel. */
   editions: (filmId, options) => get(`/api/admin/films/${filmId}/editions`, options),
   /**

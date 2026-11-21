@@ -158,6 +158,16 @@ describe('image URLs', () => {
     expect(last()).toMatchObject({ path: '/api/admin/summary', method: 'GET' });
   });
 
+  it('leaves a film unmatched with a bodiless POST to its own route', async () => {
+    const last = stubFetch();
+    await adminApi.leaveUnmatched(34);
+    expect(last()).toEqual({
+      path: '/api/admin/films/34/leave-unmatched',
+      method: 'POST',
+      body: undefined,
+    });
+  });
+
   it('reads the transcoding state and stops a session with DELETE', async () => {
     const last = stubFetch();
     await adminApi.transcoding();

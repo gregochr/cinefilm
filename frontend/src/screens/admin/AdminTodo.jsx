@@ -11,7 +11,7 @@ import SectionTitle from './SectionTitle.jsx';
 import { useFallbackFocus } from './useFallbackFocus.js';
 
 /**
- * Once a confirmed row is hidden, focus goes straight to the section title when it was on that row (or nowhere): the
+ * Once a confirmed (or left) row is hidden, focus goes straight to the section title when it was on that row (or nowhere): the
  * button it was on is about to leave the page, and a fallback waiting for a later list change could be spent by
  * another.
  */
@@ -73,6 +73,7 @@ export default function AdminTodo() {
     confirming: lists.confirming,
     problems: lists.problems,
     onConfirm: (item, opener) => lists.confirm(item, { onHidden: () => leaveRow(opener) }),
+    onLeave: (item, opener) => lists.leaveUnmatched(item, { onHidden: () => leaveRow(opener) }),
     onFindFilm: openFixMatch,
     onSortOut: openEditions,
     // A picked file settles the row: if focus falls to the page with it, it goes to the section title.

@@ -16,6 +16,11 @@ export const buttons = {
     hint: 'Search TMDB and choose which film this file is.',
     source: '07',
   },
+  leaveUnmatched: {
+    label: 'Leave unmatched',
+    hint: 'Stop listing this film here. It stays in your library.',
+    source: 'planner',
+  },
   sortEditions: {
     label: 'Sort out editions…',
     hint: 'Choose which file is which cut, the part order and the default.',
@@ -351,6 +356,12 @@ export const todoRow = {
     scan: 'A scan is running. Try again when it finishes.',
     tmdb: 'TMDB isn’t available right now. Try again in a moment.',
     other: 'Something went wrong. Try again.',
+  },
+  // "Leave unmatched" failures (planner): a 404 is the same "gone" line.
+  leaveProblems: {
+    scan: 'A scan is running — try again when it finishes.',
+    stale: 'That film is already settled. The list is being updated.',
+    other: 'Couldn’t leave it — try again.',
   },
   retry: 'Try again',
   loadingLabel: 'Loading',
