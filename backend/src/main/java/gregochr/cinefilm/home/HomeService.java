@@ -52,7 +52,7 @@ public class HomeService {
      * the next {@link #CONTINUE_WATCHING_ROW} after it (4 are shown, the rest are spares for backfill); the total
      * counts the hero and leaves out films removed from Continue watching. The films' lazy genres and keywords load
      * inside this transaction (in batches: {@code hibernate.default_batch_fetch_size}), keywords only in Christmas
-     * week.
+     * period.
      */
     @Transactional(readOnly = true)
     public Home home() {

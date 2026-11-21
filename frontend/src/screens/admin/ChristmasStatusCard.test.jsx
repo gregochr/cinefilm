@@ -13,10 +13,10 @@ describe('ChristmasStatusCard', () => {
   it('says how many films show, the week, and the Home rule', () => {
     render(<ChristmasStatusCard data={christmasFixture()} />);
     expect(card()).toHaveTextContent(
-      '14 films will show in Christmas week (Mon 14 Dec to Sun 20 Dec).',
+      '14 films will show in Christmas week (Mon 14 Dec to Fri 25 Dec).',
     );
     expect(card()).toHaveTextContent(
-      'Home shows up to 12, oldest first. Under 5 and it falls back to the usual weekly theme.',
+      'Home shows up to 12: films you added first, then a different mix each day. Under 5 and it falls back to the usual weekly theme.',
     );
   });
 

@@ -12,8 +12,9 @@ Christmas is the hard part (Die Hard, Gremlins, Trading Places, Home Alone...).
 
 1. **Christmas rule: TMDB keyword plus an override list.** A film is Christmas if TMDB tags it with the `christmas`
    keyword (id 207317), unless the owner excludes it, or it is on the owner's include list. Die Hard carries the tag.
-2. **Weeks: the Monday on or before 24 Oct (Halloween) and 18 Dec (Christmas)**, each running Monday to Sunday.
-   In 2026: Mon 19 Oct and Mon 14 Dec. Both are ordinary ISO weeks, so the Monday rollover and the caption stay true.
+2. **Periods: from the Monday on or before 24 Oct (Halloween) and 18 Dec (Christmas)**, each running to the day
+   itself (31 Oct, 25 Dec; see the 2026-11-21 update, which replaced Monday to Sunday). In 2026: Mon 19 Oct and
+   Mon 14 Dec. Each starts on a Monday; the ordinary rotation returns on 1 Nov / 26 Dec, so the theme no longer always changes on a Monday.
    Rationale: the theme shows before the day, so there is time to watch.
 
 Horror needs no new data: the `Horror` genre already exists on `Film.genres`.
@@ -23,10 +24,10 @@ Horror needs no new data: the `Horror` genre already exists on `Film.genres`.
 ### Selector (backend, `film` package)
 
 - `WeeklyThemeSelector.choose(date, library)` first asks `HolidayWeeks.holidayFor(date)` -> `HALLOWEEN`, `CHRISTMAS` or
-  empty. Pure function of the date: the Monday on or before 24 Oct / 18 Dec of that year, week = that Monday + 6 days.
+  empty. Pure function of the date: the Monday on or before 24 Oct / 18 Dec of that year through 31 Oct / 25 Dec.
 - Holiday week: kind `holiday`, value `halloween` / `christmas`, titles "This week: Halloween" /
   "This week: Christmas", caption stays the standing one. Films: Halloween = genre Horror; Christmas = `isChristmas`.
-- Same `pick` (oldest first, 12 max). **Fallback:** fewer than `MIN_FILMS` (5) matching films -> use the normal
+- Same `pick` for Halloween (oldest first, 12 max); Christmas has its own order (2026-11-21 update). **Fallback:** fewer than `MIN_FILMS` (5) matching films -> use the normal
   rotation, so a small library never gets an empty or thin row.
 - Frontend needs no change if it renders `kind`/`value` generically (check `ThemeDto` use; add a test either way).
 
@@ -70,3 +71,15 @@ Horror needs no new data: the `Horror` genre already exists on `Film.genres`.
 The `cinefilm.holiday.christmas.include` / `.exclude` properties (and the `CINEFILM_HOLIDAY_CHRISTMAS_*` variables)
 described above are replaced by a `christmas_override` table and an Admin screen, and the config implementation is
 removed with no seed. See `christmas-films-plan.md`.
+
+## Update 2026-11-21: the period runs to the day, and Christmas is shuffled daily (owner)
+
+- **The period runs until the day itself.** Halloween: the Monday on or before 24 Oct through 31 Oct inclusive.
+  Christmas: the Monday on or before 18 Dec through 25 Dec inclusive (8 to 14 days). The Sunday no longer ends it, so
+  Home keeps the holiday row on 21 to 25 Dec. Each period still starts on a Monday, but the ordinary rotation now returns on 1 Nov and 26 Dec, so the theme no
+  longer always changes on a Monday; so Home's caption now reads "A new theme each week" (owner, 2026-11-21).
+  `HolidayWeeks.christmasWeekFrom` reports next year's period from 26 Dec.
+- **Christmas order:** films the owner added by hand (an include, not excluded) first in `ROW_ORDER`, then every other
+  Christmas film in a shuffle seeded by the London date's epoch day, applied to the `ROW_ORDER` list. Stable all day
+  and for Home and the Admin screen alike; a different dozen each day, changing at London midnight. Halloween keeps its
+  order (year, sort title, id).

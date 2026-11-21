@@ -37,7 +37,11 @@ is design output the owner made, no secrets). The numbers below are settled; cop
    running — try again when it finishes" and changes nothing.
 6. **Admin entry point:** the Admin shell (left rail) has landed; add "Christmas films" between Library and Playback,
    route `/admin/christmas`, title "Christmas films".
-7. **Week:** `HolidayWeeks` gives this year's Christmas week; once it has ended the API returns next year's.
+7. **Period:** `HolidayWeeks` gives this year's Christmas period (the Monday on or before 18 Dec through 25 Dec,
+   both included; owner, 2026-11-21, replacing Monday to Sunday); once 25 Dec has passed the API returns next year's.
+8. **Order (owner, 2026-11-21):** the owner's added films first (`ROW_ORDER`), then every other film in a shuffle
+   seeded by the London date's epoch day, applied to the `ROW_ORDER` list. One code path, `christmasFilms(..., date)`:
+   Home and the screen agree for a given day, and a different dozen shows each day. `inWeek` keeps every film.
 
 ## API (`/api/admin/christmas`, signed in, CSRF header on writes; every controller gets a MockMvc test with the 401 and
 missing-CSRF cases, AGENTS.md rule 5)
@@ -111,6 +115,15 @@ listbox roles), because each row holds a button.
 
 ### Slice 5: Home preview and phone polish (was "4b")
 
-- Preview inside the status card: label "Preview · Home in Christmas week", "Hide preview"/"Show preview" button (open by default, remembered in `localStorage` inside try/catch), the real Home row title and caption ("This week: Christmas" / "A new theme every Monday"), then the first 12 `inWeek` posters reusing Home's poster row (`FilmRow` + `Poster`, lazy, 2:3 reserved). When `fallsBack`: "Christmas week will show the usual weekly theme — under 5 Christmas films." Phone: a full-width 44px "Preview Home in Christmas week ›" button opening the row in a sheet.
+- Preview inside the status card: label "Preview · Home in Christmas week", "Hide preview"/"Show preview" button (open by default, remembered in `localStorage` inside try/catch), the real Home row title and caption ("This week: Christmas" / "A new theme each week"), then the first 12 `inWeek` posters reusing Home's poster row (`FilmRow` + `Poster`, lazy, 2:3 reserved). When `fallsBack`: "Christmas week will show the usual weekly theme — under 5 Christmas films." Phone: a full-width 44px "Preview Home in Christmas week ›" button opening the row in a sheet.
 - Phone "‹ Admin" back link above the eyebrow; phone cut line uses the short text if the design shows it (`05`).
 - Tests: open/closed remembered (and storage throwing), fallsBack text, 12 posters max, sheet on phone, back link.
+
+## Update 2026-11-21: the period runs to Christmas Day; the order is daily
+
+`HolidayWeeks` runs Christmas from the Monday on or before 18 Dec through 25 Dec and Halloween through 31 Oct (the
+Sunday no longer ends them). `WeeklyThemeSelector.christmasFilms(library, include, exclude, date)` puts the owner's
+added films first and shuffles the rest by the date's epoch day. The screen's hint reads "Home shows up to 12: films
+you added first, then a different mix each day." Tests: the period boundaries for every weekday of 18 Dec and 24 Oct,
+the order stable within a day and different between days, owner films first, and Home's row equal to the first 12 of
+`inWeek` for the same date (`ChristmasApiTest`, controllable clock).

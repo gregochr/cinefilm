@@ -108,7 +108,7 @@ describe('Home rows', () => {
       within(old).getByRole('link', { name: 'See all: Not watched in years' }),
     ).toHaveAttribute('href', '/library?show=watched&sort=title');
     const theme = screen.getByRole('region', { name: 'This week: the 1970s' });
-    expect(within(theme).getByText('A new theme every Monday')).toBeInTheDocument();
+    expect(within(theme).getByText('A new theme each week')).toBeInTheDocument();
     expect(within(theme).getByRole('link', { name: /See all/ })).toHaveAttribute(
       'href',
       '/library',
@@ -144,7 +144,7 @@ describe('Home rows', () => {
     const home = structuredClone(fixtures.home);
     home.weeklyTheme = {
       title: 'This week: Christmas',
-      caption: 'A new theme every Monday',
+      caption: 'A new theme each week',
       kind: 'holiday',
       value: 'christmas',
       films: [film(21, 'Die Hard'), film(22, 'Gremlins')],
@@ -152,7 +152,7 @@ describe('Home rows', () => {
     installFetch((m, url) => (url === '/api/home' ? respond(home) : null));
     renderApp('/');
     const row = await screen.findByRole('region', { name: 'This week: Christmas' });
-    expect(within(row).getByText('A new theme every Monday')).toBeInTheDocument();
+    expect(within(row).getByText('A new theme each week')).toBeInTheDocument();
     expect(within(row).getByRole('link', { name: /Die Hard/ })).toBeInTheDocument();
     expect(within(row).getByRole('link', { name: /Gremlins/ })).toBeInTheDocument();
   });

@@ -30,7 +30,7 @@ export function shortDate(iso) {
   return `${DAYS[date.getUTCDay()]} ${day} ${MONTHS[month - 1]}`;
 }
 
-/** "Mon 14 Dec to Sun 20 Dec". */
+/** "Mon 14 Dec to Fri 25 Dec": the period runs from a Monday to Christmas Day. */
 export const weekText = (week) => `${shortDate(week.start)} to ${shortDate(week.end)}`;
 
 /** The three tab counts. */
@@ -120,10 +120,27 @@ export function rowNote(row, tab) {
 /** " · year" for the muted span after a title (empty when the year is unknown). */
 export const yearSuffix = (row) => (row.year ? ` · ${row.year}` : '');
 
-/** The cut line's words; the phone's is the short form (design `05`). */
-export const cutText = (max, count, short = false) => {
-  if (short) return `Home shows ${max}. ${count === 1 ? 'This' : 'These'} ${count} won't fit.`;
-  return `Home shows ${max}. ${count === 1 ? 'This 1 is' : `These ${count} are`} in, but won't fit. Leave out an older film to make room.`;
+/**
+ * True when the films the owner added by hand (an INCLUDE choice) fill or overflow the `max` of Home's row, so no
+ * other film ever shows: the daily shuffle only reorders the films after the owner's.
+ */
+export const ownerFillsRow = (rows, max) =>
+  rows.filter((row) => row.override === 'INCLUDE').length >= max;
+
+/**
+ * The cut line's words; the phone's is the short form (design `05`). With the daily shuffle the films below the cut
+ * come up on other days, unless `neverShow` (the owner's own films fill the row), when they never show.
+ */
+export const cutText = (max, count, short = false, neverShow = false) => {
+  const these = count === 1 ? 'This 1' : `These ${count}`;
+  if (neverShow) {
+    return short
+      ? `Home shows ${max}. ${these} will never show.`
+      : `Home shows ${max}. ${these} will never show: your own films fill the ${max}.`;
+  }
+  const verb = count === 1 ? "isn't" : "aren't";
+  if (short) return `Home shows ${max} a day. ${these} ${verb} in today's dozen.`;
+  return `Home shows ${max} a day. ${these} ${verb} in today's dozen; ${count === 1 ? 'it comes' : 'they come'} up on other days.`;
 };
 
 /** The status card's sentences: the bold count, the rest of the headline, and the line under it. */
@@ -140,7 +157,7 @@ export function statusText(data) {
   return {
     bold: filmsText(n),
     rest: ` will show in Christmas week (${weekText(data.week)}).`,
-    hint: `Home shows up to ${max}, oldest first. Under ${min} and it falls back to the usual weekly theme.`,
+    hint: `Home shows up to ${max}: films you added first, then a different mix each day. Under ${min} and it falls back to the usual weekly theme.`,
   };
 }
 
@@ -276,7 +293,7 @@ export const EMPTY_TAB_TEXT = {
 
 /** Home's row title and caption in Christmas week (the backend's WeeklyTheme builds the same two strings). */
 export const PREVIEW_TITLE = 'This week: Christmas';
-export const PREVIEW_CAPTION = 'A new theme every Monday';
+export const PREVIEW_CAPTION = 'A new theme each week';
 
 export const PREVIEW_LABEL = 'Preview · Home in Christmas week';
 

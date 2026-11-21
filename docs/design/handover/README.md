@@ -67,7 +67,7 @@ See `design/tokens.css` for every value.
 
 **Home**
 - Hero: "Pick up where you left off" shows the most recent in-progress film.
-- Rows: "Continue watching", "Recently added", "Not watched in years", and a weekly theme ("This week: the 1970s", captioned "A new theme every Monday"). Collections live in Library, not on Home (decision 16).
+- Rows: "Continue watching", "Recently added", "Not watched in years", and a weekly theme ("This week: the 1970s", captioned "A new theme each week"). Collections live in Library, not on Home (decision 16).
 - The rows are static grids with a "See all" link, not carousels.
 
 **Film detail**

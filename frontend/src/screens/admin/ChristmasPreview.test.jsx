@@ -40,7 +40,7 @@ describe('ChristmasPreview on a desktop', () => {
     show();
     expect(screen.getByText('Preview · Home in Christmas week')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'This week: Christmas' })).toBeInTheDocument();
-    expect(screen.getByText('A new theme every Monday')).toBeInTheDocument();
+    expect(screen.getByText('A new theme each week')).toBeInTheDocument();
     // 14 films are in: only 12 show.
     expect(posters()).toHaveLength(12);
     expect(screen.getByRole('link', { name: /Elf/ })).toHaveAttribute('href', '/films/12');

@@ -3,18 +3,20 @@ package gregochr.cinefilm.film;
 import java.time.LocalDate;
 import java.time.temporal.IsoFields;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
 
 /**
  * Chooses the weekly theme (decision 4): a decade, a genre or a director with at least five films, picked
- * deterministically from the ISO week (Monday start) and the library contents; in Halloween and Christmas week,
- * that holiday's films.
+ * deterministically from the ISO week (Monday start) and the library contents; in the Halloween and Christmas
+ * periods ({@link HolidayWeeks}), that holiday's films.
  */
 public final class WeeklyThemeSelector {
 
@@ -47,14 +49,14 @@ public final class WeeklyThemeSelector {
     }
 
     /**
-     * Picks the theme for the ISO week containing {@code date}. In a holiday week ({@link HolidayWeeks}) the theme is
-     * that holiday's films, unless fewer than {@link #MIN_FILMS} match, when the normal rotation applies. In Christmas
-     * week {@code include} and {@code exclude} are the owner's TMDB ids ({@link ChristmasOverrides}). The Christmas row
-     * is {@link #christmasFilms} capped at {@link #MAX_FILMS}.
+     * Picks the theme for the ISO week containing {@code date}. In a holiday period ({@link HolidayWeeks}) the theme is
+     * that holiday's films, unless fewer than {@link #MIN_FILMS} match, when the normal rotation applies. In the
+     * Christmas period {@code include} and {@code exclude} are the owner's TMDB ids ({@link ChristmasOverrides}). The
+     * Christmas row is {@link #christmasFilms} for {@code date}, capped at {@link #MAX_FILMS}.
      */
     public static WeeklyTheme choose(LocalDate date, List<Film> library, Set<Long> include, Set<Long> exclude) {
         Optional<WeeklyTheme> holiday = HolidayWeeks.holidayFor(date)
-            .map(h -> holidayTheme(h, library, include, exclude))
+            .map(h -> holidayTheme(h, library, include, exclude, date))
             .filter(t -> t.films().size() >= MIN_FILMS);
         if (holiday.isPresent()) {
             return holiday.get();
@@ -70,21 +72,36 @@ public final class WeeklyThemeSelector {
     }
 
     /**
-     * Every Christmas film of the library in the order Home shows them, with no cap: not excluded, and either included
-     * or tagged with TMDB's {@code christmas} keyword. Home's row is the first {@link #MAX_FILMS} of this list.
+     * Every Christmas film of the library in the order Home shows them on {@code date}, with no cap: not excluded, and
+     * either included or tagged with TMDB's {@code christmas} keyword. Home's row is the first {@link #MAX_FILMS} of
+     * this list. The films the owner added by hand (an include, not excluded) come first in {@link #ROW_ORDER}; every
+     * other film follows in a shuffle seeded by {@code date}'s epoch day, applied to the {@link #ROW_ORDER} list, so
+     * the order is the same all day for Home and the Admin screen and a different dozen shows each day.
      */
-    public static List<Film> christmasFilms(List<Film> library, Set<Long> include, Set<Long> exclude) {
-        return ordered(library, f -> isChristmas(f, include, exclude));
+    public static List<Film> christmasFilms(List<Film> library, Set<Long> include, Set<Long> exclude,
+                                            LocalDate date) {
+        List<Film> all = ordered(library, f -> isChristmas(f, include, exclude));
+        List<Film> out = new ArrayList<>(all.stream().filter(f -> addedByOwner(f, include)).toList());
+        List<Film> rest = new ArrayList<>(all.stream().filter(f -> !addedByOwner(f, include)).toList());
+        Collections.shuffle(rest, new Random(date.toEpochDay()));
+        out.addAll(rest);
+        return List.copyOf(out);
+    }
+
+    /** True when the owner added the film by hand: it has an include (the exclude was already ruled out). */
+    private static boolean addedByOwner(Film film, Set<Long> include) {
+        return film.getTmdbId() != null && include.contains(film.getTmdbId());
     }
 
     private static WeeklyTheme holidayTheme(HolidayWeeks.Holiday holiday, List<Film> library,
-                                            Set<Long> include, Set<Long> exclude) {
+                                            Set<Long> include, Set<Long> exclude,
+                                            LocalDate date) {
         return switch (holiday) {
             case HALLOWEEN -> new WeeklyTheme("holiday", "halloween", "This week: Halloween",
                 WeeklyTheme.STANDING_CAPTION, pick(library, f -> f.getGenres().contains("Horror")));
             case CHRISTMAS -> new WeeklyTheme("holiday", "christmas", "This week: Christmas",
                 WeeklyTheme.STANDING_CAPTION,
-                christmasFilms(library, include, exclude).stream().limit(MAX_FILMS).toList());
+                christmasFilms(library, include, exclude, date).stream().limit(MAX_FILMS).toList());
         };
     }
 
