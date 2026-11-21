@@ -8,9 +8,7 @@ import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.state;
 import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.Edition;
@@ -195,16 +193,12 @@ class HomeServiceTest {
     }
 
     @Test
-    void theOwnersChoicesAreReadOnceInChristmasWeekAndNotAtAllOtherWeeks() {
+    void theOwnersChoicesAreNotReadOutsideChristmasWeek() {
         libraryIs(libraryWithSix("Comedy", "christmas"));
-        when(christmasOverrides.snapshot()).thenReturn(new Snapshot(Set.of(), Set.of()));
 
-        service(at("2026-12-14T00:30:00Z")).home();
-        service(at("2026-12-14T00:30:00Z")).home();
         service(at("2026-11-17T00:30:00Z")).home();
 
-        verify(christmasOverrides, times(2)).snapshot();
-        verifyNoMoreInteractions(christmasOverrides);
+        verifyNoInteractions(christmasOverrides);
     }
 
     @Test

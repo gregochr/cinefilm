@@ -53,18 +53,18 @@ class ChristmasOverrideIntegrationTest extends IntegrationTestBase {
     void theServiceReadsWritesFlipsAndDeletesThroughTheTable() {
         overrides.set(3L, ChristmasChoice.INCLUDE);
         overrides.set(4L, ChristmasChoice.EXCLUDE);
-        assertThat(overrides.includes()).containsExactly(3L);
-        assertThat(overrides.excludes()).containsExactly(4L);
+        assertThat(overrides.snapshot().include()).containsExactly(3L);
+        assertThat(overrides.snapshot().exclude()).containsExactly(4L);
 
         overrides.set(3L, ChristmasChoice.EXCLUDE);
-        assertThat(overrides.includes()).isEmpty();
-        assertThat(overrides.excludes()).containsExactlyInAnyOrder(3L, 4L);
+        assertThat(overrides.snapshot().include()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).containsExactlyInAnyOrder(3L, 4L);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM christmas_override WHERE tmdb_id = 3", Integer.class))
             .isEqualTo(1);
 
         overrides.remove(3L);
         overrides.remove(4L);
         overrides.remove(999L);
-        assertThat(overrides.excludes()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).isEmpty();
     }
 }

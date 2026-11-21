@@ -3,7 +3,6 @@ package gregochr.cinefilm.film;
 import java.time.Clock;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,18 +38,6 @@ public class ChristmasOverrides {
         return new Snapshot(Set.copyOf(include), Set.copyOf(exclude));
     }
 
-    /** The TMDB ids of the films the owner included. */
-    @Transactional(readOnly = true)
-    public Set<Long> includes() {
-        return ids(ChristmasChoice.INCLUDE);
-    }
-
-    /** The TMDB ids of the films the owner excluded. */
-    @Transactional(readOnly = true)
-    public Set<Long> excludes() {
-        return ids(ChristmasChoice.EXCLUDE);
-    }
-
     /**
      * Records the choice for a film, changing an earlier one in place (so a film never has both, and the row keeps
      * the time it was first made).
@@ -65,10 +52,5 @@ public class ChristmasOverrides {
     @Transactional
     public void remove(long tmdbId) {
         repository.deleteById(tmdbId);
-    }
-
-    private Set<Long> ids(ChristmasChoice choice) {
-        return repository.findByChoice(choice).stream().map(ChristmasOverride::getTmdbId)
-            .collect(Collectors.toUnmodifiableSet());
     }
 }

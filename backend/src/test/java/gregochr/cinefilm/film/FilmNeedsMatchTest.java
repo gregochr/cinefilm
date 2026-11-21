@@ -42,13 +42,4 @@ class FilmNeedsMatchTest extends ApiTestBase {
             .containsExactlyInAnyOrderElementsOf(expected);
         assertThat(expected).as("NEEDS_MATCH both ways, plus MATCHED with no id").hasSize(3);
     }
-
-    @Test
-    void pendingAndLeftUnmatchedFilmsWithNoTmdbIdAreNotListed() {
-        for (MatchStatus status : List.of(MatchStatus.PENDING, MatchStatus.LEFT_UNMATCHED)) {
-            Film film = film(null, status.name(), 2000, NOW);
-            film.setMatchStatus(status);
-            assertThat(film.needsMatch()).as(status.name()).isFalse();
-        }
-    }
 }

@@ -119,8 +119,8 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.keywords.total").value(4))
             .andExpect(jsonPath("$.keywords.fetched").value(1))
             .andExpect(jsonPath("$.keywords.running").value(false))
-            .andExpect(jsonPath("$.keywords.enabled").isBoolean())
-            .andExpect(jsonPath("$.keywords.stalled").isBoolean())
+            .andExpect(jsonPath("$.keywords.enabled").value(false))
+            .andExpect(jsonPath("$.keywords.stalled").value(true))
             .andExpect(jsonPath("$.inWeek[*].title", contains("Added", "Tagged")))
             .andExpect(jsonPath("$.inWeek[0].reason").value("ADDED"))
             .andExpect(jsonPath("$.inWeek[1].reason").value("KEYWORD"))
@@ -138,21 +138,21 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.added[*].filmId", hasSize(1)))
             .andExpect(jsonPath("$.inWeek[0].title").value("Plain"));
-        assertThat(overrides.includes()).containsExactly(5L);
+        assertThat(overrides.snapshot().include()).containsExactly(5L);
 
         mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"EXCLUDE\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.added", hasSize(0)))
             .andExpect(jsonPath("$.leftOut[0].title").value("Plain"))
             .andExpect(jsonPath("$.leftOut[0].taggedByTmdb").value(false));
-        assertThat(overrides.includes()).isEmpty();
-        assertThat(overrides.excludes()).containsExactly(5L);
+        assertThat(overrides.snapshot().include()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).containsExactly(5L);
 
         mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":null}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.leftOut", hasSize(0)))
             .andExpect(jsonPath("$.inWeek", hasSize(0)));
-        assertThat(overrides.excludes()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).isEmpty();
     }
 
     @Test
@@ -164,7 +164,7 @@ class ChristmasApiTest extends ApiTestBase {
 
         putChoice(6L, "\"INCLUDE\"");
 
-        assertThat(overrides.includes()).containsExactly(6L);
+        assertThat(overrides.snapshot().include()).containsExactly(6L);
     }
 
     @Test
@@ -177,15 +177,15 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.added", hasSize(0)));
         reload();
 
-        assertThat(overrides.includes()).isEmpty();
-        assertThat(overrides.excludes()).isEmpty();
+        assertThat(overrides.snapshot().include()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).isEmpty();
     }
 
     @Test
     void puttingBackAnExcludedTaggedFilmWithIncludeLeavesNoRow() throws Exception {
         add("Tagged", 1970, 5L, "christmas");
         putChoice(5L, "\"EXCLUDE\"");
-        assertThat(overrides.excludes()).containsExactly(5L);
+        assertThat(overrides.snapshot().exclude()).containsExactly(5L);
 
         mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"INCLUDE\"}"))
             .andExpect(status().isOk())
@@ -193,8 +193,8 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.inWeek[0].reason").value("KEYWORD"));
         reload();
 
-        assertThat(overrides.includes()).isEmpty();
-        assertThat(overrides.excludes()).isEmpty();
+        assertThat(overrides.snapshot().include()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).isEmpty();
     }
 
     @Test
@@ -210,7 +210,7 @@ class ChristmasApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.added[*].title", contains("Untagged twin")));
         reload();
 
-        assertThat(overrides.includes()).containsExactly(5L);
+        assertThat(overrides.snapshot().include()).containsExactly(5L);
     }
 
     @Test
@@ -235,7 +235,7 @@ class ChristmasApiTest extends ApiTestBase {
         mvc.perform(put("/api/admin/christmas/404").content("{\"choice\":\"INCLUDE\"}"))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.error").value("No film with TMDB id 404"));
-        assertThat(overrides.includes()).isEmpty();
+        assertThat(overrides.snapshot().include()).isEmpty();
     }
 
     @Test
@@ -245,7 +245,7 @@ class ChristmasApiTest extends ApiTestBase {
         mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"MAYBE\"}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("Invalid request"));
-        assertThat(overrides.includes()).isEmpty();
+        assertThat(overrides.snapshot().include()).isEmpty();
     }
 
     @Test
@@ -258,8 +258,8 @@ class ChristmasApiTest extends ApiTestBase {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Invalid request"));
         }
-        assertThat(overrides.includes()).containsExactly(5L);
-        assertThat(overrides.excludes()).isEmpty();
+        assertThat(overrides.snapshot().include()).containsExactly(5L);
+        assertThat(overrides.snapshot().exclude()).isEmpty();
     }
 
     @Test
@@ -269,7 +269,7 @@ class ChristmasApiTest extends ApiTestBase {
 
         mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":null}")).andExpect(status().isOk());
 
-        assertThat(overrides.excludes()).isEmpty();
+        assertThat(overrides.snapshot().exclude()).isEmpty();
     }
 
     @Test
@@ -290,7 +290,7 @@ class ChristmasApiTest extends ApiTestBase {
         mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"INCLUDE\"}"))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.error").value("A scan is running — try again when it finishes"));
-        assertThat(overrides.includes()).isEmpty();
+        assertThat(overrides.snapshot().include()).isEmpty();
     }
 
     @Test
