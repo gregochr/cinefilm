@@ -98,7 +98,7 @@ Two PRs:
 
 ## 3b — Admin: see and correct
 
-Specified after 3a-2 merges, against the handover's admin visual language, as `credits-detection-plan.md`'s "Admin
+**Specified in `credits-3b-admin-plan.md` (2026-11-21).** The outline it follows: specified after 3a-2 merges, against the handover's admin visual language, as `credits-detection-plan.md`'s "Admin
 (phase 3)": the list (film, edition, source, time, version 2's verdict and reasons, two stills), **Set** (`OWNER`),
 **Clear** (back to automatic: under the same lock it runs `CreditsApply` for that edition with its source treated
 as cleared, so marker and source change together, whatever `cinefilm.credits.apply.enabled` says), and `GET /api/admin/credits`, `PUT` and
