@@ -32,7 +32,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * The credits apply pass on PostgreSQL: it sets, clears and keeps markers, a second pass writes nothing, and a pass
  * costs a fixed number of statements however many editions a batch holds. Not transactional: the pass runs its own
- * transactions, so the seeded rows are committed (each test uses titles of its own).
+ * transactions, so the seeded rows are committed. The database is fresh per class and shared only by this class's
+ * tests; each test leaves every edition it seeded settled, so the other's first pass changes only its own.
  */
 class CreditsApplierIntegrationTest extends IntegrationTestBase {
 
@@ -102,19 +103,30 @@ class CreditsApplierIntegrationTest extends IntegrationTestBase {
     void aPassSetsClearsAndKeepsAndASecondPassWritesNothing() {
         Edition toSet = seeded("Apply Set", null, null);
         plexRow(toSet, FINGERPRINT, 5_000_000);
+        Edition atMarker = seeded("Apply AtMarker", null, null);
+        plexRow(atMarker, FINGERPRINT, 5_000_000);
+        Edition justBefore = seeded("Apply JustBefore", null, null);
+        plexRow(justBefore, FINGERPRINT, 5_000_000);
+        Edition hidden = seeded("Apply Hidden", null, null);
+        plexRow(hidden, FINGERPRINT, 5_000_000);
         Edition toClear = seeded("Apply Clear", 5_500_000L, CreditsMarkerSource.AUTO);
         plexRow(toClear, "1:2", 5_000_000);
         Edition owner = seeded("Apply Owner", 5_500_000L, CreditsMarkerSource.OWNER);
         plexRow(owner, FINGERPRINT, 5_000_000);
         Edition same = seeded("Apply Same", 5_000_000L, CreditsMarkerSource.PLEX);
         plexRow(same, FINGERPRINT, 5_000_000);
-        states.save(inProgress(toSet, 5_200_000));
+        states.save(inProgress(toSet, 5_200_000, false));
+        states.save(inProgress(atMarker, 5_000_000, false));
+        states.save(inProgress(justBefore, 4_999_999, false));
+        states.save(inProgress(hidden, 5_200_000, true));
+        states.save(inProgress(toClear, 5_200_000, false));
 
         PassResult first = applier.runPass();
 
         assertThat(first.lockTaken()).isTrue();
-        assertThat(first.changed()).isGreaterThanOrEqualTo(2);
-        assertThat(first.inProgressPastMarker()).isEqualTo(1);
+        assertThat(first.changed()).isEqualTo(5);
+        assertThat(first.cleared()).isEqualTo(1);
+        assertThat(first.inProgressPastMarker()).isEqualTo(2);
         assertThat(stored(toSet)).containsEntry("credits_marker_ms", 5_000_000L)
             .containsEntry("credits_marker_source", "PLEX");
         assertThat(stored(toClear)).containsEntry("credits_marker_ms", null)
@@ -132,9 +144,10 @@ class CreditsApplierIntegrationTest extends IntegrationTestBase {
         assertThat(second.unchanged()).isEqualTo(first.changed() + first.unchanged());
     }
 
-    private static PlaybackState inProgress(Edition edition, long positionMs) {
+    private static PlaybackState inProgress(Edition edition, long positionMs, boolean hidden) {
         PlaybackState state = new PlaybackState(edition.getId());
         state.setPositionMs(positionMs);
+        state.setHiddenFromContinueWatching(hidden);
         return state;
     }
 

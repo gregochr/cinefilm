@@ -3,8 +3,8 @@ package gregochr.cinefilm.credits;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -81,10 +81,25 @@ class CreditsApplierTest {
         return row;
     }
 
-    private void library(List<Edition> all, PlexCreditsMarker... rows) {
-        when(editions.findAllIds()).thenReturn(all.stream().map(Edition::getId).toList());
-        when(editions.findWithFilesByIdIn(anyList())).thenReturn(all);
-        when(markers.findAllById(anyList())).thenReturn(List.of(rows));
+    /** The database holds these editions; the pass asks for their last parts' rows by exactly these file ids. */
+    private void library(List<Edition> all, List<Long> lastFileIds, PlexCreditsMarker... rows) {
+        List<Long> ids = all.stream().map(Edition::getId).toList();
+        when(editions.findAllIds()).thenReturn(ids);
+        when(editions.findWithFilesByIdIn(ids)).thenReturn(all);
+        when(markers.findAllById(lastFileIds)).thenReturn(List.of(rows));
+    }
+
+    /** Adds an original part to an edition (appended, so the caller controls the order in the list). */
+    private static void part(Edition edition, long fileId, int partNumber, long durationMs) {
+        MediaFile file = new MediaFile();
+        file.setId(fileId);
+        file.setEdition(edition);
+        file.setKind(MediaKind.ORIGINAL);
+        file.setPartNumber(partNumber);
+        file.setDurationMs(durationMs);
+        file.setSizeBytes(4_000_000_000L);
+        file.setModifiedAt(Instant.ofEpochMilli(MODIFIED));
+        edition.getMediaFiles().add(file);
     }
 
     @Test
@@ -118,9 +133,10 @@ class CreditsApplierTest {
     }
 
     @Test
-    void anInterruptedWaitGivesUpAndKeepsTheInterruptFlag() {
+    void anInterruptedWaitGivesUpAfterOneSleepAndKeepsTheInterruptFlag() {
         lock.tryAcquire(LibraryLock.SCAN);
         sleeper = d -> {
+            sleeps.add(d);
             throw new InterruptedException("stop");
         };
 
@@ -130,6 +146,10 @@ class CreditsApplierTest {
         } finally {
             Thread.interrupted();
         }
+
+        assertThat(sleeps).hasSize(1);
+        assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
+        verifyNoInteractions(editions, markers, states);
     }
 
     @Test
@@ -149,10 +169,10 @@ class CreditsApplierTest {
         Edition unchanged = edition(3, 5_000_000L, CreditsMarkerSource.PLEX);
         Edition sourceOnly = edition(4, 5_000_000L, null);
         Edition untouchedNone = edition(5, null, null);
-        library(List.of(setPlex, staleCleared, unchanged, sourceOnly, untouchedNone),
+        library(List.of(setPlex, staleCleared, unchanged, sourceOnly, untouchedNone), List.of(1L, 2L, 3L, 4L, 5L),
             row(1, FINGERPRINT, 5_000_000), row(2, "other", 5_000_000), row(3, FINGERPRINT, 5_000_000),
             row(4, FINGERPRINT, 5_000_000));
-        when(states.countInProgressAtOrPastMarker(anyList())).thenReturn(0L);
+        when(states.countInProgressAtOrPastMarker(List.of(1L, 2L, 4L))).thenReturn(0L);
 
         PassResult result = applier().runPass();
 
@@ -172,7 +192,7 @@ class CreditsApplierTest {
     @Test
     void anOwnerMarkerIsSkippedAndCountedWhateverPlexSays() {
         Edition owner = edition(1, 5_500_000L, CreditsMarkerSource.OWNER);
-        library(List.of(owner), row(1, FINGERPRINT, 5_000_000));
+        library(List.of(owner), List.of(1L), row(1, FINGERPRINT, 5_000_000));
 
         PassResult result = applier().runPass();
 
@@ -201,13 +221,29 @@ class CreditsApplierTest {
     void theInProgressCountIsTheStatesAtOrPastTheChangedEditionsNewMarkers() {
         Edition setPlex = edition(1, null, null);
         Edition other = edition(2, null, null);
-        library(List.of(setPlex, other), row(1, FINGERPRINT, 5_000_000));
+        library(List.of(setPlex, other), List.of(1L, 2L), row(1, FINGERPRINT, 5_000_000));
         when(states.countInProgressAtOrPastMarker(List.of(1L))).thenReturn(4L);
 
         PassResult result = applier().runPass();
 
         assertThat(result.inProgressPastMarker()).isEqualTo(4L);
         assertThat(result.plexSet()).isEqualTo(1);
+    }
+
+    @Test
+    void aTwoPartEditionIsAppliedFromTheLastPartsRowAtItsEditionTime() {
+        Edition twoParts = new Edition();
+        twoParts.setId(7L);
+        part(twoParts, 11, 2, 2_000_000L);
+        part(twoParts, 10, 1, 4_000_000L);
+        library(List.of(twoParts), List.of(11L), row(11, FINGERPRINT, 1_500_000));
+        when(states.countInProgressAtOrPastMarker(List.of(7L))).thenReturn(0L);
+
+        PassResult result = applier().runPass();
+
+        assertThat(twoParts.getCreditsMarkerMs()).isEqualTo(5_500_000L);
+        assertThat(twoParts.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.PLEX);
+        assertThat(result).isEqualTo(new PassResult(true, 1, 1, 0, 0, 0, 0));
     }
 
     @Test
