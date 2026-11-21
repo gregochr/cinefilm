@@ -30,7 +30,7 @@ export function shortDate(iso) {
   return `${DAYS[date.getUTCDay()]} ${day} ${MONTHS[month - 1]}`;
 }
 
-/** "Mon 14 Dec to Sun 20 Dec". */
+/** "Mon 14 Dec to Fri 25 Dec": the period runs from a Monday to Christmas Day. */
 export const weekText = (week) => `${shortDate(week.start)} to ${shortDate(week.end)}`;
 
 /** The three tab counts. */
@@ -140,7 +140,7 @@ export function statusText(data) {
   return {
     bold: filmsText(n),
     rest: ` will show in Christmas week (${weekText(data.week)}).`,
-    hint: `Home shows up to ${max}, oldest first. Under ${min} and it falls back to the usual weekly theme.`,
+    hint: `Home shows up to ${max}: films you added first, then a different mix each day. Under ${min} and it falls back to the usual weekly theme.`,
   };
 }
 

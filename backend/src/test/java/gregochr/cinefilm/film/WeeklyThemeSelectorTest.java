@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gregochr.cinefilm.person.Person;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -233,16 +234,16 @@ class WeeklyThemeSelectorTest {
     }
 
     @Test
-    void halloweenWeekIsTheSameFromMondayToSunday() {
+    void halloweenIsTheSameFromTheMondayThroughThirtyFirstOctober() {
         List<Film> library = library();
         for (int i = 0; i < 6; i++) {
             library.add(horror(1970 + i));
         }
-        for (int day = 0; day < 7; day++) {
+        for (int day = 0; day < 13; day++) {
             assertThat(WeeklyThemeSelector.choose(LocalDate.of(2026, 10, 19).plusDays(day), library).value())
-                .isEqualTo("halloween");
+                .as("day " + day).isEqualTo("halloween");
         }
-        assertThat(WeeklyThemeSelector.choose(LocalDate.of(2026, 10, 26), library).kind()).isNotEqualTo("holiday");
+        assertThat(WeeklyThemeSelector.choose(LocalDate.of(2026, 11, 1), library).kind()).isNotEqualTo("holiday");
     }
 
     @Test
@@ -286,7 +287,7 @@ class WeeklyThemeSelectorTest {
     }
 
     @Test
-    void christmasWeekIsFilmsTaggedChristmasOldestFirst() {
+    void christmasWeekIsFilmsTaggedChristmas() {
         List<Film> library = christmasLibrary(5);
         library.add(horror(1990));
 
@@ -296,7 +297,8 @@ class WeeklyThemeSelectorTest {
         assertThat(theme.value()).isEqualTo("christmas");
         assertThat(theme.title()).isEqualTo("This week: Christmas");
         assertThat(theme.caption()).isEqualTo("A new theme every Monday");
-        assertThat(theme.films()).extracting(Film::getYear).containsExactly(1980, 1981, 1982, 1983, 1984);
+        assertThat(theme.films()).extracting(Film::getYear)
+            .containsExactlyInAnyOrder(1980, 1981, 1982, 1983, 1984);
     }
 
     @Test
@@ -306,18 +308,16 @@ class WeeklyThemeSelectorTest {
     }
 
     @Test
-    void christmasWeekCapsAtTwelveOldestFirst() {
+    void christmasWeekCapsAtTwelve() {
         WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, christmasLibrary(15));
-        assertThat(theme.films()).hasSize(WeeklyThemeSelector.MAX_FILMS);
-        assertThat(theme.films()).extracting(Film::getYear).first().isEqualTo(1980);
-        assertThat(theme.films()).extracting(Film::getYear).last().isEqualTo(1991);
+        assertThat(theme.films()).hasSize(WeeklyThemeSelector.MAX_FILMS).doesNotHaveDuplicates();
     }
 
     @Test
     void christmasFilmsHasNoCapAndHomesRowIsItsFirstTwelve() {
         List<Film> library = christmasLibrary(15);
 
-        List<Film> all = WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of());
+        List<Film> all = WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of(), CHRISTMAS_WEEK);
 
         assertThat(all).hasSize(15);
         assertThat(WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library).films())
@@ -331,10 +331,78 @@ class WeeklyThemeSelectorTest {
         later.getKeywords().add("christmas");
         earlier.getKeywords().add("christmas");
 
-        assertThat(WeeklyThemeSelector.christmasFilms(List.of(later, earlier), Set.of(), Set.of()))
-            .containsExactly(earlier, later);
-        assertThat(WeeklyThemeSelector.christmasFilms(List.of(earlier, later), Set.of(), Set.of()))
-            .containsExactly(earlier, later);
+        assertThat(WeeklyThemeSelector.christmasFilms(List.of(later, earlier), Set.of(), Set.of(), CHRISTMAS_WEEK))
+            .isEqualTo(WeeklyThemeSelector.christmasFilms(List.of(earlier, later), Set.of(), Set.of(), CHRISTMAS_WEEK))
+            .containsExactlyInAnyOrder(earlier, later);
+    }
+
+    private static List<Long> tmdbIds(List<Film> films) {
+        return films.stream().map(Film::getTmdbId).toList();
+    }
+
+    @Test
+    void theChristmasOrderPutsTheOwnersAddedFilmsFirstInRowOrderThenTheRest() {
+        List<Film> library = christmasLibrary(15);
+        library.add(christmas(2001, 700L));
+        library.add(christmas(1950, 701L));
+        library.add(christmas(1999, 702L, "christmas"));
+        Set<Long> include = Set.of(700L, 701L, 702L, 999L);
+
+        for (int day = 0; day < 10; day++) {
+            List<Film> all = WeeklyThemeSelector.christmasFilms(library, include, Set.of(),
+                CHRISTMAS_WEEK.plusDays(day));
+
+            assertThat(tmdbIds(all)).as("day " + day).hasSize(18).startsWith(701L, 702L, 700L);
+        }
+    }
+
+    @Test
+    void anExcludedIncludeIsNotAddedByTheOwnerAndNotInTheList() {
+        List<Film> library = christmasLibrary(5);
+        library.add(christmas(1950, 701L));
+
+        List<Film> all = WeeklyThemeSelector.christmasFilms(library, Set.of(701L), Set.of(701L), CHRISTMAS_WEEK);
+
+        assertThat(tmdbIds(all)).doesNotContain(701L).hasSize(5);
+    }
+
+    @Test
+    void theRestIsShuffledTheSameAllDayWhateverOrderTheLibraryIsInAndDiffersBetweenDays() {
+        List<Film> library = christmasLibrary(30);
+        List<Film> reversed = new ArrayList<>(library);
+        Collections.reverse(reversed);
+
+        List<Film> today = WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of(), CHRISTMAS_WEEK);
+
+        assertThat(WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of(), CHRISTMAS_WEEK)).isEqualTo(today);
+        assertThat(WeeklyThemeSelector.christmasFilms(reversed, Set.of(), Set.of(), CHRISTMAS_WEEK)).isEqualTo(today);
+        assertThat(today).extracting(Film::getYear).isNotEqualTo(
+            library.stream().filter(f -> f.getTmdbId() != null).map(Film::getYear).sorted().toList());
+        List<Film> tomorrow = WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of(),
+            CHRISTMAS_WEEK.plusDays(1));
+        assertThat(tomorrow).isNotEqualTo(today).containsExactlyInAnyOrderElementsOf(today);
+        assertThat(tomorrow.subList(0, WeeklyThemeSelector.MAX_FILMS))
+            .isNotEqualTo(today.subList(0, WeeklyThemeSelector.MAX_FILMS));
+    }
+
+    @Test
+    void aDaysOrderIsNotAffectedByCallsForOtherDays() {
+        List<Film> library = christmasLibrary(30);
+        List<Film> first = WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of(), CHRISTMAS_WEEK);
+
+        WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of(), CHRISTMAS_WEEK.plusDays(1));
+        WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of(), CHRISTMAS_WEEK.minusDays(3));
+
+        assertThat(WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of(), CHRISTMAS_WEEK)).isEqualTo(first);
+    }
+
+    @Test
+    void christmasDayItselfStillShowsTheChristmasRowAndTheDayAfterDoesNot() {
+        List<Film> library = christmasLibrary(6);
+
+        assertThat(WeeklyThemeSelector.choose(LocalDate.of(2026, 12, 25), library).value()).isEqualTo("christmas");
+        assertThat(WeeklyThemeSelector.choose(LocalDate.of(2026, 12, 21), library).value()).isEqualTo("christmas");
+        assertThat(WeeklyThemeSelector.choose(LocalDate.of(2026, 12, 26), library).kind()).isNotEqualTo("holiday");
     }
 
     @Test
@@ -416,8 +484,8 @@ class WeeklyThemeSelectorTest {
             film.getGenres().add("Horror");
             withHoliday.add(film);
         }
-        LocalDate monday = LocalDate.of(2026, 10, 26);
-        for (int week = 0; week < 7; week++) {
+        LocalDate monday = LocalDate.of(2026, 11, 2);
+        for (int week = 0; week < 6; week++) {
             assertThat(WeeklyThemeSelector.choose(monday.plusWeeks(week), withHoliday).kind())
                 .as("week of %s", monday.plusWeeks(week)).isNotEqualTo("holiday");
         }

@@ -1,7 +1,7 @@
 # Task: an Admin screen for managing Christmas films
 
 In Christmas week, Home's weekly theme becomes "This week: Christmas". PRs #227 and #228 built the rule:
-- `HolidayWeeks`: the Monday on or before 18 Dec, through Sunday.
+- `HolidayWeeks`: the Monday on or before 18 Dec, through Sunday (changed 2026-11-21: now through 25 Dec; see Deviations).
 - `WeeklyThemeSelector`: TMDB keyword `christmas`, at most 12 films (`MAX_FILMS`), falling back to the usual theme when fewer than 5 (`MIN_FILMS`). Sorted by year, then sort title.
 - The owner's overrides were TMDB ids in a `HolidayOverrides` record set by the `CINEFILM_HOLIDAY_CHRISTMAS_INCLUDE` / `_EXCLUDE` environment variables; that mechanism was removed (see Deviations in the build). Exclude beats include, and include beats the keyword.
 
@@ -39,7 +39,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 
 ### 2. API (under `/api/admin/christmas`, signed-in only)
 - **`GET`** returns:
-  - **`week`:** `{ start, end }` of this year's Christmas week. Once that week has ended, return next year's.
+  - **`week`:** `{ start, end }` of this year's Christmas period (Monday on or before 18 Dec through 25 Dec). Once 25 Dec has passed, return next year's.
   - **`limits`:** `{ max: 12, min: 5 }` from the selector's constants.
   - **`keywords`:** `{ fetched, total, running }` (films with a TMDB id; `keywordsFetchedAt` set; `KeywordsRefresher.isRunning()`).
   - **`inWeek`:** every film that counts, in the selector's order, **without the 12 limit**. Each has `{ filmId, tmdbId, title, year, posterUrl, reason: 'KEYWORD' | 'ADDED' }`. The client marks rows 13 and after as cut.
@@ -73,8 +73,8 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 1. **Rule line,** in 15px `#D5CCBE`: "A film counts if TMDB tags it with the “christmas” keyword, unless you leave it out. You can also add any film yourself."
 2. **Status card:**
    - **Text:**
-     - "**{n} films** will show in Christmas week (Mon 14 Dec to Sun 20 Dec)."
-     - Under it: "Home shows up to 12, oldest first. Under 5 and it falls back to the usual weekly theme."
+     - "**{n} films** will show in Christmas week (Mon 14 Dec to Fri 25 Dec)."
+     - Under it: "Home shows up to 12: films you added first, then a different mix each day. Under 5 and it falls back to the usual weekly theme."
      - Use proper dates from `week`. Say "1 film" for one.
    - **The 12-slot meter** on the right:
      - 12 small segments: filled amber for each place used, `#2A251F` when empty.
@@ -179,6 +179,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 
 ## Deviations in the build
 
+- **The period runs to the day, and the order is shuffled daily (owner, 2026-11-21).** Christmas is the Monday on or before 18 Dec through 25 Dec inclusive (Halloween through 31 Oct), not Monday to Sunday, so Home keeps the row on 21 to 25 Dec. The order is no longer oldest-first: films the owner added come first (year, sort title, id), then every other film in a shuffle seeded by the London date, so a different dozen shows each day. Home and the screen agree for a given day (one code path); the screen's hint now reads "Home shows up to 12: films you added first, then a different mix each day." The mock-ups still show the old wording and Sunday date.
 - **No environment-variable seed.** The variables were never released or set, so there was nothing to migrate; `HolidayOverrides`, `HolidayConfig` and the two properties were removed (owner, 2026-11-19).
 - **The add search is a plain textbox with a plain list of result buttons**, not a combobox/listbox, because each result row holds a button (recorded in `christmas-films-plan.md`).
 - **A redundant INCLUDE row is never deleted** (the first build deleted it on the next write, which no Undo could restore and which would drop a film TMDB later un-tags); the reason, KEYWORD or ADDED, is decided on every read. Known and accepted: Leave out then Put back on a keyword film that also has a hidden INCLUDE row loses that row (Put back deletes it); Undo of the Leave out restores it, Put back does not.

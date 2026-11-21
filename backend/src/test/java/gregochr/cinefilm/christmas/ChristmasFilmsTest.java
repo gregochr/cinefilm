@@ -10,6 +10,7 @@ import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -107,7 +108,7 @@ class ChristmasFilmsTest {
     }
 
     @Test
-    void excludeBeatsIncludeBeatsTheKeywordAndTheOrderIsYearThenSortTitle() {
+    void excludeBeatsIncludeBeatsTheKeywordAndTheOwnersFilmsComeFirstInYearOrder() {
         Film excludedAndTagged = mk(1, "Excluded", 1950, 11L, "christmas");
         Film excludedAndIncluded = mk(2, "Both", 1951, 12L);
         Film includedAndTagged = mk(3, "Included tagged", 1980, 13L, "christmas");
@@ -121,9 +122,11 @@ class ChristmasFilmsTest {
 
         ChristmasView view = service.view();
 
-        assertThat(view.inWeek()).extracting(Item::filmId).containsExactly(3L, 5L, 4L, 6L);
-        assertThat(view.inWeek()).extracting(Item::reason)
-            .containsExactly(Reason.KEYWORD, Reason.KEYWORD, Reason.KEYWORD, Reason.ADDED);
+        assertThat(view.inWeek()).extracting(Item::filmId)
+            .startsWith(3L, 6L).containsExactlyInAnyOrder(3L, 4L, 5L, 6L);
+        assertThat(view.inWeek()).extracting(Item::filmId, Item::reason).containsExactlyInAnyOrder(
+            tuple(3L, Reason.KEYWORD), tuple(4L, Reason.KEYWORD), tuple(5L, Reason.KEYWORD),
+            tuple(6L, Reason.ADDED));
         assertThat(view.inWeek().get(0)).isEqualTo(new Item(3L, 13L, "Included tagged", 1980, null, Reason.KEYWORD,
             ChristmasChoice.INCLUDE));
     }
@@ -209,28 +212,30 @@ class ChristmasFilmsTest {
     }
 
     @Test
-    void theWeekIsThisYearsUntilItsSundayEndsThenNextYears() {
+    void thePeriodIsThisYearsUntilChristmasDayEndsThenNextYears() {
         library();
         overrides(Set.of(), Set.of());
 
         assertThat(serviceAt(CLOCK).view().week()).as("2024-03-31: this year's")
-            .isEqualTo(new WeekDto(LocalDate.of(2024, 12, 16), LocalDate.of(2024, 12, 22)));
-        assertThat(serviceAt(on("2026-12-20")).view().week()).as("the Sunday it ends")
-            .isEqualTo(new WeekDto(LocalDate.of(2026, 12, 14), LocalDate.of(2026, 12, 20)));
-        assertThat(serviceAt(on("2026-12-21")).view().week()).as("the Monday after")
-            .isEqualTo(new WeekDto(LocalDate.of(2027, 12, 13), LocalDate.of(2027, 12, 19)));
+            .isEqualTo(new WeekDto(LocalDate.of(2024, 12, 16), LocalDate.of(2024, 12, 25)));
+        assertThat(serviceAt(on("2026-12-21")).view().week()).as("the Monday after the first Sunday")
+            .isEqualTo(new WeekDto(LocalDate.of(2026, 12, 14), LocalDate.of(2026, 12, 25)));
+        assertThat(serviceAt(on("2026-12-25")).view().week()).as("Christmas Day")
+            .isEqualTo(new WeekDto(LocalDate.of(2026, 12, 14), LocalDate.of(2026, 12, 25)));
+        assertThat(serviceAt(on("2026-12-26")).view().week()).as("Boxing Day")
+            .isEqualTo(new WeekDto(LocalDate.of(2027, 12, 13), LocalDate.of(2027, 12, 25)));
     }
 
     @Test
-    void inTheYearEighteenDecemberIsAMondayTheWeekStartsOnItAndRollsOverAfterTheTwentyFourth() {
+    void inTheYearEighteenDecemberIsAMondayThePeriodStartsOnItAndRollsOverAfterTheTwentyFifth() {
         library();
         overrides(Set.of(), Set.of());
 
         assertThat(serviceAt(on("2023-12-01")).view().week())
-            .isEqualTo(new WeekDto(LocalDate.of(2023, 12, 18), LocalDate.of(2023, 12, 24)));
-        assertThat(serviceAt(on("2023-12-24")).view().week().end()).isEqualTo(LocalDate.of(2023, 12, 24));
-        assertThat(serviceAt(on("2023-12-25")).view().week())
-            .isEqualTo(new WeekDto(LocalDate.of(2024, 12, 16), LocalDate.of(2024, 12, 22)));
+            .isEqualTo(new WeekDto(LocalDate.of(2023, 12, 18), LocalDate.of(2023, 12, 25)));
+        assertThat(serviceAt(on("2023-12-25")).view().week().end()).isEqualTo(LocalDate.of(2023, 12, 25));
+        assertThat(serviceAt(on("2023-12-26")).view().week())
+            .isEqualTo(new WeekDto(LocalDate.of(2024, 12, 16), LocalDate.of(2024, 12, 25)));
     }
 
     @Test

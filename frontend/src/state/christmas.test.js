@@ -40,7 +40,7 @@ import {
   weekText,
 } from './christmas.js';
 
-const week = { start: '2026-12-14', end: '2026-12-20' };
+const week = { start: '2026-12-14', end: '2026-12-25' };
 const films = (n) =>
   Array.from({ length: n }, (_, i) => ({ tmdbId: i, title: `F${i}`, reason: 'KEYWORD' }));
 const body = (over = {}) => ({
@@ -55,8 +55,8 @@ const body = (over = {}) => ({
 });
 
 describe('week and counts wording', () => {
-  it('writes the week as Mon 14 Dec to Sun 20 Dec', () => {
-    expect(weekText(week)).toBe('Mon 14 Dec to Sun 20 Dec');
+  it('writes the week as Mon 14 Dec to Fri 25 Dec', () => {
+    expect(weekText(week)).toBe('Mon 14 Dec to Fri 25 Dec');
   });
 
   it('reads an ISO date as a calendar day across a year end', () => {
@@ -209,8 +209,8 @@ describe('status card', () => {
   it('says how many films show and when', () => {
     expect(statusText(body())).toEqual({
       bold: '14 films',
-      rest: ' will show in Christmas week (Mon 14 Dec to Sun 20 Dec).',
-      hint: 'Home shows up to 12, oldest first. Under 5 and it falls back to the usual weekly theme.',
+      rest: ' will show in Christmas week (Mon 14 Dec to Fri 25 Dec).',
+      hint: 'Home shows up to 12: films you added first, then a different mix each day. Under 5 and it falls back to the usual weekly theme.',
     });
   });
 

@@ -4,7 +4,7 @@ import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
-import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -71,8 +71,9 @@ class HomeHolidayApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.weeklyTheme.value").value("christmas"))
             .andExpect(jsonPath("$.weeklyTheme.title").value("This week: Christmas"))
             .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme every Monday"))
+            .andExpect(jsonPath("$.weeklyTheme.films[0].title").value("Included"))
             .andExpect(jsonPath("$.weeklyTheme.films[*].title",
-                contains("Included", "Tagged C", "Tagged A", "Tagged B", "Tagged D")));
+                containsInAnyOrder("Included", "Tagged C", "Tagged A", "Tagged B", "Tagged D")));
     }
 
     @Test
@@ -87,22 +88,23 @@ class HomeHolidayApiTest extends ApiTestBase {
         today("2026-12-14T09:00:00Z");
 
         mvc.perform(get("/api/home"))
-            .andExpect(jsonPath("$.weeklyTheme.films[*].title", contains("Tagged C", "Tagged A", "Tagged B",
-                "Tagged D", "Tagged E")));
+            .andExpect(jsonPath("$.weeklyTheme.films[*].title", containsInAnyOrder("Tagged C", "Tagged A",
+                "Tagged B", "Tagged D", "Tagged E")));
 
         overrides.set(901L, ChristmasChoice.INCLUDE);
         overrides.set(3L, ChristmasChoice.EXCLUDE);
         reload();
         mvc.perform(get("/api/home"))
-            .andExpect(jsonPath("$.weeklyTheme.films[*].title", contains("Extra", "Tagged A", "Tagged B",
-                "Tagged D", "Tagged E")));
+            .andExpect(jsonPath("$.weeklyTheme.films[0].title").value("Extra"))
+            .andExpect(jsonPath("$.weeklyTheme.films[*].title", containsInAnyOrder("Extra", "Tagged A",
+                "Tagged B", "Tagged D", "Tagged E")));
 
         overrides.set(901L, ChristmasChoice.EXCLUDE);
         overrides.remove(3L);
         reload();
         mvc.perform(get("/api/home"))
-            .andExpect(jsonPath("$.weeklyTheme.films[*].title", contains("Tagged C", "Tagged A", "Tagged B",
-                "Tagged D", "Tagged E")));
+            .andExpect(jsonPath("$.weeklyTheme.films[*].title", containsInAnyOrder("Tagged C", "Tagged A",
+                "Tagged B", "Tagged D", "Tagged E")));
     }
 
     @Test
