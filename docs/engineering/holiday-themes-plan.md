@@ -1,6 +1,6 @@
 # Holiday themes plan (Halloween and Christmas weeks)
 
-Status: plan, owner answers 2026-11-18. Not built.
+Status: built (#227, #228); the Christmas films admin screen that manages the overrides is `christmas-films-plan.md`. Differences from this plan: the keyword match is on the keyword *name* `christmas`, not id 207317; the fetch is a separate `KeywordsRefresher` (which also runs at start-up), not part of the languages fetch; the admin screen answers the open point about printing the matches.
 
 ## What the owner wants
 

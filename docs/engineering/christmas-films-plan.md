@@ -1,6 +1,6 @@
 # Christmas films admin screen plan
 
-Status: plan, owner request 2026-11-19. Builds on `holiday-themes-plan.md` (PRs #227, #228).
+Status: built (#231, #233, #235, #239, #243, #246, #259, #260, #261); owner request 2026-11-19. Builds on `holiday-themes-plan.md` (PRs #227, #228).
 
 ## What the owner wants
 
@@ -93,7 +93,7 @@ says so in search; both layouts and every state in `04` work; no reference to `C
 
 Slices 1-3 are merged (#231, #233 API, #235, #239, #243). Slice 4 (add a film) was built as three PRs, all merged:
 #246 (groundwork: states API, state helpers, results list), #259 (the desktop search panel), #260 (the phone sheet, the
-toast hold, the restored copy). The Home preview below is **slice 5**; the text under "4a" describes the first design,
+toast hold, the restored copy). The Home preview below is **slice 5** (the last slice; the PR titles' "x/6" was a miscount, there is no slice 6); the text under "4a" describes the first design,
 and the build differs in one way: the search is a plain textbox with a plain list of result buttons (no combobox or
 listbox roles), because each row holds a button.
 
