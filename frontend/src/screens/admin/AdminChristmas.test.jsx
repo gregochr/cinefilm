@@ -459,6 +459,52 @@ describe('Christmas films: changes and undo', () => {
     expect(toast()).toBeEmptyDOMElement();
   });
 
+  it('counts the 8 seconds once focus, lost with the held button, lands on another control', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const original = fresh();
+    serve({ put: () => respond(leftOut(original, 106)) });
+    await open();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await user.keyboard('{Enter}');
+    const held = await screen.findByRole('button', { name: 'Leave out Scrooged' });
+    await waitFor(() => expect(held).toHaveFocus());
+
+    // The button goes (a quiet re-read dropped its row): no blur is sent, focus falls to the page body.
+    act(() => held.remove());
+    expect(document.body).toHaveFocus();
+    act(() => vi.advanceTimersByTime(20000));
+    expect(toast()).toHaveTextContent('Left out Die Hard.');
+
+    act(() => screen.getByRole('combobox').focus());
+    act(() => vi.advanceTimersByTime(7900));
+    expect(toast()).toHaveTextContent('Left out Die Hard.');
+    act(() => vi.advanceTimersByTime(200));
+    expect(toast()).toBeEmptyDOMElement();
+  });
+
+  it('removes its listeners and starts no timer when the screen goes while it holds the toast', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const original = fresh();
+    serve({ put: () => respond(leftOut(original, 106)) });
+    const view = renderApp('/admin/christmas');
+    await screen.findByRole('tablist', { name: 'Christmas lists' });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    screen.getByRole('button', { name: 'Leave out Die Hard' }).focus();
+    await user.keyboard('{Enter}');
+    const held = await screen.findByRole('button', { name: 'Leave out Scrooged' });
+    await waitFor(() => expect(held).toHaveFocus());
+
+    const removed = vi.spyOn(document, 'removeEventListener');
+    const timers = vi.getTimerCount();
+    view.unmount();
+    expect(removed).toHaveBeenCalledWith('focusin', expect.any(Function));
+    // Nothing is left to fire on the gone screen.
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(timers);
+    act(() => vi.advanceTimersByTime(20000));
+    removed.mockRestore();
+  });
+
   it('leaves focus alone when the owner moved it before the answer came', async () => {
     const original = fresh();
     const gate = deferred();

@@ -151,18 +151,18 @@ export default function AdminChristmas() {
       return;
     }
     if (focusRequest.undo) {
-      const entry = followingRows.current.get(focusRequest.filmId);
-      const ids = entry?.ids ?? [focusRequest.filmId];
+      // A change from a list row always went through `act`, which left the row, the rows after it and the button.
+      const { ids, opener, keyboard } = followingRows.current.get(focusRequest.filmId);
       followingRows.current.delete(focusRequest.filmId);
       // Focus moves on only if it is still where the press left it (or was lost with the row); anything the owner
       // did meanwhile (another tab, the search field) keeps it.
-      const pressed = entry?.opener;
-      if (!(lost || active === pressed)) return;
+      if (!(lost || active === opener)) return;
       const target = ids.map((id) => buttons.current.get(id)).find(Boolean) ?? panel.current;
-      if (!target) return;
       target.focus();
-      if (!entry?.keyboard) return;
-      // Undo sits after the whole list: after a keyboard press the toast waits while focus rests here, and counts down once it leaves.
+      if (!keyboard) return;
+      // Undo sits after the whole list: after a keyboard press the toast waits while focus rests here, and counts
+      // down once it leaves (focus goes elsewhere, the button goes with focus lost to the body and then elsewhere,
+      // or the screen goes).
       keepToast(true);
       const leave = () => {
         document.removeEventListener('focusin', onIn);
@@ -174,7 +174,7 @@ export default function AdminChristmas() {
       };
       target.addEventListener('blur', leave);
       document.addEventListener('focusin', onIn);
-      return;
+      return leave;
     }
     const button =
       focusRequest.filmId === null
@@ -216,9 +216,9 @@ export default function AdminChristmas() {
     const act = (row, opener, keyboard) => {
       const at = rows.findIndex((r) => r.filmId === row.filmId);
       followingRows.current.set(row.filmId, {
-        ids: rows.slice(Math.max(at, 0)).map((r) => r.filmId),
-        opener: opener ?? null,
-        keyboard: keyboard === true,
+        ids: rows.slice(at).map((r) => r.filmId),
+        opener,
+        keyboard,
       });
       return state.change(row);
     };

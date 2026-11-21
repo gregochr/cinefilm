@@ -56,6 +56,7 @@ export function useChristmas() {
 
   const armToast = useCallback(() => {
     clearTimeout(toastTimer.current);
+    if (!live.current) return;
     if (!pinned.current && !held.current && !kept.current)
       toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
   }, []);

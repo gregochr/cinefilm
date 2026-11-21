@@ -187,7 +187,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
 - After Leave out, Put back or Remove on a list row, focus goes to the same row's button if it is still listed, else the
   next row's button, else the tab panel. It does not go to the toast's Undo (that sent a keyboard user back through the
   whole list after every change). Undo stays reachable because the toast is held while focus is on the button focus was
-  moved to, and counts down its 8 seconds once focus leaves it (the pointer keeps the plain 8 seconds); using Undo
+  moved to, and counts down its 8 seconds once focus leaves it (the pointer keeps the plain 8 seconds; a screen reader's virtual click may report as a pointer press and then also gets the plain 8 seconds); using Undo
   returns focus to the row. Focus moves only if it is still on the pressed button (or lost with its row): if the owner
   switched tab or went to the search field meanwhile, it stays there. The search panel and sheet keep their own focus
   behaviour.
