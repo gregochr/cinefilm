@@ -68,7 +68,7 @@ Two PRs:
 - **Triggers** (each only sets the flag and wakes the worker, so it never runs inside the publisher's lock or
   transaction): `ApplicationReadyEvent`; `ScanFinished`; `PlexImportFinished`; a new `PlexCreditsImportFinished`,
   published by `PlexCreditsImportService` when an import finishes; a new `EditionsArranged`, published by `EditionArranger.save` after its write; and the hourly
-  `CreditsScheduler` nudge, which is the real retry. **Never `LibraryChanged`:** `PlaybackService` publishes it on
+  `CreditsScheduler` nudge, which only retries a pass that was refused or failed. **Never `LibraryChanged`:** `PlaybackService` publishes it on
   every progress report, so a pass would take the lock every 10 s during playback.
 - **Config:** `cinefilm.credits.apply.enabled` (default true; false in the test profile), documented in
   `application.properties`. It gates only the triggers and the nudge; the pass itself is a package-visible
@@ -92,7 +92,7 @@ Two PRs:
     exactly one more pass, each trigger, the property off, where triggers start nothing.
   - Publishers and the nudge (3a-2b): `PlexCreditsImportServiceTest`, `PlexCreditsImportFinished` published when an
     import finishes and not on a refusal or failure; `EditionArrangerTest`, `EditionsArranged` published after a save
-    and not on a 409; `CreditsSchedulerTest`, the nudge asks the applier for a pass.
+    and not on a 409; `CreditsSchedulerTest`, the nudge retries a refused or failed pass.
   - `CreditsApplierIntegrationTest` (Testcontainers, CI): seeded editions and rows; a pass sets, clears and keeps;
     a second pass writes nothing; the query count per batch is fixed.
 

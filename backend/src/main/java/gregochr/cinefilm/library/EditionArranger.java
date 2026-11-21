@@ -150,6 +150,7 @@ public class EditionArranger {
             // After the commit (a refused or failed save never gets here): the search index and anything cached on
             // library state must see the new films and editions.
             events.publishEvent(new LibraryChanged());
+            events.publishEvent(new EditionsArranged());
             return result;
         });
     }

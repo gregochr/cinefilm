@@ -5,6 +5,8 @@ import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -45,6 +47,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** The credits import's orchestration, with Plex, the library and the database faked. */
@@ -60,6 +63,7 @@ class PlexCreditsImportServiceTest {
     private final MediaFileRepository files = mock(MediaFileRepository.class);
     private final PlexCreditsMarkerRepository markers = mock(PlexCreditsMarkerRepository.class);
     private final PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final LibraryLock lock = new LibraryLock();
     private final List<Duration> sleeps = new ArrayList<>();
     private Sleeper sleeper = sleeps::add;
@@ -74,7 +78,7 @@ class PlexCreditsImportServiceTest {
 
     private PlexCreditsImportService service(Executor executor) {
         return new PlexCreditsImportService(plex, ingest, files, markers, lock, executor, CLOCK, d -> sleeper.sleep(d),
-            PREFIX.substring(0, PREFIX.length() - 1), transactions);
+            PREFIX.substring(0, PREFIX.length() - 1), transactions, events);
     }
 
     private static PlexFilm film(String ratingKey, String title, String... paths) {
@@ -216,6 +220,49 @@ class PlexCreditsImportServiceTest {
         assertThat(status.lastImport().finishedAt()).isEqualTo(NOW);
         assertThat(report()).isEqualTo(new PlexCreditsReport(0, 0, 0, 0, List.of()));
         verifyNoInteractions(markers);
+    }
+
+    @Test
+    void aSuccessfulImportPublishesFinishedOnceAfterItsResultIsKept() {
+        plexFilms();
+        library();
+        doAnswer(invocation -> {
+            assertThat(service.status().lastImport().error()).isNull();
+            assertThat(service.status().lastImport().report()).isNotNull();
+            return null;
+        }).when(events).publishEvent(new PlexCreditsImportFinished());
+
+        service.start();
+
+        verify(events).publishEvent(new PlexCreditsImportFinished());
+    }
+
+    @Test
+    void refusedStartsPublishNothing() {
+        when(plex.configured()).thenReturn(false);
+        assertThatThrownBy(service::start).isInstanceOf(NotFoundException.class);
+        when(plex.configured()).thenReturn(true);
+        lock.tryAcquire(LibraryLock.IMPORT);
+        assertThatThrownBy(service::start).isInstanceOf(ConflictException.class);
+        lock.release();
+        PlexCreditsImportService slow = service(command -> { });
+        slow.start();
+        assertThatThrownBy(slow::start).isInstanceOf(ConflictException.class);
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void aFailedImportPublishesNothing() {
+        when(plex.films("1")).thenThrow(new PlexException("Plex answered status 401 to plex films", null));
+        service.start();
+        assertThat(service.status().lastImport().error()).isEqualTo("Plex answered status 401 to plex films");
+
+        doThrow(new IllegalStateException("secret detail")).when(plex).films("1");
+        service.start();
+
+        assertThat(service.status().lastImport().error()).isEqualTo("Import failed: IllegalStateException");
+        verifyNoInteractions(events);
     }
 
     @Test

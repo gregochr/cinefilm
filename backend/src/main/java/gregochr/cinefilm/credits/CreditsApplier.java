@@ -7,19 +7,31 @@ import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.library.EditionsArranged;
 import gregochr.cinefilm.library.LibraryLock;
+import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
+import gregochr.cinefilm.plex.PlexCreditsImportFinished;
 import gregochr.cinefilm.plex.PlexCreditsMarker;
 import gregochr.cinefilm.plex.PlexCreditsMarkerRepository;
+import gregochr.cinefilm.plex.PlexImportFinished;
 import gregochr.cinefilm.tmdb.Sleeper;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -28,7 +40,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Applies Plex's credits markers to editions: one {@link #runPass() pass} over every edition, under the library lock
  * (so an Edit editions save or an Admin marker change cannot land between the read and the write), in batches of
  * short transactions with a fixed number of queries each. Only editions whose marker or source changes are written.
- * Nothing calls the pass yet.
+ *
+ * <p>Passes run on the applier's own thread. A trigger (start-up, a finished scan, Plex import or Plex credits import,
+ * a saved Edit editions arrangement) only {@link #requestPass() asks}: it sets {@code requested} and wakes the worker,
+ * so it never runs inside the publisher's lock or transaction. A request that arrives during a pass gives exactly one
+ * more pass, refused or not, so the loop is bounded by requests. A pass that is refused (the lock stayed busy) or
+ * fails sets {@code owed}, which is cleared when the next pass starts. The hourly nudge is not a trigger:
+ * {@link #retryIfRefused()} only retries a pass that is owed.
+ * {@code LibraryChanged} is deliberately not a trigger (playback publishes it on every progress report). Off with
+ * {@code cinefilm.credits.apply.enabled=false}, which stops the triggers and the nudge only.
  */
 @Service
 public class CreditsApplier {
@@ -37,6 +57,8 @@ public class CreditsApplier {
     /** How often a pass tries for the lock, and how long it waits between tries (10 minutes in all). */
     static final int LOCK_ATTEMPTS = 120;
     static final Duration LOCK_WAIT = Duration.ofSeconds(5);
+    /** The order of the start-up listener: after the scan scheduler's, which starts the first scan. */
+    public static final int STARTUP_ORDER = 10;
     /** How many editions one transaction reads and writes. */
     static final int BATCH_SIZE = 100;
 
@@ -68,17 +90,117 @@ public class CreditsApplier {
     private final LibraryLock lock;
     private final Sleeper sleeper;
     private final TransactionTemplate tx;
+    private final Executor executor;
+    private final boolean enabled;
+    private final AtomicBoolean requested = new AtomicBoolean(); // a trigger asked
+    private final AtomicBoolean owed = new AtomicBoolean(); // the last pass was refused or failed
+    private final AtomicBoolean running = new AtomicBoolean();
+    /** Run by the worker just before it gives itself up; a test calls {@link #requestPass()} here. */
+    Runnable beforeWorkerEnds = () -> { };
 
-    /** Creates the applier. */
+    /** Creates the applier; the executor is {@code creditsApplyExecutor}. */
     public CreditsApplier(EditionRepository editions, PlexCreditsMarkerRepository markers,
                           PlaybackStateRepository states, LibraryLock lock, Sleeper sleeper,
-                          PlatformTransactionManager transactions) {
+                          PlatformTransactionManager transactions,
+                          @Qualifier("creditsApplyExecutor") Executor executor,
+                          @Value("${cinefilm.credits.apply.enabled:true}") boolean enabled) {
         this.editions = editions;
         this.markers = markers;
         this.states = states;
         this.lock = lock;
         this.sleeper = sleeper;
         this.tx = new TransactionTemplate(transactions);
+        this.executor = executor;
+        this.enabled = enabled;
+    }
+
+    /** Asks for a pass at start-up. */
+    @EventListener(ApplicationReadyEvent.class)
+    @Order(STARTUP_ORDER)
+    public void onStartup() {
+        requestPass();
+    }
+
+    /** Asks for a pass after a library scan (a file may have been added, replaced or moved). */
+    @EventListener
+    public void onScanFinished(ScanFinished event) {
+        requestPass();
+    }
+
+    /** Asks for a pass after a Plex import (the library may have changed under the editions). */
+    @EventListener
+    public void onPlexImportFinished(PlexImportFinished event) {
+        requestPass();
+    }
+
+    /** Asks for a pass after a Plex credits import (new rows to apply). */
+    @EventListener
+    public void onPlexCreditsImportFinished(PlexCreditsImportFinished event) {
+        requestPass();
+    }
+
+    /** Asks for a pass after an Edit editions save (editions, parts or markers may have moved). */
+    @EventListener
+    public void onEditionsArranged(EditionsArranged event) {
+        requestPass();
+    }
+
+    /**
+     * Asks for a pass in the background, unless applying is off. Never runs one inline. When a pass is already going
+     * the request is not lost: it gives exactly one more pass once that one ends, however many requests arrive.
+     */
+    public void requestPass() {
+        if (!enabled) {
+            return;
+        }
+        requested.set(true);
+        launch();
+    }
+
+    /**
+     * The hourly nudge: starts a pass only when the last one was refused (the library lock stayed busy) or failed.
+     * After a pass that ran, nothing is owed and this does nothing.
+     */
+    public void retryIfRefused() {
+        // owed can only be set by a pass that a request started, and requests need the property on: no check here.
+        if (owed.get()) {
+            requested.set(true);
+            launch();
+        }
+    }
+
+    private void launch() {
+        if (running.compareAndSet(false, true)) {
+            try {
+                executor.execute(this::worker);
+            } catch (RejectedExecutionException e) {
+                running.set(false);
+                throw e;
+            }
+        }
+    }
+
+    private void worker() {
+        try {
+            while (requested.getAndSet(false)) {
+                owed.set(false);
+                boolean done;
+                try {
+                    done = runPass().lockTaken();
+                } catch (RuntimeException e) {
+                    LOG.error("Credits apply pass failed", e);
+                    done = false;
+                }
+                owed.set(!done);
+            }
+            beforeWorkerEnds.run();
+        } finally {
+            running.set(false);
+        }
+        // A request that arrived after the last check but before the worker was given up would otherwise be lost.
+        if (requested.get()) {
+            launch();
+        }
     }
 
     /**
