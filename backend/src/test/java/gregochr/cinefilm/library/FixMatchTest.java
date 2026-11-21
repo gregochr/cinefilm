@@ -256,6 +256,26 @@ class FixMatchTest extends ApiTestBase {
     }
 
     @Test
+    void aFilmLeftUnmatchedIsNotListedAndFixMatchStillMatchesIt() {
+        when(tmdb.movie(5)).thenReturn(Optional.of(movie(5, "Dune", 1984)));
+        Film film = unmatched("Home video", "Home video.m4v");
+
+        fix.leaveUnmatched(film.getId());
+
+        Film left = films.findById(film.getId()).orElseThrow();
+        assertThat(left.getMatchStatus()).isEqualTo(MatchStatus.LEFT_UNMATCHED);
+        assertThat(left.getMatchCandidates()).isNull();
+        assertThat(films.findNeedingMatch()).isEmpty();
+        assertThat(films.countNeedingMatch()).isZero();
+
+        fix.apply(film.getId(), 5L);
+
+        Film matched = films.findById(film.getId()).orElseThrow();
+        assertThat(matched.getMatchStatus()).isEqualTo(MatchStatus.MATCHED);
+        assertThat(matched.getTmdbId()).isEqualTo(5L);
+    }
+
+    @Test
     void applyWhileAScanRunsIsA409AndChangesNothing() {
         Film film = unmatched("Dune", "Dune.m4v");
         lock.tryAcquire(LibraryLock.SCAN);

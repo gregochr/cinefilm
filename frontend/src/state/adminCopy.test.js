@@ -132,7 +132,9 @@ describe('adminCopy buttons', () => {
 
   it('gives every entry a known source', () => {
     for (const entry of Object.values(buttons)) {
-      expect(entry.source).toMatch(/^(07|AR[1-7]|README|plan|planner, 4a|owner 2026-11-17)$/);
+      expect(entry.source).toMatch(
+        /^(07|AR[1-7]|README|plan|planner|planner, 4a|owner 2026-11-17)$/,
+      );
     }
   });
 });
@@ -477,5 +479,19 @@ describe('settingsPage (AR5, the switches left out by Q2)', () => {
 
   it('carries no wording for the dropped switches', () => {
     expect(JSON.stringify(settingsPage)).not.toMatch(/Prepare films|missing films|automatically/i);
+  });
+});
+
+describe('"Leave unmatched" (planner copy, on no board)', () => {
+  it('has its label and its hint, and the row failures say plainly what to do', () => {
+    expect(buttons.leaveUnmatched.label).toBe('Leave unmatched');
+    expect(buttons.leaveUnmatched.hint).toBe(
+      'Stop listing this film here. It stays in your library.',
+    );
+    expect(todoRow.leaveProblems).toEqual({
+      scan: 'A scan is running — try again when it finishes.',
+      stale: 'That film is already settled. The list is being updated.',
+      other: 'Couldn’t leave it — try again.',
+    });
   });
 });

@@ -30,14 +30,20 @@ const COPY_KEY = {
   forcedQuestion: 'forcedNotFound',
 };
 
-/** A film the scanner could not match: "Yes, it's …" when the server is confident, and always "Find the film…". */
-function MatchRow({ item, busy, problem, onConfirm, onFindFilm }) {
+/**
+ * A film the scanner could not match: "Yes, it's …" when the server is confident, and always "Find the film…" and the
+ * quiet "Leave unmatched".
+ */
+function MatchRow({ item, busy, problem, onConfirm, onFindFilm, onLeave }) {
   const guess = item.confident ? bestGuess(item) : null;
   // While this row's post runs both buttons are aria-disabled (still focusable); a click on either does nothing.
   const find = (event) => {
     if (!busy) onFindFilm(item, event.currentTarget);
   };
   const busyProps = { 'aria-disabled': busy || undefined };
+  const leave = (event) => {
+    if (!busy) onLeave(item, event.currentTarget);
+  };
   // The row's title describes its buttons, so each names its film while the visible label stays the start of its name.
   const titleId = useId();
   return (
@@ -74,6 +80,15 @@ function MatchRow({ item, busy, problem, onConfirm, onFindFilm }) {
             {buttons.findFilm.label}
           </ActionWithHint>
         )}
+        <ActionWithHint
+          hint={buttons.leaveUnmatched.hint}
+          buttonClassName="admin__todo-quiet"
+          describedBy={titleId}
+          {...busyProps}
+          onClick={leave}
+        >
+          {buttons.leaveUnmatched.label}
+        </ActionWithHint>
       </div>
       {problem ? (
         <p className="admin__todo-problem" role="alert">
@@ -143,6 +158,7 @@ function renderRow(group, row, props) {
           problem={props.problems[row.filmId]}
           onConfirm={props.onConfirm}
           onFindFilm={props.onFindFilm}
+          onLeave={props.onLeave}
         />
       );
     case 'severalFiles':
@@ -193,6 +209,7 @@ export default function AdminTodoGroup({
   problems,
   onConfirm,
   onFindFilm,
+  onLeave,
   onSortOut,
   onFindSubtitles,
   fullSaving,
@@ -228,6 +245,7 @@ export default function AdminTodoGroup({
             problems,
             onConfirm,
             onFindFilm,
+            onLeave,
             onSortOut,
             onFindSubtitles,
             fullSaving,

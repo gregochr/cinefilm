@@ -11,6 +11,7 @@ import {
   guessTitle,
   matchLine,
   confirmProblem,
+  leaveProblem,
   rowTitle,
   visibleRows,
 } from './adminTodo.js';
@@ -260,5 +261,47 @@ describe('confirmProblem', () => {
     for (const status of [400, 404, 409, 500, 503]) {
       expect(confirmProblem(new ApiError(status)).message).not.toMatch(/Close this|Type a title/);
     }
+  });
+});
+
+describe('leaveProblem', () => {
+  it('says the film is gone for a 404, and asks for a re-read', () => {
+    expect(leaveProblem(new ApiError(404))).toEqual({
+      message: 'That film is no longer in the library. The list is being updated.',
+      gone: true,
+    });
+  });
+
+  it.each([
+    [409, 'A scan is running — try again when it finishes.'],
+    [400, 'Couldn’t leave it — try again.'],
+    [500, 'Couldn’t leave it — try again.'],
+    [503, 'Couldn’t leave it — try again.'],
+  ])('words a %i for the row without a re-read', (status, message) => {
+    expect(leaveProblem(new ApiError(status))).toEqual({ message, gone: false });
+  });
+
+  it('treats "not waiting for a match" as a stale row: says so and asks for a re-read', () => {
+    expect(
+      leaveProblem(new ApiError(409, undefined, { error: 'This film is not waiting for a match' })),
+    ).toEqual({ message: 'That film is already settled. The list is being updated.', gone: true });
+  });
+
+  it('keeps its own words for the server’s bare scan line and uses the server’s text for any other 409', () => {
+    expect(leaveProblem(new ApiError(409, undefined, { error: 'A scan is running' })).message).toBe(
+      'A scan is running — try again when it finishes.',
+    );
+    expect(
+      leaveProblem(
+        new ApiError(409, undefined, { error: 'The library is busy; try again in a moment' }),
+      ),
+    ).toEqual({ message: 'The library is busy; try again in a moment.', gone: false });
+  });
+
+  it('says it was not a network error for anything that is not an ApiError', () => {
+    expect(leaveProblem(new Error('offline'))).toEqual({
+      message: 'Couldn’t leave it — try again.',
+      gone: false,
+    });
   });
 });

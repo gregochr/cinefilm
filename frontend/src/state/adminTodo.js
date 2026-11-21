@@ -1,7 +1,7 @@
 // What the To do page lists, and how: which attention kinds go in which group, the cap of rows, the footers and the
 // small lines under each row. Pure, no JSX: the Apple TV and native clients reuse it. The server decides every rule
 // (kind, `confident`, `unresolved`); nothing here re-derives one.
-import { ApiError } from '../api/client.js';
+import { ApiError, serverText } from '../api/client.js';
 import { lockText } from './lockText.js';
 import { todoRow } from './adminCopy.js';
 import { titleWithYear } from './scanFormat.js';
@@ -110,4 +110,22 @@ export function confirmProblem(failure) {
   if (status === 409) return { message: lockText(failure, copy.scan), gone: false };
   if (status === 503) return { message: copy.tmdb, gone: false };
   return { message: copy.other, gone: false };
+}
+
+/**
+ * What a failed "Leave unmatched" says on its row. A 404 (the film is gone) and the 409 "not waiting for a match" (the
+ * row is stale) ask for a re-read, as for a confirm; any other 409 says what holds the library lock (the bare scan
+ * line gets this screen's own words).
+ */
+export function leaveProblem(failure) {
+  const status = failure instanceof ApiError ? failure.status : 0;
+  if (status === 404) return { message: todoRow.confirmProblems.gone, gone: true };
+  if (status === 409) {
+    // Not waiting for a match (already left, or matched meanwhile): the row is stale, so read the lists again.
+    if (serverText(failure) === 'This film is not waiting for a match') {
+      return { message: todoRow.leaveProblems.stale, gone: true };
+    }
+    return { message: lockText(failure, todoRow.leaveProblems.scan), gone: false };
+  }
+  return { message: todoRow.leaveProblems.other, gone: false };
 }

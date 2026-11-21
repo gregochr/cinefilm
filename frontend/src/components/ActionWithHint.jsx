@@ -9,6 +9,7 @@ import { Button } from './Button.jsx';
  * `action-hint__text--row|line` class is tested. At 600px and below the button is full width, 44px tall (at least; a
  * To do row grows past that when its label wraps), hint on the left.
  * `describedBy` adds more ids to the description (a row's title, so a button names its film without changing its label).
+ * `buttonClassName` is an extra class on the button itself (`className` is the wrapper's).
  * `variant` is the Button's: the one amber button in Admin is "Scan library now".
  */
 export function ActionWithHint({
@@ -17,6 +18,7 @@ export function ActionWithHint({
   variant = 'secondary',
   describedBy,
   className,
+  buttonClassName,
   children,
   ...rest
 }) {
@@ -24,7 +26,12 @@ export function ActionWithHint({
   const describedByIds = [hint ? hintId : null, describedBy].filter(Boolean).join(' ') || undefined;
   return (
     <div className={['action-hint', `action-hint--${layout}`, className].filter(Boolean).join(' ')}>
-      <Button variant={variant} aria-describedby={describedByIds} {...rest}>
+      <Button
+        variant={variant}
+        className={buttonClassName}
+        aria-describedby={describedByIds}
+        {...rest}
+      >
         {children}
       </Button>
       {hint ? (
