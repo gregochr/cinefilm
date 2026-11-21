@@ -3,6 +3,7 @@ package gregochr.cinefilm.credits;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -14,15 +15,23 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaKind;
+import gregochr.cinefilm.library.EditionsArranged;
 import gregochr.cinefilm.library.LibraryLock;
+import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
+import gregochr.cinefilm.plex.PlexCreditsImportFinished;
 import gregochr.cinefilm.plex.PlexCreditsMarker;
 import gregochr.cinefilm.plex.PlexCreditsMarkerRepository;
+import gregochr.cinefilm.plex.PlexImportFinished;
 import gregochr.cinefilm.tmdb.Sleeper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,8 +60,15 @@ class CreditsApplierTest {
     private final List<Duration> sleeps = new ArrayList<>();
     private Sleeper sleeper = sleeps::add;
 
+    private Executor executor = Runnable::run;
+
     private CreditsApplier applier() {
-        return new CreditsApplier(editions, markers, states, lock, d -> sleeper.sleep(d), transactions);
+        return applier(true);
+    }
+
+    private CreditsApplier applier(boolean enabled) {
+        return new CreditsApplier(editions, markers, states, lock, d -> sleeper.sleep(d), transactions, executor,
+            enabled);
     }
 
     /** An edition of one 100-minute file (id = edition id = file id) with its current marker. */
@@ -259,5 +275,173 @@ class CreditsApplierTest {
         verify(editions).findWithFilesByIdIn(ids.subList(0, size));
         verify(editions).findWithFilesByIdIn(ids.subList(size, size + 1));
         assertThat(result.unchanged()).isEqualTo(size + 1);
+    }
+
+    /** A pass that finds no editions: the cheapest real pass. */
+    private void emptyLibrary() {
+        when(editions.findAllIds()).thenReturn(List.of());
+    }
+
+    @Test
+    void aRequestRunsOnePassOnTheExecutorNotInline() {
+        AtomicReference<Runnable> queued = new AtomicReference<>();
+        executor = queued::set;
+        emptyLibrary();
+
+        applier().requestPass();
+
+        verifyNoInteractions(editions);
+        queued.get().run();
+        verify(editions).findAllIds();
+    }
+
+    @Test
+    void aRefusedPassLeavesTheFlagSetWithoutSpinningAndTheNextRequestRunsAPass() {
+        AtomicInteger executed = new AtomicInteger();
+        executor = command -> {
+            executed.incrementAndGet();
+            command.run();
+        };
+        lock.tryAcquire(LibraryLock.SCAN);
+        CreditsApplier applier = applier();
+
+        applier.requestPass();
+
+        assertThat(executed).hasValue(1);
+        assertThat(sleeps).hasSize(CreditsApplier.LOCK_ATTEMPTS);
+        verifyNoInteractions(editions);
+        lock.release();
+        emptyLibrary();
+
+        applier.requestPass();
+
+        assertThat(executed).hasValue(2);
+        verify(editions).findAllIds();
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aRequestDuringAPassGivesExactlyOneMorePassHoweverManyArrive() {
+        CreditsApplier applier = applier();
+        AtomicInteger reads = new AtomicInteger();
+        when(editions.findAllIds()).thenAnswer(invocation -> {
+            if (reads.incrementAndGet() == 1) {
+                applier.requestPass();
+                applier.requestPass();
+                applier.requestPass();
+            }
+            return List.of();
+        });
+
+        applier.requestPass();
+
+        assertThat(reads).hasValue(2);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aRequestAfterAFinishedPassGivesANewPass() {
+        emptyLibrary();
+        CreditsApplier applier = applier();
+
+        applier.requestPass();
+        applier.requestPass();
+
+        verify(editions, times(2)).findAllIds();
+    }
+
+    @Test
+    void aPassThatFailsIsLoggedAndTheNextRequestStillRuns() {
+        AtomicInteger reads = new AtomicInteger();
+        when(editions.findAllIds()).thenAnswer(invocation -> {
+            if (reads.incrementAndGet() == 1) {
+                throw new IllegalStateException("db down");
+            }
+            return List.of();
+        });
+        CreditsApplier applier = applier();
+
+        applier.requestPass();
+
+        verify(editions).findAllIds();
+        assertThat(lock.holder()).isNull();
+
+        applier.requestPass();
+
+        verify(editions, times(2)).findAllIds();
+    }
+
+    @Test
+    void aRefusedExecutorFreesTheWorkerSoALaterRequestCanStart() {
+        AtomicInteger offered = new AtomicInteger();
+        executor = command -> {
+            if (offered.incrementAndGet() == 1) {
+                throw new RejectedExecutionException("closed");
+            }
+            command.run();
+        };
+        CreditsApplier applier = applier();
+
+        assertThatThrownBy(applier::requestPass).isInstanceOf(RejectedExecutionException.class);
+        verifyNoInteractions(editions);
+        emptyLibrary();
+
+        applier.requestPass();
+
+        verify(editions).findAllIds();
+    }
+
+    @Test
+    void eachTriggerOnlyAsksForAPass() {
+        emptyLibrary();
+        CreditsApplier applier = applier();
+
+        applier.onStartup();
+        applier.onScanFinished(new ScanFinished("nightly"));
+        applier.onPlexImportFinished(new PlexImportFinished());
+        applier.onPlexCreditsImportFinished(new PlexCreditsImportFinished());
+        applier.onEditionsArranged(new EditionsArranged());
+
+        verify(editions, times(5)).findAllIds();
+    }
+
+    @Test
+    void aTriggerQueuesTheWorkAndNeverRunsAPassInline() {
+        AtomicInteger queued = new AtomicInteger();
+        executor = command -> queued.incrementAndGet();
+        CreditsApplier applier = applier();
+
+        applier.onScanFinished(new ScanFinished("admin"));
+        applier.onEditionsArranged(new EditionsArranged());
+
+        assertThat(queued).as("the second request found the worker already taken").hasValue(1);
+        verifyNoInteractions(editions, markers, states);
+    }
+
+    @Test
+    void withThePropertyOffNoTriggerNorNudgeStartsAnything() {
+        AtomicInteger queued = new AtomicInteger();
+        executor = command -> queued.incrementAndGet();
+        CreditsApplier applier = applier(false);
+
+        applier.onStartup();
+        applier.onScanFinished(new ScanFinished("startup"));
+        applier.onPlexImportFinished(new PlexImportFinished());
+        applier.onPlexCreditsImportFinished(new PlexCreditsImportFinished());
+        applier.onEditionsArranged(new EditionsArranged());
+        applier.requestPass();
+
+        assertThat(queued).hasValue(0);
+        verifyNoInteractions(editions, markers, states);
+    }
+
+    @Test
+    void withThePropertyOffThePassItselfStillRuns() {
+        emptyLibrary();
+
+        PassResult result = applier(false).runPass();
+
+        assertThat(result.lockTaken()).isTrue();
+        verify(editions).findAllIds();
     }
 }

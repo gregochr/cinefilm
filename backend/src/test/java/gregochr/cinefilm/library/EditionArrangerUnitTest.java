@@ -139,6 +139,7 @@ class EditionArrangerUnitTest {
         assertThat(preference.getValue().isDefaultEditionChosen()).isTrue();
         verify(join).repoint(FILM_ID, 5L, Set.of());
         verify(events).publishEvent(new LibraryChanged());
+        verify(events).publishEvent(new EditionsArranged());
         verify(films).save(film);
         ArgumentCaptor<GroupingChange> change = ArgumentCaptor.forClass(GroupingChange.class);
         verify(changes).save(change.capture());
