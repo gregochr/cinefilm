@@ -316,21 +316,22 @@ describe('Admin: the Fix match dialog', () => {
     const dialog = await openPanel();
     await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
     const before = attentionCalls;
+    const user = holdClock();
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
-    // The apply has answered, the dialog is still fading: a second click and Esc change nothing.
-    await waitFor(() => expect(applies).toBe(1));
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    // The apply has answered, the dialog is still fading (the clock is held): a second click and Esc change nothing.
+    await settle(); // the apply has been sent and answered
+    expect(applies).toBe(1);
     expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Use this match' })).toBeDisabled();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Search' }));
-    await userEvent.keyboard('{Escape}');
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Search' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
-    );
-    await waitFor(() => expect(attentionCalls).toBe(before + 1));
-    await act(async () => {}); // let anything still pending land before the exact count
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    await settle(); // let anything still pending land before the exact count
     expect(attentionCalls).toBe(before + 1);
     expect(applies).toBe(1);
     expect(fetchMock.mock.calls.filter((c) => c[0].includes('/match?'))).toHaveLength(1);
@@ -343,13 +344,16 @@ describe('Admin: the Fix match dialog', () => {
     const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
     await screen.findByRole('dialog', { name: 'Fix match' });
+    const user = holdClock();
 
-    await userEvent.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
     expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
-    );
+    // One millisecond short of the fade the dialog is still there; the last millisecond takes it away.
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS - 1));
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
   });
 
@@ -390,17 +394,19 @@ describe('Admin: the Fix match dialog', () => {
     });
     const dialog = await openPanel();
     await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    const user = holdClock();
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
     const before = attentionCalls;
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    // The dialog is fading (the clock is held) when the apply lands.
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
     await act(async () => release(respond({ filmId: 31, joined: false })));
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
-    );
-    await waitFor(() => expect(attentionCalls).toBe(before + 1));
-    await act(async () => {}); // let anything still pending land before the exact count
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    await settle(); // let anything still pending land before the exact count
     expect(attentionCalls).toBe(before + 1);
   });
 
@@ -446,19 +452,20 @@ describe('Admin: focus after an apply with motion on', () => {
     });
     const dialog = await openPanel();
     await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+    const user = holdClock();
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
-    await userEvent.tab();
-    // The row is gone and the dialog still fades: focus is inside it, not on the heading behind it.
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    await settle();
+    expect(rows()).toHaveLength(1);
+    await user.tab();
+    // The row is gone and the dialog still fades (the clock is held): focus is inside it, not on the heading behind it.
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
     expect(dialog).toContainElement(document.activeElement);
-    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).not.toHaveFocus();
+    expect(heading()).not.toHaveFocus();
 
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
-    );
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus(),
-    );
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(heading()).toHaveFocus();
   });
 });
 
@@ -473,6 +480,10 @@ function holdClock() {
   return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 }
 const flush = () => act(async () => vi.advanceTimersByTimeAsync(0));
+// Lets a chain of answered fetches land without moving the clock (`vi.waitFor` would step it 50 ms a poll).
+const settle = async () => {
+  for (let i = 0; i < 5; i += 1) await flush();
+};
 const heading = () => screen.getByRole('heading', { level: 1, name: 'To do' });
 const rows = () => screen.getAllByRole('button', { name: 'Find the film…' });
 const railLink = (name) =>
@@ -506,7 +517,8 @@ describe('Admin: the heading does not take focus behind the fading dialog', () =
 
     // The re-read lands: the row is gone while the dialog is still on screen, and focus is on the page body.
     landReread(respond({ items: fixtures.adminAttention.items.slice(1) }));
-    await vi.waitFor(() => expect(rows()).toHaveLength(1));
+    await settle();
+    expect(rows()).toHaveLength(1);
     expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
     expect(heading()).not.toHaveFocus();
 
