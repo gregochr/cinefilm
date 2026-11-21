@@ -731,8 +731,9 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
   - If B won, the Dockerfile adds the encoder `ADD`.
   - The v2 snapshot is taken **before L6a merges**, so an unrelated release of `main` can't deploy version 3 first.
     The pre-release `pg_dump` is the backstop.
-- **L6b — removal:** **Held** with L6a (owner, 2026-11-21). the rule classes (once nothing uses the 2b flag), the losing model, and the dataset job.
-- **Then** the revised gate (the second look at the test split), then phase 3 of `credits-detection-plan.md`.
+- **L6b — removal:** **Held** with L6a (owner, 2026-11-21). It removes the rule classes (once nothing uses the 2b flag), the losing model, and the dataset job.
+- **Then** the revised gate (the second look at the test split), then phase 3 of `credits-detection-plan.md`. Both
+  wait with L6a (owner, 2026-11-21): the gate reads version 3 rows, which only L6a writes.
 
 ## L1 specification (settled in review round 5)
 
@@ -1425,7 +1426,8 @@ model A's. Development films only, with no look.
 ### L5: what the models showed (2026-11-21, v0.9.2)
 
 The single look: `eval-20261121T095028Z`, model A's three runs, scored with `--look=L5 --baseline
-credits-detection-v2-2026-11-17.csv`. Same dataset and labels hashes as every earlier run.
+credits-detection-v2-2026-11-17.csv`. Its dataset and labels hashes equal model A's training runs' (the tool refuses
+a difference).
 
 - **The development half is unchanged:** its `summary.json` block equals `eval-20261119T213020Z`'s, field for field.
 - **The test split, 238 films.** Model A by the evaluation's own `summary.json`; v2 counted from `evaluation.csv`'s
@@ -1458,7 +1460,9 @@ What it shows:
 
 **The decision (owner, 2026-11-21): keep v2, and hold L6a.** Version 2 stays the product's detector and `ANALYSIS_VERSION`
 stays 2. The test split has been looked at once; its second and last look is the version 3 gate, so any new design is
-chosen on development films only and judged there. Model B's code is not deleted while L6a is held (L6b is held with it).
+chosen on development films only and judged there. The gate and phase 3's `AUTO` wait with L6a, because the gate
+reads version 3 rows (with their `opening_type` and `margin_band`) and phase 3's `AUTO` waits on the gate; until then
+only `OWNER` and `PLEX` markers are applied. Model B's code is not deleted while L6a is held (L6b is held with it).
 
 ## L3c specification (written 2026-11-19)
 
