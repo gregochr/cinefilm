@@ -185,7 +185,8 @@ public class FixMatch {
 
     /**
      * The owner chooses to leave a film without a TMDB match: it is marked {@code LEFT_UNMATCHED} and its stored
-     * candidates are cleared, so To do stops listing it and no scan retries it. Fix match can still match it later.
+     * candidates are cleared, so To do stops listing it and no scan retries it. Fix match (by id) and a Plex-supplied
+     * TMDB id can still match it.
      * Only a film To do lists as needing a match may be left; takes the library lock like {@link #apply}.
      *
      * @param filmId the film to leave unmatched
@@ -197,8 +198,9 @@ public class FixMatch {
         locked(() -> {
             tx.executeWithoutResult(status -> {
                 Film film = films.findById(filmId).orElseThrow(() -> new NotFoundException("No film " + filmId));
-                boolean listed = film.getMatchStatus() == MatchStatus.NEEDS_MATCH
-                    || (film.getTmdbId() == null && film.getMatchStatus() != MatchStatus.PENDING);
+                MatchStatus now = film.getMatchStatus();
+                boolean listed = now == MatchStatus.NEEDS_MATCH || (film.getTmdbId() == null
+                    && now != MatchStatus.PENDING && now != MatchStatus.LEFT_UNMATCHED);
                 if (!listed) {
                     throw new ConflictException("This film is not waiting for a match");
                 }

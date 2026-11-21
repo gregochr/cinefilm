@@ -18,7 +18,7 @@ export const buttons = {
   },
   leaveUnmatched: {
     label: 'Leave unmatched',
-    hint: 'Stop listing this film here. It stays in your library, and you can still match it later from Fix match.',
+    hint: 'Stop listing this film here. It stays in your library.',
     source: 'planner',
   },
   sortEditions: {
@@ -360,6 +360,7 @@ export const todoRow = {
   // "Leave unmatched" failures (planner): a 404 is the same "gone" line.
   leaveProblems: {
     scan: 'A scan is running — try again when it finishes.',
+    stale: 'That film is already settled. The list is being updated.',
     other: 'Couldn’t leave it — try again.',
   },
   retry: 'Try again',

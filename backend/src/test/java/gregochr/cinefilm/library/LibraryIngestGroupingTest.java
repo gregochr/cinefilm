@@ -196,6 +196,17 @@ class LibraryIngestGroupingTest extends ApiTestBase {
     // ---- the guard on a retried match
 
     @Test
+    void aFilmLeftUnmatchedIsNotWaitingForALookup() {
+        add("Home video.m4v", 30, null);
+        Long id = ingest.pending().get(0).filmId();
+        Film film = films.findById(id).orElseThrow();
+        film.setMatchStatus(MatchStatus.LEFT_UNMATCHED);
+        films.save(film);
+
+        assertThat(ingest.pending()).isEmpty();
+    }
+
+    @Test
     void aRetriedFileWhoseMatchIsAFilmWithADifferentTitleIsLeftUnmatchedWithTheCandidate() {
         MovieDetails heat = movie(949, "Heat");
         add("Heat.m4v", 170, matched(heat));

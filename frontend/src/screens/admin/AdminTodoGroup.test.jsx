@@ -156,9 +156,7 @@ describe('AdminTodoGroup: Leave unmatched', () => {
       expect(buttons.at(-1)).toHaveAccessibleName('Leave unmatched');
       expect(buttons.at(-2)).toHaveAccessibleName('Find the film…');
       expect(
-        within(row).getByText(
-          'Stop listing this film here. It stays in your library, and you can still match it later from Fix match.',
-        ),
+        within(row).getByText('Stop listing this film here. It stays in your library.'),
       ).toBeVisible();
     }
   });

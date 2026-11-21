@@ -405,6 +405,18 @@ class FixMatchUnitTest {
     }
 
     @Test
+    void leaveUnmatchedOnAnAlreadyLeftFilmIs409() {
+        Film left = film(FILM_ID, "Home video");
+        left.setMatchStatus(MatchStatus.LEFT_UNMATCHED);
+        left.setTmdbId(null);
+        when(films.findById(FILM_ID)).thenReturn(Optional.of(left));
+
+        assertThatThrownBy(() -> fix.leaveUnmatched(FILM_ID)).isInstanceOf(ConflictException.class)
+            .hasMessage("This film is not waiting for a match");
+        verify(films, never()).save(left);
+    }
+
+    @Test
     void leaveUnmatchedForAnUnknownFilmIs404AndReleasesTheLock() {
         assertThatThrownBy(() -> fix.leaveUnmatched(99L)).isInstanceOf(NotFoundException.class)
             .hasMessage("No film 99");

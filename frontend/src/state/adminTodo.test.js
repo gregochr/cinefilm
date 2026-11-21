@@ -281,13 +281,21 @@ describe('leaveProblem', () => {
     expect(leaveProblem(new ApiError(status))).toEqual({ message, gone: false });
   });
 
+  it('treats "not waiting for a match" as a stale row: says so and asks for a re-read', () => {
+    expect(
+      leaveProblem(new ApiError(409, undefined, { error: 'This film is not waiting for a match' })),
+    ).toEqual({ message: 'That film is already settled. The list is being updated.', gone: true });
+  });
+
   it('keeps its own words for the server’s bare scan line and uses the server’s text for any other 409', () => {
     expect(leaveProblem(new ApiError(409, undefined, { error: 'A scan is running' })).message).toBe(
       'A scan is running — try again when it finishes.',
     );
     expect(
-      leaveProblem(new ApiError(409, undefined, { error: 'This film is not waiting for a match' })),
-    ).toEqual({ message: 'This film is not waiting for a match.', gone: false });
+      leaveProblem(
+        new ApiError(409, undefined, { error: 'The library is busy; try again in a moment' }),
+      ),
+    ).toEqual({ message: 'The library is busy; try again in a moment.', gone: false });
   });
 
   it('says it was not a network error for anything that is not an ApiError', () => {

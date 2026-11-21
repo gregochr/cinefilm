@@ -486,10 +486,11 @@ describe('"Leave unmatched" (planner copy, on no board)', () => {
   it('has its label and its hint, and the row failures say plainly what to do', () => {
     expect(buttons.leaveUnmatched.label).toBe('Leave unmatched');
     expect(buttons.leaveUnmatched.hint).toBe(
-      'Stop listing this film here. It stays in your library, and you can still match it later from Fix match.',
+      'Stop listing this film here. It stays in your library.',
     );
     expect(todoRow.leaveProblems).toEqual({
       scan: 'A scan is running — try again when it finishes.',
+      stale: 'That film is already settled. The list is being updated.',
       other: 'Couldn’t leave it — try again.',
     });
   });
