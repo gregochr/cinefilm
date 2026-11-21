@@ -355,7 +355,7 @@ class CreditsApplierTest {
     }
 
     @Test
-    void aPassThatFailsIsLoggedAndTheNextRequestStillRuns() {
+    void aPassThatFailsIsLoggedAndOwedSoTheNudgeRunsItAgain() {
         AtomicInteger reads = new AtomicInteger();
         when(editions.findAllIds()).thenAnswer(invocation -> {
             if (reads.incrementAndGet() == 1) {
@@ -370,9 +370,29 @@ class CreditsApplierTest {
         verify(editions).findAllIds();
         assertThat(lock.holder()).isNull();
 
-        applier.requestPass();
+        applier.retryIfRefused();
+        applier.retryIfRefused();
 
         verify(editions, times(2)).findAllIds();
+    }
+
+    @Test
+    void aRequestAfterARefusalButBeforeTheWorkerEndsIsNotLost() {
+        lock.tryAcquire(LibraryLock.SCAN);
+        CreditsApplier applier = applier();
+        AtomicInteger hooks = new AtomicInteger();
+        applier.beforeWorkerEnds = () -> {
+            if (hooks.incrementAndGet() == 1) {
+                lock.release();
+                applier.requestPass();
+            }
+        };
+        emptyLibrary();
+
+        applier.requestPass();
+
+        verify(editions).findAllIds();
+        assertThat(hooks).hasValue(2);
     }
 
     @Test
@@ -529,19 +549,6 @@ class CreditsApplierTest {
     }
 
     @Test
-    void withThePropertyOffTheNudgeStartsNothing() {
-        AtomicInteger queued = new AtomicInteger();
-        executor = command -> queued.incrementAndGet();
-        lock.tryAcquire(LibraryLock.SCAN);
-        CreditsApplier off = applier(false);
-
-        off.retryIfRefused();
-
-        assertThat(queued).hasValue(0);
-        verifyNoInteractions(editions);
-    }
-
-    @Test
     void theTriggersAreEventListenersAndStartUpListensForApplicationReady() throws NoSuchMethodException {
         assertThat(CreditsApplier.class.getMethod("onStartup").getAnnotation(EventListener.class).value())
             .containsExactly(ApplicationReadyEvent.class);
@@ -559,6 +566,12 @@ class CreditsApplierTest {
     void noMethodListensForLibraryChanged() {
         assertThat(Arrays.stream(CreditsApplier.class.getDeclaredMethods())
             .flatMap(method -> Arrays.stream(method.getParameterTypes())))
+            .doesNotContain(LibraryChanged.class);
+        assertThat(Arrays.stream(CreditsApplier.class.getDeclaredMethods())
+            .map(method -> method.getAnnotation(EventListener.class))
+            .filter(java.util.Objects::nonNull)
+            .flatMap(listener -> java.util.stream.Stream.concat(Arrays.stream(listener.value()),
+                Arrays.stream(listener.classes()))))
             .doesNotContain(LibraryChanged.class);
     }
 }

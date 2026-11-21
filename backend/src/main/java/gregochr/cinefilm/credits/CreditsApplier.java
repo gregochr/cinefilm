@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -40,9 +41,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * short transactions with a fixed number of queries each. Only editions whose marker or source changes are written.
  *
  * <p>Passes run on the applier's own thread. A trigger (start-up, a finished scan, Plex import or Plex credits import,
- * a saved Edit editions arrangement, the hourly nudge) only {@link #requestPass() asks}: it sets a flag and wakes the
- * worker, so it never runs inside the publisher's lock or transaction. A request that arrives during a pass gives
- * exactly one more pass; a pass that cannot take the lock leaves the flag set for the next trigger or nudge.
+ * a saved Edit editions arrangement) only {@link #requestPass() asks}: it sets {@code requested} and wakes the worker,
+ * so it never runs inside the publisher's lock or transaction. A request that arrives during a pass gives exactly one
+ * more pass. A pass that is refused (the lock stayed busy) or fails ends the loop and sets {@code owed}; a request that
+ * arrived meanwhile still gives one more pass. The hourly nudge is not a trigger: {@link #retryIfRefused()} only
+ * retries a pass that is owed.
  * {@code LibraryChanged} is deliberately not a trigger (playback publishes it on every progress report). Off with
  * {@code cinefilm.credits.apply.enabled=false}, which stops the triggers and the nudge only.
  */
@@ -86,8 +89,11 @@ public class CreditsApplier {
     private final TransactionTemplate tx;
     private final Executor executor;
     private final boolean enabled;
+    private final AtomicBoolean requested = new AtomicBoolean(); // a trigger asked
+    private final AtomicBoolean owed = new AtomicBoolean(); // the last pass was refused or failed
     private final AtomicBoolean running = new AtomicBoolean();
-    private final AtomicBoolean pending = new AtomicBoolean();
+    /** Run by the worker just before it gives itself up; a test calls {@link #requestPass()} here. */
+    Runnable beforeWorkerEnds = () -> { };
 
     /** Creates the applier; the executor is {@code creditsApplyExecutor}. */
     public CreditsApplier(EditionRepository editions, PlexCreditsMarkerRepository markers,
@@ -137,59 +143,61 @@ public class CreditsApplier {
 
     /**
      * Asks for a pass in the background, unless applying is off. Never runs one inline. When a pass is already going
-     * the request is not lost: it goes round again once before it finishes, however many requests arrive.
+     * the request is not lost: it gives exactly one more pass once that one ends, however many requests arrive.
      */
     public void requestPass() {
         if (!enabled) {
             return;
         }
-        // Set before trying to take the worker: a worker that is just finishing re-checks it after giving up.
-        pending.set(true);
+        requested.set(true);
         launch();
     }
 
     /**
-     * The hourly nudge: starts a pass only when the last one could not take the library lock and left its request
-     * pending. After a pass that ran, nothing is pending and this does nothing.
+     * The hourly nudge: starts a pass only when the last one was refused (the library lock stayed busy) or failed.
+     * After a pass that ran, nothing is owed and this does nothing.
      */
     public void retryIfRefused() {
-        if (enabled && pending.get()) {
+        // owed can only be set by a pass that a request started, and requests need the property on: no check here.
+        if (owed.get()) {
+            requested.set(true);
             launch();
         }
     }
 
     private void launch() {
-        if (!running.compareAndSet(false, true)) {
-            return;
-        }
-        try {
-            executor.execute(this::worker);
-        } catch (RuntimeException e) {
-            running.set(false);
-            throw e;
+        if (running.compareAndSet(false, true)) {
+            try {
+                executor.execute(this::worker);
+            } catch (RejectedExecutionException e) {
+                running.set(false);
+                throw e;
+            }
         }
     }
 
     private void worker() {
-        boolean refused = false;
         try {
-            while (!refused && pending.getAndSet(false)) {
+            while (requested.getAndSet(false)) {
+                boolean done;
                 try {
-                    refused = !runPass().lockTaken();
+                    done = runPass().lockTaken();
                 } catch (RuntimeException e) {
                     LOG.error("Credits apply pass failed", e);
+                    done = false;
                 }
-                if (refused && pending.getAndSet(true)) {
-                    // pending was cleared when this pass began, so a request arrived while it waited for the lock
-                    // (a scan or import publishes its event while still holding it): give it one more pass.
-                    refused = false;
+                owed.set(!done);
+                if (!done) {
+                    // No spinning on a held lock; a request that arrived meanwhile is caught below.
+                    break;
                 }
             }
+            beforeWorkerEnds.run();
         } finally {
             running.set(false);
         }
         // A request that arrived after the last check but before the worker was given up would otherwise be lost.
-        if (!refused && pending.get()) {
+        if (requested.get()) {
             launch();
         }
     }
