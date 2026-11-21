@@ -13,6 +13,7 @@ import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.film.Playability;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.plex.PlexCreditsMarker;
@@ -148,14 +149,18 @@ class CreditsAdminApiTest extends ApiTestBase {
         MediaFile second = file(parts, "Two Parts-2.m4v");
         second.setPartNumber(2);
         second.setDurationMs(null);
+        Edition withPremade = seed("Premade Beside", 2004, null, null);
+        onlyFile(withPremade).setDurationMs(null);
+        file(withPremade, "Premade Beside.m4v").setKind(MediaKind.PREMADE_720);
         films.saveAndFlush(parts.getFilm());
 
         mvc.perform(get("/api/admin/credits?filter=all"))
-            .andExpect(jsonPath("$.items.length()").value(1))
-            .andExpect(jsonPath("$.items[0].title").value("Visible"))
-            .andExpect(jsonPath("$.counts.none").value(1))
-            .andExpect(jsonPath("$.counts.all").value(1))
-            .andExpect(jsonPath("$.total").value(1));
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.items[0].title").value("Premade Beside"))
+            .andExpect(jsonPath("$.items[1].title").value("Visible"))
+            .andExpect(jsonPath("$.counts.none").value(2))
+            .andExpect(jsonPath("$.counts.all").value(2))
+            .andExpect(jsonPath("$.total").value(2));
     }
 
     @Test

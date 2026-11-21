@@ -148,6 +148,11 @@ class CreditsAdminIntegrationTest extends IntegrationTestBase {
         }
         seeded.add(seed("Single No Duration", 2000, "Original", null, null,
             e -> e.originalParts().get(0).setDurationMs(null)));
+        seeded.add(seed("Single No Duration With Premade", 2000, "Original", null, null, e -> {
+            e.originalParts().get(0).setDurationMs(null);
+            MediaFile premade = file(e, "premade-nodur.m4v");
+            premade.setKind(MediaKind.PREMADE_720);
+        }));
         seeded.add(seed("Single Negative", 2000, "Original", null, null,
             e -> e.originalParts().get(0).setDurationMs(-1L)));
         seeded.add(seed("Premade Missing", 2000, "Original", null, null, e -> {
