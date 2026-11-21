@@ -34,6 +34,17 @@ class ScanSchedulerTest {
     }
 
     @Test
+    void theStartupListenerIsOrderedAheadOfTheCreditsApplier() throws NoSuchMethodException {
+        java.lang.reflect.Method startup = ScanScheduler.class.getMethod("onStartup");
+
+        org.assertj.core.api.Assertions.assertThat(startup.getAnnotation(
+            org.springframework.context.event.EventListener.class).value())
+            .containsExactly(org.springframework.boot.context.event.ApplicationReadyEvent.class);
+        org.assertj.core.api.Assertions.assertThat(startup.getAnnotation(
+            org.springframework.core.annotation.Order.class).value()).isEqualTo(ScanScheduler.STARTUP_ORDER);
+    }
+
+    @Test
     void theNightlyRunStartsANightlyScan() {
         scheduler.nightly();
 

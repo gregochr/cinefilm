@@ -3,7 +3,7 @@ package gregochr.cinefilm.credits;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -18,6 +18,7 @@ import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.library.EditionsArranged;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.library.ScanFinished;
+import gregochr.cinefilm.library.ScanScheduler;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
 import gregochr.cinefilm.plex.PlexCreditsImportFinished;
 import gregochr.cinefilm.plex.PlexCreditsMarker;
@@ -34,6 +35,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.IntConsumer;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +44,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** One pass of the credits apply: the lock wait, what is written, and what is counted. */
@@ -281,26 +284,60 @@ class CreditsApplierTest {
         assertThat(result.unchanged()).isEqualTo(size + 1);
     }
 
-    /** A pass that finds no editions: the cheapest real pass. */
-    private void emptyLibrary() {
-        when(editions.findAllIds()).thenReturn(List.of());
+    /** Every edition the pass reads, in order: each is a fresh edition 1 with no marker. */
+    private final List<Edition> served = new ArrayList<>();
+
+    /**
+     * One edition with a Plex row that matches its file. Each read serves a fresh unmarked edition, so what each pass
+     * did shows in its edition's state; {@code onRead} gets the 1-based number of the read, before it is answered.
+     */
+    private void markedLibrary(IntConsumer onRead) {
+        when(editions.findAllIds()).thenReturn(List.of(1L));
+        when(editions.findWithFilesByIdIn(List.of(1L))).thenAnswer(invocation -> {
+            Edition fresh = edition(1, null, null);
+            served.add(fresh);
+            onRead.accept(served.size());
+            return List.of(fresh);
+        });
+        when(markers.findAllById(List.of(1L))).thenReturn(List.of(row(1, FINGERPRINT, 5_000_000)));
+    }
+
+    private void markedLibrary() {
+        markedLibrary(n -> { });
+    }
+
+    private static void assertApplied(Edition edition) {
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(5_000_000L);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.PLEX);
+    }
+
+    /** The pass number {@code count} editions were served for, all applied and saved. */
+    private void assertServedAndApplied(int count) {
+        assertThat(served).hasSize(count);
+        served.forEach(CreditsApplierTest::assertApplied);
+        if (count > 0) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<Edition>> saved = ArgumentCaptor.forClass(List.class);
+            verify(editions, atLeastOnce()).saveAll(saved.capture());
+            assertThat(saved.getAllValues().stream().flatMap(List::stream)).containsExactlyElementsOf(served);
+        }
     }
 
     @Test
-    void aRequestRunsOnePassOnTheExecutorNotInline() {
+    void aRequestAppliesTheMarkerOnTheExecutorNotInline() {
         AtomicReference<Runnable> queued = new AtomicReference<>();
         executor = queued::set;
-        emptyLibrary();
+        markedLibrary();
 
         applier().requestPass();
 
-        verifyNoInteractions(editions);
+        assertThat(served).isEmpty();
         queued.get().run();
-        verify(editions).findAllIds();
+        assertServedAndApplied(1);
     }
 
     @Test
-    void aRefusedPassLeavesTheFlagSetWithoutSpinningAndTheNextRequestRunsAPass() {
+    void aRefusedPassAppliesNothingAndDoesNotSpinAndTheNextRequestAppliesTheMarker() {
         AtomicInteger executed = new AtomicInteger();
         executor = command -> {
             executed.incrementAndGet();
@@ -313,67 +350,64 @@ class CreditsApplierTest {
 
         assertThat(executed).hasValue(1);
         assertThat(sleeps).hasSize(CreditsApplier.LOCK_ATTEMPTS);
-        verifyNoInteractions(editions);
         lock.release();
-        emptyLibrary();
+        markedLibrary();
 
         applier.requestPass();
 
         assertThat(executed).hasValue(2);
-        verify(editions).findAllIds();
+        assertServedAndApplied(1);
         assertThat(lock.holder()).isNull();
     }
 
     @Test
     void aRequestDuringAPassGivesExactlyOneMorePassHoweverManyArrive() {
         CreditsApplier applier = applier();
-        AtomicInteger reads = new AtomicInteger();
-        when(editions.findAllIds()).thenAnswer(invocation -> {
-            if (reads.incrementAndGet() == 1) {
+        markedLibrary(n -> {
+            if (n == 1) {
                 applier.requestPass();
                 applier.requestPass();
                 applier.requestPass();
             }
-            return List.of();
         });
 
         applier.requestPass();
 
-        assertThat(reads).hasValue(2);
+        assertServedAndApplied(2);
         assertThat(lock.holder()).isNull();
     }
 
     @Test
     void aRequestAfterAFinishedPassGivesANewPass() {
-        emptyLibrary();
+        markedLibrary();
         CreditsApplier applier = applier();
 
         applier.requestPass();
         applier.requestPass();
 
-        verify(editions, times(2)).findAllIds();
+        assertServedAndApplied(2);
     }
 
     @Test
-    void aPassThatFailsIsLoggedAndOwedSoTheNudgeRunsItAgain() {
-        AtomicInteger reads = new AtomicInteger();
-        when(editions.findAllIds()).thenAnswer(invocation -> {
-            if (reads.incrementAndGet() == 1) {
+    void aPassThatFailsIsOwedSoTheNudgeAppliesTheMarkerAndASecondNudgeDoesNothing() {
+        markedLibrary(n -> {
+            if (n == 1) {
                 throw new IllegalStateException("db down");
             }
-            return List.of();
         });
         CreditsApplier applier = applier();
 
         applier.requestPass();
 
-        verify(editions).findAllIds();
+        assertThat(served).hasSize(1);
+        assertThat(served.get(0).getCreditsMarkerMs()).as("the failed pass applied nothing").isNull();
         assertThat(lock.holder()).isNull();
 
         applier.retryIfRefused();
         applier.retryIfRefused();
 
-        verify(editions, times(2)).findAllIds();
+        assertThat(served).hasSize(2);
+        assertApplied(served.get(1));
     }
 
     @Test
@@ -387,11 +421,11 @@ class CreditsApplierTest {
                 applier.requestPass();
             }
         };
-        emptyLibrary();
+        markedLibrary();
 
         applier.requestPass();
 
-        verify(editions).findAllIds();
+        assertServedAndApplied(1);
         assertThat(hooks).hasValue(2);
     }
 
@@ -404,20 +438,20 @@ class CreditsApplierTest {
             }
             command.run();
         };
+        markedLibrary();
         CreditsApplier applier = applier();
 
         assertThatThrownBy(applier::requestPass).isInstanceOf(RejectedExecutionException.class);
-        verifyNoInteractions(editions);
-        emptyLibrary();
+        assertThat(served).isEmpty();
 
         applier.requestPass();
 
-        verify(editions).findAllIds();
+        assertServedAndApplied(1);
     }
 
     @Test
-    void eachTriggerOnlyAsksForAPass() {
-        emptyLibrary();
+    void eachTriggerAppliesTheMarker() {
+        markedLibrary();
         CreditsApplier applier = applier();
 
         applier.onStartup();
@@ -426,7 +460,7 @@ class CreditsApplierTest {
         applier.onPlexCreditsImportFinished(new PlexCreditsImportFinished());
         applier.onEditionsArranged(new EditionsArranged());
 
-        verify(editions, times(5)).findAllIds();
+        assertServedAndApplied(5);
     }
 
     @Test
@@ -461,13 +495,13 @@ class CreditsApplierTest {
     }
 
     @Test
-    void withThePropertyOffThePassItselfStillRuns() {
-        emptyLibrary();
+    void withThePropertyOffThePassItselfStillAppliesTheMarker() {
+        markedLibrary();
 
         PassResult result = applier(false).runPass();
 
         assertThat(result.lockTaken()).isTrue();
-        verify(editions).findAllIds();
+        assertServedAndApplied(1);
     }
 
     @Test
@@ -484,11 +518,11 @@ class CreditsApplierTest {
                 lock.release();
             }
         };
-        emptyLibrary();
+        markedLibrary();
 
         applier.requestPass();
 
-        verify(editions).findAllIds();
+        assertServedAndApplied(1);
         assertThat(lock.holder()).isNull();
     }
 
@@ -510,7 +544,7 @@ class CreditsApplierTest {
     }
 
     @Test
-    void theNudgeRetriesARefusedPassOnce() {
+    void theNudgeAppliesTheMarkerOfARefusedPassOnceAndNotAgain() {
         AtomicInteger executed = new AtomicInteger();
         executor = command -> {
             executed.incrementAndGet();
@@ -520,13 +554,13 @@ class CreditsApplierTest {
         CreditsApplier applier = applier();
         applier.requestPass();
         lock.release();
-        emptyLibrary();
+        markedLibrary();
 
         applier.retryIfRefused();
         applier.retryIfRefused();
 
         assertThat(executed).hasValue(2);
-        verify(editions).findAllIds();
+        assertServedAndApplied(1);
     }
 
     @Test
@@ -536,7 +570,7 @@ class CreditsApplierTest {
             queued.incrementAndGet();
             command.run();
         };
-        emptyLibrary();
+        markedLibrary();
         CreditsApplier applier = applier();
 
         applier.retryIfRefused();
@@ -546,7 +580,20 @@ class CreditsApplierTest {
         applier.retryIfRefused();
 
         assertThat(queued).as("only the request itself").hasValue(1);
-        verify(editions).findAllIds();
+        assertServedAndApplied(1);
+    }
+
+    @Test
+    void aNudgeDuringAPassAfterAnEarlierRefusalDoesNotGiveASecondPass() {
+        lock.tryAcquire(LibraryLock.SCAN);
+        CreditsApplier applier = applier();
+        applier.requestPass();
+        lock.release();
+        markedLibrary(n -> applier.retryIfRefused());
+
+        applier.requestPass();
+
+        assertServedAndApplied(1);
     }
 
     @Test
@@ -564,6 +611,15 @@ class CreditsApplierTest {
     }
 
     @Test
+    void theStartupListenerRunsAfterTheScanSchedulersSoTheFirstScanTakesTheLockFirst() throws NoSuchMethodException {
+        int credits = CreditsApplier.class.getMethod("onStartup").getAnnotation(Order.class).value();
+        int scan = ScanScheduler.class.getMethod("onStartup").getAnnotation(Order.class).value();
+
+        assertThat(credits).isEqualTo(CreditsApplier.STARTUP_ORDER);
+        assertThat(scan).isLessThan(credits);
+    }
+
+    @Test
     void noMethodListensForLibraryChanged() {
         assertThat(Arrays.stream(CreditsApplier.class.getDeclaredMethods())
             .flatMap(method -> Arrays.stream(method.getParameterTypes())))
@@ -574,21 +630,5 @@ class CreditsApplierTest {
             .flatMap(listener -> java.util.stream.Stream.concat(Arrays.stream(listener.value()),
                 Arrays.stream(listener.classes()))))
             .doesNotContain(LibraryChanged.class);
-    }
-
-    @Test
-    void aNudgeDuringAPassAfterAnEarlierRefusalDoesNotGiveASecondPass() {
-        lock.tryAcquire(LibraryLock.SCAN);
-        CreditsApplier applier = applier();
-        applier.requestPass();
-        lock.release();
-        when(editions.findAllIds()).thenAnswer(invocation -> {
-            applier.retryIfRefused();
-            return List.of();
-        });
-
-        applier.requestPass();
-
-        verify(editions).findAllIds();
     }
 }

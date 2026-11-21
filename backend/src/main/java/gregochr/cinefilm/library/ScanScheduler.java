@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,12 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(name = "cinefilm.scan.schedule", havingValue = "true", matchIfMissing = true)
 public class ScanScheduler {
+
+    /**
+     * The order of the start-up listener: before the credits applier's, so the initial scan holds the library lock
+     * before a credits pass asks for it (the pass then waits, instead of making the scan refuse to start).
+     */
+    public static final int STARTUP_ORDER = 0;
 
     private static final Logger LOG = LoggerFactory.getLogger(ScanScheduler.class);
 
@@ -30,6 +37,7 @@ public class ScanScheduler {
 
     /** Scans once the application is up, but only when there are no films yet. */
     @EventListener(ApplicationReadyEvent.class)
+    @Order(STARTUP_ORDER)
     public void onStartup() {
         if (films.count() == 0) {
             begin("startup");

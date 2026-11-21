@@ -31,6 +31,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -56,6 +57,8 @@ public class CreditsApplier {
     /** How often a pass tries for the lock, and how long it waits between tries (10 minutes in all). */
     static final int LOCK_ATTEMPTS = 120;
     static final Duration LOCK_WAIT = Duration.ofSeconds(5);
+    /** The order of the start-up listener: after the scan scheduler's, which starts the first scan. */
+    public static final int STARTUP_ORDER = 10;
     /** How many editions one transaction reads and writes. */
     static final int BATCH_SIZE = 100;
 
@@ -113,6 +116,7 @@ public class CreditsApplier {
 
     /** Asks for a pass at start-up. */
     @EventListener(ApplicationReadyEvent.class)
+    @Order(STARTUP_ORDER)
     public void onStartup() {
         requestPass();
     }
