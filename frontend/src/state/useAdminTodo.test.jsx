@@ -539,6 +539,23 @@ describe('useAdminTodo: leaveUnmatched', () => {
     expect(onChanged).not.toHaveBeenCalled();
   });
 
+  it('reads the lists again on a 409 "not waiting for a match", the row being stale', async () => {
+    installFetch((m, url) =>
+      m === 'POST' && url === LEAVE
+        ? respond({ error: 'This film is not waiting for a match' }, 409)
+        : null,
+    );
+    const { result, onChanged } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+
+    await act(() => result.current.leaveUnmatched(SUSPIRIA));
+
+    expect(result.current.problems[34]).toBe(
+      'That film is already settled. The list is being updated.',
+    );
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
   it('reads the lists again on a 404, the film being gone', async () => {
     installFetch((m, url) => (m === 'POST' && url === LEAVE ? respond({ error: 'x' }, 404) : null));
     const { result, onChanged } = mount();

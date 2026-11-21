@@ -114,7 +114,8 @@ export function confirmProblem(failure) {
 
 /**
  * What a failed "Leave unmatched" says on its row. A 404 (the film is gone) and the 409 "not waiting for a match" (the
- * row is stale) ask for a re-read, as for a confirm; any other 409 says what holds the library lock (the bare scan line gets this screen's own words).
+ * row is stale) ask for a re-read, as for a confirm; any other 409 says what holds the library lock (the bare scan
+ * line gets this screen's own words).
  */
 export function leaveProblem(failure) {
   const status = failure instanceof ApiError ? failure.status : 0;
