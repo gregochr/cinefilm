@@ -6,10 +6,6 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyCollection;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsList;
@@ -31,7 +27,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 
 /** The list's mapping: counts, the page's rows, Plex's state and the size cap, over mocked repositories. */
 @ExtendWith(MockitoExtension.class)
@@ -70,10 +65,12 @@ class CreditsAdminServiceTest {
         return row;
     }
 
-    private void page(List<Edition> page) {
-        when(editions.findCreditsPageIds(anyBoolean(), anyBoolean(), eq(CreditsMarkerSource.PLEX),
-            any(Pageable.class))).thenReturn(page.stream().map(Edition::getId).toList());
-        when(editions.findWithFilesAndFilmByIdIn(anyCollection())).thenReturn(page);
+    /** Answers the first page of 25 for the filter with these editions, and loads exactly their ids. */
+    private void page(CreditsFilter filter, List<Edition> page) {
+        List<Long> ids = page.stream().map(Edition::getId).toList();
+        when(editions.findCreditsPageIds(filter.anySource(), filter.unsettled(), filter.source(),
+            PageRequest.of(0, 25))).thenReturn(ids);
+        when(editions.findWithFilesAndFilmByIdIn(ids)).thenReturn(page);
     }
 
     @Test
@@ -81,8 +78,8 @@ class CreditsAdminServiceTest {
         when(editions.countVisibleBySource()).thenReturn(List.of(new SourceCount(null, 5),
             new SourceCount(CreditsMarkerSource.PLEX, 3), new SourceCount(CreditsMarkerSource.OWNER, 2),
             new SourceCount(CreditsMarkerSource.AUTO, 1)));
-        when(editions.findCreditsPageIds(anyBoolean(), anyBoolean(), eq(CreditsMarkerSource.PLEX),
-            any(Pageable.class))).thenReturn(List.of());
+        when(editions.findCreditsPageIds(false, false, CreditsMarkerSource.PLEX, PageRequest.of(0, 25)))
+            .thenReturn(List.of());
 
         CreditsList list = service().list(CreditsFilter.PLEX, 0, 25);
 
@@ -95,8 +92,12 @@ class CreditsAdminServiceTest {
     void theTotalIsTheChosenFiltersCount() {
         when(editions.countVisibleBySource()).thenReturn(List.of(new SourceCount(null, 5),
             new SourceCount(CreditsMarkerSource.PLEX, 3), new SourceCount(CreditsMarkerSource.OWNER, 2)));
-        when(editions.findCreditsPageIds(anyBoolean(), anyBoolean(), any(),
-            any(Pageable.class))).thenReturn(List.of());
+        when(editions.findCreditsPageIds(false, true, CreditsMarkerSource.PLEX, PageRequest.of(0, 25)))
+            .thenReturn(List.of());
+        when(editions.findCreditsPageIds(false, false, CreditsMarkerSource.OWNER, PageRequest.of(0, 25)))
+            .thenReturn(List.of());
+        when(editions.findCreditsPageIds(true, false, CreditsMarkerSource.PLEX, PageRequest.of(0, 25)))
+            .thenReturn(List.of());
 
         assertThat(service().list(CreditsFilter.NONE, 0, 25).total()).isEqualTo(5);
         assertThat(service().list(CreditsFilter.OWNER, 0, 25).total()).isEqualTo(2);
@@ -106,10 +107,10 @@ class CreditsAdminServiceTest {
     @Test
     void aRowCarriesTheFilmTheEditionTheCountTheRuntimeAndPlexsState() {
         Edition edition = seeded(7, "Heat", 1995, 5_000_000L, CreditsMarkerSource.PLEX);
-        page(List.of(edition));
+        page(CreditsFilter.PLEX, List.of(edition));
         when(editions.countVisibleBySource()).thenReturn(List.of());
-        when(editions.countVisibleByFilmIdIn(anyCollection())).thenReturn(List.of(new FilmEditionCount(7L, 2)));
-        when(markers.findAllById(anyCollection())).thenReturn(List.of(plexRow(7, FINGERPRINT, 5_000_000)));
+        when(editions.countVisibleByFilmIdIn(List.of(7L))).thenReturn(List.of(new FilmEditionCount(7L, 2)));
+        when(markers.findAllById(List.of(7L))).thenReturn(List.of(plexRow(7, FINGERPRINT, 5_000_000)));
 
         List<CreditsRow> items = service().list(CreditsFilter.PLEX, 0, 25).items();
 
@@ -123,10 +124,10 @@ class CreditsAdminServiceTest {
         Edition refused = seeded(2, "Refused", 2001, null, null);
         Edition stale = seeded(3, "Stale", 2002, null, null);
         Edition none = seeded(4, "None", 2003, null, null);
-        page(List.of(owner, refused, stale, none));
+        page(CreditsFilter.ALL, List.of(owner, refused, stale, none));
         when(editions.countVisibleBySource()).thenReturn(List.of());
-        when(editions.countVisibleByFilmIdIn(anyCollection())).thenReturn(List.of());
-        when(markers.findAllById(anyCollection())).thenReturn(List.of(plexRow(1, FINGERPRINT, 5_000_000),
+        when(editions.countVisibleByFilmIdIn(List.of(1L, 2L, 3L, 4L))).thenReturn(List.of());
+        when(markers.findAllById(List.of(1L, 2L, 3L, 4L))).thenReturn(List.of(plexRow(1, FINGERPRINT, 5_000_000),
             plexRow(2, FINGERPRINT, 1_000_000), plexRow(3, "1:2", 5_000_000)));
 
         List<CreditsRow> items = service().list(CreditsFilter.ALL, 0, 25).items();
@@ -147,10 +148,10 @@ class CreditsAdminServiceTest {
         part.setVideoDurationMs(null);
         Edition noFile = seeded(2, "No File", 2000, null, null);
         noFile.getMediaFiles().clear();
-        page(List.of(noDuration, noFile));
+        page(CreditsFilter.ALL, List.of(noDuration, noFile));
         when(editions.countVisibleBySource()).thenReturn(List.of());
-        when(editions.countVisibleByFilmIdIn(anyCollection())).thenReturn(List.of());
-        when(markers.findAllById(anyCollection())).thenReturn(List.of(plexRow(1, FINGERPRINT, 5_000_000)));
+        when(editions.countVisibleByFilmIdIn(List.of(1L, 2L))).thenReturn(List.of());
+        when(markers.findAllById(List.of(1L))).thenReturn(List.of(plexRow(1, FINGERPRINT, 5_000_000)));
 
         List<CreditsRow> items = service().list(CreditsFilter.ALL, 0, 25).items();
 
@@ -165,9 +166,9 @@ class CreditsAdminServiceTest {
     void aPageOfOnlyFilelessEditionsShowsEveryRowAsPlexNone() {
         Edition noFile = seeded(2, "No File", 2000, null, null);
         noFile.getMediaFiles().clear();
-        page(List.of(noFile));
+        page(CreditsFilter.ALL, List.of(noFile));
         when(editions.countVisibleBySource()).thenReturn(List.of());
-        when(editions.countVisibleByFilmIdIn(anyCollection())).thenReturn(List.of());
+        when(editions.countVisibleByFilmIdIn(List.of(2L))).thenReturn(List.of());
 
         List<CreditsRow> items = service().list(CreditsFilter.ALL, 0, 25).items();
 
@@ -180,11 +181,11 @@ class CreditsAdminServiceTest {
         Edition first = seeded(1, "Alpha", 2000, null, null);
         Edition second = seeded(2, "Beta", 2000, null, null);
         when(editions.countVisibleBySource()).thenReturn(List.of());
-        when(editions.findCreditsPageIds(anyBoolean(), anyBoolean(), eq(CreditsMarkerSource.PLEX),
-            any(Pageable.class))).thenReturn(List.of(1L, 2L));
-        when(editions.findWithFilesAndFilmByIdIn(anyCollection())).thenReturn(List.of(second, first));
-        when(editions.countVisibleByFilmIdIn(anyCollection())).thenReturn(List.of());
-        when(markers.findAllById(anyCollection())).thenReturn(List.of());
+        when(editions.findCreditsPageIds(true, false, CreditsMarkerSource.PLEX, PageRequest.of(0, 25)))
+            .thenReturn(List.of(1L, 2L));
+        when(editions.findWithFilesAndFilmByIdIn(List.of(1L, 2L))).thenReturn(List.of(second, first));
+        when(editions.countVisibleByFilmIdIn(List.of(1L, 2L))).thenReturn(List.of());
+        when(markers.findAllById(List.of(1L, 2L))).thenReturn(List.of());
 
         assertThat(service().list(CreditsFilter.ALL, 0, 25).items()).extracting(CreditsRow::title)
             .containsExactly("Alpha", "Beta");
@@ -196,11 +197,12 @@ class CreditsAdminServiceTest {
         List<Edition> many = LongStream.rangeClosed(1, 100).mapToObj(n -> seeded(n, "Film " + n, 2000, null, null))
             .toList();
         // Only a request for page 2 of exactly 100 rows is answered; any other page size finds nothing.
-        when(editions.findCreditsPageIds(anyBoolean(), anyBoolean(), eq(CreditsMarkerSource.PLEX),
-            eq(PageRequest.of(2, 100)))).thenReturn(many.stream().map(Edition::getId).toList());
-        when(editions.findWithFilesAndFilmByIdIn(anyCollection())).thenReturn(many);
-        when(editions.countVisibleByFilmIdIn(anyCollection())).thenReturn(List.of());
-        when(markers.findAllById(anyCollection())).thenReturn(List.of());
+        List<Long> ids = many.stream().map(Edition::getId).toList();
+        when(editions.findCreditsPageIds(true, false, CreditsMarkerSource.PLEX, PageRequest.of(2, 100)))
+            .thenReturn(ids);
+        when(editions.findWithFilesAndFilmByIdIn(ids)).thenReturn(many);
+        when(editions.countVisibleByFilmIdIn(ids)).thenReturn(List.of());
+        when(markers.findAllById(ids)).thenReturn(List.of());
 
         CreditsList list = service().list(CreditsFilter.ALL, 2, 5000);
 
@@ -212,8 +214,8 @@ class CreditsAdminServiceTest {
     @Test
     void aNegativePageAndASizeBelowOneAreClamped() {
         when(editions.countVisibleBySource()).thenReturn(List.of());
-        when(editions.findCreditsPageIds(anyBoolean(), anyBoolean(), any(),
-            any(Pageable.class))).thenReturn(List.of());
+        when(editions.findCreditsPageIds(true, false, CreditsMarkerSource.PLEX, PageRequest.of(0, 1)))
+            .thenReturn(List.of());
 
         CreditsList list = service().list(CreditsFilter.ALL, -3, 0);
 
