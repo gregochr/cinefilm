@@ -38,7 +38,7 @@ class HomeControllerTest {
     @BeforeEach
     void home() {
         when(service.home()).thenReturn(new Home(null, List.of(), 0, List.of(), List.of(),
-            new ThemeDto("This week: the 1990s", "A new theme every Monday", "decade", "1990", List.of())));
+            new ThemeDto("This week: the 1990s", "A new theme each week", "decade", "1990", List.of())));
     }
 
     @Test

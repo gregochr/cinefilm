@@ -86,7 +86,7 @@ The titles and years are sample data. Which films TMDB actually tags will decide
      - Poll every 30 s while `running`.
 3. **Preview, inside the same card:**
    - The label "Preview · Home in Christmas week" with a "Hide preview" text button. Remember open or closed in `localStorage`, in a try/catch, and default to open.
-   - Then **the real Home row title and caption**: "This week: Christmas" / "A new theme every Monday".
+   - Then **the real Home row title and caption**: "This week: Christmas" / "A new theme each week".
    - Then the first 12 posters at 2:3 in a 12-column grid.
    - **Reuse the Home row's poster component** so it really looks like Home. Lazy images, with the aspect ratio reserved.
    - When `fallsBack`, the preview instead reads "Christmas week will show the usual weekly theme — under 5 Christmas films."

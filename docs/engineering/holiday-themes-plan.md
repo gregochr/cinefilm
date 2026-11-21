@@ -77,7 +77,7 @@ removed with no seed. See `christmas-films-plan.md`.
 - **The period runs until the day itself.** Halloween: the Monday on or before 24 Oct through 31 Oct inclusive.
   Christmas: the Monday on or before 18 Dec through 25 Dec inclusive (8 to 14 days). The Sunday no longer ends it, so
   Home keeps the holiday row on 21 to 25 Dec. Each period still starts on a Monday, but the ordinary rotation now returns on 1 Nov and 26 Dec, so the theme no
-  longer always changes on a Monday (Home's caption is left as it is, pending the owner).
+  longer always changes on a Monday; so Home's caption now reads "A new theme each week" (owner, 2026-11-21).
   `HolidayWeeks.christmasWeekFrom` reports next year's period from 26 Dec.
 - **Christmas order:** films the owner added by hand (an include, not excluded) first in `ROW_ORDER`, then every other
   Christmas film in a shuffle seeded by the London date's epoch day, applied to the `ROW_ORDER` list. Stable all day

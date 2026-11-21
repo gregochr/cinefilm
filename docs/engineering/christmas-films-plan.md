@@ -115,7 +115,7 @@ listbox roles), because each row holds a button.
 
 ### Slice 5: Home preview and phone polish (was "4b")
 
-- Preview inside the status card: label "Preview · Home in Christmas week", "Hide preview"/"Show preview" button (open by default, remembered in `localStorage` inside try/catch), the real Home row title and caption ("This week: Christmas" / "A new theme every Monday"), then the first 12 `inWeek` posters reusing Home's poster row (`FilmRow` + `Poster`, lazy, 2:3 reserved). When `fallsBack`: "Christmas week will show the usual weekly theme — under 5 Christmas films." Phone: a full-width 44px "Preview Home in Christmas week ›" button opening the row in a sheet.
+- Preview inside the status card: label "Preview · Home in Christmas week", "Hide preview"/"Show preview" button (open by default, remembered in `localStorage` inside try/catch), the real Home row title and caption ("This week: Christmas" / "A new theme each week"), then the first 12 `inWeek` posters reusing Home's poster row (`FilmRow` + `Poster`, lazy, 2:3 reserved). When `fallsBack`: "Christmas week will show the usual weekly theme — under 5 Christmas films." Phone: a full-width 44px "Preview Home in Christmas week ›" button opening the row in a sheet.
 - Phone "‹ Admin" back link above the eyebrow; phone cut line uses the short text if the design shows it (`05`).
 - Tests: open/closed remembered (and storage throwing), fallsBack text, 12 posters max, sheet on phone, back link.
 

@@ -70,7 +70,7 @@ class HomeHolidayApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.weeklyTheme.kind").value("holiday"))
             .andExpect(jsonPath("$.weeklyTheme.value").value("christmas"))
             .andExpect(jsonPath("$.weeklyTheme.title").value("This week: Christmas"))
-            .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme every Monday"))
+            .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme each week"))
             .andExpect(jsonPath("$.weeklyTheme.films[0].title").value("Included"))
             .andExpect(jsonPath("$.weeklyTheme.films[*].title",
                 containsInAnyOrder("Included", "Tagged C", "Tagged A", "Tagged B", "Tagged D")));

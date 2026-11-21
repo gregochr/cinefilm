@@ -293,7 +293,7 @@ export const EMPTY_TAB_TEXT = {
 
 /** Home's row title and caption in Christmas week (the backend's WeeklyTheme builds the same two strings). */
 export const PREVIEW_TITLE = 'This week: Christmas';
-export const PREVIEW_CAPTION = 'A new theme every Monday';
+export const PREVIEW_CAPTION = 'A new theme each week';
 
 export const PREVIEW_LABEL = 'Preview · Home in Christmas week';
 

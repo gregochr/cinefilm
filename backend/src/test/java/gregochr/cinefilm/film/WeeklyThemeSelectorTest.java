@@ -131,7 +131,7 @@ class WeeklyThemeSelectorTest {
         boolean sawDirector = false;
         for (int week = 0; week < 52; week++) {
             WeeklyTheme theme = WeeklyThemeSelector.choose(LocalDate.of(2026, 1, 5).plusWeeks(week), library);
-            assertThat(theme.caption()).isEqualTo("A new theme every Monday");
+            assertThat(theme.caption()).isEqualTo("A new theme each week");
             switch (theme.kind()) {
                 case "decade" -> {
                     sawDecade = true;
@@ -214,7 +214,7 @@ class WeeklyThemeSelectorTest {
         assertThat(theme.kind()).isEqualTo("holiday");
         assertThat(theme.value()).isEqualTo("halloween");
         assertThat(theme.title()).isEqualTo("This week: Halloween");
-        assertThat(theme.caption()).isEqualTo("A new theme every Monday");
+        assertThat(theme.caption()).isEqualTo("A new theme each week");
         assertThat(theme.films()).extracting(Film::getYear).containsExactly(1960, 1978, 1999, 2005, 2010);
     }
 
@@ -296,7 +296,7 @@ class WeeklyThemeSelectorTest {
         assertThat(theme.kind()).isEqualTo("holiday");
         assertThat(theme.value()).isEqualTo("christmas");
         assertThat(theme.title()).isEqualTo("This week: Christmas");
-        assertThat(theme.caption()).isEqualTo("A new theme every Monday");
+        assertThat(theme.caption()).isEqualTo("A new theme each week");
         assertThat(theme.films()).extracting(Film::getYear)
             .containsExactlyInAnyOrder(1980, 1981, 1982, 1983, 1984);
     }

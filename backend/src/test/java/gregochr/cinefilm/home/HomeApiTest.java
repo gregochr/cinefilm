@@ -37,7 +37,7 @@ class HomeApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.continueWatching", hasSize(0)))
             .andExpect(jsonPath("$.recentlyAdded", hasSize(0)))
             .andExpect(jsonPath("$.notWatchedInYears", hasSize(0)))
-            .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme every Monday"))
+            .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme each week"))
             .andExpect(jsonPath("$.weeklyTheme.films", hasSize(0)));
     }
 
@@ -62,7 +62,7 @@ class HomeApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.notWatchedInYears[*].title", contains("Kes")))
             .andExpect(jsonPath("$.notWatchedInYears[0].watched").value(true))
             .andExpect(jsonPath("$.weeklyTheme.title").value("This week: your library"))
-            .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme every Monday"))
+            .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme each week"))
             .andExpect(jsonPath("$.weeklyTheme.kind").value("library"))
             .andExpect(jsonPath("$.weeklyTheme.films", hasSize(5)))
             .andExpect(jsonPath("$.collections").doesNotExist());

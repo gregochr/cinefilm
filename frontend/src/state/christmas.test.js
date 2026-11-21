@@ -442,7 +442,7 @@ describe('the Home preview', () => {
 
   it('says what Home says', () => {
     expect(PREVIEW_TITLE).toBe('This week: Christmas');
-    expect(PREVIEW_CAPTION).toBe('A new theme every Monday');
+    expect(PREVIEW_CAPTION).toBe('A new theme each week');
     expect(PREVIEW_LABEL).toBe('Preview · Home in Christmas week');
     expect(fallbackText(5)).toBe(
       'Christmas week will show the usual weekly theme — under 5 Christmas films.',
