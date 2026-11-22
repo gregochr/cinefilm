@@ -231,7 +231,9 @@ describe('EndCreditsPanel: the time field, Set and Clear', () => {
 
     const { onClear } = open(owner);
     const clear = screen.getByRole('button', { name: 'Clear my time' });
-    expect(clear).toHaveAccessibleDescription('Goes back to Plex’s marker, or none');
+    expect(clear).toHaveAccessibleDescription(
+      'Goes back to Plex’s marker, the detected time, or none',
+    );
     await userEvent.click(clear);
     expect(onClear).toHaveBeenCalledTimes(1);
   });

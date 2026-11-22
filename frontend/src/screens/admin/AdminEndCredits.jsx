@@ -89,7 +89,7 @@ function Pager({ page, size, total, onPage }) {
 
 /**
  * The End credits list opened from Library's card: every edition and its marker, in tabs (Needs a look, From Plex,
- * Yours, All; the open one is `?show=`), 25 a page with Previous and Next. A row's "Look and set…" opens its panel
+ * Detected, Yours, All; the open one is `?show=`), 25 a page with Previous and Next. A row's "Look and set…" opens its panel
  * inline; one is open at a time, and a new tab or page closes it.
  */
 export default function AdminEndCredits() {

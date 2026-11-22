@@ -42,7 +42,7 @@ public class CreditsAdminController {
 
     /**
      * One page of editions with their credits markers. {@code filter} is {@code none} (the default), {@code plex},
-     * {@code owner} or {@code all}; {@code page} is 0-based (default 0); {@code size} is 1 to
+     * {@code auto}, {@code owner} or {@code all}; {@code page} is 0-based (default 0); {@code size} is 1 to
      * {@link CreditsAdminService#MAX_SIZE} (default 25). A parameter that is present must be valid: anything
      * else, or a page whose first row would sit past {@link Integer#MAX_VALUE}, is a 400 {@code Invalid request}.
      */
