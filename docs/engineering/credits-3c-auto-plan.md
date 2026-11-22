@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after eleven adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after twelve adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -232,16 +232,18 @@ Each at most 1,500 changed lines, tests included.
   - The properties, the compose mount and the file reader.
   - The pass's batched read gains the `credits_detection` rows and the unit key's inputs (including every listed
     film's current unit key, for rule 6), with a fixed number of queries per batch.
-  - The Clear plumbing: `CreditsAdminService.clear` (and 3c-1d's candidates) read the same inputs as the pass: the
-    detection row, the switch, the cards flag, the deny list, the film's unit key inputs and `tmdb_id`, and every
-    listed film's current unit key, through the same code.
+  - The Clear plumbing: `CreditsAdminService.clear` (and 3c-1d's candidates) take the list in force that the applier
+    kept from its latest pass (held in memory, shared with the pass, never re-read from the file), and read live the
+    detection row, the switch, the cards flag, the film's unit key inputs and `tmdb_id`, and every listed film's
+    current unit key, through the same code as the pass.
   - Log fields.
   - Tests:
     - `CreditsApplierTest`: the log counts, including a second pass that changes nothing and still logs the full
       `AUTO` count; the header's date and count with no entry or id in the log; each reason `AUTO` is off (the
       switch, no list in force).
     - `CreditsAdminServiceTest`: Clear landing on `AUTO`; Clear with an older copy in force landing on `AUTO` from it; Clear with no list in force
-      landing on step 4; Clear landing on step 4,
+      landing on step 4; after a pass, the file's contents replaced with no pass run, Clear still answering from
+      the pass's copy without calling the reader; Clear landing on step 4,
       not `AUTO`, for an edition denied by rule 2, by rule 6, and for an unmatched film.
     - The reader's test, an empty path counting as unreadable.
     - The list in force, in the reader's test and `CreditsApplierTest`: a good read then a bad one (the second pass
@@ -262,7 +264,8 @@ Each at most 1,500 changed lines, tests included.
 
     It is computed by the same code, over the same editions as the pass (hidden ones included). It answers 409 "No
     deny list" only when there is no list in force. It goes in `foundation-plan.md` and `RouteSecurityDriftTest`.
-  - Tests: the service and controller tests (401, missing CSRF, the 409 with no list in force, and a 200 on an older copy), and an
+  - Tests: the service and controller tests (401, missing CSRF, the 409 with no list in force, a 200 on an older copy, and the
+    file replaced with no pass run still answered from the pass's copy), and an
     integration test where one fixture's candidates not flagged `owner` equal the editions a pass then sets to
     `AUTO`, with hidden and owner editions, and cards on and off.
   - `operations.md`:
