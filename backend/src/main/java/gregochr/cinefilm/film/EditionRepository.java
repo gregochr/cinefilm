@@ -128,6 +128,29 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
                                   Pageable pageable);
 
     /**
+     * One edition's film and the film's unit key inputs, as L1's export reads them.
+     *
+     * @param editionId the edition
+     * @param filmId the edition's film
+     * @param filmTmdbId the film's TMDB id; null when not matched
+     * @param title the film's title
+     * @param year the film's release year; null when unknown
+     * @param collectionId the film's collection; null when none
+     * @param collectionTmdbId the collection's TMDB id; null when none
+     */
+    record EditionFilmRow(Long editionId, Long filmId, Long filmTmdbId, String title, Integer year,
+                          Long collectionId, Long collectionTmdbId) {
+    }
+
+    /**
+     * The film and unit key inputs of each given edition, in one statement, without loading any entity (the credits
+     * pass leaves the film lazy).
+     */
+    @Query("select new gregochr.cinefilm.film.EditionRepository$EditionFilmRow(e.id, f.id, f.tmdbId, f.title, "
+        + "f.year, c.id, c.tmdbId) from Edition e join e.film f left join f.collection c where e.id in :ids")
+    List<EditionFilmRow> findFilmRowsByIdIn(Collection<Long> ids);
+
+    /**
      * The given editions with their files (an edition with no original file row too) and their film, in one
      * statement. The film is fetched, unlike {@link #findWithFilesByIdIn}, which leaves it lazy.
      */

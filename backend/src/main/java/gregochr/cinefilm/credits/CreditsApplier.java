@@ -2,7 +2,10 @@ package gregochr.cinefilm.credits;
 
 import gregochr.cinefilm.credits.CreditsApply.Applied;
 import gregochr.cinefilm.credits.CreditsApply.Part;
+import gregochr.cinefilm.credits.CreditsApply.AutoInputs;
 import gregochr.cinefilm.credits.CreditsApply.PlexRow;
+import gregochr.cinefilm.credits.CreditsDenyFile.DenyList;
+import gregochr.cinefilm.credits.CreditsDenyFile.Parsed;
 import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
@@ -67,21 +70,22 @@ public class CreditsApplier {
      *
      * @param lockTaken false when the library lock could not be taken and nothing was read or written
      * @param plexSet editions that now have a {@code PLEX} marker (changed or not)
+     * @param autoSet editions that now have an {@code AUTO} marker (changed or not)
      * @param changed editions written
      * @param cleared editions written with no marker
      * @param ownerKept editions whose {@code OWNER} marker was left alone
      * @param unchanged editions not written
      * @param inProgressPastMarker changed editions' states in progress at or past the new marker
      */
-    public record PassResult(boolean lockTaken, int plexSet, int changed, int cleared, int ownerKept, int unchanged,
-                      long inProgressPastMarker) {
+    public record PassResult(boolean lockTaken, int plexSet, int autoSet, int changed, int cleared, int ownerKept,
+                             int unchanged, long inProgressPastMarker) {
 
         static PassResult notTaken() {
-            return new PassResult(false, 0, 0, 0, 0, 0, 0);
+            return new PassResult(false, 0, 0, 0, 0, 0, 0, 0);
         }
     }
 
-    private record Batch(int plexSet, int changed, int cleared, int ownerKept, long inProgress) {
+    private record Batch(int plexSet, int autoSet, int changed, int cleared, int ownerKept, long inProgress) {
     }
 
     private final EditionRepository editions;
@@ -91,6 +95,8 @@ public class CreditsApplier {
     private final Sleeper sleeper;
     private final TransactionTemplate tx;
     private final Executor executor;
+    private final CreditsDenyListKeeper denyList;
+    private final CreditsAutoReader auto;
     private final boolean enabled;
     private final AtomicBoolean requested = new AtomicBoolean(); // a trigger asked
     private final AtomicBoolean owed = new AtomicBoolean(); // the last pass was refused or failed
@@ -102,7 +108,8 @@ public class CreditsApplier {
     public CreditsApplier(EditionRepository editions, PlexCreditsMarkerRepository markers,
                           PlaybackStateRepository states, LibraryLock lock, Sleeper sleeper,
                           PlatformTransactionManager transactions,
-                          @Qualifier("creditsApplyExecutor") Executor executor,
+                          @Qualifier("creditsApplyExecutor") Executor executor, CreditsDenyListKeeper denyList,
+                          CreditsAutoReader auto,
                           @Value("${cinefilm.credits.apply.enabled:true}") boolean enabled) {
         this.editions = editions;
         this.markers = markers;
@@ -111,6 +118,8 @@ public class CreditsApplier {
         this.sleeper = sleeper;
         this.tx = new TransactionTemplate(transactions);
         this.executor = executor;
+        this.denyList = denyList;
+        this.auto = auto;
         this.enabled = enabled;
     }
 
@@ -240,32 +249,63 @@ public class CreditsApplier {
     }
 
     private PassResult applyAll() {
+        DenyList list = readDenyList();
+        Map<Long, String> listedUnitKeys = auto.listedUnitKeys(list);
         List<Long> ids = editions.findAllIds();
         int plexSet = 0;
+        int autoSet = 0;
         int changed = 0;
         int cleared = 0;
         int ownerKept = 0;
         long inProgress = 0;
         for (int from = 0; from < ids.size(); from += BATCH_SIZE) {
             List<Long> batch = ids.subList(from, Math.min(ids.size(), from + BATCH_SIZE));
-            Batch done = tx.execute(status -> applyBatch(batch));
+            Batch done = tx.execute(status -> applyBatch(batch, list, listedUnitKeys));
             plexSet += done.plexSet();
+            autoSet += done.autoSet();
             changed += done.changed();
             cleared += done.cleared();
             ownerKept += done.ownerKept();
             inProgress += done.inProgress();
         }
-        PassResult result = new PassResult(true, plexSet, changed, cleared, ownerKept, ids.size() - changed,
-            inProgress);
-        LOG.info("Credits apply pass: {} with a Plex marker, {} changed, {} cleared, {} owner markers kept, "
-                + "{} unchanged; {} saved positions in progress are at or past their new marker",
-            result.plexSet(), result.changed(), result.cleared(), result.ownerKept(), result.unchanged(),
+        PassResult result = new PassResult(true, plexSet, autoSet, changed, cleared, ownerKept,
+            ids.size() - changed, inProgress);
+        LOG.info("Credits apply pass: {} with a Plex marker, {} with an automatic marker, {} changed, {} cleared, "
+                + "{} owner markers kept, {} unchanged; {} saved positions in progress are at or past their new "
+                + "marker",
+            result.plexSet(), result.autoSet(), result.changed(), result.cleared(), result.ownerKept(),
+            result.unchanged(),
             result.inProgressPastMarker());
         return result;
     }
 
+    /**
+     * Reads the deny file at the start of the pass, whatever the switch says, and logs what is in force: the header's
+     * date and count, never an entry. Says once why {@code AUTO} is off, when it is.
+     *
+     * @return the list in force; null when there is none
+     */
+    private DenyList readDenyList() {
+        CreditsDenyListKeeper.Refreshed refreshed = denyList.refresh();
+        Parsed inForce = refreshed.inForce();
+        if (inForce == null) {
+            LOG.info("Credits deny file: could not be read and no earlier copy exists, so no deny list is in force");
+        } else if (refreshed.fellBack()) {
+            LOG.info("Credits deny file: could not be read, so the copy read earlier stays in force "
+                + "(manifest {}, {} entries)", inForce.manifestDate(), inForce.count());
+        } else {
+            LOG.info("Credits deny file: read (manifest {}, {} entries)", inForce.manifestDate(), inForce.count());
+        }
+        if (!auto.enabled() || inForce == null) {
+            String why = !auto.enabled() && inForce == null ? "the switch is off and no deny list is in force"
+                : !auto.enabled() ? "the switch is off" : "no deny list is in force";
+            LOG.info("Credits AUTO is off: {}", why);
+        }
+        return inForce == null ? null : inForce.list();
+    }
+
     /** Reads, computes and writes one batch: a fixed number of reads however many editions it holds. */
-    private Batch applyBatch(List<Long> batch) {
+    private Batch applyBatch(List<Long> batch, DenyList list, Map<Long, String> listedUnitKeys) {
         List<Edition> loaded = editions.findWithFilesByIdIn(batch);
         List<Long> lastPartIds = new ArrayList<>();
         for (Edition edition : loaded) {
@@ -277,14 +317,19 @@ public class CreditsApplier {
         Map<Long, PlexCreditsMarker> rows = lastPartIds.isEmpty() ? Map.of()
             : markers.findAllById(lastPartIds).stream()
                 .collect(Collectors.toMap(PlexCreditsMarker::getMediaFileId, m -> m));
+        CreditsAutoReader.Lookup lookup = auto.lookup(loaded, list, listedUnitKeys);
         int plexSet = 0;
+        int autoSet = 0;
         int cleared = 0;
         int ownerKept = 0;
         List<Edition> toSave = new ArrayList<>();
         for (Edition edition : loaded) {
-            Applied applied = applyEdition(edition, rows, edition.getCreditsMarkerSource());
+            Applied applied = applyEdition(edition, rows, edition.getCreditsMarkerSource(), lookup.inputs(edition));
             if (applied.source() == CreditsMarkerSource.PLEX) {
                 plexSet++;
+            }
+            if (applied.source() == CreditsMarkerSource.AUTO) {
+                autoSet++;
             }
             if (applied.source() == CreditsMarkerSource.OWNER) {
                 ownerKept++;
@@ -305,7 +350,7 @@ public class CreditsApplier {
             editions.saveAll(toSave);
             inProgress = states.countInProgressAtOrPastMarker(toSave.stream().map(Edition::getId).toList());
         }
-        return new Batch(plexSet, toSave.size(), cleared, ownerKept, inProgress);
+        return new Batch(plexSet, autoSet, toSave.size(), cleared, ownerKept, inProgress);
     }
 
     /**
@@ -316,13 +361,15 @@ public class CreditsApplier {
      * @param edition the edition, with its files loaded
      * @param rows Plex's rows by media file id (the last part's row is the one used)
      * @param source the source to treat the edition's marker as having
+     * @param autoInputs step 3's inputs; null leaves step 3 off
      */
-    static Applied applyEdition(Edition edition, Map<Long, PlexCreditsMarker> rows, CreditsMarkerSource source) {
+    static Applied applyEdition(Edition edition, Map<Long, PlexCreditsMarker> rows, CreditsMarkerSource source,
+                                AutoInputs autoInputs) {
         List<MediaFile> originals = edition.originalParts();
         List<Part> parts = originals.stream().map(f -> new Part(f.getId(), f.timelineDurationMs())).toList();
         MediaFile last = originals.isEmpty() ? null : originals.get(originals.size() - 1);
         PlexCreditsMarker row = last == null ? null : rows.get(last.getId());
         return CreditsApply.apply(parts, last == null ? null : last.fingerprint(), edition.getCreditsMarkerMs(),
-            source, row == null ? null : new PlexRow(row.getFingerprint(), row.getStartMs()));
+            source, row == null ? null : new PlexRow(row.getFingerprint(), row.getStartMs()), autoInputs);
     }
 }

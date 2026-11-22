@@ -3,16 +3,26 @@ package gregochr.cinefilm.credits;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.MANIFEST_DATE;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.crawl;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.denyFile;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.tmdbOn;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.credits.CreditsApplier.PassResult;
+import gregochr.cinefilm.credits.learn.Side;
 import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.EditionRepository.EditionFilmRow;
+import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.library.EditionsArranged;
@@ -31,17 +41,21 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
 import java.util.stream.LongStream;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.annotation.Order;
@@ -62,12 +76,39 @@ class CreditsApplierTest {
     private PlaybackStateRepository states;
     @Mock
     private PlatformTransactionManager transactions;
+    @Mock
+    private CreditsDenyFileReader denyReader;
+    @Mock
+    private FilmRepository films;
+    @Mock
+    private CreditsDetectionRepository detections;
 
+    private boolean autoEnabled;
+    private boolean autoCards = true;
+    private CreditsDenyListKeeper keeper;
+    private final Logger applierLog = (Logger) LoggerFactory.getLogger(CreditsApplier.class);
+    private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
     private final LibraryLock lock = new LibraryLock();
     private final List<Duration> sleeps = new ArrayList<>();
     private Sleeper sleeper = sleeps::add;
 
     private Executor executor = Runnable::run;
+
+    @BeforeEach
+    void setUp() {
+        keeper = new CreditsDenyListKeeper(denyReader);
+        logged.start();
+        applierLog.addAppender(logged);
+    }
+
+    @AfterEach
+    void detachLog() {
+        applierLog.detachAppender(logged);
+    }
+
+    private List<String> messages() {
+        return logged.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    }
 
     private CreditsApplier applier() {
         return applier(true);
@@ -75,7 +116,7 @@ class CreditsApplierTest {
 
     private CreditsApplier applier(boolean enabled) {
         return new CreditsApplier(editions, markers, states, lock, d -> sleeper.sleep(d), transactions, executor,
-            enabled);
+            keeper, new CreditsAutoReader(editions, films, detections, autoEnabled, autoCards), enabled);
     }
 
     /** An edition of one 100-minute file (id = edition id = file id) with its current marker. */
@@ -209,7 +250,7 @@ class CreditsApplierTest {
         assertThat(staleCleared.getCreditsMarkerSource()).isNull();
         assertThat(sourceOnly.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.PLEX);
         assertThat(unchanged.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.PLEX);
-        assertThat(result).isEqualTo(new PassResult(true, 3, 3, 1, 0, 2, 0));
+        assertThat(result).isEqualTo(new PassResult(true, 3, 0, 3, 1, 0, 2, 0));
     }
 
     @Test
@@ -224,7 +265,7 @@ class CreditsApplierTest {
         verifyNoMoreInteractions(editions);
         assertThat(owner.getCreditsMarkerMs()).isEqualTo(5_500_000L);
         assertThat(owner.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.OWNER);
-        assertThat(result).isEqualTo(new PassResult(true, 0, 0, 0, 1, 1, 0));
+        assertThat(result).isEqualTo(new PassResult(true, 0, 0, 0, 0, 1, 1, 0));
     }
 
     @Test
@@ -237,7 +278,7 @@ class CreditsApplierTest {
         PassResult result = applier().runPass();
 
         verifyNoMoreInteractions(markers);
-        assertThat(result).isEqualTo(new PassResult(true, 0, 0, 0, 0, 1, 0));
+        assertThat(result).isEqualTo(new PassResult(true, 0, 0, 0, 0, 0, 1, 0));
     }
 
     @Test
@@ -266,7 +307,7 @@ class CreditsApplierTest {
 
         assertThat(twoParts.getCreditsMarkerMs()).isEqualTo(5_500_000L);
         assertThat(twoParts.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.PLEX);
-        assertThat(result).isEqualTo(new PassResult(true, 1, 1, 0, 0, 0, 0));
+        assertThat(result).isEqualTo(new PassResult(true, 1, 0, 1, 0, 0, 0, 0));
     }
 
     @Test
@@ -631,5 +672,175 @@ class CreditsApplierTest {
             .flatMap(listener -> java.util.stream.Stream.concat(Arrays.stream(listener.value()),
                 Arrays.stream(listener.classes()))))
             .doesNotContain(LibraryChanged.class);
+    }
+
+    // ---- AUTO: the deny list in force, the switch, and the log ----
+
+    private static final String PASS_LINE = "Credits apply pass: 0 with a Plex marker, %d with an automatic marker, "
+        + "%d changed, %d cleared, 0 owner markers kept, %d unchanged; 0 saved positions in progress are at or past "
+        + "their new marker";
+
+    private static String passLine(int auto, int changed, int cleared, int unchanged) {
+        return PASS_LINE.formatted(auto, changed, cleared, unchanged);
+    }
+
+    /** A film row for edition {@code id} (its film is {@code id + 100}) matched to a development-side TMDB id. */
+    private static EditionFilmRow filmRow(long id) {
+        return new EditionFilmRow(id, id + 100, tmdbOn(Side.DEV, (int) id), "Film " + id, 2000, null, null);
+    }
+
+    /**
+     * The database holds these editions, each with a version 2 crawl at 5,000,000 ms of its 100-minute file; the
+     * pass reads their detection rows and film rows (only when the list and the switch let step 3 apply).
+     */
+    private void autoLibrary(Edition... all) {
+        List<Long> ids = Arrays.stream(all).map(Edition::getId).toList();
+        library(List.of(all), ids);
+        when(detections.findAllById(ids)).thenReturn(ids.stream().map(id -> crawl(id, FINGERPRINT, 5_000_000))
+            .toList());
+        when(editions.findFilmRowsByIdIn(ids)).thenReturn(ids.stream().map(CreditsApplierTest::filmRow).toList());
+    }
+
+    @Test
+    void anAutoMarkerIsSetTwentySecondsAfterTheDetectionAndASecondPassStillLogsTheFullAutoCount() {
+        autoEnabled = true;
+        Edition edition = edition(1, null, null);
+        autoLibrary(edition);
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("file 999")));
+        CreditsApplier applier = applier();
+
+        PassResult first = applier.runPass();
+        PassResult second = applier.runPass();
+
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(5_020_000L);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
+        assertThat(first).isEqualTo(new PassResult(true, 0, 1, 1, 0, 0, 0, 0));
+        assertThat(second).isEqualTo(new PassResult(true, 0, 1, 0, 0, 0, 1, 0));
+        assertThat(messages()).containsExactly(
+            "Credits deny file: read (manifest " + MANIFEST_DATE + ", 1 entries)", passLine(1, 1, 0, 0),
+            "Credits deny file: read (manifest " + MANIFEST_DATE + ", 1 entries)", passLine(1, 0, 0, 1));
+    }
+
+    @Test
+    void theLogCarriesTheHeadersDateAndCountButNoEntryAndNoId() {
+        autoEnabled = true;
+        when(editions.findAllIds()).thenReturn(List.of());
+        when(denyReader.read()).thenReturn(Optional.of(
+            denyFile("unit ctmdb:777777", "file 424242", "edition 313131", "film 535353")));
+
+        applier().runPass();
+
+        assertThat(messages()).containsExactly(
+            "Credits deny file: read (manifest " + MANIFEST_DATE + ", 4 entries)", passLine(0, 0, 0, 0));
+    }
+
+    @Test
+    void whenTheSwitchIsOffTheFileIsStillReadAndKeptInForceAndTheLogSaysWhyAutoIsOff() {
+        when(editions.findAllIds()).thenReturn(List.of());
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("file 999")));
+
+        applier().runPass();
+
+        assertThat(messages()).containsExactly(
+            "Credits deny file: read (manifest " + MANIFEST_DATE + ", 1 entries)",
+            "Credits AUTO is off: the switch is off", passLine(0, 0, 0, 0));
+        assertThat(keeper.current().list().files()).containsExactly(999L);
+    }
+
+    @Test
+    void withTheSwitchOnAndNoReadableFileTheLogSaysThereIsNoDenyListInForce() {
+        autoEnabled = true;
+        when(editions.findAllIds()).thenReturn(List.of());
+
+        applier().runPass();
+
+        assertThat(messages()).containsExactly(
+            "Credits deny file: could not be read and no earlier copy exists, so no deny list is in force",
+            "Credits AUTO is off: no deny list is in force", passLine(0, 0, 0, 0));
+    }
+
+    @Test
+    void withTheSwitchOffAndNoReadableFileTheLogSaysBothReasons() {
+        when(editions.findAllIds()).thenReturn(List.of());
+
+        applier().runPass();
+
+        assertThat(messages()).containsExactly(
+            "Credits deny file: could not be read and no earlier copy exists, so no deny list is in force",
+            "Credits AUTO is off: the switch is off and no deny list is in force", passLine(0, 0, 0, 0));
+    }
+
+    @Test
+    void aBadReadAtStartUpClearsAnAutoMarkerAndNothingIsSetUntilAReadableFileIsBack() {
+        autoEnabled = true;
+        Edition marked = edition(1, 5_020_000L, CreditsMarkerSource.AUTO);
+        library(List.of(marked), List.of(1L));
+
+        PassResult result = applier().runPass();
+
+        assertThat(marked.getCreditsMarkerMs()).isNull();
+        assertThat(marked.getCreditsMarkerSource()).isNull();
+        assertThat(result).isEqualTo(new PassResult(true, 0, 0, 1, 1, 0, 0, 0));
+        assertThat(messages()).containsExactly(
+            "Credits deny file: could not be read and no earlier copy exists, so no deny list is in force",
+            "Credits AUTO is off: no deny list is in force", passLine(0, 1, 1, 0));
+    }
+
+    @Test
+    void aGoodReadThenABadOneAppliesTheFirstCopyInFullAndLogsTheFallBack() {
+        autoEnabled = true;
+        Edition allowed = edition(1, null, null);
+        Edition listed = edition(2, 5_020_000L, CreditsMarkerSource.AUTO);
+        autoLibrary(allowed, listed);
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("edition 2", "file 999")), Optional.empty());
+        CreditsApplier applier = applier();
+
+        applier.runPass();
+        PassResult second = applier.runPass();
+
+        assertThat(allowed.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
+        assertThat(listed.getCreditsMarkerMs()).as("denied by the first copy's edition entry").isNull();
+        assertThat(second).isEqualTo(new PassResult(true, 0, 1, 0, 0, 0, 2, 0));
+        assertThat(messages()).containsExactly(
+            "Credits deny file: read (manifest " + MANIFEST_DATE + ", 2 entries)", passLine(1, 2, 1, 0),
+            "Credits deny file: could not be read, so the copy read earlier stays in force (manifest "
+                + MANIFEST_DATE + ", 2 entries)", passLine(1, 0, 0, 2));
+    }
+
+    @Test
+    void aBadReadThenAGoodOneUsesTheNewCopy() {
+        autoEnabled = true;
+        Edition edition = edition(1, null, null);
+        autoLibrary(edition);
+        when(denyReader.read()).thenReturn(Optional.empty(), Optional.of(denyFile("file 999")));
+        CreditsApplier applier = applier();
+
+        PassResult first = applier.runPass();
+
+        assertThat(first.autoSet()).isZero();
+        assertThat(edition.getCreditsMarkerSource()).isNull();
+
+        PassResult second = applier.runPass();
+
+        assertThat(second.autoSet()).isEqualTo(1);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
+        assertThat(messages()).containsExactly(
+            "Credits deny file: could not be read and no earlier copy exists, so no deny list is in force",
+            "Credits AUTO is off: no deny list is in force", passLine(0, 0, 0, 1),
+            "Credits deny file: read (manifest " + MANIFEST_DATE + ", 1 entries)", passLine(1, 1, 0, 0));
+    }
+
+    @Test
+    void aListedFilmsCurrentUnitKeyDeniesAnEditionOfAnotherFilmThatSharesIt() {
+        autoEnabled = true;
+        Edition edition = edition(1, null, null);
+        autoLibrary(edition);
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("film 55")));
+        when(films.findUnitRowsByIdIn(List.of(55L))).thenReturn(List.of(
+            new FilmRepository.UnitRow(55L, filmRow(1).filmTmdbId(), "Other", 2001, null, null)));
+
+        applier().runPass();
+
+        assertThat(edition.getCreditsMarkerSource()).isNull();
     }
 }
