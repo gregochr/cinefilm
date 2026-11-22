@@ -2350,6 +2350,22 @@
   height: 100%;
   background: var(--cf-surface-2);
 }
+.credits-panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.credits-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.credits-panel__clear {
+  margin-left: 0;
+}
 .credits-pager {
   display: flex;
   align-items: center;

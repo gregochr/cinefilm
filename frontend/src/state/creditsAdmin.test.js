@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { ApiError } from '../api/client.js';
 import {
+  checkTime,
   filterOf,
+  focusTargetAfter,
   hasNextPage,
+  isPlausible,
+  neighboursOf,
   pageAfterRead,
   pagingText,
   panelTimeMs,
+  parseTime,
+  plausibleRange,
   rowLines,
   stillTimes,
+  writeFailure,
 } from './creditsAdmin.js';
 
 const row = (over = {}) => ({
@@ -149,5 +157,144 @@ describe('filterOf', () => {
     ]);
     expect(filterOf('bogus')).toBe('none');
     expect(filterOf(null)).toBe('none');
+  });
+});
+
+describe('parseTime', () => {
+  it.each([
+    ['1:52:10', 6730000],
+    ['52:10', 3130000],
+    ['0:59', 59000],
+    ['75:00', 4500000],
+    ['  1:52:10 ', 6730000],
+    ['0:00:00', 0],
+  ])('reads %s as %i ms', (text, ms) => {
+    expect(parseTime(text)).toBe(ms);
+  });
+
+  it.each([
+    '1:60:00',
+    '1:2:3:4',
+    '',
+    '   ',
+    '-1:00',
+    '-0:30',
+    '1:52:1',
+    '1:5:10',
+    '52:60',
+    '52',
+    '1.5',
+    'abc',
+    '1:xx:10',
+    '1:52:10s',
+    '1:52:10.5',
+  ])('refuses %j', (text) => {
+    expect(parseTime(text)).toBeNull();
+  });
+});
+
+describe('the guard range', () => {
+  // 7,200,500 ms is not a whole second: 60% is 4,320,300 ms and 60 s before the end is 7,140,500 ms.
+  const total = 7200500;
+
+  it('matches the server: at least 60% in and at least 60 s before the end', () => {
+    expect(isPlausible(4320300, total)).toBe(true);
+    expect(isPlausible(4320299, total)).toBe(false);
+    expect(isPlausible(7140500, total)).toBe(true);
+    expect(isPlausible(7140501, total)).toBe(false);
+  });
+
+  it('gives the whole-second range, and a whole second either side of each end is refused or accepted', () => {
+    expect(plausibleRange(total)).toEqual({ fromMs: 4321000, toMs: 7140000 });
+    expect(isPlausible(4320000, total)).toBe(false);
+    expect(isPlausible(4321000, total)).toBe(true);
+    expect(isPlausible(7140000, total)).toBe(true);
+    expect(isPlausible(7141000, total)).toBe(false);
+  });
+
+  it('gives no range for a film too short to have one', () => {
+    expect(plausibleRange(90000)).toBeNull();
+  });
+
+  it('checks a typed time against it, in words', () => {
+    expect(checkTime('1:12:01', total)).toEqual({ ms: 4321000 });
+    expect(checkTime('1:12:00', total).error).toBe(
+      'That time is outside where end credits can start (1:12:01 to 1:59:00). Pick a time inside it',
+    );
+    expect(checkTime('1:59:00', total)).toEqual({ ms: 7140000 });
+    expect(checkTime('1:59:01', total).error).toMatch(/^That time is outside/);
+    expect(checkTime('soon', total).error).toBe('Use h:mm:ss or m:ss, for example 1:52:10');
+    expect(checkTime('1:30', 90000).error).toBe(
+      'This film is too short to set an end credits time',
+    );
+  });
+});
+
+describe('writeFailure', () => {
+  it('maps each status to where it shows', () => {
+    expect(writeFailure(new ApiError(401, 'Unauthorised'), 'set')).toEqual({
+      kind: 'signin',
+      text: null,
+    });
+    expect(writeFailure(new ApiError(404, undefined, { error: 'No such edition' }), 'set')).toEqual(
+      { kind: 'gone', text: 'This film isn’t in the library any more' },
+    );
+    expect(
+      writeFailure(
+        new ApiError(400, undefined, { error: 'That time is outside where end credits can start' }),
+        'set',
+      ),
+    ).toEqual({ kind: 'field', text: 'That time is outside where end credits can start' });
+    expect(writeFailure(new ApiError(400, undefined, null), 'set')).toEqual({
+      kind: 'field',
+      text: 'That time can’t be used',
+    });
+  });
+
+  it('uses the lock holder the server names on a 409, ending in a full stop, else its own words', () => {
+    expect(
+      writeFailure(new ApiError(409, undefined, { error: 'A Plex import is running' }), 'set'),
+    ).toEqual({
+      kind: 'alert',
+      text: 'A Plex import is running.',
+    });
+    expect(
+      writeFailure(new ApiError(409, undefined, { error: 'A scan is running' }), 'clear'),
+    ).toEqual({
+      kind: 'alert',
+      text: 'A scan or import is running. Try again when it finishes.',
+    });
+  });
+
+  it('says it could not save or clear for anything else', () => {
+    expect(writeFailure(new ApiError(500), 'set').text).toBe('Couldn’t save that time. Try again.');
+    expect(writeFailure(new TypeError('Failed to fetch'), 'clear').text).toBe(
+      'Couldn’t clear your time. Try again.',
+    );
+  });
+});
+
+describe('where focus goes after a write', () => {
+  const items = (...ids) => ids.map((editionId) => ({ editionId }));
+
+  it('finds the rows either side of a row', () => {
+    expect(neighboursOf(items(1, 2, 3), 2)).toEqual({ after: 3, before: 1 });
+    expect(neighboursOf(items(1, 2, 3), 1)).toEqual({ after: 2, before: null });
+    expect(neighboursOf(items(1, 2, 3), 3)).toEqual({ after: null, before: 2 });
+    expect(neighboursOf(items(1, 2, 3), 9)).toEqual({ after: null, before: null });
+  });
+
+  it('prefers the row itself, then the next row, then the previous row', () => {
+    const near = { after: 3, before: 1 };
+    expect(focusTargetAfter(2, near, items(1, 2, 3), false)).toBe(2);
+    expect(focusTargetAfter(2, near, items(1, 3), false)).toBe(3);
+    expect(focusTargetAfter(2, near, items(1, 4), false)).toBe(1);
+    expect(focusTargetAfter(2, { after: null, before: 1 }, items(1), false)).toBe(1);
+  });
+
+  it('takes the last row of the new page after a step back, and none from an empty page', () => {
+    expect(focusTargetAfter(2, { after: 3, before: 1 }, items(7, 8, 9), true)).toBe(9);
+    expect(focusTargetAfter(2, { after: 3, before: 1 }, [], false)).toBeNull();
+    expect(focusTargetAfter(2, { after: null, before: null }, items(5), false)).toBeNull();
   });
 });

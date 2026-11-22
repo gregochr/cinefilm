@@ -72,6 +72,8 @@ const WRITES = [
   ['adminApi.leaveUnmatched', 'POST', '/api/admin/films/:filmId/leave-unmatched', HELD],
   ['adminApi.putBack', 'POST', '/api/admin/films/:filmId/put-back', HELD],
   ['adminApi.saveEditions', 'PUT', '/api/admin/films/:filmId/editions', HELD],
+  ['adminApi.setCredits', 'PUT', '/api/admin/editions/:id/credits', HELD],
+  ['adminApi.clearCredits', 'DELETE', '/api/admin/editions/:id/credits', HELD],
   ['adminApi.startPlexImport', 'POST', '/api/admin/plex/import', HELD],
   ['adminApi.startPlexCreditsImport', 'POST', '/api/admin/plex/credits/import', HELD],
   ['adminApi.stopTranscodingSession', 'DELETE', '/api/admin/transcoding/sessions/:id', HELD],

@@ -24,7 +24,24 @@ export const creditsPanel = {
   frame: (clock) => `Frame at ${clock}`,
   noStill: 'No still for this time',
   tryAgain: 'Try again',
+  timeLabel: 'End credits start at',
+  timeHint: 'Hours, minutes and seconds, like 1:52:10, or minutes and seconds, like 52:10',
+  timeFormat: 'Use h:mm:ss or m:ss, for example 1:52:10',
+  outside: (from, to) =>
+    `That time is outside where end credits can start (${from} to ${to}). Pick a time inside it`,
+  noRange: 'This film is too short to set an end credits time',
+  showStills: 'Show stills',
+  set: 'Set this time',
+  clear: 'Clear my time',
+  clearHint: 'Goes back to Plex’s marker, or none',
+  refused: 'That time can’t be used',
+  gone: 'This film isn’t in the library any more',
+  scanRunning: 'A scan or import is running. Try again when it finishes.',
+  setFailed: 'Couldn’t save that time. Try again.',
+  clearFailed: 'Couldn’t clear your time. Try again.',
 };
+
+export const creditsToast = { set: 'End credits set', cleared: 'Your time cleared' };
 
 export const creditsRow = {
   fromPlex: 'From Plex',
