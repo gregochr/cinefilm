@@ -1,15 +1,19 @@
 package gregochr.cinefilm.credits;
 
+import gregochr.cinefilm.credits.CreditsDenyFile.DenyList;
+import gregochr.cinefilm.credits.learn.CreditsSplit;
+import gregochr.cinefilm.credits.learn.Side;
 import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.EditionTimeline;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Decides what an edition's credits marker and its source should be, from what is known about it now. Pure: no
  * Spring, no repositories. The order is fixed: an owner's marker is never touched; otherwise Plex's marker for the
  * last part applies when it still describes the same file and lies inside the {@link EditionGuard} limits;
- * otherwise (step 3, an automatic marker, is reserved for a later phase and never applies yet) the marker and its
- * source are both cleared.
+ * otherwise (step 3) an automatic marker from version 2's detection, when the switch is on, a deny list is in force
+ * and none of its rules holds ({@link AutoInputs}); otherwise the marker and its source are both cleared.
  */
 public final class CreditsApply {
 
@@ -67,7 +71,112 @@ public final class CreditsApply {
     public record PlexStatus(PlexState state, Long markerMs) {
     }
 
+    /** The version of the analysis whose results may become {@code AUTO} markers. */
+    public static final int AUTO_ANALYSIS_VERSION = 2;
+    /** How far after the detected start an {@code AUTO} marker lies, milliseconds. */
+    static final long AUTO_MARGIN_MS = 20_000;
+
+    /**
+     * The inputs of a film's unit key, read the way L1's export query reads them.
+     *
+     * @param collectionTmdbId {@code film_collection.tmdb_id} through {@code film.collection_id}; null when none
+     * @param collectionId {@code film.collection_id}; null when none
+     * @param filmTmdbId {@code film.tmdb_id}; null when the film is not matched
+     * @param title {@code film.title}
+     * @param year {@code film.release_year}; null when unknown
+     */
+    public record UnitInputs(Long collectionTmdbId, Long collectionId, Long filmTmdbId, String title, Integer year) {
+
+        /** The unit key, by the one rule L1 uses. */
+        public String unitKey() {
+            return CreditsSplit.unitKey(collectionTmdbId, collectionId, filmTmdbId, title, year);
+        }
+    }
+
+    /**
+     * The detection row of the last part's file.
+     *
+     * @param analysisVersion the analysis version that wrote it
+     * @param verdict the verdict
+     * @param offsetMs where the credits start inside the file; null when none
+     * @param fingerprint the file's fingerprint when analysed
+     * @param reasons the stored reasons, one per line
+     */
+    public record Detection(int analysisVersion, CreditsVerdict verdict, Long offsetMs, String fingerprint,
+                            String reasons) {
+    }
+
+    /**
+     * What step 3 needs to decide.
+     *
+     * @param enabled whether the switch is on
+     * @param cards whether card results may take {@code AUTO}
+     * @param denyList the deny list in force; null when there is none
+     * @param editionId the edition
+     * @param filmId the edition's film
+     * @param film the film's unit key inputs
+     * @param listedFilmUnitKeys the current unit key of every film the deny list names as a {@code film}, by film id
+     *     (for rule 6)
+     * @param detection the last part's detection row; null when there is none
+     */
+    public record AutoInputs(boolean enabled, boolean cards, DenyList denyList, long editionId, long filmId,
+                             UnitInputs film, Map<Long, String> listedFilmUnitKeys, Detection detection) {
+    }
+
     private CreditsApply() {
+    }
+
+    /**
+     * Whether any of the six deny rules holds for an edition: its film is listed; its unit key hashes to test; its
+     * unit key is listed; one of its files is listed; the edition is listed; or a listed film has today the same
+     * unit key.
+     */
+    static boolean denied(DenyList list, long editionId, long filmId, String unitKey, List<Part> parts,
+                          Map<Long, String> listedFilmUnitKeys) {
+        return list.films().contains(filmId)
+            || CreditsSplit.hashSide(unitKey) == Side.TEST
+            || list.units().contains(unitKey)
+            || parts.stream().anyMatch(p -> list.files().contains(p.mediaFileId()))
+            || list.editions().contains(editionId)
+            || list.films().stream().anyMatch(id -> unitKey.equals(listedFilmUnitKeys.get(id)));
+    }
+
+    /** Step 3's marker in edition milliseconds, or null when step 3 does not hold. */
+    private static Long autoMarker(List<Part> parts, String lastFingerprint, AutoInputs auto) {
+        Detection d = auto.detection();
+        if (!auto.enabled() || auto.denyList() == null || auto.film().filmTmdbId() == null || d == null
+            || d.verdict() != CreditsVerdict.FOUND || d.offsetMs() == null
+            || d.analysisVersion() != AUTO_ANALYSIS_VERSION
+            || lastFingerprint == null || !lastFingerprint.equals(d.fingerprint())) {
+            return null;
+        }
+        String first = d.reasons().split("\n", 2)[0];
+        boolean crawl = first.startsWith(CreditsFinder.CRAWL_OPENING);
+        boolean card = first.startsWith(CreditsFinder.CARD_OPENING);
+        if (!crawl && !(card && auto.cards())) {
+            return null;
+        }
+        if (denied(auto.denyList(), auto.editionId(), auto.filmId(), auto.film().unitKey(), parts,
+            auto.listedFilmUnitKeys())) {
+            return null;
+        }
+        EditionTimeline timeline;
+        try {
+            timeline = EditionTimeline.of(parts.stream().map(Part::timelineDurationMs).toList());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+        long start;
+        try {
+            start = timeline.toGlobal(parts.size() - 1, d.offsetMs());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+        long total = timeline.totalMs();
+        if (!EditionGuard.plausible(start, total)) {
+            return null;
+        }
+        return Math.min(start + AUTO_MARGIN_MS, total - CreditsTuning.MIN_BEFORE_END_MS);
     }
 
     /**
@@ -82,12 +191,34 @@ public final class CreditsApply {
      */
     public static Applied apply(List<Part> parts, String lastFingerprint, Long markerMs,
                                 CreditsMarkerSource source, PlexRow plexRow) {
+        return apply(parts, lastFingerprint, markerMs, source, plexRow, null);
+    }
+
+    /**
+     * Works out the marker and source for one edition, with step 3 available.
+     *
+     * @param parts the edition's original parts in play order (may be empty)
+     * @param lastFingerprint the last part's file's current fingerprint; null when unknown
+     * @param markerMs the edition's current marker; null when none
+     * @param source the current marker's source; null when none (or stored before sources existed)
+     * @param plexRow Plex's row for the last part's file; null when there is none
+     * @param auto step 3's inputs; null leaves step 3 off
+     * @return the marker and source the edition should have
+     */
+    public static Applied apply(List<Part> parts, String lastFingerprint, Long markerMs,
+                                CreditsMarkerSource source, PlexRow plexRow, AutoInputs auto) {
         if (source == CreditsMarkerSource.OWNER) {
             return new Applied(markerMs, source);
         }
         PlexStatus status = plexStatus(parts, lastFingerprint, plexRow);
         if (status.state() == PlexState.USABLE) {
             return new Applied(status.markerMs(), CreditsMarkerSource.PLEX);
+        }
+        if (auto != null) {
+            Long autoMarker = autoMarker(parts, lastFingerprint, auto);
+            if (autoMarker != null) {
+                return new Applied(autoMarker, CreditsMarkerSource.AUTO);
+            }
         }
         return new Applied(null, null);
     }

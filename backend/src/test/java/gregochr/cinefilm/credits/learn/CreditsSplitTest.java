@@ -3,15 +3,29 @@ package gregochr.cinefilm.credits.learn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gregochr.cinefilm.credits.CreditsApply.UnitInputs;
 import gregochr.cinefilm.credits.learn.CreditsSplit.SplitFilm;
+import gregochr.cinefilm.plex.PlexRules;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 class CreditsSplitTest {
 
     private static final Map<Long, ManifestEntry> NONE = Map.of();
+    private static final Path FIXTURES = LearnFixtures.dir();
+
+    @TempDir
+    Path temp;
 
     private static SplitFilm film(long id, String unit) {
         return new SplitFilm(id, unit);
@@ -246,5 +260,27 @@ class CreditsSplitTest {
             film(20, "tmdb:1008")), NONE, Set.of());
 
         assertThat(result.entries().keySet()).containsExactly(10L, 20L, 30L);
+    }
+
+    @Test
+    void theProductsUnitKeyEqualsTheOneL1WritesForEveryFixtureFile() throws IOException {
+        LabelsJob.run(new LabelsOptions(FIXTURES.resolve("archive"), FIXTURES.resolve("export.csv"),
+            FIXTURES.resolve("preseed.txt"), PlexRules.prefix(LearnFixtures.PREFIX), LocalDate.of(2026, 11, 13), temp,
+            null, null));
+        List<ExportRow> rows = ExportReader.parse(Files.readString(FIXTURES.resolve("export.csv")));
+        Map<Long, String> l1 = new java.util.HashMap<>();
+        for (JsonNode node : JsonMapper.builder().build().readTree(
+            Files.readString(temp.resolve("labels-2026-11-13.json")))) {
+            l1.put(node.path("media_file_id").asLong(), node.path("unit_key").asString());
+        }
+
+        Set<String> kinds = new HashSet<>();
+        for (ExportRow row : rows) {
+            String product = new UnitInputs(row.collectionTmdbId(), row.collectionId(), row.filmTmdbId(),
+                row.filmTitle(), row.filmYear()).unitKey();
+            assertThat(product).as("file %d", row.mediaFileId()).isEqualTo(l1.get(row.mediaFileId()));
+            kinds.add(product.substring(0, product.indexOf(':')));
+        }
+        assertThat(kinds).containsExactlyInAnyOrder("ctmdb", "cid", "tmdb", "title");
     }
 }

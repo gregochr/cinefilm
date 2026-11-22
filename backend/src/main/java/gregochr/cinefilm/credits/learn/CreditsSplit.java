@@ -20,7 +20,7 @@ import java.util.TreeMap;
  * carry-over rules that keep earlier decisions when the library changes. Pure. The rules are in
  * {@code docs/engineering/credits-classifier-plan.md}, "The split".
  */
-final class CreditsSplit {
+public final class CreditsSplit {
 
     /** A unit is on the development side when its hash mod 100 is below this. */
     static final int DEV_PERCENT = 70;
@@ -65,7 +65,8 @@ final class CreditsSplit {
      * @param year the film's release year, or null
      * @return {@code ctmdb:<id>}, {@code cid:<id>}, {@code tmdb:<id>} or {@code title:<t>|<year>}
      */
-    static String unitKey(Long collectionTmdbId, Long collectionId, Long filmTmdbId, String title, Integer year) {
+    public static String unitKey(Long collectionTmdbId, Long collectionId, Long filmTmdbId, String title,
+                                 Integer year) {
         if (collectionTmdbId != null) {
             return "ctmdb:" + collectionTmdbId;
         }
@@ -87,7 +88,7 @@ final class CreditsSplit {
     }
 
     /** The first 8 bytes of SHA-256 over the unit key's UTF-8 bytes, big-endian, as an unsigned 64-bit value. */
-    static long hash(String unitKey) {
+    public static long hash(String unitKey) {
         return hash(unitKey, () -> MessageDigest.getInstance("SHA-256"));
     }
 
@@ -101,7 +102,7 @@ final class CreditsSplit {
     }
 
     /** The side the hash gives a unit: hash mod 100 below 70 is development. */
-    static Side hashSide(String unitKey) {
+    public static Side hashSide(String unitKey) {
         return Long.remainderUnsigned(hash(unitKey), 100) < DEV_PERCENT ? Side.DEV : Side.TEST;
     }
 
