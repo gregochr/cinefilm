@@ -3,6 +3,7 @@ package gregochr.cinefilm.film;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -96,4 +97,68 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
      */
     @Query("select e from Edition e left join fetch e.mediaFiles where e.id in :ids")
     List<Edition> findWithFilesByIdIn(Collection<Long> ids);
+
+    /**
+     * The edition is not hidden from browse: no original part is missing from disk, unplayable, or (in a multi-part
+     * edition) without a stored duration. The database form of {@link Edition#hiddenFromBrowse()}, for an alias
+     * {@code e}; the integration test pins the two together.
+     */
+    String VISIBLE = "not exists (select hm.id from MediaFile hm where hm.edition = e "
+        + "and hm.kind = gregochr.cinefilm.film.MediaKind.ORIGINAL "
+        + "and (hm.presence <> gregochr.cinefilm.film.Presence.PRESENT "
+        + "or hm.playability <> gregochr.cinefilm.film.Playability.PLAYABLE "
+        + "or ((hm.durationMs is null or hm.durationMs <= 0) and (select count(sib.id) from MediaFile sib "
+        + "where sib.edition = e and sib.kind = gregochr.cinefilm.film.MediaKind.ORIGINAL) > 1)))";
+
+    /**
+     * Which credits sources a list filter accepts, for an alias {@code e}: every one ({@code :anySource}), the ones
+     * with no source ({@code :unsettled} true) or the one {@code :source} (when {@code :unsettled} is false).
+     */
+    String SOURCE_MATCHES = "(:anySource = true or (:unsettled = true and e.creditsMarkerSource is null) "
+        + "or (:unsettled = false and e.creditsMarkerSource = :source))";
+
+    /**
+     * One page of visible edition ids for the Admin End credits list: by the film's sort title (case-insensitive),
+     * then its year with nulls last (placed explicitly, as H2 and PostgreSQL sort them differently), then the
+     * edition's name, then its id.
+     */
+    @Query("select e.id from Edition e join e.film f where " + VISIBLE + " and " + SOURCE_MATCHES
+        + " order by lower(f.sortTitle), case when f.year is null then 1 else 0 end, f.year, e.name, e.id")
+    List<Long> findCreditsPageIds(boolean anySource, boolean unsettled, CreditsMarkerSource source,
+                                  Pageable pageable);
+
+    /**
+     * The given editions with their files (an edition with no original file row too) and their film, in one
+     * statement. The film is fetched, unlike {@link #findWithFilesByIdIn}, which leaves it lazy.
+     */
+    @Query("select e from Edition e left join fetch e.mediaFiles join fetch e.film where e.id in :ids")
+    List<Edition> findWithFilesAndFilmByIdIn(Collection<Long> ids);
+
+    /**
+     * How many visible editions a film has.
+     *
+     * @param filmId the film
+     * @param count its visible editions
+     */
+    record FilmEditionCount(Long filmId, long count) {
+    }
+
+    /** The visible-edition count of each given film, in one grouped statement. */
+    @Query("select new gregochr.cinefilm.film.EditionRepository$FilmEditionCount(e.film.id, count(e)) "
+        + "from Edition e where e.film.id in :filmIds and " + VISIBLE + " group by e.film.id")
+    List<FilmEditionCount> countVisibleByFilmIdIn(Collection<Long> filmIds);
+
+    /**
+     * How many visible editions have a credits source.
+     *
+     * @param source the source; null for editions with none
+     * @param count how many
+     */
+    record SourceCount(CreditsMarkerSource source, long count) {
+    }
+
+    /** The visible editions grouped by credits source (one row for no source), in one statement. */
+    @Query("select new gregochr.cinefilm.film.EditionRepository$SourceCount(e.creditsMarkerSource, count(e)) "
+        + "from Edition e where " + VISIBLE + " group by e.creditsMarkerSource")
+    List<SourceCount> countVisibleBySource();
 }

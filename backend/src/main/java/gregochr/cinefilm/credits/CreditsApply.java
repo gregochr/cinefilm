@@ -40,6 +40,33 @@ public final class CreditsApply {
     public record Applied(Long markerMs, CreditsMarkerSource source) {
     }
 
+    /** Why Plex's row does or does not apply to an edition, in the order the checks run. */
+    public enum PlexState {
+        /** Plex has no row for the last part's file. */
+        NONE,
+        /** The last part has no fingerprint, so the row cannot be matched to it. */
+        NO_FINGERPRINT,
+        /** The row's fingerprint differs from the file's: it describes an older copy. */
+        STALE,
+        /** The edition's parts have no timeline (no original part, or a part with no duration). */
+        NO_TIMELINE,
+        /** The row's offset lies outside the last part. */
+        OUTSIDE,
+        /** The time is outside the {@link EditionGuard} limits. */
+        REFUSED,
+        /** The pass applies the row. */
+        USABLE
+    }
+
+    /**
+     * Plex's row as it stands for an edition.
+     *
+     * @param state which check decided
+     * @param markerMs Plex's time in edition milliseconds for {@code REFUSED} and {@code USABLE}; null otherwise
+     */
+    public record PlexStatus(PlexState state, Long markerMs) {
+    }
+
     private CreditsApply() {
     }
 
@@ -58,24 +85,46 @@ public final class CreditsApply {
         if (source == CreditsMarkerSource.OWNER) {
             return new Applied(markerMs, source);
         }
-        Long plex = plexMarker(parts, lastFingerprint, plexRow);
-        if (plex != null) {
-            return new Applied(plex, CreditsMarkerSource.PLEX);
+        PlexStatus status = plexStatus(parts, lastFingerprint, plexRow);
+        if (status.state() == PlexState.USABLE) {
+            return new Applied(status.markerMs(), CreditsMarkerSource.PLEX);
         }
         return new Applied(null, null);
     }
 
-    private static Long plexMarker(List<Part> parts, String lastFingerprint, PlexRow plexRow) {
-        if (plexRow == null || lastFingerprint == null || parts.isEmpty()
-            || !lastFingerprint.equals(plexRow.fingerprint())) {
-            return null;
+    /**
+     * What Plex's row means for an edition, whatever the edition's source is. The checks run in the order of
+     * {@link PlexState}, and {@link #apply} applies the row exactly when the state is {@code USABLE}, so a list and
+     * the pass cannot disagree.
+     *
+     * @param parts the edition's original parts in play order (may be empty)
+     * @param lastFingerprint the last part's file's current fingerprint; null when unknown
+     * @param plexRow Plex's row for the last part's file; null when there is none
+     * @return the state, and Plex's time in edition milliseconds for {@code REFUSED} and {@code USABLE} only
+     */
+    public static PlexStatus plexStatus(List<Part> parts, String lastFingerprint, PlexRow plexRow) {
+        if (plexRow == null) {
+            return new PlexStatus(PlexState.NONE, null);
         }
+        if (lastFingerprint == null) {
+            return new PlexStatus(PlexState.NO_FINGERPRINT, null);
+        }
+        if (!lastFingerprint.equals(plexRow.fingerprint())) {
+            return new PlexStatus(PlexState.STALE, null);
+        }
+        EditionTimeline timeline;
         try {
-            EditionTimeline timeline = EditionTimeline.of(parts.stream().map(Part::timelineDurationMs).toList());
-            long global = timeline.toGlobal(parts.size() - 1, plexRow.startMs());
-            return EditionGuard.plausible(global, timeline.totalMs()) ? global : null;
+            timeline = EditionTimeline.of(parts.stream().map(Part::timelineDurationMs).toList());
         } catch (IllegalArgumentException e) {
-            return null;
+            return new PlexStatus(PlexState.NO_TIMELINE, null);
         }
+        long global;
+        try {
+            global = timeline.toGlobal(parts.size() - 1, plexRow.startMs());
+        } catch (IllegalArgumentException e) {
+            return new PlexStatus(PlexState.OUTSIDE, null);
+        }
+        return new PlexStatus(EditionGuard.plausible(global, timeline.totalMs())
+            ? PlexState.USABLE : PlexState.REFUSED, global);
     }
 }

@@ -10,8 +10,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Where Plex says the credits start inside one media file, copied once by the credits import. Stored for comparison
- * only; nothing applies it yet. A row whose fingerprint no longer matches the file is ignored.
+ * Where Plex says the credits start inside one media file, copied once by the credits import. The credits apply pass
+ * and the Admin End credits list read it ({@code CreditsApply}). A row whose fingerprint no longer matches the file
+ * is ignored.
  */
 @Entity
 @Table(name = "plex_credits_marker")
