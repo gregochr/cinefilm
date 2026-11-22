@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after ten adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after eleven adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -57,8 +57,8 @@ Per edition, the first that holds wins (steps 1, 2 and 4 are unchanged from 3a):
 **The deny list in force** is the one read at the start of this pass; if that read fails (the file missing,
 unreadable or malformed), the last copy read successfully since start-up, in full, and the pass logs that it fell
 back; if there is none (the container started with a bad file), there is no list in force, so no `AUTO` is set and
-`AUTO` editions are cleared until a readable file is back (temporary; the log says why). The pass, Clear and the
-candidates all use the list in force. **When the switch is off**, `AUTO` editions fall through to step 4 and are cleared.
+`AUTO` editions are cleared until a readable file is back (temporary; the log says why). Clear and the candidates
+never read the file: they use the list in force of the latest pass. **When the switch is off**, `AUTO` editions fall through to step 4 and are cleared.
 
 **Raising `ANALYSIS_VERSION` clears `AUTO`:** there is one row per file, so a version 3 backfill overwrites the
 version 2 rows and each `AUTO` marker falls to 97% as it goes. The version 3 plan must keep version 2's rows or
@@ -102,7 +102,8 @@ side out itself.
     them** (the ids come from a read-only query the owner runs at G0, given the film ids and answering edition and
     `media_file_id`s only);
   - for a unit that the manifest has on both sides or excludes as `SPLIT_CONFLICT`: its unit key and every file of
-    its films, and `film` entries only for its test-side films (so rule 6 follows test films only);
+    its films, and `film` entries for every film whose manifest side is test, a `SPLIT_CONFLICT` film's reference
+    side included (later L1 runs keep that side), so rule 6 follows test films only;
   - any edition G1 judges unclear, as an `edition` entry and a `file` entry for each of its parts (file ids survive
     a re-arrangement or a merge), never `film`, so rule 6 doesn't take its collection.
 
@@ -217,6 +218,7 @@ Each at most 1,500 changed lines, tests included.
       - the start at the guard's lower bound and just under it, the cap at `total − 60 s`, `toGlobal` refusing;
       - a two-part edition;
       - `OWNER` and `PLEX` still winning;
+      - rule 6 following a `SPLIT_CONFLICT` film listed by its reference side;
       - each of the six deny rules, rule 5 with an edition moved by a merge and rule 6 with a new film sharing a
         listed film's current unit key;
       - an unmatched film (`tmdb_id` null) never `AUTO`;
@@ -238,7 +240,8 @@ Each at most 1,500 changed lines, tests included.
     - `CreditsApplierTest`: the log counts, including a second pass that changes nothing and still logs the full
       `AUTO` count; the header's date and count with no entry or id in the log; each reason `AUTO` is off (the
       switch, no list in force).
-    - `CreditsAdminServiceTest`: Clear landing on `AUTO`; Clear with the list unreadable; Clear landing on step 4,
+    - `CreditsAdminServiceTest`: Clear landing on `AUTO`; Clear with an older copy in force landing on `AUTO` from it; Clear with no list in force
+      landing on step 4; Clear landing on step 4,
       not `AUTO`, for an edition denied by rule 2, by rule 6, and for an unmatched film.
     - The reader's test, an empty path counting as unreadable.
     - The list in force, in the reader's test and `CreditsApplierTest`: a good read then a bad one (the second pass
