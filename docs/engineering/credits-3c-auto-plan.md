@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after nine adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after ten adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -37,7 +37,7 @@ Per edition, the first that holds wins (steps 1, 2 and 4 are unchanged from 3a):
 
 1. source `OWNER`: unchanged.
 2. a usable Plex row (`PlexState.USABLE`): Plex's time, source `PLEX`.
-3. **`AUTO`**, only when the switch is on, the deny list was read for this pass, and the edition is not denied
+3. **`AUTO`**, only when the switch is on, there is a **deny list in force** (below), and the edition is not denied
    ("The test split"), and the film is matched (`film.tmdb_id` not null: an unmatched copy or cut has a `title:`
    unit key that the deny rules can't tie to a listed film), from the last part's `credits_detection` row when it:
    - has verdict `FOUND`, a non-null `offset_ms`, and `analysis_version` exactly **2**
@@ -54,10 +54,11 @@ Per edition, the first that holds wins (steps 1, 2 and 4 are unchanged from 3a):
    `start` because the start passed the guard.
 4. otherwise both cleared (the 97% fallback).
 
-**When the deny list can't be read** (switch on; the file missing, unreadable or malformed): the pass uses the last
-copy it read successfully since start-up, in full, and logs that it did. With no good copy (the container started
-with a bad file), no `AUTO` is set and `AUTO` editions are cleared until a readable file is back; that is
-temporary, and the log says why. **When the switch is off**, `AUTO` editions fall through to step 4 and are cleared.
+**The deny list in force** is the one read at the start of this pass; if that read fails (the file missing,
+unreadable or malformed), the last copy read successfully since start-up, in full, and the pass logs that it fell
+back; if there is none (the container started with a bad file), there is no list in force, so no `AUTO` is set and
+`AUTO` editions are cleared until a readable file is back (temporary; the log says why). The pass, Clear and the
+candidates all use the list in force. **When the switch is off**, `AUTO` editions fall through to step 4 and are cleared.
 
 **Raising `ANALYSIS_VERSION` clears `AUTO`:** there is one row per file, so a version 3 backfill overwrites the
 version 2 rows and each `AUTO` marker falls to 97% as it goes. The version 3 plan must keep version 2's rows or
@@ -221,8 +222,8 @@ Each at most 1,500 changed lines, tests included.
       - an unmatched film (`tmdb_id` null) never `AUTO`;
       - an unclear edition's file moved to a new edition stays denied;
       - the switch off clearing `AUTO`;
-      - an unreadable list with a last good copy applying that copy in full (a film moved into a listed unit since
-        is cleared); an unreadable list with no good copy clearing `AUTO`.
+      - a list in force that is an older copy, applied in full (a film moved into a listed unit since is cleared);
+        no list in force clearing `AUTO`.
     - The parser's test: the header, the count, the four entry kinds, comments, and malformed lines.
     - `CreditsSplitTest`: the product's unit key equals L1's for the same fixture rows.
 - **3c-1b, wiring.**
@@ -236,10 +237,13 @@ Each at most 1,500 changed lines, tests included.
   - Tests:
     - `CreditsApplierTest`: the log counts, including a second pass that changes nothing and still logs the full
       `AUTO` count; the header's date and count with no entry or id in the log; each reason `AUTO` is off (the
-      switch, an unreadable list).
+      switch, no list in force).
     - `CreditsAdminServiceTest`: Clear landing on `AUTO`; Clear with the list unreadable; Clear landing on step 4,
       not `AUTO`, for an edition denied by rule 2, by rule 6, and for an unmatched film.
     - The reader's test, an empty path counting as unreadable.
+    - The list in force, in the reader's test and `CreditsApplierTest`: a good read then a bad one (the second pass
+      applies the first copy in full and logs the fall-back); a bad read at start-up (`AUTO` cleared, the log says
+      why); bad then good (the new copy is used); no log carries an entry.
     - `CreditsApplierIntegrationTest`: an `AUTO` set and kept, a hidden edition marked, the query count per batch
       fixed.
 - **3c-1c, the trigger.** `CreditsDetected`, published by `CreditsDetectionService` after the lock, and its
@@ -254,8 +258,8 @@ Each at most 1,500 changed lines, tests included.
     - `startMs` and `markerMs` are edition time.
 
     It is computed by the same code, over the same editions as the pass (hidden ones included). It answers 409 "No
-    deny list" when the file can't be read. It goes in `foundation-plan.md` and `RouteSecurityDriftTest`.
-  - Tests: the service and controller tests (401, missing CSRF, the 409 with an unreadable list), and an
+    deny list" only when there is no list in force. It goes in `foundation-plan.md` and `RouteSecurityDriftTest`.
+  - Tests: the service and controller tests (401, missing CSRF, the 409 with no list in force, and a 200 on an older copy), and an
     integration test where one fixture's candidates not flagged `owner` equal the editions a pass then sets to
     `AUTO`, with hidden and owner editions, and cards on and off.
   - `operations.md`:
@@ -280,11 +284,14 @@ Each at most 1,500 changed lines, tests included.
   - Version 2's verdict and reasons stay unshown. `foundation-plan.md`.
   - Tests: backend, the filter and counts; frontend, the tab, the times and the exact hint.
 - **3c-4, `LOOKED_AT` in L1** (any time before the next L1 run; nothing in 3c waits for it).
-  - `LabelsMain` gains `--looked-at <file of film ids>`. `CreditsSplit.assign` takes the set. A listed film that
+  - `LabelsMain` gains `--looked-at <file of film ids>`. `CreditsSplit.assign` takes the set and checks it on each
+    film's final side, after the carry-over rules or the hash chose it (never inside one branch). A listed film that
     would land on test is excluded with the new `ExcludeReason.LOOKED_AT`, and the manifest records the side it
-    would have had (so the deny file's `film` entry and rule 6 still follow it). The report counts them.
+    would have had (so the deny file's `film` entry and rule 6 still follow it). The report counts them; a film whose file is already excluded for an
+    earlier reason keeps that reason and is counted apart.
   - Tests in `CreditsSplitTest` and the L1 job's test: a looked-at film landing on test through carry-over rule 2 is
-    excluded and counted; one landing on dev is unaffected; on a later run (carry-over rule 1) it stays excluded.
+    excluded and counted; one landing on test by the hash alone (a unit with no earlier members) likewise; one landing
+    on dev is unaffected; one already excluded keeps its reason; on a later run (carry-over rule 1) it stays excluded.
 - **Then the gate** (G0–G2), then the owner switches `AUTO` on. No release is tagged by a session.
 
 ## Not in this plan
