@@ -170,7 +170,7 @@ well, whether or not the scan counted them; the report lists them and which film
     offset; otherwise it stays a decoy. These clips take only the ear-check's shape (6 s before, 2 s after, two
     clicks, the line's text), not its first-of-run choice or its 3 s rule: the only question is whether foreign
     speech is heard under the cue. The margin threshold is then computed once on the rest. If more than 10 draws need
-    hearing, the report stops for a decision. **B needs at least 5 films and 50 decoy draws left
+    hearing, a seeded random 10 of them are heard and the others stay decoys. **B needs at least 5 films and 50 decoy draws left
     after the screen**; below that, B is unproven. The report says how many decoys sit mostly
     on speech labelled foreign, as a check on the labels.
   - **What the draws cannot show.** A's draws are dense runs of subtitled lines, not a sparse forced file among
@@ -186,7 +186,8 @@ well, whether or not the scan counted them; the report lists them and which film
   - **The one `EMBEDDED` `ALIGNED` file:** the offset fitted to its English track on the raw cues, within the
     tolerance.
   - **The one owner-verified file:** its current offset, within the tolerance.
-- **Robustness of the real forced files, against each one's base fit b.** These are changes the score curve is not
+- **Robustness of the real forced files, against each one's base fit b.** Only sample files whose frozen base fit is
+  B-`ALIGNED` are changed; fewer than 10 such files makes B unproven. These are changes the score curve is not
   invariant to:
   - drop 30–50% of the cues, or jitter cue starts by ±300 ms: must stay within ±200 ms of b;
   - move only the second half by 2–20 s, as another cut would: must come out `CHECK`. This is the only test of the
@@ -195,7 +196,8 @@ well, whether or not the scan counted them; the report lists them and which film
   A plain shift of every cue is reported as a check of the search code only, outside any gate. Shifts are kept within
   the window: |b + s| ≤ 110 s, with "beyond the cap" meaning |b + s| > 30 s.
 - **Decoys,** each a wrong pick for the threshold rule:
-  - every forced file against other films' audio (a seeded sample of 40 when there are more);
+  - every forced file against other films' audio: a seeded sample of 40 (when there are more) of the other maps,
+    the absolute answers' films left out;
   - the forced file with its cue order and gaps shuffled (durations kept) against its own film;
   - each fit's second-best peak more than 2 s away.
 - **The owner's ear, B's proof (owner, 2026-11-20).** It runs only after every threshold and the bias are frozen, on
@@ -272,7 +274,7 @@ well, whether or not the scan counted them; the report lists them and which film
 - **Which score is built:** for each score, every gate above that applies to it must pass.
   - **B** first, if its gates pass in this order: the decoy screen and the decoy minimum; never confident and wrong;
     robustness; useful coverage; the absolute answers on `tiny`; |the bias| at most 300 ms (the report
-    stops past that, since B takes it untested); and last the ear-check, run only after all the others have passed.
+    stops past that, since B takes it untested); cost (below); and last the ear-check, run only after all the others have passed.
   - **Otherwise neither.** A was measured and failed (2026-11-22); it is not a fallback.
 - **Cost (Python):** the product budget is **7 days of one niced CPU (168 CPU-hours)** to map every edition with a
   forced file (3d-1c), with peak RSS under 1.5 GB. The gate: the 60 sampled files' mean CPU per hour of film, times
@@ -282,13 +284,15 @@ well, whether or not the scan counted them; the report lists them and which film
   only films with a forced file.
 - **Which forced files are measured (fixed 2026-11-22, before any forced-file result is seen).** A seeded random
   sample (seed 1) of **60** of the media files with a forced file, other than the absolute answers' films, which are
-  mapped anyway. Maps are run in nightly batches in that sample's order. Between batches the report shows only map
+  mapped anyway. Films mapped before the draw are in the frame like any other: one the draw picks is a full sample
+  member (no forced-file gate result had been looked at), one it does not pick is reported only. A sampled file that
+  cannot be mapped or fitted stays in every count as not `ALIGNED`, is reported, and is never replaced. Maps are run in nightly batches in that sample's order. Between batches the report shows only map
   counts and cost, never a gate result, a verdict or an `ALIGNED` count. When all 60 are mapped, everything is frozen
   and evaluated **once**. Useful coverage, robustness, the real-file decoys, the ear-check draw and its count use
   only the forced files of those 60 media files. The absolute answers are judged on their own (above) and never
-  enter them; forced-file films mapped outside the sample (four before 2026-11-22, and any mapped while the order
-  was export order) are reported only. If B's ear list then holds fewer than 10 clippable `ALIGNED` files, **B is
-  unproven for 3d** and the run stops and reports. Any later attempt must pre-declare a new seeded sample disjoint
+  enter them; forced-file films mapped but not drawn are reported only. If any forced-file gate fails on the sample,
+  or B's ear list holds fewer than 10 clippable `ALIGNED` files, **B is unproven for 3d** and the run stops and
+  reports. Any later attempt must pre-declare a new seeded sample disjoint
   from these 60, freeze on it, and judge every forced-file gate on it alone. The full-track films are already mapped (they give
   the decoys and the bias); no foreign-label films are mapped.
 
@@ -338,7 +342,8 @@ The shape is fixed here. Details come from 3d-M's numbers.
   - then the other films with a forced file;
   - and any edition when it gains its first forced file, at import or when a sidecar is stored later (3c), with a
     test of that trigger.
-- **Cost.** About 150 files at a median of 12 CPU-minutes per film-hour is roughly 65 CPU-hours, plus reading each file over SMB once. The PR
+- **Cost.** About 150 files at the first run's median of 12 CPU-minutes per film-hour is roughly 65 CPU-hours (an
+  estimate; 3d-M's gate projects from the sample's mean), plus reading each file over SMB once. The PR
   states the measured rate and the expected days.
 - **Map parity, the gate before 3d-2 is briefed.** A tool-run `main` (`SpeechMapMain`) builds the maps of the whole
   3d-M test set in a throwaway container from a released image. **The owner releases after 3d-1c.**
@@ -350,7 +355,8 @@ The shape is fixed here. Details come from 3d-M's numbers.
   It must give:
   - stretch edges within 30 ms of 3d-M's;
   - per-stretch p(en) within the tolerance 3d-M sets;
-  - CPU within 3d-M's cost rule (a mean of at most 20 CPU-minutes per film-hour);
+  - CPU within 3d-M's budget: the measured mean CPU per film-hour, times the total runtime of the media files with a
+    forced file, at most 168 CPU-hours;
   - peak RSS inside the app container's `mem_limit: 2g` alongside a transcode (L4a's limit).
 
   The `whisper.cpp` fallback, if ever used, must pass the same parity.
