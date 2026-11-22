@@ -196,8 +196,8 @@ well, whether or not the scan counted them; the report lists them and which film
   A plain shift of every cue is reported as a check of the search code only, outside any gate. Shifts are kept within
   the window: |b + s| ≤ 110 s, with "beyond the cap" meaning |b + s| > 30 s.
 - **Decoys,** each a wrong pick for the threshold rule:
-  - every forced file against other films' audio: a seeded sample of 40 (when there are more) of the other maps,
-    the absolute answers' films left out;
+  - every forced file against other films' audio: a seeded sample of 40 (when there are more) of the maps of the
+    other 59 sampled media files and of the bias films;
   - the forced file with its cue order and gaps shuffled (durations kept) against its own film;
   - each fit's second-best peak more than 2 s away.
 - **The owner's ear, B's proof (owner, 2026-11-20).** It runs only after every threshold and the bias are frozen, on
@@ -270,7 +270,7 @@ well, whether or not the scan counted them; the report lists them and which film
   - every ear-check the owner finds wrong.
 - **The absolute answers** each pass, as stated above.
 - **Useful coverage:** at least 70% of the sample's eligible real forced files come out `ALIGNED` in the frozen record. Eligible means 8 or more cues on
-  speech. This is reported beside the ear-check's precision.
+  speech; a sampled file that could not be mapped or fitted counts as eligible and not `ALIGNED`. This is reported beside the ear-check's precision.
 - **Which score is built:** for each score, every gate above that applies to it must pass.
   - **B** first, if its gates pass in this order: the decoy screen and the decoy minimum; never confident and wrong;
     robustness; useful coverage; the absolute answers on `tiny`; |the bias| at most 300 ms (the report
@@ -284,15 +284,17 @@ well, whether or not the scan counted them; the report lists them and which film
   only films with a forced file.
 - **Which forced files are measured (fixed 2026-11-22, before any forced-file result is seen).** A seeded random
   sample (seed 1) of **60** of the media files with a forced file, other than the absolute answers' films, which are
-  mapped anyway. Films mapped before the draw are in the frame like any other: one the draw picks is a full sample
-  member (no forced-file gate result had been looked at), one it does not pick is reported only. A sampled file that
+  mapped anyway, and other than The Lord of the Rings: The Fellowship of the Ring (media file 921), whose forced
+  file's B fit appeared in the first run's report. Other films mapped before the draw are in the frame like any other
+  (none of their forced-file results has been seen): one the draw picks is a full sample member, one it does not
+  pick is reported only. A sampled file that
   cannot be mapped or fitted stays in every count as not `ALIGNED`, is reported, and is never replaced. Maps are run in nightly batches in that sample's order. Between batches the report shows only map
   counts and cost, never a gate result, a verdict or an `ALIGNED` count. When all 60 are mapped, everything is frozen
   and evaluated **once**. Useful coverage, robustness, the real-file decoys, the ear-check draw and its count use
   only the forced files of those 60 media files. The absolute answers are judged on their own (above) and never
-  enter them; forced-file films mapped but not drawn are reported only. If any forced-file gate fails on the sample,
-  or B's ear list holds fewer than 10 clippable `ALIGNED` files, **B is unproven for 3d** and the run stops and
-  reports. Any later attempt must pre-declare a new seeded sample disjoint
+  enter them; the forced files of films mapped but not drawn are reported only. Once the sample has been evaluated,
+  if B is not proven for any reason (any gate failing, the ear-check included, or fewer than 10 clippable `ALIGNED`
+  files), **B is unproven for 3d** and the run stops and reports. Any later attempt must pre-declare a new seeded sample disjoint
   from these 60, freeze on it, and judge every forced-file gate on it alone. The full-track films are already mapped (they give
   the decoys and the bias); no foreign-label films are mapped.
 
