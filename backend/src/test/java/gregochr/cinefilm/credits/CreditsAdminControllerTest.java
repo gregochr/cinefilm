@@ -41,7 +41,7 @@ class CreditsAdminControllerTest {
 
     private static final CreditsRow ROW = new CreditsRow(11, 5, "Heat", 1995, "Original", 2, 6_000_000L,
         5_000_000L, CreditsMarkerSource.PLEX, new Plex(PlexState.USABLE, 5_000_000L));
-    private static final CreditsList LIST = new CreditsList(new Counts(4, 3, 2, 9), 1, 25, 4, List.of(ROW));
+    private static final CreditsList LIST = new CreditsList(new Counts(4, 3, 1, 2, 9), 1, 25, 4, List.of(ROW));
 
     @Autowired
     private MockMvc mvc;
@@ -118,12 +118,22 @@ class CreditsAdminControllerTest {
     }
 
     @Test
+    void theAutoFilterReachesTheService() throws Exception {
+        when(credits.list(CreditsFilter.AUTO, 0, 25)).thenReturn(LIST);
+
+        mvc.perform(get("/api/admin/credits?filter=auto").with(user("owner"))).andExpect(status().isOk());
+
+        verify(credits).list(CreditsFilter.AUTO, 0, 25);
+    }
+
+    @Test
     void theAnswerUsesTheFieldNamesTheScreenReads() throws Exception {
         when(credits.list(CreditsFilter.NONE, 0, 25)).thenReturn(LIST);
 
         mvc.perform(get("/api/admin/credits").with(user("owner")))
             .andExpect(jsonPath("$.counts.none").value(4))
             .andExpect(jsonPath("$.counts.plex").value(3))
+            .andExpect(jsonPath("$.counts.auto").value(1))
             .andExpect(jsonPath("$.counts.owner").value(2))
             .andExpect(jsonPath("$.counts.all").value(9))
             .andExpect(jsonPath("$.page").value(1))
@@ -150,7 +160,7 @@ class CreditsAdminControllerTest {
 
         JsonNode json = JsonMapper.builder().build().readTree(body);
         assertThat(names(json)).containsExactlyInAnyOrder("counts", "page", "size", "total", "items");
-        assertThat(names(json.get("counts"))).containsExactlyInAnyOrder("none", "plex", "owner", "all");
+        assertThat(names(json.get("counts"))).containsExactlyInAnyOrder("none", "plex", "auto", "owner", "all");
         assertThat(names(json.get("items").get(0))).containsExactlyInAnyOrder("editionId", "filmId", "title", "year",
             "editionName", "editionCount", "runtimeMs", "markerMs", "source", "plex");
         assertThat(names(json.get("items").get(0).get("plex"))).containsExactlyInAnyOrder("state", "markerMs");
@@ -161,7 +171,7 @@ class CreditsAdminControllerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"filter=", "filter=None", "filter=auto", "filter=all,plex", "page=-1", "page=", "page=x",
+    @ValueSource(strings = {"filter=", "filter=None", "filter=all,plex", "page=-1", "page=", "page=x",
         "page=1.5", "page=99999999999", "page=21474837&size=100", "size=0", "size=101", "size=-5", "size=", "size=ten"})
     void aParameterThatIsPresentButInvalidIs400(String query) throws Exception {
         mvc.perform(get("/api/admin/credits?" + query).with(user("owner")))

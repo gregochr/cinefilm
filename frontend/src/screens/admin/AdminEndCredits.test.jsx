@@ -57,7 +57,7 @@ describe('End credits list: the page and its tabs', () => {
     expect(kes).toHaveTextContent('This film’s length isn’t known');
   });
 
-  it('shows the four tabs with their counts, Needs a look first, and reads that filter', async () => {
+  it('shows the five tabs with their counts, Needs a look first, and reads that filter', async () => {
     const fetchMock = installFetch();
     renderApp(PATH);
 
@@ -70,8 +70,9 @@ describe('End credits list: the page and its tabs', () => {
       'aria-selected',
       'false',
     );
+    expect(screen.getByRole('tab', { name: 'Detected 2' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Yours 1' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'All 5' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'All 7' })).toBeInTheDocument();
     expect(creditsCalls(fetchMock).map(([url]) => url)).toEqual([
       '/api/admin/credits?filter=none&page=0',
     ]);
@@ -93,6 +94,38 @@ describe('End credits list: the page and its tabs', () => {
       '/api/admin/credits?filter=plex&page=0',
       '/api/admin/credits?filter=owner&page=0',
     ]);
+  });
+
+  it('puts Detected between From Plex and Yours and reads the auto filter for it', async () => {
+    const fetchMock = installFetch();
+    renderApp(PATH);
+
+    const tablist = await screen.findByRole('tablist', { name: 'End credits lists' });
+    expect(
+      within(tablist)
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent),
+    ).toEqual(['Needs a look 3', 'From Plex 1', 'Detected 2', 'Yours 1', 'All 7']);
+    await userEvent.click(screen.getByRole('tab', { name: 'Detected 2' }));
+
+    expect(screen.getByRole('tab', { name: 'Detected 2' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(creditsCalls(fetchMock).map(([url]) => url)).toEqual([
+      '/api/admin/credits?filter=none&page=0',
+      '/api/admin/credits?filter=auto&page=0',
+    ]);
+  });
+
+  it('shows a Detected row with its time like the other sources', async () => {
+    const detected = structuredClone(fixtures.adminCredits);
+    detected.items = [{ ...detected.items[0], markerMs: 6730000, source: 'AUTO' }];
+    serve(() => respond(detected));
+    renderApp(`${PATH}?show=auto`);
+
+    const list = await screen.findByRole('list', { name: 'End credits' });
+    expect(within(list).getByRole('listitem')).toHaveTextContent('Detected · 1:52:10');
   });
 
   it('treats an unknown ?show= as Needs a look', async () => {
