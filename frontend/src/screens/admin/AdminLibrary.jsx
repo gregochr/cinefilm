@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAdminContext } from '../../state/adminContext.js';
 import { useGroupingReport } from '../../state/useAdmin.js';
+import EndCreditsCard from './EndCreditsCard.jsx';
 import LibraryCastCard from './LibraryCastCard.jsx';
 import LibraryPlexCard from './LibraryPlexCard.jsx';
 import LibraryRatingsCard from './LibraryRatingsCard.jsx';
@@ -9,8 +10,8 @@ import LibraryScanCard from './LibraryScanCard.jsx';
 import SectionTitle from './SectionTitle.jsx';
 
 /**
- * Library: the scan (with what it changed), the ratings, the Plex import (with the credits-marker import) and
- * Cast & crew. Opens on `#scan` or
+ * Library: the scan (with what it changed), the ratings, the Plex import (with the credits-marker import), End
+ * credits and Cast & crew. Opens on `#scan` or
  * `#plex-import` when asked.
  */
 export default function AdminLibrary() {
@@ -79,6 +80,7 @@ export default function AdminLibrary() {
           onImport={plexImport.startImport}
           onRecheck={plexImport.reload}
         />
+        <EndCreditsCard />
         <LibraryCastCard scan={scan} loading={loading} />
       </div>
     </>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminApi } from '../api/resources.js';
 import { pageAfterRead } from './creditsAdmin.js';
 import { useResource } from './useResource.js';
@@ -32,4 +32,34 @@ export function useCreditsAdmin(filter, signInCount) {
   // A failed read wins: the old data stays in `read` on failure, and must not keep the screen on its skeleton.
   const waiting = !read.error && (loading || stale || stepBackTo !== page);
   return { ...read, loading: waiting, page, setPage };
+}
+
+/**
+ * How long after a change of key the counts are read once more. The scan and the Plex import publish their finish
+ * events while still holding the library lock, so the marker pass's first try fails and it retries after its
+ * `LOCK_WAIT` of 5 s, then runs: 15 s covers the wait and the pass itself.
+ */
+export const COUNTS_FOLLOW_UP_MS = 15000;
+
+/**
+ * The three counts the Library card shows, read from the first page of "Needs a look". `version` is part of the
+ * request, so a scan or import finishing reads the counts again. The marker pass runs on a background executor after
+ * that finish, so one more quiet read follows `COUNTS_FOLLOW_UP_MS` after any later change of key (cancelled by the
+ * next change or by unmount).
+ */
+export function useCreditsCounts(signInCount, version) {
+  const { data, loading, error, reload, refresh } = useResource(
+    `admin-credits-counts:${signInCount}:${version}`,
+    (options) => adminApi.credits('none', 0, options),
+  );
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return undefined;
+    }
+    const id = setTimeout(refresh, COUNTS_FOLLOW_UP_MS);
+    return () => clearTimeout(id);
+  }, [signInCount, version, refresh]);
+  return { counts: data?.counts ?? null, loading, error, reload };
 }
