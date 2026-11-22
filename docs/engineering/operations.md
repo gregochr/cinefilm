@@ -567,8 +567,9 @@ file, the candidates list, the query results) stays on the server or the planner
 ### The deny file
 
 The planner writes it from the manifest and L1's labels (the plan's "The test split"). The owner puts it on the
-server and **recreates the container after every replacement** (the file is read only by a pass, and a start-up pass
-runs on every recreate).
+server and **recreates the container after every replacement** with `--force-recreate` (the file is read only by a
+pass, a start-up pass runs on every recreate, and a plain `up -d` does not recreate when only the file's contents
+changed).
 
 - **Where:** `${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/credits-auto/deny.txt`, mounted read-only into the
   container at `/credits-auto` (`deploy/docker-compose.yml`). The container's user (uid 1001) must be able to read it.
@@ -592,7 +593,7 @@ runs on every recreate).
   sed -i '/^CINEFILM_CREDITS_AUTO_DENYLIST=/d' .env
   echo 'CINEFILM_CREDITS_AUTO_DENYLIST=/credits-auto/deny.txt' >> .env
   grep -c '^CINEFILM_CREDITS_AUTO_DENYLIST=' .env                      # prints 1; never print the whole .env
-  export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm   # recreates it; do it when nothing is playing
+  export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d --force-recreate cinefilm   # recreates it even when only the file changed; do it when nothing is playing
   ```
 - **Check it was read.** The start-up pass logs the header's date and count, never an entry:
 
@@ -689,7 +690,7 @@ Added by 3c-2.
    echo 'CINEFILM_CREDITS_AUTO_ENABLED=true' >> .env
    # only if G1 turned cards off:
    # sed -i '/^CINEFILM_CREDITS_AUTO_CARDS=/d' .env && echo 'CINEFILM_CREDITS_AUTO_CARDS=false' >> .env
-   export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm
+   export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d --force-recreate cinefilm
    docker logs cinefilm 2>&1 | grep -E 'Credits apply pass|Credits AUTO is off' | tail -3
    ```
 
