@@ -5,9 +5,13 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.crawl;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.denyFile;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.tmdbOn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,12 +21,16 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsList;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsRow;
 import gregochr.cinefilm.credits.CreditsApply.PlexState;
+import gregochr.cinefilm.credits.learn.Side;
 import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.EditionRepository.EditionFilmRow;
 import gregochr.cinefilm.film.EditionRepository.FilmEditionCount;
 import gregochr.cinefilm.film.EditionRepository.SourceCount;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.film.FilmRepository.UnitRow;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
@@ -30,7 +38,9 @@ import gregochr.cinefilm.plex.PlexCreditsMarker;
 import gregochr.cinefilm.plex.PlexCreditsMarkerRepository;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.LongStream;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -57,8 +67,24 @@ class CreditsAdminServiceTest {
 
     private final LibraryLock lock = new LibraryLock();
 
+    @Mock
+    private FilmRepository films;
+    @Mock
+    private CreditsDetectionRepository detections;
+    @Mock
+    private CreditsDenyFileReader denyReader;
+
+    private CreditsDenyListKeeper keeper;
+    private boolean autoEnabled;
+
+    @BeforeEach
+    void setUp() {
+        keeper = new CreditsDenyListKeeper(denyReader);
+    }
+
     private CreditsAdminService service() {
-        return new CreditsAdminService(editions, markers, lock, transactions);
+        return new CreditsAdminService(editions, markers, lock, keeper,
+            new CreditsAutoReader(editions, films, detections, autoEnabled, true), transactions);
     }
 
     /** A film (id = n) with one 100-minute edition (id = n) whose one file (id = n) has a fingerprint. */
@@ -445,5 +471,144 @@ class CreditsAdminServiceTest {
         // The write's commit happens under the lock; the answer's read transaction commits after it is given back.
         assertThat(heldAtCommit).containsExactly(true, false);
         assertThat(lock.holder()).isNull();
+    }
+
+    // ---- Clear and AUTO: the list in force of the latest pass, and step 3 read live ----
+
+    /**
+     * An owner-marked edition 7 ("Heat") whose film has this TMDB id, with a version 2 crawl at 5,000,000 ms in its
+     * file, the switch on, and the reads Clear makes for step 3.
+     */
+    private Edition autoCase(Long tmdbId) {
+        autoEnabled = true;
+        Edition edition = seeded(7, "Heat", 1995, 5_500_000L, CreditsMarkerSource.OWNER);
+        edition.getFilm().setTmdbId(tmdbId);
+        stubWriteAndAnswer(edition, null);
+        when(detections.findAllById(List.of(7L))).thenReturn(List.of(crawl(7, FINGERPRINT, 5_000_000)));
+        when(editions.findFilmRowsByIdIn(List.of(7L))).thenReturn(List.of(
+            new EditionFilmRow(7L, 7L, tmdbId, "Heat", 1995, null, null)));
+        return edition;
+    }
+
+    private static void assertAuto(Edition edition, CreditsRow row) {
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(5_020_000L);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.AUTO);
+        assertThat(row.markerMs()).isEqualTo(5_020_000L);
+        assertThat(row.source()).isEqualTo(CreditsMarkerSource.AUTO);
+    }
+
+    private static void assertCleared(Edition edition, CreditsRow row) {
+        assertThat(edition.getCreditsMarkerMs()).isNull();
+        assertThat(edition.getCreditsMarkerSource()).isNull();
+        assertThat(row.markerMs()).isNull();
+        assertThat(row.source()).isNull();
+    }
+
+    @Test
+    void clearingAnOwnerTimeLandsOnAutoWhenStepThreeHoldsWithTheListInForce() {
+        Edition edition = autoCase(tmdbOn(Side.DEV, 1));
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("file 999")));
+        keeper.refresh();
+
+        CreditsRow row = service().clear(7);
+
+        assertAuto(edition, row);
+        verify(editions).save(edition);
+    }
+
+    @Test
+    void clearingWithAnOlderCopyInForceLandsOnAutoFromIt() {
+        Edition edition = autoCase(tmdbOn(Side.DEV, 1));
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("edition 99")), Optional.empty());
+        keeper.refresh();
+        keeper.refresh();
+
+        CreditsRow row = service().clear(7);
+
+        assertAuto(edition, row);
+    }
+
+    /**
+     * A reader whose repositories answer exactly what {@link #autoCase} stubs (a version 2 crawl at 5,000,000 ms and
+     * a matched development-side film), so step 3 would land on AUTO unless the check under test stops it. Answers,
+     * not stubs: the check short-circuits before these reads, and an unused stub would fail strict stubs.
+     */
+    private CreditsAutoReader validReads(boolean enabled) {
+        long tmdb = tmdbOn(Side.DEV, 1);
+        EditionRepository filmRows = mock(EditionRepository.class,
+            invocation -> List.of(new EditionFilmRow(7L, 7L, tmdb, "Heat", 1995, null, null)));
+        CreditsDetectionRepository crawls = mock(CreditsDetectionRepository.class,
+            invocation -> List.of(crawl(7, FINGERPRINT, 5_000_000)));
+        return new CreditsAutoReader(filmRows, films, crawls, enabled, true);
+    }
+
+    private CreditsRow clearWith(CreditsAutoReader reader) {
+        return new CreditsAdminService(editions, markers, lock, keeper, reader, transactions).clear(7);
+    }
+
+    @Test
+    void clearingWithNoListInForceLandsOnTheFallbackNotAutoEvenWithAValidDetection() {
+        Edition edition = seeded(7, "Heat", 1995, 5_500_000L, CreditsMarkerSource.OWNER);
+        edition.getFilm().setTmdbId(tmdbOn(Side.DEV, 1));
+        stubWriteAndAnswer(edition, null);
+
+        CreditsRow row = clearWith(validReads(true));
+
+        assertCleared(edition, row);
+    }
+
+    @Test
+    void clearingWithTheSwitchOffLandsOnTheFallbackEvenWithAListInForceAndAValidDetection() {
+        Edition edition = seeded(7, "Heat", 1995, 5_500_000L, CreditsMarkerSource.OWNER);
+        edition.getFilm().setTmdbId(tmdbOn(Side.DEV, 1));
+        stubWriteAndAnswer(edition, null);
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("file 999")));
+        keeper.refresh();
+
+        CreditsRow row = clearWith(validReads(false));
+
+        assertCleared(edition, row);
+    }
+
+    @Test
+    void afterAPassTheFileReplacedWithNoPassRunClearStillAnswersFromThePassCopyWithoutReadingTheFile() {
+        Edition edition = autoCase(tmdbOn(Side.DEV, 1));
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("file 999")), Optional.of(denyFile("edition 7")));
+        keeper.refresh();
+
+        CreditsRow row = service().clear(7);
+
+        assertAuto(edition, row);
+        verify(denyReader).read();
+    }
+
+    @Test
+    void clearingLandsOnTheFallbackForAnEditionTheHashPutsOnTheTestSide() {
+        Edition edition = autoCase(tmdbOn(Side.TEST, 1));
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("file 999")));
+        keeper.refresh();
+
+        assertCleared(edition, service().clear(7));
+    }
+
+    @Test
+    void clearingLandsOnTheFallbackWhenAListedFilmNowSharesTheEditionsUnitKey() {
+        long tmdb = tmdbOn(Side.DEV, 1);
+        Edition edition = autoCase(tmdb);
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("film 55")));
+        keeper.refresh();
+        when(films.findUnitRowsByIdIn(List.of(55L))).thenReturn(List.of(
+            new UnitRow(55L, tmdb, "Other", 2001, null, null)));
+
+        assertCleared(edition, service().clear(7));
+    }
+
+    @Test
+    void clearingLandsOnTheFallbackForAnUnmatchedFilm() {
+        Edition edition = autoCase(null);
+        when(denyReader.read()).thenReturn(Optional.of(denyFile("file 999")));
+        keeper.refresh();
+
+        assertCleared(edition, service().clear(7));
     }
 }

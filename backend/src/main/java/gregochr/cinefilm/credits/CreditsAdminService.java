@@ -8,6 +8,9 @@ import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.credits.CreditsAdminDtos.Plex;
 import gregochr.cinefilm.credits.CreditsApply.Applied;
+import gregochr.cinefilm.credits.CreditsApply.AutoInputs;
+import gregochr.cinefilm.credits.CreditsDenyFile.DenyList;
+import gregochr.cinefilm.credits.CreditsDenyFile.Parsed;
 import gregochr.cinefilm.credits.CreditsApply.Part;
 import gregochr.cinefilm.credits.CreditsApply.PlexRow;
 import gregochr.cinefilm.credits.CreditsApply.PlexStatus;
@@ -48,15 +51,20 @@ public class CreditsAdminService {
     private final EditionRepository editions;
     private final PlexCreditsMarkerRepository markers;
     private final LibraryLock lock;
+    private final CreditsDenyListKeeper denyList;
+    private final CreditsAutoReader auto;
     private final TransactionTemplate readTx;
     private final TransactionTemplate writeTx;
 
     /** Creates the service. */
     public CreditsAdminService(EditionRepository editions, PlexCreditsMarkerRepository markers, LibraryLock lock,
+                               CreditsDenyListKeeper denyList, CreditsAutoReader auto,
                                PlatformTransactionManager transactions) {
         this.editions = editions;
         this.markers = markers;
         this.lock = lock;
+        this.denyList = denyList;
+        this.auto = auto;
         this.readTx = new TransactionTemplate(transactions);
         this.readTx.setReadOnly(true);
         this.writeTx = new TransactionTemplate(transactions);
@@ -95,7 +103,8 @@ public class CreditsAdminService {
 
     /**
      * Clears the owner's time: an {@code OWNER} edition goes back to what the automatic rules say (Plex's marker when
-     * usable, otherwise none), whatever {@code cinefilm.credits.apply.enabled} says. Any other edition is left alone.
+     * usable, otherwise an {@code AUTO} marker when step 3 holds with the deny list the latest pass kept in force,
+     * otherwise none), whatever {@code cinefilm.credits.apply.enabled} says. Any other edition is left alone.
      *
      * @param editionId the edition
      * @return the edition's row as it now stands
@@ -107,7 +116,11 @@ public class CreditsAdminService {
             if (edition.getCreditsMarkerSource() != CreditsMarkerSource.OWNER) {
                 return;
             }
-            Applied applied = CreditsApplier.applyEdition(edition, plexRows(List.of(edition)), null);
+            // The list in force of the latest pass, held in memory: Clear never reads the file. One snapshot, whole.
+            Parsed inForce = denyList.current();
+            DenyList list = inForce == null ? null : inForce.list();
+            AutoInputs autoInputs = auto.lookup(List.of(edition), list, auto.listedUnitKeys(list)).inputs(edition);
+            Applied applied = CreditsApplier.applyEdition(edition, plexRows(List.of(edition)), null, autoInputs);
             edition.setCreditsMarkerMs(applied.markerMs());
             edition.setCreditsMarkerSource(applied.source());
             editions.save(edition);

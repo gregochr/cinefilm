@@ -63,6 +63,8 @@ services:
       # Posters and backdrops imported from Plex: a persistent data mount, not a cache (Plex's copies cannot be
       # fetched again once Plex is gone). Backed up with the database.
       - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/artwork:/app/artwork
+      # The credits AUTO deny file (/credits-auto/deny.txt), library data kept off the repository; read-only.
+      - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/credits-auto:/credits-auto:ro
     depends_on:
       cinefilm-db:
         condition: service_healthy

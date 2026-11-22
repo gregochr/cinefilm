@@ -5,20 +5,28 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.crawl;
+import static gregochr.cinefilm.credits.CreditsAutoTestData.tmdbOn;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import gregochr.cinefilm.credits.CreditsApplier;
 import gregochr.cinefilm.credits.CreditsApplier.PassResult;
+import gregochr.cinefilm.credits.CreditsDetectionRepository;
+import gregochr.cinefilm.credits.learn.Side;
 import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.playback.PlaybackState;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
 import gregochr.cinefilm.plex.PlexCreditsMarker;
 import gregochr.cinefilm.plex.PlexCreditsMarkerRepository;
 import jakarta.persistence.EntityManagerFactory;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.hibernate.SessionFactory;
@@ -28,6 +36,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * The credits apply pass on PostgreSQL: it sets, clears and keeps markers, a second pass writes nothing, and a pass
@@ -38,6 +48,22 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class CreditsApplierIntegrationTest extends IntegrationTestBase {
 
     private static final String FINGERPRINT = "4000000000:" + NOW.toEpochMilli();
+
+    /** A deny file that lists no film the tests seed, with a listed film that does not exist (rule 6 still reads). */
+    private static final String DENY_FILE = "# cinefilm-deny 2026-11-13 3\nunit ctmdb:1\nfile 987654321\n"
+        + "film 987654321\n";
+
+    /** Switches AUTO on with a readable deny file, so the pass reads detection rows and unit key inputs. */
+    @DynamicPropertySource
+    static void autoOn(DynamicPropertyRegistry registry) throws IOException {
+        Path file = Files.createTempFile("cinefilm-deny", ".txt");
+        file.toFile().deleteOnExit();
+        Files.writeString(file, DENY_FILE);
+        registry.add("cinefilm.credits.auto.enabled", () -> "true");
+        registry.add("cinefilm.credits.auto.denylist", file::toString);
+    }
+
+    private static int nextDevTmdb = 1;
 
     @Autowired
     private CreditsApplier applier;
@@ -50,6 +76,9 @@ class CreditsApplierIntegrationTest extends IntegrationTestBase {
 
     @Autowired
     private PlaybackStateRepository states;
+
+    @Autowired
+    private CreditsDetectionRepository detections;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -171,6 +200,64 @@ class CreditsApplierIntegrationTest extends IntegrationTestBase {
         for (String title : List.of("Count Two", "Count Three", "Count Four")) {
             Edition more = seeded(title, null, null);
             plexRow(more, FINGERPRINT, 5_000_000);
+        }
+        applier.runPass();
+        long withMore = statementsOfOnePass();
+
+        assertThat(withOne).isPositive();
+        assertThat(withMore).isEqualTo(withOne);
+    }
+
+    /**
+     * A matched film (a development-side TMDB id, so no deny rule holds) with one edition whose file has a version 2
+     * crawl at 5,000,000 ms; the edition is unmarked and, when {@code hidden}, its file is missing.
+     */
+    private Edition seededWithCrawl(String title, boolean hidden) {
+        Film film = film(null, title, 2008, NOW);
+        film.setTmdbId(tmdbOn(Side.DEV, nextDevTmdb++));
+        Edition edition = edition(film, null, "Original", 100 * MIN, null);
+        MediaFile file = file(edition, title + ".m4v");
+        file.setSizeBytes(4_000_000_000L);
+        file.setModifiedAt(NOW);
+        file.setPresence(hidden ? Presence.MISSING : Presence.PRESENT);
+        Edition saved = films.saveAndFlush(film).getEditions().get(0);
+        detections.saveAndFlush(crawl(fileId(saved), FINGERPRINT, 5_000_000));
+        return saved;
+    }
+
+    private long autoEditions() {
+        return jdbc.queryForObject("select count(*) from edition where credits_marker_source = 'AUTO'", Long.class);
+    }
+
+    @Test
+    void anAutoMarkerIsSetTwentySecondsAfterTheCrawlOnAVisibleAndAHiddenEditionAndKept() {
+        Edition visible = seededWithCrawl("Auto Visible", false);
+        Edition hidden = seededWithCrawl("Auto Hidden", true);
+
+        PassResult first = applier.runPass();
+
+        assertThat(first.lockTaken()).isTrue();
+        assertThat(stored(visible)).containsEntry("credits_marker_ms", 5_020_000L)
+            .containsEntry("credits_marker_source", "AUTO");
+        assertThat(stored(hidden)).containsEntry("credits_marker_ms", 5_020_000L)
+            .containsEntry("credits_marker_source", "AUTO");
+
+        PassResult second = applier.runPass();
+
+        assertThat(second.changed()).isZero();
+        assertThat(second.autoSet()).isEqualTo(autoEditions());
+        assertThat(stored(visible)).containsEntry("credits_marker_ms", 5_020_000L)
+            .containsEntry("credits_marker_source", "AUTO");
+    }
+
+    @Test
+    void aPassCostsTheSameStatementsForMoreAutoEditionsInOneBatch() {
+        seededWithCrawl("AutoCount One", false);
+        applier.runPass();
+        long withOne = statementsOfOnePass();
+
+        for (String title : List.of("AutoCount Two", "AutoCount Three", "AutoCount Four")) {
+            seededWithCrawl(title, false);
         }
         applier.runPass();
         long withMore = statementsOfOnePass();

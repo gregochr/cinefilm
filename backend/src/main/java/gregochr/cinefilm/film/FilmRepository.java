@@ -414,4 +414,23 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /** The id of every film that has at least one credit (cast or director), each once. */
     @org.springframework.data.jpa.repository.Query("select distinct c.film.id from Credit c")
     List<Long> findIdsWithCredits();
+
+    /**
+     * A film's unit key inputs, as L1's export reads them.
+     *
+     * @param filmId the film
+     * @param tmdbId the film's TMDB id; null when not matched
+     * @param title the film's title
+     * @param year the film's release year; null when unknown
+     * @param collectionId the film's collection; null when none
+     * @param collectionTmdbId the collection's TMDB id; null when none
+     */
+    record UnitRow(Long filmId, Long tmdbId, String title, Integer year, Long collectionId, Long collectionTmdbId) {
+    }
+
+    /** The unit key inputs of each given film, in one statement. */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$UnitRow(f.id, f.tmdbId, f.title, f.year, c.id, "
+        + "c.tmdbId) from Film f left join f.collection c where f.id in :ids")
+    List<UnitRow> findUnitRowsByIdIn(java.util.Collection<Long> ids);
 }
