@@ -19,6 +19,7 @@ import adminScan from './fixtures/admin-scan.json';
 import adminGrouping from './fixtures/admin-grouping.json';
 import adminEditions from './fixtures/admin-editions.json';
 import adminMatch from './fixtures/admin-match.json';
+import adminCredits from './fixtures/admin-credits.json';
 import adminPlex from './fixtures/admin-plex.json';
 import adminPlexCredits from './fixtures/admin-plex-credits.json';
 import adminTranscoding from './fixtures/admin-transcoding.json';
@@ -53,6 +54,7 @@ export const fixtures = {
   adminGrouping,
   adminEditions,
   adminMatch,
+  adminCredits,
   adminPlex,
   adminPlexCredits,
   adminTranscoding,
@@ -129,6 +131,7 @@ export function defaultRoute(method, url, init = {}) {
   if (path === '/api/admin/plex/credits/import') {
     return json({ running: true, progress: { processed: 0, total: 0 }, lastImport: null }, 202);
   }
+  if (path === '/api/admin/credits') return json(adminCredits);
   if (path === '/api/admin/plex') {
     return method === 'POST'
       ? json({ ...adminPlex, running: true }, 202)

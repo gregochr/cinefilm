@@ -35,6 +35,9 @@ export const FILE_LISTS = [
   },
 ];
 
+/** The End credits list, a sub-list of Library like the file lists. */
+export const CREDITS_PATH = '/admin/library/credits';
+
 /** The old address of the Library scan card, before Admin had sections. */
 export const OLD_SCAN_HASH = '#library-scan';
 
@@ -56,6 +59,7 @@ export function bareOnPhone(pathname) {
   const path = normalisePath(pathname);
   return (
     ADMIN_SECTIONS.some((section) => section.to === path) ||
-    FILE_LISTS.some((list) => list.path === path)
+    FILE_LISTS.some((list) => list.path === path) ||
+    path === CREDITS_PATH
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAdminContext } from '../../state/adminContext.js';
 import { useGroupingReport } from '../../state/useAdmin.js';
+import EndCreditsCard from './EndCreditsCard.jsx';
 import LibraryCastCard from './LibraryCastCard.jsx';
 import LibraryPlexCard from './LibraryPlexCard.jsx';
 import LibraryRatingsCard from './LibraryRatingsCard.jsx';
@@ -79,6 +80,7 @@ export default function AdminLibrary() {
           onImport={plexImport.startImport}
           onRecheck={plexImport.reload}
         />
+        <EndCreditsCard />
         <LibraryCastCard scan={scan} loading={loading} />
       </div>
     </>

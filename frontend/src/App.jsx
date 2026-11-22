@@ -6,7 +6,8 @@ import AdminLayout from './screens/Admin.jsx';
 import AdminLibrary from './screens/admin/AdminLibrary.jsx';
 import AdminChristmas from './screens/admin/AdminChristmas.jsx';
 import AdminLibraryFiles from './screens/admin/AdminLibraryFiles.jsx';
-import { FILE_LISTS } from './state/adminRoutes.js';
+import AdminEndCredits from './screens/admin/AdminEndCredits.jsx';
+import { CREDITS_PATH, FILE_LISTS } from './state/adminRoutes.js';
 import AdminPlayback from './screens/admin/AdminPlayback.jsx';
 import AdminSettings from './screens/admin/AdminSettings.jsx';
 import AdminSubtitles from './screens/admin/AdminSubtitles.jsx';
@@ -63,6 +64,7 @@ export default function App() {
                 element={<AdminLibraryFiles list={list} />}
               />
             ))}
+            <Route path={CREDITS_PATH.replace('/admin/', '')} element={<AdminEndCredits />} />
             <Route path="christmas" element={<AdminChristmas />} />
             <Route path="playback" element={<AdminPlayback />} />
             <Route path="settings" element={<AdminSettings />} />

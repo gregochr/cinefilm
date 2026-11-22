@@ -92,6 +92,9 @@ export const adminApi = {
   startScan: () => post('/api/admin/scan'),
   startRatingsRefresh: () => post('/api/admin/ratings/refresh'),
   attention: (options) => get('/api/admin/attention', options),
+  /** One page (0-based, the server's 25 rows) of the End credits list; `filter` is none, plex, owner or all. */
+  credits: (filter, page, options) =>
+    get(`/api/admin/credits?${new URLSearchParams({ filter, page: String(page) })}`, options),
   /** The rail and To do strip's figures, read fresh each time (the server does not cache). */
   summary: (options) => get('/api/admin/summary', options),
   groupingReport: (options) => get('/api/admin/grouping-report', options),

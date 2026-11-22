@@ -1,0 +1,44 @@
+{
+  "counts": { "none": 3, "plex": 1, "owner": 1, "all": 5 },
+  "page": 0,
+  "size": 25,
+  "total": 3,
+  "items": [
+    {
+      "editionId": 33,
+      "filmId": 3,
+      "title": "Alien",
+      "year": 1979,
+      "editionName": "Director’s Cut",
+      "editionCount": 2,
+      "runtimeMs": 6960000,
+      "markerMs": 6720000,
+      "source": null,
+      "plex": { "state": "USABLE", "markerMs": 6720000 }
+    },
+    {
+      "editionId": 11,
+      "filmId": 1,
+      "title": "Heat",
+      "year": 1995,
+      "editionName": "Theatrical",
+      "editionCount": 1,
+      "runtimeMs": 10200000,
+      "markerMs": null,
+      "source": null,
+      "plex": { "state": "NONE", "markerMs": null }
+    },
+    {
+      "editionId": 44,
+      "filmId": 4,
+      "title": "Kes",
+      "year": null,
+      "editionName": "Theatrical",
+      "editionCount": 1,
+      "runtimeMs": null,
+      "markerMs": null,
+      "source": null,
+      "plex": { "state": "NO_TIMELINE", "markerMs": null }
+    }
+  ]
+}
