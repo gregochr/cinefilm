@@ -262,11 +262,124 @@ class CreditsSplitTest {
         assertThat(result.entries().keySet()).containsExactly(10L, 20L, 30L);
     }
 
+    private static ManifestEntry looked(long id, String unit) {
+        return new ManifestEntry(id, unit, Side.TEST, null, true);
+    }
+
+    @Test
+    void aLookedAtNewcomerTakingTheTestSideThroughRuleTwoIsExcludedAndCounted() {
+        // ctmdb:500 has an old member on test; film 5 joins it and is listed
+        CreditsSplit.Result result = CreditsSplit.assign(List.of(film(1, "ctmdb:500"), film(5, "ctmdb:500")),
+            previous(entry(1, "ctmdb:500", Side.TEST, null)), Set.of(), Set.of(5L));
+
+        assertThat(result.entries().get(5L)).isEqualTo(looked(5, "ctmdb:500"));
+        assertThat(result.entries().get(1L)).isEqualTo(entry(1, "ctmdb:500", Side.TEST, null));
+        assertThat(result.lookedAt()).containsExactly(5L);
+        assertThat(result.unitsSplit()).isZero();
+    }
+
+    @Test
+    void aLookedAtFilmOnTestByTheHashAloneIsExcludedAndCounted() {
+        CreditsSplit.Result result = CreditsSplit.assign(List.of(film(2, "tmdb:1003")), NONE, Set.of(), Set.of(2L));
+
+        assertThat(result.entries().get(2L)).isEqualTo(looked(2, "tmdb:1003"));
+        assertThat(result.lookedAt()).containsExactly(2L);
+    }
+
+    @Test
+    void aLookedAtFilmOnDevelopmentIsUnaffected() {
+        CreditsSplit.Result result = CreditsSplit.assign(List.of(film(1, "tmdb:1004")), NONE, Set.of(), Set.of(1L));
+
+        assertThat(result.entries().get(1L)).isEqualTo(entry(1, "tmdb:1004", Side.DEV, 4));
+        assertThat(result.entries().get(1L).lookedAt()).isNull();
+        assertThat(result.lookedAt()).isEmpty();
+    }
+
+    @Test
+    void anUnlistedFilmOnTestIsNotFlagged() {
+        CreditsSplit.Result result = CreditsSplit.assign(List.of(film(2, "tmdb:1003"), film(3, "tmdb:75")), NONE,
+            Set.of(), Set.of(3L));
+
+        assertThat(result.entries().get(2L)).isEqualTo(entry(2, "tmdb:1003", Side.TEST, null));
+        assertThat(result.lookedAt()).containsExactly(3L);
+    }
+
+    @Test
+    void aListedSplitConflictFilmKeepsTheConflictAndIsNotFlagged() {
+        CreditsSplit.Result result = CreditsSplit.assign(
+            List.of(film(3, "ctmdb:500"), film(4, "ctmdb:500"), film(5, "ctmdb:500")),
+            previous(entry(3, "ctmdb:500", Side.DEV, 1), entry(4, "ctmdb:500", Side.TEST, null)), Set.of(),
+            Set.of(5L));
+
+        assertThat(result.conflicts()).containsExactly(5L);
+        assertThat(result.entries().get(5L).lookedAt()).isNull();
+        assertThat(result.lookedAt()).isEmpty();
+    }
+
+    @Test
+    void aListedConflictFilmWhoseHashSideIsTestIsNotFlagged() {
+        CreditsSplit.Result result = CreditsSplit.assign(
+            List.of(film(3, "tmdb:1003"), film(4, "tmdb:1003"), film(5, "tmdb:1003")),
+            previous(entry(3, "tmdb:1003", Side.DEV, 1), entry(4, "tmdb:1003", Side.TEST, null)), Set.of(),
+            Set.of(5L));
+
+        assertThat(result.conflicts()).containsExactly(5L);
+        assertThat(result.entries().get(5L)).isEqualTo(entry(5, "tmdb:1003", Side.TEST, null));
+        assertThat(result.lookedAt()).isEmpty();
+    }
+
+    @Test
+    void aFilmFlaggedInThePreviousManifestStaysFlaggedOnALaterRunWhetherListedOrNot() {
+        Map<Long, ManifestEntry> before = previous(looked(5, "ctmdb:500"));
+
+        CreditsSplit.Result notListed = CreditsSplit.assign(List.of(film(5, "ctmdb:500")), before, Set.of(), Set.of());
+        CreditsSplit.Result listed = CreditsSplit.assign(List.of(film(5, "ctmdb:500")), before, Set.of(), Set.of(5L));
+
+        assertThat(notListed.entries().get(5L)).isEqualTo(looked(5, "ctmdb:500"));
+        assertThat(notListed.lookedAt()).containsExactly(5L);
+        assertThat(listed.entries().get(5L)).isEqualTo(looked(5, "ctmdb:500"));
+        assertThat(listed.keptOnOldSide()).isEmpty();
+    }
+
+    @Test
+    void aFilmFlaggedInThePreviousManifestThatChangedUnitKeepsTheFlagAndIsReportedAsMoved() {
+        CreditsSplit.Result result = CreditsSplit.assign(List.of(film(5, "ctmdb:501")),
+            previous(looked(5, "tmdb:1005")), Set.of(), Set.of());
+
+        assertThat(result.entries().get(5L)).isEqualTo(looked(5, "ctmdb:501"));
+        assertThat(result.keptOnOldSide()).containsExactly(5L);
+    }
+
+    @Test
+    void aNewcomerToAUnitWithALookedAtMemberTakesTheMembersTestSideUnflagged() {
+        CreditsSplit.Result result = CreditsSplit.assign(List.of(film(5, "ctmdb:500"), film(6, "ctmdb:500")),
+            previous(looked(5, "ctmdb:500")), Set.of(), Set.of());
+
+        assertThat(result.entries().get(6L)).isEqualTo(entry(6, "ctmdb:500", Side.TEST, null));
+        assertThat(result.lookedAt()).containsExactly(5L);
+    }
+
+    @Test
+    void theLookedAtFlagRoundTripsThroughJsonAndIsLeftOutWhenNull() {
+        JsonMapper mapper = JsonMapper.builder().build();
+
+        String flagged = mapper.writeValueAsString(looked(5, "ctmdb:500"));
+        String plain = mapper.writeValueAsString(entry(1, "tmdb:1", Side.DEV, 2));
+
+        assertThat(flagged).isEqualTo("{\"film_id\":5,\"unit_key\":\"ctmdb:500\",\"side\":\"test\",\"fold\":null,"
+            + "\"looked_at\":true}");
+        assertThat(plain).isEqualTo("{\"film_id\":1,\"unit_key\":\"tmdb:1\",\"side\":\"dev\",\"fold\":2}");
+        assertThat(mapper.readValue(flagged, ManifestEntry.class)).isEqualTo(looked(5, "ctmdb:500"));
+        assertThat(mapper.readValue(plain, ManifestEntry.class)).isEqualTo(entry(1, "tmdb:1", Side.DEV, 2));
+        assertThat(looked(5, "x").isLookedAt()).isTrue();
+        assertThat(entry(1, "x", Side.DEV, 2).isLookedAt()).isFalse();
+    }
+
     @Test
     void theProductsUnitKeyEqualsTheOneL1WritesForEveryFixtureFile() throws IOException {
         LabelsJob.run(new LabelsOptions(FIXTURES.resolve("archive"), FIXTURES.resolve("export.csv"),
             FIXTURES.resolve("preseed.txt"), PlexRules.prefix(LearnFixtures.PREFIX), LocalDate.of(2026, 11, 13), temp,
-            null, null));
+            null, null, null));
         List<ExportRow> rows = ExportReader.parse(Files.readString(FIXTURES.resolve("export.csv")));
         Map<Long, String> l1 = new java.util.HashMap<>();
         for (JsonNode node : JsonMapper.builder().build().readTree(

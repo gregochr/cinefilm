@@ -26,10 +26,10 @@ class LabelsReportTest {
         PlexArchive archive = new PlexArchive(Map.of(1L, new ArchiveItem(1, 1L, List.of(), List.of())),
             List.of(8L, 12L), List.of("item-1.json.tmp"));
         CreditsSplit.Result split = new CreditsSplit.Result(Map.of(), List.of(4L), List.of(7L, 9L), List.of(6L), 2,
-            List.of(99L));
+            List.of(99L), List.of(3L, 8L));
 
         String text = LabelsReport.render(LocalDate.of(2026, 11, 13), records, archive, split, 3,
-            new java.util.TreeMap<>(Map.of(40L, "wrong, see stills", 5L, "x")));
+            new java.util.TreeMap<>(Map.of(40L, "wrong, see stills", 5L, "x")), 4, 2);
 
         assertThat(text).isEqualTo("""
             CineFilm credits labels, run date 2026-11-13
@@ -50,6 +50,7 @@ class LabelsReportTest {
               MARKER_BEFORE_WINDOW: 0
               OWNER_EXCLUDED: 0
               SPLIT_CONFLICT: 1
+              LOOKED_AT: 0
             leading_island files: 1
             archive items parsed: 1
             archive keys listed in a section with no item file, not parsed: 2 [8, 12]
@@ -59,6 +60,8 @@ class LabelsReportTest {
             units split across sides: 2
             films kept on their old side after changing unit: 1 [4]
             films excluded as SPLIT_CONFLICT: 1 [6]
+            looked-at film ids given: 4, films excluded as LOOKED_AT: 2 [3, 8]
+            files of looked-at films on test that keep an earlier exclusion reason: 2
             owner exclusions: 2
               5: x
               40: wrong, see stills
@@ -68,8 +71,8 @@ class LabelsReportTest {
     @Test
     void emptyListsPrintNoBrackets() {
         String text = LabelsReport.render(LocalDate.of(2026, 11, 13), List.of(), new PlexArchive(Map.of(), List.of(),
-            List.of()), new CreditsSplit.Result(Map.of(), List.of(), List.of(), List.of(), 0, List.of()), 0,
-            Map.of());
+            List.of()), new CreditsSplit.Result(Map.of(), List.of(), List.of(), List.of(), 0, List.of(),
+            List.of()), 0, Map.of(), 0, 0);
 
         assertThat(text).contains("files: 0\nunits: 0\n").contains("no item file, not parsed: 0\n")
             .contains("not in the export: 0\n").contains("owner exclusions: 0\n").doesNotContain("[");

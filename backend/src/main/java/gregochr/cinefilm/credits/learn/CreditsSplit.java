@@ -50,9 +50,11 @@ public final class CreditsSplit {
      *     for reference only
      * @param unitsSplit units that have films on both sides
      * @param preseedMissing pre-seeded film ids that are not in the export
+     * @param lookedAt films whose final side is test and that credits 3c looked at (given now, or flagged in the
+     *     previous manifest): their files are excluded as {@code LOOKED_AT}
      */
     record Result(Map<Long, ManifestEntry> entries, List<Long> keptOnOldSide, List<Long> preseedOverridden,
-                  List<Long> conflicts, int unitsSplit, List<Long> preseedMissing) {
+                  List<Long> conflicts, int unitsSplit, List<Long> preseedMissing, List<Long> lookedAt) {
     }
 
     /**
@@ -120,6 +122,21 @@ public final class CreditsSplit {
      * @return the entries and what to report
      */
     static Result assign(List<SplitFilm> films, Map<Long, ManifestEntry> previous, Set<Long> preseed) {
+        return assign(films, previous, preseed, Set.of());
+    }
+
+    /**
+     * Places every film, applying the carry-over rules in order, then marks the looked-at films that landed on test.
+     *
+     * @param films every exported film, once
+     * @param previous the previous manifest's entries by film id (empty on a first run)
+     * @param preseed film ids forced into development with their whole units
+     * @param lookedAt film ids credits 3c looked at: one whose final side is test, whichever rule chose it, keeps
+     *     that side in the manifest and is flagged; a film flagged in the previous manifest stays flagged
+     * @return the entries and what to report
+     */
+    static Result assign(List<SplitFilm> films, Map<Long, ManifestEntry> previous, Set<Long> preseed,
+                         Set<Long> lookedAt) {
         Map<Long, String> unitOf = new TreeMap<>();
         films.forEach(f -> unitOf.put(f.filmId(), f.unitKey()));
         Set<String> preseedUnits = new HashSet<>();
@@ -168,7 +185,18 @@ public final class CreditsSplit {
                 entries.put(id, new ManifestEntry(id, unit, side, side == Side.DEV ? hashFold(unit) : null));
             }
         }
-        return new Result(entries, kept, overridden, conflicts, unitsSplit(entries), preseedMissing);
+        List<Long> looked = new ArrayList<>();
+        Set<Long> conflicted = new HashSet<>(conflicts);
+        for (Map.Entry<Long, ManifestEntry> placed : entries.entrySet()) {
+            ManifestEntry entry = placed.getValue();
+            ManifestEntry old = previous.get(placed.getKey());
+            boolean listed = lookedAt.contains(placed.getKey()) || old != null && old.isLookedAt();
+            if (listed && entry.side() == Side.TEST && !conflicted.contains(placed.getKey())) {
+                placed.setValue(new ManifestEntry(entry.filmId(), entry.unitKey(), Side.TEST, null, true));
+                looked.add(placed.getKey());
+            }
+        }
+        return new Result(entries, kept, overridden, conflicts, unitsSplit(entries), preseedMissing, looked);
     }
 
     private static int unitsSplit(Map<Long, ManifestEntry> entries) {
