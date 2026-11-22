@@ -420,10 +420,18 @@ describe('Christmas films: adding a film', () => {
   it('turns a removed film into Add in place, with focus kept, when the write lands before /states answers', async () => {
     const user = userEvent.setup();
     const slow = deferred();
-    serve({ states: () => slow.promise });
+    let calls = 0;
+    serve({
+      states: () => {
+        calls += 1;
+        return slow.promise;
+      },
+    });
     await open();
     await user.click(field());
     await user.keyboard('trading');
+    // /states is asked, and held, before the write: the held answer is then older than the write.
+    await waitFor(() => expect(calls).toBe(1));
     const remove = await panelButton('Remove Trading Places');
     await user.click(remove);
     const add = await panelButton('Add Trading Places');
@@ -437,12 +445,20 @@ describe('Christmas films: adding a film', () => {
   it('keeps the pressed button in place as Add, with focus, when a keyboard Remove finishes before the first /states answer', async () => {
     const user = userEvent.setup();
     const slow = deferred();
-    serve({ states: () => slow.promise });
+    let calls = 0;
+    serve({
+      states: () => {
+        calls += 1;
+        return slow.promise;
+      },
+    });
     await open();
     await user.click(field());
     await user.keyboard('trading{ArrowDown}');
     const remove = await panelButton('Remove Trading Places');
     expect(remove).toHaveFocus();
+    // /states is asked, and held, before the write: the held answer is then older than the write.
+    await waitFor(() => expect(calls).toBe(1));
     await user.keyboard('{Enter}');
     const add = await panelButton('Add Trading Places');
     expect(add).toBe(remove);
