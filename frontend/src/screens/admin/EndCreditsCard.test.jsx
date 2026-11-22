@@ -58,7 +58,7 @@ describe('Library: the End credits card', () => {
     expect(within(card).queryByRole('alert')).toBeNull();
   });
 
-  it('reads the counts again when a scan finishes', async () => {
+  it('reads the counts once more, not twice, when a scan finishes', async () => {
     let none = 3;
     let finishedAt = fixtures.adminScan.lastScan.finishedAt;
     const fetchMock = installFetch((method, url) => {
@@ -82,17 +82,17 @@ describe('Library: the End credits card', () => {
     expect(card).toHaveTextContent('Needs a look3');
     const reads = () =>
       fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin/credits')).length;
-    // The scan status arriving is itself a change of stamp: let those reads settle before the scan "finishes".
     const scanButton = await screen.findByRole('button', { name: 'Scan library now' });
     await act(async () => {});
-    const before = reads();
+    expect(reads()).toBe(1);
 
     none = 2;
     finishedAt = '2026-11-08T13:41:10Z';
     await userEvent.click(scanButton);
 
     await waitFor(() => expect(card).toHaveTextContent('Needs a look2'));
-    expect(reads()).toBeGreaterThan(before);
+    await act(async () => {});
+    expect(reads()).toBe(2);
   });
 
   it('reads the counts again when the credits import finishes', async () => {
@@ -110,5 +110,34 @@ describe('Library: the End credits card', () => {
     act(() => announceLibraryChanged());
 
     await waitFor(() => expect(card).toHaveTextContent('Needs a look0'));
+  });
+
+  it('shows – for each count while the read is out, then the numbers', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    installFetch((method, url) => (String(url).startsWith('/api/admin/credits') ? gate : null));
+    renderApp('/admin/library');
+    const card = await screen.findByRole('region', { name: 'End credits' });
+
+    expect(
+      within(card)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Needs a look–', 'From Plex–', 'Yours–']);
+    await act(async () => release(respond(fixtures.adminCredits)));
+
+    await waitFor(() => expect(card).toHaveTextContent('Needs a look3'));
+  });
+
+  it('makes Review end credits… a secondary button, never amber', async () => {
+    installFetch();
+    renderApp('/admin/library');
+
+    const link = await screen.findByRole('link', { name: 'Review end credits…' });
+
+    expect(link).not.toHaveClass('btn--primary');
+    expect(link).toHaveClass('btn--secondary');
   });
 });

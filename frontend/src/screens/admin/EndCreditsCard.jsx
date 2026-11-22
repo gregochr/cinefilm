@@ -1,6 +1,5 @@
 import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { ButtonLink } from '../../components/Button.jsx';
-import { useAdminContext } from '../../state/adminContext.js';
 import { CREDITS_PATH } from '../../state/adminRoutes.js';
 import { creditsCard } from '../../state/creditsAdminCopy.js';
 import { useCreditsCounts } from '../../state/useCreditsAdmin.js';
@@ -12,13 +11,11 @@ import { useSignInRecovery } from './useSignInRecovery.js';
  * way into the list. The counts come from the list's own first read.
  */
 export default function EndCreditsCard() {
-  // The counts are read again when a scan, the Plex import or the credits import finishes (each announces a library
-  // change) and after a match or edit.
-  const { settledAt, changed } = useAdminContext();
-  const libraryChanges = useLibraryChanges();
+  // The counts are read again when a scan, the Plex import or the credits import finishes: each announces one library
+  // change, so that is the one thing the key follows (`settledAt` would change first and send a second read).
   const { counts, loading, error, reload } = useCreditsCounts(
     useSignInRecovery(),
-    `${settledAt}|${changed}|${libraryChanges}`,
+    useLibraryChanges(),
   );
   const tiles = [
     { key: 'none', label: creditsCard.needs },

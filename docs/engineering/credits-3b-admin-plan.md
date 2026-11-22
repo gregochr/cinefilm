@@ -272,8 +272,8 @@ Each page costs a fixed number of queries, never one per edition:
   the missing-CSRF-header case for PUT and DELETE. Every 4xx assertion checks `$.error`.
 - `CreditsAdminIntegrationTest`: a PUT then DELETE round trip.
 
-**3b-2a — the read-only list.** The Library card (its tiles, its link and `useCreditsCounts`) moved to 3b-2b on
-2026-11-22 to keep this PR under 1,500 lines; its tests below go with it.
+**3b-2a — the read-only list.** The Library card (its tiles, its link and `useCreditsCounts`) moved to 3b-2c on
+2026-11-22 to keep these PRs under 1,500 lines; its tests below go with it.
 - `parseTime` isn't in this PR.
 - Pure tests:
   - the row text for every state and source;
@@ -293,8 +293,7 @@ Each page costs a fixed number of queries, never one per edition:
   - a failed still and Try again;
   - no stills without `runtimeMs`.
 
-**3b-2b — the card, the time field, Set and Clear.** The card's counts refresh when a scan or import finishes (the
-shell's library-change stamps), as the other Library cards do.
+**3b-2b — the time field, Set and Clear.**
 - `parseTime`:
   - accepts `1:52:10`, `52:10` and `0:59`;
   - refuses `1:60:00`, `1:2:3:4`, empty input, negative values and letters.
@@ -308,6 +307,13 @@ shell's library-change stamps), as the other Library cards do.
     back, or the section title;
   - Clear only on a "Yours" row;
   - the page stepping back after the last row leaves.
+
+**3b-2c — the card and its counts refresh.** The card's counts read again when a scan, the Plex import or the
+credits import finishes (each announces `cinefilm:library-changed`, which is the only key that changes), and once
+more 15 s later, because the marker pass runs after those finishes.
+- The card's tiles and link, the "–" placeholders while the read is out, the link not `btn--primary`, the failed
+  read and Check again.
+- A finished scan sends exactly one counts read, then one follow-up; the follow-up's timing and its cancelling.
 
 ## Not in this plan
 
