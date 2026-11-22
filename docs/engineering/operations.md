@@ -635,7 +635,7 @@ force. It needs the owner's signed-in session, so **the owner runs it**: sign in
 classifier: the 10-film dataset trial", step 2 (the password is typed only at the hidden prompt), then:
 
 ```bash
-curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/auto-candidates > auto-candidates.json
+curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/auto-candidates > ~/auto-candidates.json
 curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X DELETE http://127.0.0.1:8090/api/session; rm -f ~/cf-jar   # sign out
 ```
 
@@ -677,7 +677,60 @@ produces rows only for the ids it is given.
 
 ### The sheet tool's command
 
-Added by 3c-2.
+G1's contact sheets, one per candidate: `credits.learn.CreditsAutoCheckMain` is a plain class run as a throwaway
+container from the released image (needs the release that holds 3c-2). It reads the candidates file ("Fetching the
+candidates") and the film files read-only, with no network, and writes one directory of its own,
+`/out/auto-check-<UTC time>/`, never reusing one. Make the output directory once (the image runs as uid 1001):
+
+```bash
+sudo mkdir -p ~/cinefilm-data/cache/credits-auto-check-out && sudo chown 1001:1001 ~/cinefilm-data/cache/credits-auto-check-out
+```
+
+**The sheets** (all candidates):
+
+```bash
+export CINEFILM_VERSION=$(cat ~/cinefilm/.deployed-version)
+docker run --rm --network none --cpus 1 --cpu-shares 2 --memory 1g --entrypoint nice \
+  -v /mnt/workhorse-films:/media:ro -v ~/auto-candidates.json:/in/auto-candidates.json:ro \
+  -v ~/cinefilm-data/cache/credits-auto-check-out:/out \
+  ghcr.io/gregochr/cinefilm:${CINEFILM_VERSION} -n 19 java -Xmx512m \
+  -Dloader.main=gregochr.cinefilm.credits.learn.CreditsAutoCheckMain \
+  -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher \
+  --candidates /in/auto-candidates.json --out /out
+```
+
+**One full-size still** (edition id, then tile 1 to 9; a colour PNG at the file's own resolution, not the 480-pixel tile; only a non-square pixel aspect is corrected):
+
+```bash
+export CINEFILM_VERSION=$(cat ~/cinefilm/.deployed-version)
+docker run --rm --network none --cpus 1 --cpu-shares 2 --memory 1g --entrypoint nice \
+  -v /mnt/workhorse-films:/media:ro -v ~/auto-candidates.json:/in/auto-candidates.json:ro \
+  -v ~/cinefilm-data/cache/credits-auto-check-out:/out \
+  ghcr.io/gregochr/cinefilm:${CINEFILM_VERSION} -n 19 java -Xmx512m \
+  -Dloader.main=gregochr.cinefilm.credits.learn.CreditsAutoCheckMain \
+  -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher \
+  --candidates /in/auto-candidates.json --out /out --full 123 4
+```
+
+- **The sheet** is nine tiles in reading order: the start minus 10 s, the start, the start plus 10 s, the marker, and
+  the marker plus 15, 30, 60, 120 and 240 s (edition time; a two-part edition's times are moved into the last part's
+  file). It is named `edition-<id>.png`, by edition id only.
+- **`list.csv`** (in the run's directory) has a row per candidate: `editionId, kind, owner, startMs, markerMs, sheet,
+  blackTiles, note`. `blackTiles` lists the tiles drawn black because they could not be read, as `tile:reason`:
+  `before-part` (before the last part's start), `past-end` (tile 7, 8 or 9 when it and every later tile had no
+  picture: the file ends there) or `no-frame` (any other tile with no picture). A `no-frame` tile makes `note` say
+  `tile N had no picture`. A file that cannot be read (not there, or ffmpeg failed) has no sheet, and `note` says why.
+  **G1 judges a candidate with a `note` unclear** (it could not be read). It holds no title and no path.
+- **Exit codes:** 0 when it ran, even with unreadable files listed; 1 on a bad flag, an unreadable candidates file,
+  a run directory that already exists, or a `--full` that names no candidate or a tile with no picture.
+- **Copy the directory to the Mac** (the sheets are library pictures: keep them out of the repository):
+
+  ```bash
+  # on the server, as the owner:
+  cp -r ~/cinefilm-data/cache/credits-auto-check-out/auto-check-<stamp> ~/auto-check-<stamp>
+  # on the Mac:
+  scp -r <server>:auto-check-<stamp> ~/cinefilm-labels/
+  ```
 
 ### Switching on and off
 
