@@ -11,6 +11,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -135,6 +136,8 @@ class CreditsAutoCheckMainTest {
             work -> {
                 seen.add(work);
                 try {
+                    assertThat(Files.getPosixFilePermissions(work))
+                        .isEqualTo(PosixFilePermissions.fromString("rwx------"));
                     Files.createDirectories(work.resolve("credits/job-1"));
                     Files.writeString(work.resolve("credits/job-1/frame.pgm"), "x");
                 } catch (IOException e) {
