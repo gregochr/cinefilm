@@ -28,5 +28,7 @@ public enum ExcludeReason {
     /** The owner's exclusions file lists the file. */
     OWNER_EXCLUDED,
     /** The film's unit has earlier members on both sides of the split. */
-    SPLIT_CONFLICT
+    SPLIT_CONFLICT,
+    /** The film landed on the test side but credits 3c looked at it, so it never joins the test split. */
+    LOOKED_AT
 }

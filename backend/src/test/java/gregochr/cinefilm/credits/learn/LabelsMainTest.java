@@ -91,6 +91,33 @@ class LabelsMainTest {
     }
 
     @Test
+    void theLookedAtFlagExcludesAListedTestFilmEndToEnd() throws IOException {
+        Path seen = temp.resolve("seen.txt");
+        Files.writeString(seen, "# G1\n17\n");
+
+        assertThat(run(args(temp.resolve("out"), "--looked-at", seen.toString()))).isZero();
+        assertThat(Files.readString(temp.resolve("out/labels-2026-11-13-report.txt")))
+            .contains("films excluded as LOOKED_AT: 1 [17]");
+    }
+
+    @Test
+    void aMissingOrMalformedLookedAtFileExitsOneWithOneLineAndWritesNothing() throws IOException {
+        Path missing = temp.resolve("nope.txt");
+        assertThat(run(args(temp.resolve("out"), "--looked-at", missing.toString()))).isEqualTo(1);
+        assertThat(errBytes.toString(StandardCharsets.UTF_8))
+            .isEqualTo("labels: IllegalArgumentException: --looked-at file is missing or not a file: " + missing
+                + "\n");
+        Path bad = temp.resolve("bad.txt");
+        Files.writeString(bad, "seventeen\n");
+        errBytes.reset();
+
+        assertThat(run(args(temp.resolve("out"), "--looked-at", bad.toString()))).isEqualTo(1);
+        assertThat(errBytes.toString(StandardCharsets.UTF_8))
+            .isEqualTo("labels: IllegalArgumentException: looked-at line is not a film id: seventeen\n");
+        assertThat(temp.resolve("out")).doesNotExist();
+    }
+
+    @Test
     void aMalformedInputExitsNonZeroWithOneLine() throws IOException {
         Path badExport = temp.resolve("bad.csv");
         Files.writeString(badExport, "a,b\n1,2\n");

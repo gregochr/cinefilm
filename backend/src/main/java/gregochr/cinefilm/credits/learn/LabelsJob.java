@@ -42,6 +42,7 @@ final class LabelsJob {
         List<ExportRow> rows = ExportReader.parse(read(options.export()));
         Map<Long, String> ownerReasons = exclusions(options.exclusions());
         Set<Long> preseed = preseed(read(options.preseed()));
+        Set<Long> lookedAt = options.lookedAt() == null ? Set.of() : lookedAt(options.lookedAt());
         Map<Long, ManifestEntry> previous = new TreeMap<>();
         List<Object> looks = List.of();
         if (options.previousSplit() != null) {
@@ -57,10 +58,14 @@ final class LabelsJob {
             films.putIfAbsent(row.filmId(), new CreditsSplit.SplitFilm(row.filmId(), CreditsSplit.unitKey(
                 row.collectionTmdbId(), row.collectionId(), row.filmTmdbId(), row.filmTitle(), row.filmYear())));
         }
-        CreditsSplit.Result split = CreditsSplit.assign(new ArrayList<>(films.values()), previous, preseed);
+        CreditsSplit.Result split = CreditsSplit.assign(new ArrayList<>(films.values()), previous, preseed,
+            lookedAt);
 
         Map<String, List<ArchiveMatch>> index = archive.index(options.prefix());
         Set<Long> conflicts = new HashSet<>(split.conflicts());
+        Set<Long> looked = new HashSet<>(split.lookedAt());
+        int lookedAtOtherReason = 0;
+        Set<Long> lookedAtFilms = new java.util.TreeSet<>();
         List<LabelRecord> records = new ArrayList<>();
         for (ExportRow row : sorted) {
             FileLabel label = CreditsLabels.label(row, index.getOrDefault(PlexRules.nfc(row.path()), List.of()),
@@ -69,6 +74,12 @@ final class LabelsJob {
                 label = FileLabel.excluded(ExcludeReason.SPLIT_CONFLICT);
             }
             ManifestEntry entry = split.entries().get(row.filmId());
+            if (label.excluded() == null && looked.contains(row.filmId())) {
+                label = FileLabel.excluded(ExcludeReason.LOOKED_AT);
+                lookedAtFilms.add(row.filmId());
+            } else if (label.excluded() != null && looked.contains(row.filmId())) {
+                lookedAtOtherReason++;
+            }
             records.add(new LabelRecord(row.mediaFileId(), row.fingerprint(), entry.unitKey(), entry.side(),
                 entry.side() == Side.DEV ? entry.fold() : null, label.targetStartMs(), label.shiftMs(),
                 label.leadingIsland(), label.credits(), label.film(), label.leftOut(), label.excluded(),
@@ -85,7 +96,7 @@ final class LabelsJob {
             + lines(new ArrayList<>(split.entries().values())) + ",\n\"looks\": " + MAPPER.writeValueAsString(looks)
             + "\n}\n", StandardCharsets.UTF_8);
         Files.writeString(reportFile, LabelsReport.render(options.date(), records, archive, split, preseed.size(),
-            ownerReasons), StandardCharsets.UTF_8);
+            ownerReasons, lookedAt.size(), List.copyOf(lookedAtFilms), lookedAtOtherReason), StandardCharsets.UTF_8);
         return List.of(labelsFile, splitFile, reportFile);
     }
 
@@ -109,6 +120,10 @@ final class LabelsJob {
             if (!foldOk) {
                 throw new IllegalArgumentException("previous split film " + entry.filmId()
                     + " has a fold that does not fit its side (dev 0-4, test none)");
+            }
+            if (entry.isLookedAt() && entry.side() != Side.TEST) {
+                throw new IllegalArgumentException("previous split film " + entry.filmId()
+                    + " is looked_at but not on the test side");
             }
             if (!seen.add(entry.filmId())) {
                 throw new IllegalArgumentException("previous split repeats film_id " + entry.filmId());
@@ -150,6 +165,32 @@ final class LabelsJob {
             }
         }
         return reasons;
+    }
+
+    /**
+     * The looked-at film ids, one per line; blank lines and lines starting with {@code #} are skipped.
+     *
+     * @param file the file given to {@code --looked-at}
+     * @return the ids
+     * @throws IOException when the file cannot be read
+     * @throws IllegalArgumentException when the file is missing or not a file, or a line is not a film id
+     */
+    static Set<Long> lookedAt(Path file) throws IOException {
+        if (!Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("--looked-at file is missing or not a file: " + file);
+        }
+        Set<Long> ids = new HashSet<>();
+        for (String line : read(file).split("\\R")) {
+            String text = line.strip();
+            if (!text.isEmpty() && !text.startsWith("#")) {
+                try {
+                    ids.add(Long.parseLong(text));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("looked-at line is not a film id: " + text, e);
+                }
+            }
+        }
+        return ids;
     }
 
     /** The pre-seed film ids, one per line; blank lines are skipped. */

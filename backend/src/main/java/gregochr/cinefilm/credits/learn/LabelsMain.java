@@ -20,7 +20,8 @@ public final class LabelsMain {
     /**
      * Runs the tool and exits non-zero, with a one-line message, on a bad flag or an unreadable input.
      *
-     * @param args {@code --archive --export --preseed --prefix --date --out [--previous-split] [--exclusions]}
+     * @param args {@code --archive --export --preseed --prefix --date --out [--previous-split] [--exclusions]
+     *     [--looked-at]}
      */
     public static void main(String[] args) {
         exitOnFailure(run(args, System.out, System.err), System::exit);

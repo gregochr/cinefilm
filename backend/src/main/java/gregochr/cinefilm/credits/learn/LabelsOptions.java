@@ -19,12 +19,13 @@ import java.util.Map;
  * @param out the output directory
  * @param previousSplit the previous manifest, or null
  * @param exclusions the owner's exclusions CSV, or null
+ * @param lookedAt the file of film ids credits 3c looked at, or null
  */
 record LabelsOptions(Path archive, Path export, Path preseed, String prefix, LocalDate date, Path out,
-                     Path previousSplit, Path exclusions) {
+                     Path previousSplit, Path exclusions, Path lookedAt) {
 
     private static final List<String> REQUIRED = List.of("archive", "export", "preseed", "prefix", "date", "out");
-    private static final List<String> OPTIONAL = List.of("previous-split", "exclusions");
+    private static final List<String> OPTIONAL = List.of("previous-split", "exclusions", "looked-at");
 
     /**
      * Parses {@code --flag value} pairs.
@@ -66,7 +67,7 @@ record LabelsOptions(Path archive, Path export, Path preseed, String prefix, Loc
         }
         return new LabelsOptions(Path.of(flags.get("archive")), Path.of(flags.get("export")),
             Path.of(flags.get("preseed")), prefix, date, Path.of(flags.get("out")), optional(flags, "previous-split"),
-            optional(flags, "exclusions"));
+            optional(flags, "exclusions"), optional(flags, "looked-at"));
     }
 
     private static Path optional(Map<String, String> flags, String name) {
