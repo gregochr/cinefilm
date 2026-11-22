@@ -64,8 +64,17 @@ public class CreditsAutoReader {
      * cannot apply or the list names no film.
      */
     public Map<Long, String> listedUnitKeys(DenyList list) {
+        return listedUnitKeys(list, enabled);
+    }
+
+    /** {@link #listedUnitKeys} as if the switch were on: for the candidates list. */
+    public Map<Long, String> candidateListedUnitKeys(DenyList list) {
+        return listedUnitKeys(list, true);
+    }
+
+    private Map<Long, String> listedUnitKeys(DenyList list, boolean on) {
         Map<Long, String> keys = new HashMap<>();
-        if (!active(list)) {
+        if (!on || list == null) {
             return keys;
         }
         List<Long> ids = list.films().stream().sorted().toList();
@@ -87,8 +96,17 @@ public class CreditsAutoReader {
      * @return the lookup that answers each edition's {@link AutoInputs}
      */
     public Lookup lookup(List<Edition> loaded, DenyList list, Map<Long, String> listedUnitKeys) {
-        if (!active(list)) {
-            return new Lookup(this, list, listedUnitKeys, Map.of(), Map.of());
+        return lookup(loaded, list, listedUnitKeys, enabled);
+    }
+
+    /** {@link #lookup} as if the switch were on (its inputs say so): for the candidates list. */
+    public Lookup candidateLookup(List<Edition> loaded, DenyList list, Map<Long, String> listedUnitKeys) {
+        return lookup(loaded, list, listedUnitKeys, true);
+    }
+
+    private Lookup lookup(List<Edition> loaded, DenyList list, Map<Long, String> listedUnitKeys, boolean on) {
+        if (!on || list == null) {
+            return new Lookup(this, on, list, listedUnitKeys, Map.of(), Map.of());
         }
         List<Long> lastPartIds = new ArrayList<>();
         List<Long> editionIds = new ArrayList<>();
@@ -106,21 +124,23 @@ public class CreditsAutoReader {
         Map<Long, EditionFilmRow> filmRows = editionIds.isEmpty() ? Map.of()
             : editions.findFilmRowsByIdIn(editionIds).stream()
                 .collect(Collectors.toMap(EditionFilmRow::editionId, r -> r));
-        return new Lookup(this, list, listedUnitKeys, rows, filmRows);
+        return new Lookup(this, on, list, listedUnitKeys, rows, filmRows);
     }
 
     /** One batch's reads; answers each edition's step 3 inputs. */
     public static final class Lookup {
 
         private final CreditsAutoReader reader;
+        private final boolean on;
         private final DenyList list;
         private final Map<Long, String> listedUnitKeys;
         private final Map<Long, Detection> detections;
         private final Map<Long, EditionFilmRow> filmRows;
 
-        private Lookup(CreditsAutoReader reader, DenyList list, Map<Long, String> listedUnitKeys,
+        private Lookup(CreditsAutoReader reader, boolean on, DenyList list, Map<Long, String> listedUnitKeys,
                        Map<Long, Detection> detections, Map<Long, EditionFilmRow> filmRows) {
             this.reader = reader;
+            this.on = on;
             this.list = list;
             this.listedUnitKeys = listedUnitKeys;
             this.detections = detections;
@@ -142,7 +162,7 @@ public class CreditsAutoReader {
             List<MediaFile> originals = edition.originalParts();
             Detection detection = originals.isEmpty() ? null
                 : detections.get(originals.get(originals.size() - 1).getId());
-            return new AutoInputs(reader.enabled, reader.cards, list, edition.getId(), film.filmId(),
+            return new AutoInputs(on, reader.cards, list, edition.getId(), film.filmId(),
                 new UnitInputs(film.collectionTmdbId(), film.collectionId(), film.filmTmdbId(), film.title(),
                     film.year()), listedUnitKeys, detection);
         }

@@ -49,6 +49,55 @@ class CreditsAdminControllerTest {
     @MockitoBean
     private CreditsAdminService credits;
 
+    @MockitoBean
+    private CreditsAutoCandidates candidates;
+
+    // ---- GET /api/admin/credits/auto-candidates ----
+
+    private static final String CANDIDATES = "/api/admin/credits/auto-candidates";
+
+    @Test
+    void autoCandidatesAnswersTheListWithEveryField() throws Exception {
+        when(candidates.candidates()).thenReturn(List.of(new CreditsAdminDtos.AutoCandidate(11, 5, 21, "Dir/a.m4v",
+            5_000_000L, CreditsApply.AutoKind.CARD, 5_100_000L, 5_120_000L, true)));
+
+        String body = mvc.perform(get(CANDIDATES).with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].editionId").value(11))
+            .andExpect(jsonPath("$[0].filmId").value(5))
+            .andExpect(jsonPath("$[0].mediaFileId").value(21))
+            .andExpect(jsonPath("$[0].path").value("Dir/a.m4v"))
+            .andExpect(jsonPath("$[0].offsetMs").value(5_000_000))
+            .andExpect(jsonPath("$[0].kind").value("CARD"))
+            .andExpect(jsonPath("$[0].startMs").value(5_100_000))
+            .andExpect(jsonPath("$[0].markerMs").value(5_120_000))
+            .andExpect(jsonPath("$[0].owner").value(true))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(names(JsonMapper.builder().build().readTree(body).get(0))).containsExactlyInAnyOrder("editionId",
+            "filmId", "mediaFileId", "path", "offsetMs", "kind", "startMs", "markerMs", "owner");
+    }
+
+    @Test
+    void autoCandidatesWithNoDenyListIs409WithTheServicesText() throws Exception {
+        when(candidates.candidates()).thenThrow(new ConflictException("No deny list"));
+
+        mvc.perform(get(CANDIDATES).with(user("owner")))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("No deny list"));
+    }
+
+    @Test
+    void autoCandidatesIsAGetSoItNeedsNoCsrfHeaderButSignedOutIs401() throws Exception {
+        when(candidates.candidates()).thenReturn(List.of());
+
+        mvc.perform(get(CANDIDATES).with(user("owner"))).andExpect(status().isOk());
+        mvc.perform(get(CANDIDATES))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
+
     @Test
     void noParametersAsksForTheFirstPageOfNeedsALookWithTwentyFiveRows() throws Exception {
         when(credits.list(CreditsFilter.NONE, 0, 25)).thenReturn(LIST);
