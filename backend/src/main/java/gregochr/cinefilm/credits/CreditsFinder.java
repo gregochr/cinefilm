@@ -18,6 +18,11 @@ import java.util.List;
  */
 public final class CreditsFinder {
 
+    /** How the reason of a found crawl begins; the time follows. {@link CreditsApply} reads it back. */
+    public static final String CRAWL_OPENING = "Text on a dark screen moves up steadily from ";
+    /** How the reason of a found run of cards begins; the time follows. {@link CreditsApply} reads it back. */
+    public static final String CARD_OPENING = "Cards of text on a dark screen change from ";
+
     private CreditsFinder() {
     }
 
@@ -141,8 +146,8 @@ public final class CreditsFinder {
                 + " after the credits seem to start");
         }
         String what = motion.kind() == CreditsMotion.Kind.CRAWL
-            ? "Text on a dark screen moves up steadily from " + clock(startMs)
-            : "Cards of text on a dark screen change from " + clock(startMs);
+            ? CRAWL_OPENING + clock(startMs)
+            : CARD_OPENING + clock(startMs);
         return CreditsResult.found(startMs, what);
     }
 
