@@ -155,6 +155,22 @@ describe('End credits list: paging', () => {
     expect(screen.getByRole('button', { name: 'Previous' })).toHaveFocus();
   });
 
+  it('keeps the pager on the page on screen while the next one loads', async () => {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    serve((filter, page) => (page === 1 ? held : respond(pageOf(page))));
+    renderApp(PATH);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+
+    expect(screen.getByText('Film 1')).toBeInTheDocument();
+    expect(screen.getByText('Showing 1–25 of 52')).toBeInTheDocument();
+    release(respond(pageOf(1)));
+    expect(await screen.findByText('Showing 26–50 of 52')).toBeInTheDocument();
+  });
+
   it('goes back to page 0 when the tab changes', async () => {
     const fetchMock = serve((filter, page) => respond(pageOf(page)));
     renderApp(PATH);
