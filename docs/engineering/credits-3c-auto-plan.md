@@ -107,9 +107,9 @@ side out itself.
     a re-arrangement or a merge), never `film`, so rule 6 doesn't take its collection.
 
   **Films G1 looks at never join the test split later.** The planner keeps a private list (off the repository) of
-  every film G1 judged and every film the follow-up looked at. The next L1 run takes it as a second pre-seed list:
-  those films go to development even when carry-over rule 2 (a unit's members' side) would put them on test, and the
-  run reports how many it moved. `credits-classifier-plan.md`'s "The split" says so too.
+  every film G1 judged and every film the follow-up looked at. The next L1 run takes it as an exclusions list: a
+  listed film that would land on test (carry-over rule 2 puts a unit's newcomers on its members' side) is excluded
+  with the reason `LOOKED_AT` instead, so no unit is split, and the run reports how many. `credits-classifier-plan.md`'s "The split" says so too.
 
   At G0 the planner's script also checks, offline, that the hash side agrees with the manifest for every manifest
   film that carry-over did not move.
