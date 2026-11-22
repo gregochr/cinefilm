@@ -116,7 +116,8 @@ class RouteSecurityDriftTest {
             "GET /api/admin/subtitles", "GET /api/admin/subtitles/{id}/cues",
             "POST /api/admin/subtitles/{id}/attach", "POST /api/admin/subtitles/{id}/detach",
             "PUT /api/admin/subtitles/{id}/offset", "POST /api/admin/subtitles/{id}/verify",
-            "DELETE /api/admin/subtitles/{id}/verify");
+            "DELETE /api/admin/subtitles/{id}/verify", "GET /api/admin/credits",
+            "PUT /api/admin/editions/{id}/credits", "DELETE /api/admin/editions/{id}/credits");
     }
 
     @Test
@@ -155,7 +156,8 @@ class RouteSecurityDriftTest {
             "DELETE /api/admin/transcoding/sessions/{id}", "PUT /api/playback-health/{playbackId}",
             "POST /api/admin/subtitles/{id}/attach", "POST /api/admin/subtitles/{id}/detach",
             "PUT /api/admin/subtitles/{id}/offset", "POST /api/admin/subtitles/{id}/verify",
-            "DELETE /api/admin/subtitles/{id}/verify");
+            "DELETE /api/admin/subtitles/{id}/verify", "PUT /api/admin/editions/{id}/credits",
+            "DELETE /api/admin/editions/{id}/credits");
         assertThat(apiRoutes()).containsAll(mutating);
 
         for (String route : mutating) {

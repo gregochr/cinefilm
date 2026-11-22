@@ -1,0 +1,3 @@
+### New — set or clear a film's end-credits time (server side)
+
+The server can now set an owner time for where a film's end credits start, and clear it again. A time you set always wins over Plex's marker and is never changed by an automatic pass. Clearing it goes back to Plex's marker when it is usable, otherwise to no marker. Times are whole seconds and must sit at least 60% of the way into the film and at least a minute before its end. Both changes are refused with "try again in a moment" while a scan, import or other library job is running. The Admin screen that uses this comes in a later release.

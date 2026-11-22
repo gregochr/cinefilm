@@ -282,13 +282,7 @@ public class CreditsApplier {
         int ownerKept = 0;
         List<Edition> toSave = new ArrayList<>();
         for (Edition edition : loaded) {
-            List<MediaFile> originals = edition.originalParts();
-            List<Part> parts = originals.stream().map(f -> new Part(f.getId(), f.timelineDurationMs())).toList();
-            MediaFile last = originals.isEmpty() ? null : originals.get(originals.size() - 1);
-            PlexCreditsMarker row = last == null ? null : rows.get(last.getId());
-            Applied applied = CreditsApply.apply(parts, last == null ? null : last.fingerprint(),
-                edition.getCreditsMarkerMs(), edition.getCreditsMarkerSource(),
-                row == null ? null : new PlexRow(row.getFingerprint(), row.getStartMs()));
+            Applied applied = applyEdition(edition, rows, edition.getCreditsMarkerSource());
             if (applied.source() == CreditsMarkerSource.PLEX) {
                 plexSet++;
             }
@@ -312,5 +306,23 @@ public class CreditsApplier {
             inProgress = states.countInProgressAtOrPastMarker(toSave.stream().map(Edition::getId).toList());
         }
         return new Batch(plexSet, toSave.size(), cleared, ownerKept, inProgress);
+    }
+
+    /**
+     * What one edition's marker and source should be, as one pass step: {@link CreditsApply#apply} over the edition's
+     * original parts and Plex's row for the last one. Shared with the Admin End credits clear, which passes a null
+     * {@code source} to let the automatic rules decide again.
+     *
+     * @param edition the edition, with its files loaded
+     * @param rows Plex's rows by media file id (the last part's row is the one used)
+     * @param source the source to treat the edition's marker as having
+     */
+    static Applied applyEdition(Edition edition, Map<Long, PlexCreditsMarker> rows, CreditsMarkerSource source) {
+        List<MediaFile> originals = edition.originalParts();
+        List<Part> parts = originals.stream().map(f -> new Part(f.getId(), f.timelineDurationMs())).toList();
+        MediaFile last = originals.isEmpty() ? null : originals.get(originals.size() - 1);
+        PlexCreditsMarker row = last == null ? null : rows.get(last.getId());
+        return CreditsApply.apply(parts, last == null ? null : last.fingerprint(), edition.getCreditsMarkerMs(),
+            source, row == null ? null : new PlexRow(row.getFingerprint(), row.getStartMs()));
     }
 }

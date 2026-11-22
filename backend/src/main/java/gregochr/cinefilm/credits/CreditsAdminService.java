@@ -3,7 +3,11 @@ package gregochr.cinefilm.credits;
 import gregochr.cinefilm.credits.CreditsAdminDtos.Counts;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsList;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsRow;
+import gregochr.cinefilm.config.BadRequestException;
+import gregochr.cinefilm.config.ConflictException;
+import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.credits.CreditsAdminDtos.Plex;
+import gregochr.cinefilm.credits.CreditsApply.Applied;
 import gregochr.cinefilm.credits.CreditsApply.Part;
 import gregochr.cinefilm.credits.CreditsApply.PlexRow;
 import gregochr.cinefilm.credits.CreditsApply.PlexStatus;
@@ -15,16 +19,20 @@ import gregochr.cinefilm.film.EditionRepository.SourceCount;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.plex.PlexCreditsMarker;
 import gregochr.cinefilm.plex.PlexCreditsMarkerRepository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * The Admin End credits list: every visible edition with its marker, where it came from, and what Plex says. A page
@@ -39,11 +47,98 @@ public class CreditsAdminService {
 
     private final EditionRepository editions;
     private final PlexCreditsMarkerRepository markers;
+    private final LibraryLock lock;
+    private final TransactionTemplate readTx;
+    private final TransactionTemplate writeTx;
 
     /** Creates the service. */
-    public CreditsAdminService(EditionRepository editions, PlexCreditsMarkerRepository markers) {
+    public CreditsAdminService(EditionRepository editions, PlexCreditsMarkerRepository markers, LibraryLock lock,
+                               PlatformTransactionManager transactions) {
         this.editions = editions;
         this.markers = markers;
+        this.lock = lock;
+        this.readTx = new TransactionTemplate(transactions);
+        this.readTx.setReadOnly(true);
+        this.writeTx = new TransactionTemplate(transactions);
+    }
+
+    /**
+     * Sets the owner's time for an edition ({@code OWNER}, over a {@code PLEX} marker too).
+     *
+     * @param editionId the edition
+     * @param markerMs the time in milliseconds; null (a missing, non-whole or negative value) is a 400
+     * @return the edition's row as it now stands
+     * @throws ConflictException when the library lock is held; nothing is written
+     * @throws NotFoundException when the edition is unknown or hidden from browse
+     * @throws BadRequestException for a null time, an edition with no timeline, or a time outside the guard
+     */
+    public CreditsRow set(long editionId, Long markerMs) {
+        write(editionId, edition -> {
+            if (markerMs == null) {
+                throw new BadRequestException("Invalid request");
+            }
+            long total;
+            try {
+                total = EditionTimeline.of(edition).totalMs();
+            } catch (IllegalArgumentException e) {
+                throw new BadRequestException("This film's length isn't known");
+            }
+            if (!EditionGuard.plausible(markerMs, total)) {
+                throw new BadRequestException("That time is outside where end credits can start");
+            }
+            edition.setCreditsMarkerMs(markerMs);
+            edition.setCreditsMarkerSource(CreditsMarkerSource.OWNER);
+            editions.save(edition);
+        });
+        return view(editionId);
+    }
+
+    /**
+     * Clears the owner's time: an {@code OWNER} edition goes back to what the automatic rules say (Plex's marker when
+     * usable, otherwise none), whatever {@code cinefilm.credits.apply.enabled} says. Any other edition is left alone.
+     *
+     * @param editionId the edition
+     * @return the edition's row as it now stands
+     * @throws ConflictException when the library lock is held; nothing is written
+     * @throws NotFoundException when the edition is unknown or hidden from browse
+     */
+    public CreditsRow clear(long editionId) {
+        write(editionId, edition -> {
+            if (edition.getCreditsMarkerSource() != CreditsMarkerSource.OWNER) {
+                return;
+            }
+            Applied applied = CreditsApplier.applyEdition(edition, plexRows(List.of(edition)), null);
+            edition.setCreditsMarkerMs(applied.markerMs());
+            edition.setCreditsMarkerSource(applied.source());
+            editions.save(edition);
+        });
+        return view(editionId);
+    }
+
+    /**
+     * The one write path: tries the credits lock once (never waiting), then reads, changes and commits in one
+     * transaction, and only then gives the lock up, so a pass waiting for the lock never reads the old marker. The
+     * answer is built by the caller after this returns.
+     */
+    private void write(long editionId, Consumer<Edition> change) {
+        if (!lock.tryAcquire(LibraryLock.CREDITS)) {
+            throw new ConflictException(lock.busyText());
+        }
+        try {
+            writeTx.executeWithoutResult(status -> change.accept(visible(editionId)));
+        } finally {
+            lock.release();
+        }
+    }
+
+    private Edition visible(long editionId) {
+        return editions.findWithFilesAndFilmByIdIn(List.of(editionId)).stream()
+            .filter(e -> !e.hiddenFromBrowse()).findFirst()
+            .orElseThrow(() -> new NotFoundException("No such edition"));
+    }
+
+    private CreditsRow view(long editionId) {
+        return readTx.execute(status -> rows(List.of(visible(editionId)))).get(0);
     }
 
     /**
@@ -73,9 +168,25 @@ public class CreditsAdminService {
         Map<Long, Edition> loaded = editions.findWithFilesAndFilmByIdIn(ids).stream()
             .collect(Collectors.toMap(Edition::getId, e -> e));
         List<Edition> ordered = ids.stream().map(loaded::get).filter(Objects::nonNull).toList();
+        List<CreditsRow> items = rows(ordered);
+        return new CreditsList(counts, pageNumber, pageSize, total, items);
+    }
+
+    /** The rows of these editions, in order: one grouped read of the film counts and one of Plex's rows. */
+    private List<CreditsRow> rows(List<Edition> ordered) {
         Map<Long, Long> visible = editions.countVisibleByFilmIdIn(
                 ordered.stream().map(e -> e.getFilm().getId()).distinct().toList()).stream()
             .collect(Collectors.toMap(FilmEditionCount::filmId, FilmEditionCount::count));
+        Map<Long, PlexCreditsMarker> rows = plexRows(ordered);
+        List<CreditsRow> items = new ArrayList<>();
+        for (Edition edition : ordered) {
+            int count = visible.getOrDefault(edition.getFilm().getId(), 0L).intValue();
+            items.add(row(edition, count, rows));
+        }
+        return items;
+    }
+
+    private Map<Long, PlexCreditsMarker> plexRows(List<Edition> ordered) {
         List<Long> lastPartIds = new ArrayList<>();
         for (Edition edition : ordered) {
             List<MediaFile> originals = edition.originalParts();
@@ -83,15 +194,9 @@ public class CreditsAdminService {
                 lastPartIds.add(originals.get(originals.size() - 1).getId());
             }
         }
-        Map<Long, PlexCreditsMarker> rows = lastPartIds.isEmpty() ? Map.of()
+        return lastPartIds.isEmpty() ? Map.of()
             : markers.findAllById(lastPartIds).stream()
                 .collect(Collectors.toMap(PlexCreditsMarker::getMediaFileId, m -> m));
-        List<CreditsRow> items = new ArrayList<>();
-        for (Edition edition : ordered) {
-            int count = visible.getOrDefault(edition.getFilm().getId(), 0L).intValue();
-            items.add(row(edition, count, rows));
-        }
-        return new CreditsList(counts, pageNumber, pageSize, total, items);
     }
 
     private static Counts counts(List<SourceCount> grouped) {
