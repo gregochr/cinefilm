@@ -1469,6 +1469,10 @@ reads version 3 rows (with their `opening_type` and `margin_band`) and phase 3's
 is not built yet, so today no marker is applied: every film's end overlay
 appears at 97% of its runtime, and it counts as watched at 92%. Model B's code is not deleted while L6a is held (L6b is held with it).
 
+**Superseded (owner, 2026-11-22): the test split and its version 3 gate are retired.** Phase 3's `AUTO` shipped
+under its own gate (`credits-3c-auto-plan.md`), and the split's hold is lifted behind a soundtrack check
+(`credits-soundtrack-check-plan.md`). A later detector is judged on the whole library's Plex markers, and says so.
+
 ## L3c specification (written 2026-11-19)
 
 Three PRs, each at most 1,500 changed lines: **L3c-1**, the segmenter and the training `main`'s nested models;
