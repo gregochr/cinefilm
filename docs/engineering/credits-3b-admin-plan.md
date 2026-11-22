@@ -272,7 +272,8 @@ Each page costs a fixed number of queries, never one per edition:
   the missing-CSRF-header case for PUT and DELETE. Every 4xx assertion checks `$.error`.
 - `CreditsAdminIntegrationTest`: a PUT then DELETE round trip.
 
-**3b-2a — the card and the read-only list.**
+**3b-2a — the read-only list.** The Library card (its tiles, its link and `useCreditsCounts`) moved to 3b-2b on
+2026-11-22 to keep this PR under 1,500 lines; its tests below go with it.
 - `parseTime` isn't in this PR.
 - Pure tests:
   - the row text for every state and source;
@@ -292,7 +293,8 @@ Each page costs a fixed number of queries, never one per edition:
   - a failed still and Try again;
   - no stills without `runtimeMs`.
 
-**3b-2b — the time field, Set and Clear.**
+**3b-2b — the card, the time field, Set and Clear.** The card's counts refresh when a scan or import finishes (the
+shell's library-change stamps), as the other Library cards do.
 - `parseTime`:
   - accepts `1:52:10`, `52:10` and `0:59`;
   - refuses `1:60:00`, `1:2:3:4`, empty input, negative values and letters.
