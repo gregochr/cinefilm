@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsList;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsRow;
 import gregochr.cinefilm.credits.CreditsAdminService;
+import gregochr.cinefilm.credits.CreditsApply;
 import gregochr.cinefilm.credits.CreditsFilter;
 import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
@@ -21,6 +22,7 @@ import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.film.Playability;
 import gregochr.cinefilm.film.Presence;
+import gregochr.cinefilm.plex.PlexCreditsMarker;
 import gregochr.cinefilm.plex.PlexCreditsMarkerRepository;
 import jakarta.persistence.EntityManagerFactory;
 import java.util.ArrayList;
@@ -246,5 +248,35 @@ class CreditsAdminIntegrationTest extends IntegrationTestBase {
 
         assertThat(withOne).isPositive();
         assertThat(withMore).isEqualTo(withOne);
+    }
+
+    @Test
+    void anOwnerTimeIsSetOverPlexAndClearedBackToPlexOnThePersistedRow() {
+        Edition seeded = seed("Round Trip", 2000, "Original", null, null);
+        MediaFile file = seeded.getMediaFiles().get(0);
+        PlexCreditsMarker plex = new PlexCreditsMarker();
+        plex.setMediaFileId(file.getId());
+        plex.setFingerprint(file.fingerprint());
+        plex.setStartMs(5_000_000L);
+        plex.setImportedAt(NOW);
+        plexRows.saveAndFlush(plex);
+        long id = seeded.getId();
+
+        CreditsRow set = service.set(id, 5_500_000L);
+
+        assertThat(set.markerMs()).isEqualTo(5_500_000L);
+        assertThat(set.source()).isEqualTo(CreditsMarkerSource.OWNER);
+        assertThat(set.plex().state()).isEqualTo(CreditsApply.PlexState.USABLE);
+        Edition stored = editions.findById(id).orElseThrow();
+        assertThat(stored.getCreditsMarkerMs()).isEqualTo(5_500_000L);
+        assertThat(stored.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.OWNER);
+
+        CreditsRow cleared = service.clear(id);
+
+        assertThat(cleared.markerMs()).isEqualTo(5_000_000L);
+        assertThat(cleared.source()).isEqualTo(CreditsMarkerSource.PLEX);
+        Edition back = editions.findById(id).orElseThrow();
+        assertThat(back.getCreditsMarkerMs()).isEqualTo(5_000_000L);
+        assertThat(back.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.PLEX);
     }
 }

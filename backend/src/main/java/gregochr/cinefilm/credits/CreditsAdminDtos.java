@@ -3,6 +3,7 @@ package gregochr.cinefilm.credits;
 import gregochr.cinefilm.credits.CreditsApply.PlexState;
 import gregochr.cinefilm.film.CreditsMarkerSource;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
 
 /** Response bodies of the Admin End credits endpoints. */
 public final class CreditsAdminDtos {
@@ -59,5 +60,28 @@ public final class CreditsAdminDtos {
      * @param items the page's rows
      */
     public record CreditsList(Counts counts, int page, int size, long total, List<CreditsRow> items) {
+    }
+
+    /**
+     * Body of {@code PUT /api/admin/editions/{id}/credits}. The number is read as a {@link JsonNode}, so Jackson's
+     * coercion (a fraction cut to a long, a string parsed as a number) cannot turn a bad value into a valid one.
+     *
+     * @param markerMs the time the credits start, in milliseconds
+     */
+    public record MarkerUpdate(JsonNode markerMs) {
+
+        /**
+         * The time in milliseconds, or null when the field is missing, null, not a JSON integer that fits a long
+         * (a fraction, a string, a boolean, an object), negative, or not a whole number of seconds; the service
+         * answers null with a 400.
+         */
+        public Long wholeSecondsMs() {
+            JsonNode node = markerMs;
+            if (node == null || !node.isIntegralNumber() || !node.canConvertToLong()) {
+                return null;
+            }
+            long ms = node.longValue();
+            return ms >= 0 && ms % 1000 == 0 ? ms : null;
+        }
     }
 }

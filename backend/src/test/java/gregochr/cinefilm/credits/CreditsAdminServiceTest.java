@@ -6,8 +6,14 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.config.BadRequestException;
+import gregochr.cinefilm.config.ConflictException;
+import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsList;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsRow;
 import gregochr.cinefilm.credits.CreditsApply.PlexState;
@@ -18,15 +24,21 @@ import gregochr.cinefilm.film.EditionRepository.FilmEditionCount;
 import gregochr.cinefilm.film.EditionRepository.SourceCount;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.film.Presence;
+import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.plex.PlexCreditsMarker;
 import gregochr.cinefilm.plex.PlexCreditsMarkerRepository;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /** The list's mapping: counts, the page's rows, Plex's state and the size cap, over mocked repositories. */
 @ExtendWith(MockitoExtension.class)
@@ -40,8 +52,13 @@ class CreditsAdminServiceTest {
     @Mock
     private PlexCreditsMarkerRepository markers;
 
+    @Mock
+    private PlatformTransactionManager transactions;
+
+    private final LibraryLock lock = new LibraryLock();
+
     private CreditsAdminService service() {
-        return new CreditsAdminService(editions, markers);
+        return new CreditsAdminService(editions, markers, lock, transactions);
     }
 
     /** A film (id = n) with one 100-minute edition (id = n) whose one file (id = n) has a fingerprint. */
@@ -221,5 +238,212 @@ class CreditsAdminServiceTest {
 
         assertThat(list.page()).isZero();
         assertThat(list.size()).isEqualTo(1);
+    }
+
+    // ---- the two writes ----
+
+    private static final long MARKER = 5_000_000L;
+
+    /** A seeded edition (id = film = file = n) whose one part is {@code runtimeMs} long. */
+    private static Edition ofLength(long n, long runtimeMs, Long marker, CreditsMarkerSource source) {
+        Edition edition = seeded(n, "Film " + n, 2000, marker, source);
+        MediaFile part = edition.originalParts().get(0);
+        part.setDurationMs(runtimeMs);
+        part.setVideoDurationMs(runtimeMs);
+        return edition;
+    }
+
+    /** Lets the write find the edition and the answer be built from it, with Plex's row (when given). */
+    private void stubWriteAndAnswer(Edition edition, PlexCreditsMarker plex) {
+        long id = edition.getId();
+        when(editions.findWithFilesAndFilmByIdIn(List.of(id))).thenReturn(List.of(edition));
+        when(editions.countVisibleByFilmIdIn(List.of(id))).thenReturn(List.of(new FilmEditionCount(id, 1)));
+        when(markers.findAllById(List.of(id))).thenReturn(plex == null ? List.of() : List.of(plex));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        // total, one second below the lower bound, the first second inside, one second above it
+        "7200500, 4320000, 4321000, 4322000",
+        "6000000, 3599000, 3600000, 3601000"})
+    void aTimeIsRefusedOneSecondBelowTheLowerBoundAndSetAtAndAboveIt(long total, long below, long at, long above) {
+        Edition edition = ofLength(7, total, null, null);
+        stubWriteAndAnswer(edition, null);
+
+        assertThatThrownBy(() -> service().set(7, below)).isInstanceOf(BadRequestException.class)
+            .hasMessage("That time is outside where end credits can start");
+        assertThat(edition.getCreditsMarkerMs()).isNull();
+        assertThat(service().set(7, at).markerMs()).isEqualTo(at);
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(at);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.OWNER);
+        assertThat(service().set(7, above).markerMs()).isEqualTo(above);
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(above);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        // total, the last whole second at least a minute before the end, the next one
+        "7200500, 7140000, 7141000",
+        "6000000, 5940000, 5941000"})
+    void aTimeIsSetAtTheUpperBoundAndRefusedOneSecondAfterIt(long total, long at, long after) {
+        Edition edition = ofLength(7, total, null, null);
+        stubWriteAndAnswer(edition, null);
+
+        assertThat(service().set(7, at).markerMs()).isEqualTo(at);
+        assertThatThrownBy(() -> service().set(7, after)).isInstanceOf(BadRequestException.class)
+            .hasMessage("That time is outside where end credits can start");
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(at);
+    }
+
+    @Test
+    void aMissingTimeIsInvalidRequestOnceTheEditionIsKnown() {
+        Edition edition = ofLength(7, 6_000_000, null, null);
+        when(editions.findWithFilesAndFilmByIdIn(List.of(7L))).thenReturn(List.of(edition));
+
+        assertThatThrownBy(() -> service().set(7, null)).isInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid request");
+        assertThat(edition.getCreditsMarkerMs()).isNull();
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void anUnknownOrHiddenEditionIs404BeforeAMissingTimeOrABadOneIsLookedAt() {
+        Edition hidden = seeded(8, "Hidden", 2000, null, null);
+        hidden.originalParts().get(0).setPresence(Presence.MISSING);
+        when(editions.findWithFilesAndFilmByIdIn(List.of(7L))).thenReturn(List.of());
+        when(editions.findWithFilesAndFilmByIdIn(List.of(8L))).thenReturn(List.of(hidden));
+
+        assertThatThrownBy(() -> service().set(7, null)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+        assertThatThrownBy(() -> service().set(8, null)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+        assertThatThrownBy(() -> service().set(7, 1_000L)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+    }
+
+    @Test
+    void anEditionWithNoTimelineSaysItsLengthIsNotKnown() {
+        Edition edition = seeded(7, "No Length", 2000, null, null);
+        MediaFile part = edition.originalParts().get(0);
+        part.setDurationMs(null);
+        part.setVideoDurationMs(null);
+        when(editions.findWithFilesAndFilmByIdIn(List.of(7L))).thenReturn(List.of(edition));
+
+        assertThatThrownBy(() -> service().set(7, 5_000_000L)).isInstanceOf(BadRequestException.class)
+            .hasMessage("This film's length isn't known");
+        assertThat(edition.getCreditsMarkerMs()).isNull();
+    }
+
+    @Test
+    void anUnknownEditionIs404ForBothWritesAndSoIsAHiddenOne() {
+        Edition hidden = seeded(8, "Hidden", 2000, null, null);
+        hidden.originalParts().get(0).setPresence(Presence.MISSING);
+        when(editions.findWithFilesAndFilmByIdIn(List.of(7L))).thenReturn(List.of());
+        when(editions.findWithFilesAndFilmByIdIn(List.of(8L))).thenReturn(List.of(hidden));
+
+        assertThatThrownBy(() -> service().set(7, MARKER)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+        assertThatThrownBy(() -> service().clear(7)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+        assertThatThrownBy(() -> service().set(8, MARKER)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+        assertThatThrownBy(() -> service().clear(8)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+        assertThat(hidden.getCreditsMarkerMs()).isNull();
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void anOwnerTimeReplacesAPlexMarkerAndTheAnswerIsTheNewRow() {
+        Edition edition = seeded(7, "Heat", 1995, MARKER, CreditsMarkerSource.PLEX);
+        stubWriteAndAnswer(edition, plexRow(7, FINGERPRINT, MARKER));
+
+        CreditsRow row = service().set(7, 5_500_000L);
+
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(5_500_000L);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.OWNER);
+        assertThat(row).isEqualTo(new CreditsRow(7, 7, "Heat", 1995, "Original", 1, 100 * MIN, 5_500_000L,
+            CreditsMarkerSource.OWNER, new CreditsAdminDtos.Plex(PlexState.USABLE, MARKER)));
+        verify(editions).save(edition);
+    }
+
+    @Test
+    void clearingAnOwnerTimeGoesBackToAUsablePlexMarker() {
+        Edition edition = seeded(7, "Heat", 1995, 5_500_000L, CreditsMarkerSource.OWNER);
+        stubWriteAndAnswer(edition, plexRow(7, FINGERPRINT, MARKER));
+
+        CreditsRow row = service().clear(7);
+
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(MARKER);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.PLEX);
+        assertThat(row.markerMs()).isEqualTo(MARKER);
+        assertThat(row.source()).isEqualTo(CreditsMarkerSource.PLEX);
+        verify(editions).save(edition);
+    }
+
+    @Test
+    void clearingAnOwnerTimeWithNoUsablePlexMarkerLeavesNoMarkerAndNoSource() {
+        Edition edition = seeded(7, "Heat", 1995, 5_500_000L, CreditsMarkerSource.OWNER);
+        stubWriteAndAnswer(edition, plexRow(7, "1:2", MARKER));
+
+        CreditsRow row = service().clear(7);
+
+        assertThat(edition.getCreditsMarkerMs()).isNull();
+        assertThat(edition.getCreditsMarkerSource()).isNull();
+        assertThat(row.markerMs()).isNull();
+        assertThat(row.source()).isNull();
+        assertThat(row.plex().state()).isEqualTo(PlexState.STALE);
+    }
+
+    @Test
+    void clearingAnEditionThatIsNotOwnersLeavesAStalePlexMarkerForThePass() {
+        Edition edition = seeded(7, "Heat", 1995, MARKER, CreditsMarkerSource.PLEX);
+        stubWriteAndAnswer(edition, plexRow(7, "1:2", MARKER));
+
+        CreditsRow row = service().clear(7);
+
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(MARKER);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.PLEX);
+        assertThat(row.markerMs()).isEqualTo(MARKER);
+        assertThat(row.plex().state()).isEqualTo(PlexState.STALE);
+    }
+
+    @Test
+    void bothWritesAreRefusedWithTheHoldersTextAndWriteNothingWhileTheLockIsHeld() {
+        Edition edition = seeded(7, "Heat", 1995, 5_500_000L, CreditsMarkerSource.OWNER);
+        lock.tryAcquire(LibraryLock.SCAN);
+
+        assertThatThrownBy(() -> service().set(7, MARKER)).isInstanceOf(ConflictException.class)
+            .hasMessage("A scan is running");
+        assertThatThrownBy(() -> service().clear(7)).isInstanceOf(ConflictException.class)
+            .hasMessage("A scan is running");
+
+        assertThat(edition.getCreditsMarkerMs()).isEqualTo(5_500_000L);
+        assertThat(edition.getCreditsMarkerSource()).isEqualTo(CreditsMarkerSource.OWNER);
+        assertThat(lock.heldBy(LibraryLock.SCAN)).as("the other holder's lock is not released").isTrue();
+    }
+
+    @Test
+    void theLockIsReleasedWhenAWriteFails() {
+        when(editions.findWithFilesAndFilmByIdIn(List.of(7L))).thenThrow(new IllegalStateException("database down"));
+
+        assertThatThrownBy(() -> service().set(7, MARKER)).isInstanceOf(IllegalStateException.class);
+        assertThat(lock.holder()).isNull();
+        assertThatThrownBy(() -> service().clear(7)).isInstanceOf(IllegalStateException.class);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void theLockIsStillHeldWhenTheWriteCommitsAndFreeWhenTheAnswerIsRead() {
+        Edition edition = seeded(7, "Heat", 1995, null, null);
+        stubWriteAndAnswer(edition, null);
+        List<Boolean> heldAtCommit = new ArrayList<>();
+        doAnswer(invocation -> heldAtCommit.add(lock.heldBy(LibraryLock.CREDITS))).when(transactions).commit(null);
+
+        service().set(7, MARKER);
+
+        // The write's commit happens under the lock; the answer's read transaction commits after it is given back.
+        assertThat(heldAtCommit).containsExactly(true, false);
+        assertThat(lock.holder()).isNull();
     }
 }

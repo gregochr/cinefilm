@@ -5,11 +5,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.auth.SecurityConfig;
+import gregochr.cinefilm.config.BadRequestException;
+import gregochr.cinefilm.config.ConflictException;
+import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.credits.CreditsAdminDtos.Counts;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsList;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsRow;
@@ -21,6 +26,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -137,5 +143,135 @@ class CreditsAdminControllerTest {
         mvc.perform(get("/api/admin/credits"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
+
+    // ---- PUT and DELETE /api/admin/editions/{id}/credits ----
+
+    private static final String PATH = "/api/admin/editions/11/credits";
+
+    private static MockHttpServletRequestBuilder putBody(String body) {
+        return put(PATH).with(user("owner")).header("X-CineFilm", "1").contentType("application/json").content(body);
+    }
+
+    @Test
+    void putSetsTheTimeInMillisecondsAndAnswersTheRow() throws Exception {
+        when(credits.set(11, 6_720_000L)).thenReturn(ROW);
+
+        mvc.perform(putBody("{\"markerMs\":6720000}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.editionId").value(11))
+            .andExpect(jsonPath("$.markerMs").value(5_000_000))
+            .andExpect(jsonPath("$.plex.state").value("USABLE"));
+
+        verify(credits).set(11, 6_720_000L);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"markerMs\":null}", "{\"markerMs\":6720000.4}", "{\"markerMs\":\"6720000\"}",
+        "{\"markerMs\":-1000}", "{\"markerMs\":6720500}", "{\"markerMs\":true}", "{\"markerMs\":{}}",
+        "{\"markerMs\":99999999999999999999}", "{\"markerMs\":9223372036854775807}", "null"})
+    void aTimeThatIsNotAWholeNumberOfSecondsReachesTheServiceAsMissingAndIs400(String body) throws Exception {
+        when(credits.set(11, null)).thenThrow(new BadRequestException("Invalid request"));
+
+        mvc.perform(putBody(body))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+
+        verify(credits).set(11, null);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{", "[]", "\"6720000\"", "6720000"})
+    void anUnreadableBodyIs400WithoutReachingTheService(String body) throws Exception {
+        mvc.perform(putBody(body))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+
+        verifyNoInteractions(credits);
+    }
+
+    @Test
+    void aMissingBodyReachesTheServiceAsAMissingTime() throws Exception {
+        when(credits.set(11, null)).thenThrow(new BadRequestException("Invalid request"));
+
+        mvc.perform(put(PATH).with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void aNonNumericEditionIdIs400() throws Exception {
+        mvc.perform(delete("/api/admin/editions/abc/credits").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void theServicesRefusalsKeepTheirTextsAndStatuses() throws Exception {
+        when(credits.set(11, 1_000L)).thenThrow(new BadRequestException("This film's length isn't known"));
+        when(credits.set(11, 2_000L))
+            .thenThrow(new BadRequestException("That time is outside where end credits can start"));
+        when(credits.set(11, 3_000L)).thenThrow(new NotFoundException("No such edition"));
+        when(credits.set(11, 4_000L)).thenThrow(new ConflictException("A scan is running"));
+
+        mvc.perform(putBody("{\"markerMs\":1000}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("This film's length isn't known"));
+        mvc.perform(putBody("{\"markerMs\":2000}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("That time is outside where end credits can start"));
+        mvc.perform(putBody("{\"markerMs\":3000}"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such edition"));
+        mvc.perform(putBody("{\"markerMs\":4000}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("A scan is running"));
+    }
+
+    @Test
+    void deleteClearsAndAnswersTheRow() throws Exception {
+        when(credits.clear(11)).thenReturn(ROW);
+
+        mvc.perform(delete(PATH).with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.editionId").value(11))
+            .andExpect(jsonPath("$.source").value("PLEX"));
+
+        verify(credits).clear(11);
+    }
+
+    @Test
+    void deleteKeepsTheServicesNotFoundAndBusyTexts() throws Exception {
+        when(credits.clear(12)).thenThrow(new NotFoundException("No such edition"));
+        when(credits.clear(13))
+            .thenThrow(new ConflictException("Plex credits are being imported; try again in a moment"));
+
+        mvc.perform(delete("/api/admin/editions/12/credits").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such edition"));
+        mvc.perform(delete("/api/admin/editions/13/credits").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("Plex credits are being imported; try again in a moment"));
+    }
+
+    @Test
+    void bothWritesSignedOutAre401() throws Exception {
+        mvc.perform(put(PATH).header("X-CineFilm", "1").contentType("application/json")
+                .content("{\"markerMs\":6720000}"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+        mvc.perform(delete(PATH).header("X-CineFilm", "1"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
+
+    @Test
+    void bothWritesWithoutTheCsrfHeaderAreRefused() throws Exception {
+        mvc.perform(put(PATH).with(user("owner")).contentType("application/json").content("{\"markerMs\":6720000}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+        mvc.perform(delete(PATH).with(user("owner")))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
     }
 }
