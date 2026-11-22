@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after four adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after five adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -17,8 +17,9 @@ specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spe
   deny list under a new manifest. All of them are the same unchecked case the owner accepted.
 - **2026-11-22: the "zero early against Plex" check of `credits-phase3-plan.md`'s outline is dropped.** Its only
   role was to tell whether films nobody checks can take `AUTO`, and the owner answered that with the breach's figure
-  in hand. Every film the switch-on marks is still checked by stills (G1). Dropping it also removes the one count
-  that, taken from the breach's, would give a figure for the test split.
+  in hand. Every film the switch-on marks is still checked by stills (G1). Version 2's test-split figure in that bin
+  is already public (L5: 0 of 238 more than 15 s early), so development counts against Plex, here or in the
+  follow-up, reveal nothing new about the test split.
 - **2026-11-22: "good enough for v1 but needs to be better."** After the gate, the development rows version 2 has
   early against Plex are looked at, and an approach to resolve them is brought to the owner ("Follow-up").
 
@@ -77,9 +78,9 @@ side out itself.
   1. its film is listed in the deny file;
   2. the hash of its film's unit key gives test;
   3. its film's unit key is listed;
-  4. its last part's `media_file_id` is listed;
+  4. the `media_file_id` of any of its parts is listed;
   5. the edition itself is listed;
-  6. a film listed under rule 1 has, today, the same unit key as its film (computed in the pass, which reads every
+  6. a film listed as `film` (only test-side films are) has, today, the same unit key as its film (computed in the pass, which reads every
      film's unit key inputs). This follows a test film that joins a collection: L1 keeps it, and every new film of
      its new unit, on test.
 
@@ -97,11 +98,11 @@ side out itself.
   which only costs `AUTO`.
 - **The deny file** is written by the planner from the manifest and L1's labels alone, before any version 2 result is
   read, and is kept off the repository (it is library data). It lists:
-  - every film the newest manifest puts on test, with its unit key, its labelled `media_file_id` and **every one of
-    its editions** (their ids come from a read-only query the owner runs at G0, given the film ids and answering
-    edition ids only);
+  - every film the newest manifest puts on test, with its unit key, **every one of its editions and every file of
+    them** (the ids come from a read-only query the owner runs at G0, given the film ids and answering edition and
+    `media_file_id`s only);
   - every film, unit key and file of a unit that the manifest has on both sides or excludes as `SPLIT_CONFLICT`;
-  - any film G1 judges unclear.
+  - any edition G1 judges unclear, as an `edition` entry (never `film`, so rule 6 doesn't take its collection).
 
   At G0 the planner's script also checks, offline, that the hash side agrees with the manifest for every manifest
   film that carry-over did not move.
@@ -163,7 +164,7 @@ waits for the release it needs:
        the planner can't read at sheet size (a full-size still may be taken first), or a candidate the tool could
        not read;
     3. otherwise **clear**.
-  - An unclear film goes on the deny list, and nothing else changes.
+  - An unclear edition goes on the deny list as `edition <id>`, and nothing else changes.
   - Any early card turns cards off. **Any early crawl ends 3c: `AUTO` stays off altogether.**
 - **An end is final:** retrying a kind that a gate ended needs a revised plan and a fresh gate. Denying an early
   film and switching on anyway is not allowed.
@@ -171,17 +172,17 @@ waits for the release it needs:
   - The planner gives the owner the final deny file.
   - The owner copies it, sets `CINEFILM_CREDITS_AUTO_ENABLED=true` (and `CINEFILM_CREDITS_AUTO_CARDS=false` if G1
     said so), and recreates the container.
-  - The candidates are fetched again. Their set of `(editionId, markerMs)`, less those flagged `owner`, must equal
-    G1's clear set (clear cards only while cards are on), less its `owner` ones. The pass's logged `AUTO` count
-    must equal its size.
-  - **Any difference:** the owner switches off and recreates, and G1 covers every new or changed candidate before
+  - The candidates are fetched again. Their `(editionId, markerMs)` pairs not flagged `owner` must all be among
+    G1's clear pairs, owner-flagged ones included (cards only while cards are on); a candidate that dropped out
+    (a Plex marker arrived, say) is fine. The pass's logged `AUTO` count must equal the number of those pairs.
+  - **A pair outside G1's clear pairs:** the owner switches off and recreates, and G1 judges every such pair before
     switching on again.
 
 ## Follow-up (owner, 2026-11-22)
 
-After G2, the owner runs a read-only query, joined on a list the planner writes from the manifest and labels alone (the development films' labelled files that no deny rule holds for), that
-lists the development rows version 2 has more than 15 s before Plex. No count of it is recorded, and nobody sets it
-against the breach's counts. Each is looked at: its stills around version 2's start and Plex's, and its reasons. The cause is found, and an approach is put to the owner before anything is built. Any change to the
+After G2, the owner runs a read-only query, joined on a list the planner writes from the manifest and labels alone
+(the development films' labelled files that no deny rule holds for), that lists the development rows version 2 has
+more than 15 s before Plex. No test row is produced. Each is looked at: its stills around version 2's start and Plex's, and its reasons. The cause is found, and an approach is put to the owner before anything is built. Any change to the
 detector is a new analysis version, so it comes with the version 3 rule above (keep version 2's rows or gate first).
 
 ## PRs
@@ -229,8 +230,11 @@ Each at most 1,500 changed lines, tests included.
     - `offsetMs` is file time, for the tool;
     - `startMs` and `markerMs` are edition time.
 
-    It is computed by the same code, over the same editions as the pass (hidden ones included). It answers 409 "No deny list" when the file can't be read. It goes in
-    `foundation-plan.md` and `RouteSecurityDriftTest`, with the service and controller tests (401 and missing CSRF).
+    It is computed by the same code, over the same editions as the pass (hidden ones included). It answers 409 "No
+    deny list" when the file can't be read. It goes in `foundation-plan.md` and `RouteSecurityDriftTest`.
+  - Tests: the service and controller tests (401, missing CSRF, the 409 with an unreadable list), and an
+    integration test where one fixture's candidates not flagged `owner` equal the editions a pass then sets to
+    `AUTO`, with hidden and owner editions, and cards on and off.
   - `operations.md`:
     - the G0 edition query and the follow-up query;
     - the deny file's place, keys, and the recreate after each replacement;
