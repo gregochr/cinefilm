@@ -317,15 +317,15 @@ class CreditsSplitTest {
     }
 
     @Test
-    void aListedConflictFilmWhoseHashSideIsTestIsNotFlagged() {
+    void aListedConflictFilmWhoseHashSideIsTestIsFlaggedAndStaysAConflict() {
         CreditsSplit.Result result = CreditsSplit.assign(
             List.of(film(3, "tmdb:1003"), film(4, "tmdb:1003"), film(5, "tmdb:1003")),
             previous(entry(3, "tmdb:1003", Side.DEV, 1), entry(4, "tmdb:1003", Side.TEST, null)), Set.of(),
             Set.of(5L));
 
         assertThat(result.conflicts()).containsExactly(5L);
-        assertThat(result.entries().get(5L)).isEqualTo(entry(5, "tmdb:1003", Side.TEST, null));
-        assertThat(result.lookedAt()).isEmpty();
+        assertThat(result.entries().get(5L)).isEqualTo(looked(5, "tmdb:1003"));
+        assertThat(result.lookedAt()).containsExactly(5L);
     }
 
     @Test

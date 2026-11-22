@@ -29,7 +29,7 @@ class LabelsReportTest {
             List.of(99L), List.of(3L, 8L));
 
         String text = LabelsReport.render(LocalDate.of(2026, 11, 13), records, archive, split, 3,
-            new java.util.TreeMap<>(Map.of(40L, "wrong, see stills", 5L, "x")), 4, 2);
+            new java.util.TreeMap<>(Map.of(40L, "wrong, see stills", 5L, "x")), 4, List.of(3L, 8L), 2);
 
         assertThat(text).isEqualTo("""
             CineFilm credits labels, run date 2026-11-13
@@ -72,7 +72,7 @@ class LabelsReportTest {
     void emptyListsPrintNoBrackets() {
         String text = LabelsReport.render(LocalDate.of(2026, 11, 13), List.of(), new PlexArchive(Map.of(), List.of(),
             List.of()), new CreditsSplit.Result(Map.of(), List.of(), List.of(), List.of(), 0, List.of(),
-            List.of()), 0, Map.of(), 0, 0);
+            List.of()), 0, Map.of(), 0, List.of(), 0);
 
         assertThat(text).contains("files: 0\nunits: 0\n").contains("no item file, not parsed: 0\n")
             .contains("not in the export: 0\n").contains("owner exclusions: 0\n").doesNotContain("[");

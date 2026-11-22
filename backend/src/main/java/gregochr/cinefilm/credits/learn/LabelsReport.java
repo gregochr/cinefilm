@@ -22,12 +22,13 @@ final class LabelsReport {
      * @param preseedCount the number of film ids in the pre-seed file
      * @param ownerReasons the exclusions file's reasons by media file id, in id order
      * @param lookedAtGiven the number of film ids in the looked-at file (0 when none was given)
+     * @param lookedAtFilms the films with at least one file excluded as {@code LOOKED_AT}, in id order
      * @param lookedAtOtherReason files of listed films on the test side that keep an earlier exclusion reason
      * @return the text, one line per figure, ending with a newline
      */
     static String render(LocalDate date, List<LabelRecord> records, PlexArchive archive, CreditsSplit.Result split,
                          int preseedCount, Map<Long, String> ownerReasons, int lookedAtGiven,
-                         int lookedAtOtherReason) {
+                         List<Long> lookedAtFilms, int lookedAtOtherReason) {
         Map<ExcludeReason, Integer> reasons = new EnumMap<>(ExcludeReason.class);
         for (ExcludeReason reason : ExcludeReason.values()) {
             reasons.put(reason, 0);
@@ -79,7 +80,7 @@ final class LabelsReport {
         line(out, "films excluded as SPLIT_CONFLICT: " + split.conflicts().size()
             + list(split.conflicts()));
         line(out, "looked-at film ids given: " + lookedAtGiven + ", films excluded as LOOKED_AT: "
-            + split.lookedAt().size() + list(split.lookedAt()));
+            + lookedAtFilms.size() + list(lookedAtFilms));
         line(out, "files of looked-at films on test that keep an earlier exclusion reason: " + lookedAtOtherReason);
         line(out, "owner exclusions: " + ownerReasons.size());
         ownerReasons.forEach((id, reason) -> line(out, "  " + id + ": " + reason));

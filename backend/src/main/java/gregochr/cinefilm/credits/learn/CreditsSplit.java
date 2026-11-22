@@ -131,8 +131,9 @@ public final class CreditsSplit {
      * @param films every exported film, once
      * @param previous the previous manifest's entries by film id (empty on a first run)
      * @param preseed film ids forced into development with their whole units
-     * @param lookedAt film ids credits 3c looked at: one whose final side is test, whichever rule chose it, keeps
-     *     that side in the manifest and is flagged; a film flagged in the previous manifest stays flagged
+     * @param lookedAt film ids credits 3c looked at: one whose final side is test, whichever rule chose it (a
+     *     {@code SPLIT_CONFLICT} film's reference side included), keeps that side in the manifest and is flagged; a
+     *     film flagged in the previous manifest stays flagged
      * @return the entries and what to report
      */
     static Result assign(List<SplitFilm> films, Map<Long, ManifestEntry> previous, Set<Long> preseed,
@@ -186,12 +187,11 @@ public final class CreditsSplit {
             }
         }
         List<Long> looked = new ArrayList<>();
-        Set<Long> conflicted = new HashSet<>(conflicts);
         for (Map.Entry<Long, ManifestEntry> placed : entries.entrySet()) {
             ManifestEntry entry = placed.getValue();
             ManifestEntry old = previous.get(placed.getKey());
             boolean listed = lookedAt.contains(placed.getKey()) || old != null && old.isLookedAt();
-            if (listed && entry.side() == Side.TEST && !conflicted.contains(placed.getKey())) {
+            if (listed && entry.side() == Side.TEST) {
                 placed.setValue(new ManifestEntry(entry.filmId(), entry.unitKey(), Side.TEST, null, true));
                 looked.add(placed.getKey());
             }

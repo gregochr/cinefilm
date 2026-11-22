@@ -262,7 +262,7 @@ class LabelsJobTest {
         assertThat(lines(temp.resolve("split-2026-11-13.json"))).contains("{\"film_id\":6,"
             + "\"unit_key\":\"title:zetafilm|\",\"side\":\"test\",\"fold\":null,\"looked_at\":true},");
         assertThat(Files.readString(temp.resolve("labels-2026-11-13-report.txt"))).contains("  LOOKED_AT: 0\n")
-            .contains("looked-at film ids given: 1, films excluded as LOOKED_AT: 1 [6]\n")
+            .contains("looked-at film ids given: 1, films excluded as LOOKED_AT: 0\n")
             .contains("keep an earlier exclusion reason: 1\n");
     }
 
@@ -292,6 +292,50 @@ class LabelsJobTest {
             .contains("keep an earlier exclusion reason: 1\n");
         assertThat(labelOf(temp.resolve("labels-2026-11-13.json"), 106).path("excluded").asString())
             .isEqualTo("NO_CREDITS_MARKER");
+    }
+
+    @Test
+    void aListedNewcomerJoiningATestUnitThroughRuleTwoIsExcludedAndCounted() throws IOException {
+        Path previous = temp.resolve("previous.json");
+        Files.writeString(previous, "{\"date\":\"2026-11-01\",\"films\":[{\"film_id\":91,"
+            + "\"unit_key\":\"tmdb:1001\",\"side\":\"test\",\"fold\":null}],\"looks\":[]}");
+
+        LabelsJob.run(options(temp, previous, null, lookedAtFile("1\n")));
+
+        JsonNode alpha = labelOf(temp.resolve("labels-2026-11-13.json"), 101);
+        assertThat(alpha.path("excluded").asString()).isEqualTo("LOOKED_AT");
+        assertThat(alpha.path("side").asString()).isEqualTo("test");
+        assertThat(Files.readString(temp.resolve("labels-2026-11-13-report.txt"))).contains("  LOOKED_AT: 1\n")
+            .contains("looked-at film ids given: 1, films excluded as LOOKED_AT: 1 [1]\n")
+            .contains("keep an earlier exclusion reason: 0\n");
+    }
+
+    @Test
+    void aListedConflictFilmOnTestKeepsItsReasonThisRunAndIsExcludedAsLookedAtOnTheNext() throws IOException {
+        Path first = temp.resolve("first.json");
+        Files.writeString(first, "{\"date\":\"2026-11-01\",\"films\":[{\"film_id\":90,"
+            + "\"unit_key\":\"tmdb:1017\",\"side\":\"dev\",\"fold\":1},{\"film_id\":91,"
+            + "\"unit_key\":\"tmdb:1017\",\"side\":\"test\",\"fold\":null}],\"looks\":[]}");
+        Path run1 = temp.resolve("run1");
+        Path run2 = temp.resolve("run2");
+
+        LabelsJob.run(options(run1, first, null, lookedAtFile("17\n")));
+
+        assertThat(labelOf(run1.resolve("labels-2026-11-13.json"), 117).path("excluded").asString())
+            .isEqualTo("SPLIT_CONFLICT");
+        assertThat(lines(run1.resolve("split-2026-11-13.json"))).contains("{\"film_id\":17,"
+            + "\"unit_key\":\"tmdb:1017\",\"side\":\"test\",\"fold\":null,\"looked_at\":true},");
+        assertThat(Files.readString(run1.resolve("labels-2026-11-13-report.txt"))).contains("  LOOKED_AT: 0\n")
+            .contains("looked-at film ids given: 1, films excluded as LOOKED_AT: 0\n")
+            .contains("keep an earlier exclusion reason: 1\n");
+
+        LabelsJob.run(options(run2, run1.resolve("split-2026-11-13.json"), null));
+
+        assertThat(labelOf(run2.resolve("labels-2026-11-13.json"), 117).path("excluded").asString())
+            .isEqualTo("LOOKED_AT");
+        assertThat(Files.readString(run2.resolve("labels-2026-11-13-report.txt")))
+            .contains("films excluded as SPLIT_CONFLICT: 0\n")
+            .contains("looked-at film ids given: 0, films excluded as LOOKED_AT: 1 [17]\n");
     }
 
     @Test

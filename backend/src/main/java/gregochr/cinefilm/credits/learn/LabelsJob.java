@@ -65,6 +65,7 @@ final class LabelsJob {
         Set<Long> conflicts = new HashSet<>(split.conflicts());
         Set<Long> looked = new HashSet<>(split.lookedAt());
         int lookedAtOtherReason = 0;
+        Set<Long> lookedAtFilms = new java.util.TreeSet<>();
         List<LabelRecord> records = new ArrayList<>();
         for (ExportRow row : sorted) {
             FileLabel label = CreditsLabels.label(row, index.getOrDefault(PlexRules.nfc(row.path()), List.of()),
@@ -75,8 +76,8 @@ final class LabelsJob {
             ManifestEntry entry = split.entries().get(row.filmId());
             if (label.excluded() == null && looked.contains(row.filmId())) {
                 label = FileLabel.excluded(ExcludeReason.LOOKED_AT);
-            } else if (label.excluded() != null && entry.side() == Side.TEST
-                && (lookedAt.contains(row.filmId()) || looked.contains(row.filmId()))) {
+                lookedAtFilms.add(row.filmId());
+            } else if (label.excluded() != null && looked.contains(row.filmId())) {
                 lookedAtOtherReason++;
             }
             records.add(new LabelRecord(row.mediaFileId(), row.fingerprint(), entry.unitKey(), entry.side(),
@@ -95,7 +96,7 @@ final class LabelsJob {
             + lines(new ArrayList<>(split.entries().values())) + ",\n\"looks\": " + MAPPER.writeValueAsString(looks)
             + "\n}\n", StandardCharsets.UTF_8);
         Files.writeString(reportFile, LabelsReport.render(options.date(), records, archive, split, preseed.size(),
-            ownerReasons, lookedAt.size(), lookedAtOtherReason), StandardCharsets.UTF_8);
+            ownerReasons, lookedAt.size(), List.copyOf(lookedAtFilms), lookedAtOtherReason), StandardCharsets.UTF_8);
         return List.of(labelsFile, splitFile, reportFile);
     }
 
