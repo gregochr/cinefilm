@@ -15,7 +15,7 @@ specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spe
   the owner fixes any film with **Set**.
 - **2026-11-22: the "zero early against Plex" check of `credits-phase3-plan.md`'s outline is dropped.** Its only
   role was to tell whether films nobody checks can take `AUTO`, and the owner answered that with the breach's figure
-  in hand. Every film the switch-on marks is still checked by stills (G2). Dropping it also removes the one count
+  in hand. Every film the switch-on marks is still checked by stills (G1). Dropping it also removes the one count
   that, taken from the breach's, would give a figure for the test split.
 - **2026-11-22: "good enough for v1 but needs to be better."** After the gate, the development rows version 2 has
   early against Plex are looked at, and an approach to resolve them is brought to the owner ("Follow-up").
@@ -25,7 +25,7 @@ specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spe
 Of the 256 editions with no usable Plex marker at the first 3a pass, those with a version 2 crawl or card result
 that passes the guard get their end overlay, and count as watched, 20 s after where version 2 saw the credits start,
 instead of at 97%. About 30% of films fall on the classifier's test side and keep the 97% fallback ("The test
-split"), so roughly 120–160 editions are expected; G2 gives the real count. Admin → Library → End credits shows them
+split"), so roughly 120–160 editions are expected; G1 gives the real count. Admin → Library → End credits shows them
 as **Detected**. In-progress states are not re-evaluated when a marker lands (as in 3a).
 
 ## The rule (`CreditsApply`, step 3)
@@ -98,7 +98,7 @@ side out itself.
     its editions** (their ids come from a read-only query the owner runs at G0, given the film ids and answering
     edition ids only);
   - every film, unit key and file of a unit that the manifest has on both sides or excludes as `SPLIT_CONFLICT`;
-  - any film G2 judges unclear.
+  - any film G1 judges unclear.
 
   At G0 the planner's script also checks, offline, that the hash side agrees with the manifest for every manifest
   film that carry-over did not move.
@@ -142,7 +142,7 @@ waits for the release it needs:
 
 - **G0, the deny file** (after 3c-1c is released). The planner writes it ("The test split"). The owner copies it to
   the server and sets `CINEFILM_CREDITS_AUTO_DENYLIST`, and recreates the container; the switch stays off.
-- **G2, every candidate by stills** (after 3c-2 is released).
+- **G1, every candidate by stills** (after 3c-2 is released).
   - The candidates list (3c-1c) names every edition step 3 would mark, computed as if the switch were on and as if
     the source were null, so editions the owner set are included (flagged `owner`).
   - The 3c-2 tool writes one sheet per candidate. Its nine tiles are, in edition time: the start − 10 s, the start,
@@ -158,18 +158,18 @@ waits for the release it needs:
   - Any early card turns cards off. **Any early crawl ends 3c without crawl `AUTO`.**
 - **An end is final:** retrying a kind that a gate ended needs a revised plan and a fresh gate. Denying an early
   film and switching on anyway is not allowed.
-- **G3, switching on** (after 3c-3 is released, so Admin shows Detected).
+- **G2, switching on** (after 3c-3 is released, so Admin shows Detected).
   - The planner gives the owner the final deny file.
-  - The owner copies it, sets `CINEFILM_CREDITS_AUTO_ENABLED=true` (and `CINEFILM_CREDITS_AUTO_CARDS=false` if G2
+  - The owner copies it, sets `CINEFILM_CREDITS_AUTO_ENABLED=true` (and `CINEFILM_CREDITS_AUTO_CARDS=false` if G1
     said so), and recreates the container.
   - The pass that follows logs the `AUTO` count. It must equal the clear crawl candidates, plus the clear card
     candidates while cards are on, less the candidates flagged `owner` (those stay `OWNER`).
-  - **A different count:** the owner switches off and recreates. The candidates are fetched again, and G2 covers
+  - **A different count:** the owner switches off and recreates. The candidates are fetched again, and G1 covers
     every new one before switching on again.
 
 ## Follow-up (owner, 2026-11-22)
 
-After G3, the owner runs a read-only query, joined on a list the planner writes from the manifest and labels alone (the development films' labelled files that no deny rule holds for), that
+After G2, the owner runs a read-only query, joined on a list the planner writes from the manifest and labels alone (the development films' labelled files that no deny rule holds for), that
 lists the development rows version 2 has more than 15 s before Plex. No count of it is recorded, and nobody sets it
 against the breach's counts. Each is looked at: its stills around version 2's start and Plex's, and its reasons. The cause is found, and an approach is put to the owner before anything is built. Any change to the
 detector is a new analysis version, so it comes with the version 3 rule above (keep version 2's rows or gate first).
@@ -224,9 +224,9 @@ Each at most 1,500 changed lines, tests included.
     - the tool's command;
     - switching on and off.
 - **3c-2, the sheet tool** (`credits.learn`, a `main` run with `docker run`, `/media` mounted read-only).
-  - It reads the candidates JSON and decodes each file with `CreditsFrameReader` (ffmpeg), turning G2's edition
+  - It reads the candidates JSON and decodes each file with `CreditsFrameReader` (ffmpeg), turning G1's edition
     times into file time.
-  - It writes a 9-tile `ContactSheet` per candidate (G2's tiles) in a fresh `auto-check-<UTC time>/` directory.
+  - It writes a 9-tile `ContactSheet` per candidate (G1's tiles) in a fresh `auto-check-<UTC time>/` directory.
     A tile past the file's end is black, and the run's list says so.
   - With `--full <editionId> <tile>` it writes one full-size still.
   - A file it can't read is listed by edition id and skipped, and the run still exits 0.
@@ -238,7 +238,7 @@ Each at most 1,500 changed lines, tests included.
   - The Clear hint becomes "Goes back to Plex's marker, the detected time, or none".
   - Version 2's verdict and reasons stay unshown. `foundation-plan.md`.
   - Tests: backend, the filter and counts; frontend, the tab, the times and the exact hint.
-- **Then the gate** (G0–G3), then the owner switches `AUTO` on. No release is tagged by a session.
+- **Then the gate** (G0–G2), then the owner switches `AUTO` on. No release is tagged by a session.
 
 ## Not in this plan
 
