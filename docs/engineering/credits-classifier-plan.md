@@ -242,7 +242,8 @@ path:
     sides, excludes the newcomers with a reason, never moves an old film.
 - **Films looked at by credits 3c** (`credits-3c-auto-plan.md`, 2026-11-22): every film its stills gate judged and
   every film its follow-up looked at is given to the next L1 run; one that would land on test is excluded with the
-  reason `LOOKED_AT` (no unit is split), and the run reports how many.
+  reason `LOOKED_AT` (no unit is split), on every L1 run from then on, and the run reports how many. The version
+  3 gate scores only test films that are not excluded.
 - **The pre-seed list** forces films already examined while designing the detectors into development, together
   with their whole units (a film already in a previous manifest keeps its recorded side, carry-over rule 1):
   - *Wicked*, *Gladiator II* and *Civil War* (this plan);

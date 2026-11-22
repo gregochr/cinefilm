@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after eight adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after nine adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -54,11 +54,10 @@ Per edition, the first that holds wins (steps 1, 2 and 4 are unchanged from 3a):
    `start` because the start passed the guard.
 4. otherwise both cleared (the 97% fallback).
 
-**When the deny list can't be read** (switch on; the file missing, unreadable or malformed): no new `AUTO` is set.
-An edition already `AUTO` keeps its marker only if step 3, with the deny file's own checks left out (the hash check
-still applies), gives exactly the same marker; otherwise it is cleared. So a bad file never clears good markers to
-put them back later, and never keeps one that went stale (a changed file, a re-analysis, a new arrangement).
-**When the switch is off**, `AUTO` editions fall through to step 4 and are cleared.
+**When the deny list can't be read** (switch on; the file missing, unreadable or malformed): the pass uses the last
+copy it read successfully since start-up, in full, and logs that it did. With no good copy (the container started
+with a bad file), no `AUTO` is set and `AUTO` editions are cleared until a readable file is back; that is
+temporary, and the log says why. **When the switch is off**, `AUTO` editions fall through to step 4 and are cleared.
 
 **Raising `ANALYSIS_VERSION` clears `AUTO`:** there is one row per file, so a version 3 backfill overwrites the
 version 2 rows and each `AUTO` marker falls to 97% as it goes. The version 3 plan must keep version 2's rows or
@@ -109,7 +108,9 @@ side out itself.
   **Films G1 looks at never join the test split later.** The planner keeps a private list (off the repository) of
   every film G1 judged and every film the follow-up looked at. The next L1 run takes it as an exclusions list: a
   listed film that would land on test (carry-over rule 2 puts a unit's newcomers on its members' side) is excluded
-  with the reason `LOOKED_AT` instead, so no unit is split, and the run reports how many. `credits-classifier-plan.md`'s "The split" says so too.
+  with the reason `LOOKED_AT` instead, so no unit is split, and the run reports how many. The list is given to **every** L1 run from now on,
+  and the version 3 gate scores only test films that are not excluded. 3c-4 builds this, before the next L1 run.
+  `credits-classifier-plan.md`'s "The split" says so too.
 
   At G0 the planner's script also checks, offline, that the hash side agrees with the manifest for every manifest
   film that carry-over did not move.
@@ -220,7 +221,8 @@ Each at most 1,500 changed lines, tests included.
       - an unmatched film (`tmdb_id` null) never `AUTO`;
       - an unclear edition's file moved to a new edition stays denied;
       - the switch off clearing `AUTO`;
-      - an unreadable list keeping a still-valid `AUTO` and clearing a stale one.
+      - an unreadable list with a last good copy applying that copy in full (a film moved into a listed unit since
+        is cleared); an unreadable list with no good copy clearing `AUTO`.
     - The parser's test: the header, the count, the four entry kinds, comments, and malformed lines.
     - `CreditsSplitTest`: the product's unit key equals L1's for the same fixture rows.
 - **3c-1b, wiring.**
@@ -277,6 +279,12 @@ Each at most 1,500 changed lines, tests included.
   - The Clear hint becomes "Goes back to Plex's marker, the detected time, or none".
   - Version 2's verdict and reasons stay unshown. `foundation-plan.md`.
   - Tests: backend, the filter and counts; frontend, the tab, the times and the exact hint.
+- **3c-4, `LOOKED_AT` in L1** (any time before the next L1 run; nothing in 3c waits for it).
+  - `LabelsMain` gains `--looked-at <file of film ids>`. `CreditsSplit.assign` takes the set. A listed film that
+    would land on test is excluded with the new `ExcludeReason.LOOKED_AT`, and the manifest records the side it
+    would have had (so the deny file's `film` entry and rule 6 still follow it). The report counts them.
+  - Tests in `CreditsSplitTest` and the L1 job's test: a looked-at film landing on test through carry-over rule 2 is
+    excluded and counted; one landing on dev is unaffected; on a later run (carry-over rule 1) it stays excluded.
 - **Then the gate** (G0–G2), then the owner switches `AUTO` on. No release is tagged by a session.
 
 ## Not in this plan
