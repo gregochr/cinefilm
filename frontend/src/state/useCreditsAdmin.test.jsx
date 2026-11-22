@@ -1,10 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
-import { useCreditsAdmin, useCreditsCounts } from './useCreditsAdmin.js';
+import { COUNTS_FOLLOW_UP_MS, useCreditsAdmin, useCreditsCounts } from './useCreditsAdmin.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const COUNTS = { none: 3, plex: 1, owner: 1, all: 5 };
@@ -207,5 +208,45 @@ describe('useCreditsCounts', () => {
 
     await waitFor(() => expect(result.current.counts?.none).toBe(2));
     expect(credits(fetchMock)).toHaveLength(2);
+  });
+
+  describe('the follow-up read', () => {
+    async function afterChange(unmountFirst) {
+      let none = 3;
+      const fetchMock = serve((filter, page) =>
+        respond({ ...pageOf(filter, page, 1, none), counts: { ...COUNTS, none } }),
+      );
+      const { result, rerender, unmount } = renderHook(
+        ({ version }) => useCreditsCounts(0, version),
+        { initialProps: { version: 'a|0' } },
+      );
+      await waitFor(() => expect(result.current.counts?.none).toBe(3));
+      // Only the timers are held, and only now: the clock moves only through `advanceTimersByTimeAsync`.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      rerender({ version: 'b|0' });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(credits(fetchMock)).toHaveLength(2);
+      none = 1;
+      if (unmountFirst) unmount();
+      await act(() => vi.advanceTimersByTimeAsync(COUNTS_FOLLOW_UP_MS - 1));
+      expect(credits(fetchMock)).toHaveLength(2);
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      return { result, fetchMock, rerender };
+    }
+
+    it('reads once more after the delay, showing the new numbers, and not again', async () => {
+      const { result, fetchMock } = await afterChange(false);
+
+      expect(credits(fetchMock)).toHaveLength(3);
+      expect(result.current.counts?.none).toBe(1);
+      await act(() => vi.advanceTimersByTimeAsync(COUNTS_FOLLOW_UP_MS * 3));
+      expect(credits(fetchMock)).toHaveLength(3);
+    });
+
+    it('reads nothing after unmount', async () => {
+      const { fetchMock } = await afterChange(true);
+
+      expect(credits(fetchMock)).toHaveLength(2);
+    });
   });
 });

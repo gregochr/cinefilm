@@ -67,7 +67,7 @@ export default function EndCreditsPanel({ row, id, busy, failure, onSet, onClear
   const clearHintId = useId();
   const times = atMs == null ? null : stillTimes(atMs);
   const fieldError = invalid ?? (failure?.kind === 'field' ? failure.text : null);
-  const alertText = failure?.kind === 'alert' || failure?.kind === 'gone' ? failure.text : null;
+  const alertText = failure?.kind === 'alert' ? failure.text : null;
 
   const edit = (text) => {
     setDraft(text);

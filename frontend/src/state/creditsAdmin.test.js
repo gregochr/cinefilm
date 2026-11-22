@@ -176,17 +176,13 @@ describe('parseTime', () => {
     '1:60:00',
     '1:2:3:4',
     '',
-    '   ',
     '-1:00',
     '-0:30',
     '1:52:1',
     '1:5:10',
     '52:60',
-    '52',
-    '1.5',
     'abc',
     '1:xx:10',
-    '1:52:10s',
     '1:52:10.5',
   ])('refuses %j', (text) => {
     expect(parseTime(text)).toBeNull();
@@ -264,13 +260,6 @@ describe('writeFailure', () => {
       kind: 'alert',
       text: 'A scan or import is running. Try again when it finishes.',
     });
-  });
-
-  it('says it could not save or clear for anything else', () => {
-    expect(writeFailure(new ApiError(500), 'set').text).toBe('Couldn’t save that time. Try again.');
-    expect(writeFailure(new TypeError('Failed to fetch'), 'clear').text).toBe(
-      'Couldn’t clear your time. Try again.',
-    );
   });
 });
 

@@ -141,14 +141,21 @@ export default function AdminEndCredits() {
     moved.current = false;
     const outcome = await writer.run(rowId, verb, markerMs);
     if (outcome.ignored) return;
-    if (!outcome.ok) {
+    if (!outcome.ok && outcome.failure.kind !== 'gone') {
       takeFocusFallback();
       const { failure } = outcome;
-      if (failure.kind === 'gone') reload();
       if (failure.text && openRef.current !== rowId) showToast(failure.text);
       return;
     }
-    showToast(verb === 'set' ? creditsToast.set : creditsToast.cleared);
+    // A film that has gone (404) leaves the list like a row that was set: its words go in the toast (the panel goes
+    // with the row) and focus follows the same rules.
+    showToast(
+      outcome.ok
+        ? verb === 'set'
+          ? creditsToast.set
+          : creditsToast.cleared
+        : outcome.failure.text,
+    );
     pending.current = { rowId, ...before };
     // Its panel closes; another one the owner has opened since is left alone.
     if (openRef.current === rowId) setOpenId(null);

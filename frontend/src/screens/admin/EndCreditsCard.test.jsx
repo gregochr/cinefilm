@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { announceLibraryChanged } from '../../api/client.js';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
 
 afterEach(() => {
@@ -92,5 +93,22 @@ describe('Library: the End credits card', () => {
 
     await waitFor(() => expect(card).toHaveTextContent('Needs a look2'));
     expect(reads()).toBeGreaterThan(before);
+  });
+
+  it('reads the counts again when the credits import finishes', async () => {
+    let none = 3;
+    installFetch((method, url) =>
+      String(url).startsWith('/api/admin/credits')
+        ? respond({ ...fixtures.adminCredits, counts: { ...fixtures.adminCredits.counts, none } })
+        : null,
+    );
+    renderApp('/admin/library');
+    const card = await screen.findByRole('region', { name: 'End credits' });
+    await waitFor(() => expect(card).toHaveTextContent('Needs a look3'));
+
+    none = 0;
+    act(() => announceLibraryChanged());
+
+    await waitFor(() => expect(card).toHaveTextContent('Needs a look0'));
   });
 });

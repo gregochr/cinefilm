@@ -4,6 +4,7 @@ import { useAdminContext } from '../../state/adminContext.js';
 import { CREDITS_PATH } from '../../state/adminRoutes.js';
 import { creditsCard } from '../../state/creditsAdminCopy.js';
 import { useCreditsCounts } from '../../state/useCreditsAdmin.js';
+import { useLibraryChanges } from './useLibraryChanges.js';
 import { useSignInRecovery } from './useSignInRecovery.js';
 
 /**
@@ -11,11 +12,13 @@ import { useSignInRecovery } from './useSignInRecovery.js';
  * way into the list. The counts come from the list's own first read.
  */
 export default function EndCreditsCard() {
-  // The counts are read again when a scan or Plex import finishes (both settle markers) and after a match or edit.
+  // The counts are read again when a scan, the Plex import or the credits import finishes (each announces a library
+  // change) and after a match or edit.
   const { settledAt, changed } = useAdminContext();
+  const libraryChanges = useLibraryChanges();
   const { counts, loading, error, reload } = useCreditsCounts(
     useSignInRecovery(),
-    `${settledAt}|${changed}`,
+    `${settledAt}|${changed}|${libraryChanges}`,
   );
   const tiles = [
     { key: 'none', label: creditsCard.needs },

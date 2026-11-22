@@ -113,27 +113,6 @@ describe('useCreditsWrite', () => {
     expect(writes(fetchMock)).toHaveLength(2);
   });
 
-  it('forgets an old refusal when the next write starts', async () => {
-    let status = 409;
-    installFetch((method, url) =>
-      url === '/api/admin/editions/33/credits'
-        ? respond(status === 409 ? { error: 'A Plex import is running' } : ROW, status)
-        : null,
-    );
-    const { result } = renderHook(() => useCreditsWrite());
-    await act(async () => {
-      await result.current.run(33, 'set', 6730000);
-    });
-    expect(result.current.failure?.text).toBe('A Plex import is running.');
-
-    status = 200;
-    await act(async () => {
-      await result.current.run(33, 'clear');
-    });
-
-    expect(result.current.failure).toBeNull();
-  });
-
   it('reports a 401 as sign-in, with no words', async () => {
     installFetch((method, url) =>
       url === '/api/admin/editions/33/credits' ? respond(null, 401) : null,

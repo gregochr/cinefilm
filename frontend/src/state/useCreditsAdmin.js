@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminApi } from '../api/resources.js';
 import { pageAfterRead } from './creditsAdmin.js';
 import { useResource } from './useResource.js';
@@ -34,14 +34,28 @@ export function useCreditsAdmin(filter, signInCount) {
   return { ...read, loading: waiting, page, setPage };
 }
 
+/** How long after a change of key the counts are read once more: the marker pass runs after the finish stamps. */
+export const COUNTS_FOLLOW_UP_MS = 5000;
+
 /**
- * The three counts the Library card shows, read from the first page of "Needs a look". `version` (the shell's
- * `settledAt|changed`) is part of the request, so a scan or Plex import finishing reads the counts again.
+ * The three counts the Library card shows, read from the first page of "Needs a look". `version` is part of the
+ * request, so a scan or import finishing reads the counts again. The marker pass runs on a background executor after
+ * that finish, so one more quiet read follows `COUNTS_FOLLOW_UP_MS` after any later change of key (cancelled by the
+ * next change or by unmount).
  */
 export function useCreditsCounts(signInCount, version) {
-  const { data, loading, error, reload } = useResource(
+  const { data, loading, error, reload, refresh } = useResource(
     `admin-credits-counts:${signInCount}:${version}`,
     (options) => adminApi.credits('none', 0, options),
   );
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return undefined;
+    }
+    const id = setTimeout(refresh, COUNTS_FOLLOW_UP_MS);
+    return () => clearTimeout(id);
+  }, [signInCount, version, refresh]);
   return { counts: data?.counts ?? null, loading, error, reload };
 }
