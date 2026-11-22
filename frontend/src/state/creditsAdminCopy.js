@@ -1,16 +1,5 @@
-// Every word on the Admin "End credits" card and list, in one place. No JSX: the Apple TV and native clients reuse it.
+// Every word on the Admin "End credits" list, in one place. No JSX: the Apple TV and native clients reuse it.
 // Source: docs/engineering/credits-3b-admin-plan.md, "The screen".
-
-export const creditsCard = {
-  title: 'End credits',
-  tilesLabel: 'End credits counts',
-  needs: 'Needs a look',
-  plex: 'From Plex',
-  owner: 'Yours',
-  review: 'Review end credits…',
-  loadError: 'Couldn’t load the end credits counts.',
-  checkAgain: 'Check again',
-};
 
 export const creditsPage = {
   back: '← Library',

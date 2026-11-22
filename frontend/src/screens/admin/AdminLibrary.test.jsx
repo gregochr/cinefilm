@@ -27,7 +27,7 @@ function held(url) {
 }
 
 describe('Admin Library section', () => {
-  it('is named Library and holds the scan, ratings, Plex import, End credits and Cast & crew cards in order', async () => {
+  it('is named Library and holds the scan, ratings, Plex import and Cast & crew cards in order', async () => {
     installFetch((m, url) => (url === '/api/admin/plex' ? respond(PLEX) : null));
     renderApp('/admin/library');
     expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();
@@ -37,7 +37,6 @@ describe('Admin Library section', () => {
       'scan',
       'ratings',
       'plex-import',
-      'end-credits',
       'cast-crew',
     ]);
     expect(screen.queryByRole('region', { name: 'Grouping report' })).toBeNull();

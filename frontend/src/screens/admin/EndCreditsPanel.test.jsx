@@ -107,6 +107,20 @@ describe('EndCreditsPanel: the time field, Set and Clear', () => {
     expect(onSet).not.toHaveBeenCalled();
   });
 
+  it('keeps the stills where they were when Show stills gets a time that will not do', async () => {
+    open();
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'soon');
+    await userEvent.click(screen.getByRole('button', { name: 'Show stills' }));
+
+    expect(srcs()).toEqual([
+      '/api/editions/33/still?atMs=6690000',
+      '/api/editions/33/still?atMs=6720000',
+    ]);
+    expect(screen.getByRole('alert')).toHaveTextContent('Use h:mm:ss or m:ss, for example 1:52:10');
+  });
+
   it('sends the typed time, in milliseconds, with Set this time or Enter', async () => {
     const { onSet } = open();
 
@@ -145,6 +159,20 @@ describe('EndCreditsPanel: the time field, Set and Clear', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Set this time' }));
     expect(screen.getByRole('alert')).toHaveTextContent('(1:09:36 to 1:55:00)');
     expect(onSet).not.toHaveBeenCalled();
+  });
+
+  it('takes the error away, and tells the page, when the time is edited', async () => {
+    const { onEdit } = open();
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Set this time' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    await userEvent.type(field(), '1');
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(field()).not.toHaveAttribute('aria-invalid');
+    expect(onEdit).toHaveBeenCalled();
   });
 
   it('does nothing on Set while a write is in flight, and the button stays focusable', async () => {
@@ -204,6 +232,14 @@ describe('EndCreditsPanel: the time field, Set and Clear', () => {
     expect(clear).toHaveAccessibleDescription('Goes back to Plex’s marker, or none');
     await userEvent.click(clear);
     expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing on Clear while a write is in flight', async () => {
+    const { onClear } = open(owner, { busy: true });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear my time' }));
+
+    expect(onClear).not.toHaveBeenCalled();
   });
 
   it('has no field and no stills without a runtime, but Clear my time on a Yours row', () => {

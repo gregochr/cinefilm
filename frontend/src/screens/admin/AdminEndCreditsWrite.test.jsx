@@ -213,6 +213,21 @@ describe('End credits list: Set and Clear', () => {
     );
   });
 
+  it('says it could not save when the write fails some other way, and keeps the panel', async () => {
+    const { state } = writable([row(1)]);
+    state.fail = respond(null, 500);
+    renderApp(PATH);
+    await screen.findByText('Film 1');
+    const panel = await open('Film 1');
+
+    await userEvent.click(panel.getByRole('button', { name: 'Set this time' }));
+
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'Couldn’t save that time. Try again.',
+    );
+    expect(screen.getByRole('group', { name: 'Stills for Film 1' })).toBeInTheDocument();
+  });
+
   it('reads the list again, says so in the toast and focuses the next row when the edition is no longer there (404)', async () => {
     const { state, fetchMock } = writable([row(1), row(2)]);
     state.fail = respond({ error: 'No such edition' }, 404);
@@ -347,5 +362,20 @@ describe('End credits list: a write that is already out', () => {
     await within(toast()).findByText('A Plex import is running.');
     expect(state.writes).toHaveLength(1);
     expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('does not show an old refusal when the panel is opened again', async () => {
+    const { state } = writable([row(1)]);
+    state.fail = respond({ error: 'A Plex import is running' }, 409);
+    renderApp(PATH);
+    await screen.findByText('Film 1');
+    const panel = await open('Film 1');
+    await userEvent.click(panel.getByRole('button', { name: 'Set this time' }));
+    await panel.findByRole('alert');
+
+    await userEvent.click(lookButton('Film 1'));
+    await userEvent.click(lookButton('Film 1'));
+
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
