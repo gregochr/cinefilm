@@ -80,7 +80,7 @@ export default function AdminEndCredits() {
   // The last page that had rows: what stays on screen while a pressed page (or its step back) loads.
   const [shown, setShown] = useState(null);
   if (data && data.items.length > 0 && data !== shown) setShown(data);
-  const view = loading && paged ? shown : data;
+  const view = loading ? (paged ? shown : null) : data;
   const tabs = FILTERS.map((key) => ({
     key,
     label: creditsPage.tabs[key],

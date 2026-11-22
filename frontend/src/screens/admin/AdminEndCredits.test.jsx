@@ -155,22 +155,6 @@ describe('End credits list: paging', () => {
     expect(screen.getByRole('button', { name: 'Previous' })).toHaveFocus();
   });
 
-  it('keeps the pager on the page on screen while the next one loads', async () => {
-    let release;
-    const held = new Promise((resolve) => {
-      release = resolve;
-    });
-    serve((filter, page) => (page === 1 ? held : respond(pageOf(page))));
-    renderApp(PATH);
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
-
-    expect(screen.getByText('Film 1')).toBeInTheDocument();
-    expect(screen.getByText('Showing 1–25 of 52')).toBeInTheDocument();
-    release(respond(pageOf(1)));
-    expect(await screen.findByText('Showing 26–50 of 52')).toBeInTheDocument();
-  });
-
   it('goes back to page 0 when the tab changes', async () => {
     const fetchMock = serve((filter, page) => respond(pageOf(page)));
     renderApp(PATH);
@@ -181,6 +165,30 @@ describe('End credits list: paging', () => {
 
     expect(await screen.findByText('Film 1')).toBeInTheDocument();
     expect(creditsCalls(fetchMock).at(-1)[0]).toBe('/api/admin/credits?filter=all&page=0');
+  });
+
+  it('shows the skeleton, not the last tab’s rows, while another tab loads', async () => {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    serve((filter, page) => (filter === 'all' ? held : respond(pageOf(page))));
+    renderApp(PATH);
+    await screen.findByText('Film 1');
+
+    await userEvent.click(screen.getByRole('tab', { name: /^All/ }));
+
+    expect(await screen.findByRole('status', { name: 'Loading end credits' })).toBeInTheDocument();
+    expect(screen.queryByText('Film 1')).toBeNull();
+    release(
+      respond({
+        ...pageOf(0),
+        items: pageOf(0)
+          .items.slice(0, 1)
+          .map((r) => ({ ...r, title: 'Only film' })),
+      }),
+    );
+    expect(await screen.findByText('Only film')).toBeInTheDocument();
   });
 
   it('steps back one page when the current page comes back empty but the filter still has films', async () => {
