@@ -22,7 +22,9 @@ export function containTab(event, dialog) {
   const first = items[0];
   const last = items[items.length - 1];
   const active = document.activeElement;
-  if (!dialog.contains(active)) {
+  // A focused button that has just been disabled (the apply button during the fade) can keep `activeElement` in some
+  // engines, yet it is in no Tab order: treat it as stray focus too, or Tab would walk out to the page behind.
+  if (!dialog.contains(active) || active.matches?.(':disabled')) {
     event.preventDefault();
     (event.shiftKey ? last : first).focus();
   } else if (event.shiftKey && active === first) {
