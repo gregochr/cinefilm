@@ -3,7 +3,6 @@ package gregochr.cinefilm.credits.learn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -48,7 +47,6 @@ class AutoCheckJobTest {
         media = Files.createDirectories(temp.resolve("media"));
         out = temp.resolve("out");
         candidates = temp.resolve("candidates.json");
-        when(source.open(any(Path.class))).thenReturn(reading);
         // A frame is a 4x2 picture whose grey is the file time in seconds, mod 256, unless the time is past the end.
         when(reading.frameAt(anyLong())).thenAnswer(call -> {
             long ms = call.getArgument(0);
@@ -79,10 +77,29 @@ class AutoCheckJobTest {
         Files.writeString(candidates, "[" + String.join(",", items) + "]");
     }
 
+    /** A file under the media root, opened as {@link #reading}. The stub is for this exact path only. */
     private Path film(String name) throws IOException {
+        return film(name, reading);
+    }
+
+    private Path film(String name, StillSource.Reading opened) throws IOException {
         Path file = media.resolve(name);
         Files.createDirectories(file.getParent());
-        return Files.write(file, new byte[] {1});
+        Files.write(file, new byte[] {1});
+        when(source.open(file)).thenReturn(opened);
+        return file;
+    }
+
+    /** A reading of its own: grey is the file time in seconds plus {@code shift}, and a PNG is tagged {@code tag}. */
+    private static StillSource.Reading readingOf(int shift, String tag) {
+        StillSource.Reading own = mock(StillSource.Reading.class);
+        when(own.frameAt(anyLong())).thenAnswer(call -> {
+            long ms = call.getArgument(0);
+            return Optional.of(grey((ms / 1000 + shift) % 256));
+        });
+        when(own.fullPngAt(anyLong())).thenAnswer(call -> Optional.of((tag + "@" + call.getArgument(0))
+            .getBytes(StandardCharsets.UTF_8)));
+        return own;
     }
 
     private AutoCheckOptions options(AutoCheckOptions.Full full) {
@@ -226,14 +243,20 @@ class AutoCheckJobTest {
 
     @Test
     void everyReadingIsClosedOncePerCandidate() throws IOException {
-        film("a.mkv");
-        film("b.mkv");
+        StillSource.Reading first = readingOf(0, "a");
+        StillSource.Reading second = readingOf(100, "b");
+        film("a.mkv", first);
+        film("b.mkv", second);
         candidates(json(1, "a.mkv", 100_000, "CRAWL", 100_000, 120_000, false),
             json(2, "b.mkv", 100_000, "CRAWL", 100_000, 120_000, false));
 
         job.run(options(null));
 
-        verify(reading, times(2)).close();
+        verify(first, times(1)).close();
+        verify(second, times(1)).close();
+        // Each sheet comes from its own file: tile 1 is at file time 90 s.
+        assertThat(sheet("edition-1.png").luma(0, 0)).isEqualTo(90);
+        assertThat(sheet("edition-2.png").luma(0, 0)).isEqualTo(190);
     }
 
     @Test
@@ -298,8 +321,8 @@ class AutoCheckJobTest {
 
     @Test
     void aFileFfmpegCannotReadIsListedWithTheReasonAndSkipped() throws IOException {
-        film("bad.mkv");
-        when(source.open(any(Path.class)))
+        Path bad = film("bad.mkv");
+        when(source.open(bad))
             .thenThrow(new CreditsFrameReader.ReadException("ffmpeg could not be run: nope"));
         candidates(json(3, "bad.mkv", 0, "CRAWL", 100_000, 120_000, false));
 
@@ -383,12 +406,15 @@ class AutoCheckJobTest {
 
     @Test
     void fullWritesTheOneStillOfTheTileInItsOwnDirectory() throws IOException {
+        StillSource.Reading other = readingOf(0, "other");
         film("one.mkv");
+        film("other.mkv", other);
         candidates(json(7, "one.mkv", 100_000, "CRAWL", 100_000, 120_000, false),
-            json(8, "one.mkv", 0, "CRAWL", 500_000, 520_000, false));
+            json(8, "other.mkv", 0, "CRAWL", 500_000, 520_000, false));
 
         List<Path> written = job.run(options(new AutoCheckOptions.Full(7, 5)));
 
+        verifyNoInteractions(other);
         Path still = out.resolve(RUN).resolve("edition-7-tile-5.png");
         assertThat(written).containsExactly(out.resolve(RUN), still);
         assertThat(asked).containsExactly(135_000L);
