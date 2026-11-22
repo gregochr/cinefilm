@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { renderHook, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { containTab, FADE_MS, useDialog } from './useDialog.js';
 
@@ -59,19 +59,20 @@ describe('containTab', () => {
 
   it('pulls focus back in when it sits on a disabled button inside the dialog', () => {
     document.body.innerHTML =
-      '<a href="/">Home</a><div id="dlg"><button id="a">A</button><button id="b" disabled>B</button></div>';
-    const dialog = document.getElementById('dlg');
+      '<a href="/">Home</a><div role="dialog" aria-label="Fixture"><button>A</button><button disabled>B</button></div>';
+    const dialog = screen.getByRole('dialog', { name: 'Fixture' });
+    const inside = within(dialog);
     // An engine that does not blur a button the moment it is disabled keeps it as the active element; jsdom does not
     // allow focusing a disabled one, so pin it.
     const spy = vi
       .spyOn(document, 'activeElement', 'get')
-      .mockReturnValue(document.getElementById('b'));
+      .mockReturnValue(inside.getByRole('button', { name: 'B' }));
     const event = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true });
 
     containTab(event, dialog);
 
     spy.mockRestore();
     expect(event.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(document.getElementById('a'));
+    expect(inside.getByRole('button', { name: 'A' })).toHaveFocus();
   });
 });
