@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after seven adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after eight adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -101,9 +101,15 @@ side out itself.
   - every film the newest manifest puts on test, with its unit key, **every one of its editions and every file of
     them** (the ids come from a read-only query the owner runs at G0, given the film ids and answering edition and
     `media_file_id`s only);
-  - every film, unit key and file of a unit that the manifest has on both sides or excludes as `SPLIT_CONFLICT`;
+  - for a unit that the manifest has on both sides or excludes as `SPLIT_CONFLICT`: its unit key and every file of
+    its films, and `film` entries only for its test-side films (so rule 6 follows test films only);
   - any edition G1 judges unclear, as an `edition` entry and a `file` entry for each of its parts (file ids survive
     a re-arrangement or a merge), never `film`, so rule 6 doesn't take its collection.
+
+  **Films G1 looks at never join the test split later.** The planner keeps a private list (off the repository) of
+  every film G1 judged and every film the follow-up looked at. The next L1 run takes it as a second pre-seed list:
+  those films go to development even when carry-over rule 2 (a unit's members' side) would put them on test, and the
+  run reports how many it moved. `credits-classifier-plan.md`'s "The split" says so too.
 
   At G0 the planner's script also checks, offline, that the hash side agrees with the manifest for every manifest
   film that carry-over did not move.
@@ -178,7 +184,8 @@ waits for the release it needs:
   - The planner gives the owner the final deny file.
   - The owner copies it, sets `CINEFILM_CREDITS_AUTO_ENABLED=true` (and `CINEFILM_CREDITS_AUTO_CARDS=false` if G1
     said so), and recreates the container.
-  - The owner waits for a pass log line after which no pass is pending, then fetches the candidates again. Every
+  - After the start-up pass's log line, the owner fetches the candidates again (they are computed from live data,
+    so later passes don't change the check). Every
     pair `(editionId, markerMs)` among them **not** flagged `owner` must be one G1 judged clear (G1's clear pairs
     include those judged for owner-flagged candidates; cards only while cards are on). A candidate that dropped out
     (a Plex marker arrived, say) is fine. There is no count to match: the candidates and the pass are the same code,
@@ -226,16 +233,17 @@ Each at most 1,500 changed lines, tests included.
   - Log fields.
   - Tests:
     - `CreditsApplierTest`: the log counts, including a second pass that changes nothing and still logs the full
-      `AUTO` count, and the header's date.
+      `AUTO` count; the header's date and count with no entry or id in the log; each reason `AUTO` is off (the
+      switch, an unreadable list).
     - `CreditsAdminServiceTest`: Clear landing on `AUTO`; Clear with the list unreadable; Clear landing on step 4,
       not `AUTO`, for an edition denied by rule 2, by rule 6, and for an unmatched film.
-    - The reader's test.
+    - The reader's test, an empty path counting as unreadable.
     - `CreditsApplierIntegrationTest`: an `AUTO` set and kept, a hidden edition marked, the query count per batch
       fixed.
 - **3c-1c, the trigger.** `CreditsDetected`, published by `CreditsDetectionService` after the lock, and its
   listener, and `FilmMatchFixed` asking for a pass. Tests: `CreditsDetectionServiceTest` (published after the lock;
-  for a version 2 `FOUND` or a replaced one; the same result under a new fingerprint publishes; nothing for
-  `DROPPED` or `BUSY`) and `CreditsApplierTest` (each event asks for a pass).
+  for a version 2 `FOUND`; for an `UNSURE` or `NOT_FOUND` replacing a version 2 `FOUND`; the same result under a
+  new fingerprint publishes; nothing for `DROPPED`, `BUSY`, or another verdict replacing another verdict) and `CreditsApplierTest` (each event asks for a pass).
 - **3c-1d, the candidates and the runbook.**
   - `GET /api/admin/credits/auto-candidates` returns
     `[{editionId, filmId, mediaFileId, path, offsetMs, kind, startMs, markerMs, owner}]`:
@@ -261,8 +269,8 @@ Each at most 1,500 changed lines, tests included.
     A tile past the file's end is black, and the run's list says so.
   - With `--full <editionId> <tile>` it writes one full-size still.
   - A file it can't read is listed by edition id and skipped, and the run still exits 0.
-  - Tests: the tile times, a two-part edition's file time, the directory refusal, a missing file, and the smoke test
-    of the documented command.
+  - Tests: the tile times, a two-part edition's file time, a tile past the file's end (black, and in the list),
+    `--full`, the directory refusal, a missing file, and the smoke test of the documented command.
 - **3c-3, Admin.**
   - `CreditsFilter.AUTO`, `counts.auto`, and the Detected tab (between From Plex and Yours).
   - `AUTO` rows show their time (3b showed none).

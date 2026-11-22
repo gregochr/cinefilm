@@ -240,6 +240,9 @@ path:
   - a film listed with a different unit key now (it joined a collection) keeps its old side, and so does every new
     film of its new unit. A conflict between members, where two old films now share a unit but sit on different
     sides, excludes the newcomers with a reason, never moves an old film.
+- **Films looked at by credits 3c** (`credits-3c-auto-plan.md`, 2026-11-22): every film its stills gate judged and
+  every film its follow-up looked at is given to the next L1 run as a second pre-seed list, and goes to development
+  even when carry-over rule 2 would put it on test; the run reports how many it moved.
 - **The pre-seed list** forces films already examined while designing the detectors into development, together
   with their whole units (a film already in a previous manifest keeps its recorded side, carry-over rule 1):
   - *Wicked*, *Gladiator II* and *Civil War* (this plan);
