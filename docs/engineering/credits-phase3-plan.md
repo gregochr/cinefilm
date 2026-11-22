@@ -108,6 +108,8 @@ only with 3c.
 
 ## 3c — `AUTO` from version 2 (needs the owner's yes)
 
+**Specified in `credits-3c-auto-plan.md` (owner's yes, 2026-11-22).** The outline it follows:
+
 Not specified until the owner says yes: the 2026-11-21 decision has `AUTO` wait with L6a, and that PR edits both
 `credits-detection-plan.md` passages that tie `AUTO` to the classifier plan's gate. What its spec must settle:
 

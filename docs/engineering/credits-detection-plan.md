@@ -149,7 +149,9 @@ end, else `UNSURE`. The same guard applies to an imported Plex marker (phase 2c)
   1. source `OWNER`: left alone;
   2. a `plex_credits_marker` row whose fingerprint matches the file and that passes the edition guard: that marker,
      source `PLEX`;
-  3. once `credits-classifier-plan.md`'s gate has passed, for the opening types and margin bands it cleared, a
+  3. **Revised by `credits-3c-auto-plan.md` (2026-11-22), which wins for version 2:** version 2's `FOUND` rows mark
+     `AUTO` once that plan's gate has passed and the owner switches it on. As first written: once
+     `credits-classifier-plan.md`'s gate has passed, for the opening types and margin bands it cleared, a
      `FOUND` row of the current `ANALYSIS_VERSION` whose fingerprint matches
      and that passes the guard: its offset **plus 20 s** (never past the guard's 60 s before the end), source `AUTO`;
   4. otherwise the marker and source are cleared (the 97% fallback).
@@ -310,7 +312,7 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    3a-2b (`PLEX` only), 3b (Admin) and 3c (`AUTO` from version 2, on the owner's yes). `credits_marker_source` and its carrying, applying (the watched rule is unchanged:
    watched at the marker, decided 2026-11-13), the Admin list and overrides. Precedence per edition: `OWNER`; then
    `PLEX` (the last part's `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a
-   **20 s margin** (`AUTO`), applied only once `credits-classifier-plan.md`'s gate has passed, and only for the
+   **20 s margin** (`AUTO`; for version 2, `credits-3c-auto-plan.md`'s gate instead), applied only once `credits-classifier-plan.md`'s gate has passed, and only for the
    opening types and margin bands it cleared; then the 97% fallback. Every marker goes through the
    edition guard. **A late overlay is better than an early one** (owner, 2026-11-13).
 
