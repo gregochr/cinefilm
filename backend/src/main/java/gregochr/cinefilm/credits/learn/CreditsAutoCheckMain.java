@@ -5,9 +5,14 @@ import gregochr.cinefilm.library.ProcessCommandRunner;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.ZoneOffset;
+import java.util.Comparator;
+import java.util.function.Function;
 import java.util.function.IntConsumer;
+import java.util.stream.Stream;
 import tools.jackson.core.JacksonException;
 
 /**
@@ -31,10 +36,48 @@ public final class CreditsAutoCheckMain {
      * @param args {@code --candidates --out [--media] [--full <editionId> <tile>]}
      */
     public static void main(String[] args) {
-        String tmp = System.getProperty("java.io.tmpdir");
-        AutoCheckJob job = new AutoCheckJob(Clock.system(ZoneOffset.UTC),
-            new FfmpegStillSource(new CreditsFrameReader(new ProcessCommandRunner(), "ffmpeg", 0, tmp)));
-        exitOnFailure(run(args, System.out, System.err, job), System::exit);
+        int code = runInWorkDir(args, System.out, System.err, Path.of(System.getProperty("java.io.tmpdir")),
+            work -> new AutoCheckJob(Clock.system(ZoneOffset.UTC),
+                new FfmpegStillSource(new CreditsFrameReader(new ProcessCommandRunner(), "ffmpeg", 0,
+                    work.toString()))));
+        exitOnFailure(code, System::exit);
+    }
+
+    /**
+     * Runs the tool with a private work directory for the frame reader, made with {@code createTempDirectory} (owner
+     * only on POSIX, so nothing it holds is readable by other users) and deleted at the end, best effort.
+     *
+     * @param args the command line
+     * @param out where the written paths go
+     * @param err where the one-line failure message goes
+     * @param parent where the work directory is made
+     * @param jobFor makes the job, given the work directory
+     * @return as {@link #run}, or 1 when the work directory cannot be made
+     */
+    static int runInWorkDir(String[] args, PrintStream out, PrintStream err, Path parent,
+                            Function<Path, AutoCheckJob> jobFor) {
+        Path work;
+        try {
+            work = Files.createTempDirectory(parent, "cinefilm-auto-check");
+        } catch (IOException e) {
+            err.println("auto-check: " + e.getClass().getSimpleName() + ": could not make a work directory");
+            return 1;
+        }
+        try {
+            return run(args, out, err, jobFor.apply(work));
+        } finally {
+            deleteTree(work);
+        }
+    }
+
+    private static void deleteTree(Path root) {
+        try (Stream<Path> tree = Files.walk(root)) {
+            for (Path path : tree.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException | UncheckedIOException e) {
+            // Best effort: the run's result stands.
+        }
     }
 
     /** Calls {@code exit} with the code unless it is 0. */

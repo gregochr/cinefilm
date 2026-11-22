@@ -11,14 +11,12 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.credits.CreditsFrameReader;
+import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.credits.GreyFrame;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -30,7 +28,7 @@ import org.junit.jupiter.api.io.TempDir;
 /** The sheet job with a mocked still source: the tile times, the black tiles, the files written and the list. */
 class AutoCheckJobTest {
 
-    private static final String RUN = "auto-check-20261122T120000Z";
+    private static final String RUN = "auto-check-20240331T233000Z";
     private static final long END_MS = 6_000_000;
 
     @TempDir
@@ -46,7 +44,7 @@ class AutoCheckJobTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        job = new AutoCheckJob(Clock.fixed(Instant.parse("2026-11-22T12:00:00Z"), ZoneOffset.UTC), source);
+        job = new AutoCheckJob(TestData.CLOCK, source);
         media = Files.createDirectories(temp.resolve("media"));
         out = temp.resolve("out");
         candidates = temp.resolve("candidates.json");
@@ -346,6 +344,17 @@ class AutoCheckJobTest {
             assertThat(names.map(p -> p.getFileName().toString()).toList())
                 .containsExactlyInAnyOrder("edition-7.png", "list.csv");
         }
+    }
+
+    @Test
+    void theRunDirectoryIsStampedInUtcWhateverTheClocksZoneIs() throws IOException {
+        candidates();
+
+        job.run(options(null));
+
+        // TestData.CLOCK is 23:30 UTC on 31 March, already 1 April in its London zone.
+        assertThat(TestData.CLOCK.getZone().getId()).isEqualTo("Europe/London");
+        assertThat(out.resolve("auto-check-20240331T233000Z")).isDirectory();
     }
 
     @Test

@@ -3,15 +3,14 @@ package gregochr.cinefilm.credits.learn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import gregochr.cinefilm.TestData;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class CreditsAutoCheckMainTest {
 
-    private static final String RUN = "auto-check-20261122T120000Z";
+    private static final String RUN = "auto-check-20240331T233000Z";
     private static final String ONE = "[{\"editionId\":7,\"filmId\":1,\"mediaFileId\":2,\"path\":\"gone.mkv\","
         + "\"offsetMs\":0,\"kind\":\"CRAWL\",\"startMs\":100000,\"markerMs\":120000,\"owner\":false}]";
 
@@ -36,7 +35,7 @@ class CreditsAutoCheckMainTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        job = new AutoCheckJob(Clock.fixed(Instant.parse("2026-11-22T12:00:00Z"), ZoneOffset.UTC),
+        job = new AutoCheckJob(TestData.CLOCK,
             mock(StillSource.class));
         media = Files.createDirectories(temp.resolve("media"));
         candidates = Files.writeString(temp.resolve("c.json"), ONE);
@@ -125,6 +124,55 @@ class CreditsAutoCheckMainTest {
 
         assertThat(code).isEqualTo(1);
         assertThat(err()).isEqualTo("auto-check: IllegalArgumentException: no candidate for edition 99\n");
+    }
+
+    @Test
+    void theWorkDirectoryIsMadeInTheParentAndDeletedAfterwardsWithWhatItHolds() {
+        List<Path> seen = new ArrayList<>();
+
+        int code = CreditsAutoCheckMain.runInWorkDir(new String[] {"--candidates", candidates.toString(), "--out",
+            out.toString(), "--media", media.toString()}, new PrintStream(outBytes), new PrintStream(errBytes), temp,
+            work -> {
+                seen.add(work);
+                try {
+                    Files.createDirectories(work.resolve("credits/job-1"));
+                    Files.writeString(work.resolve("credits/job-1/frame.pgm"), "x");
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                return job;
+            });
+
+        assertThat(code).isZero();
+        assertThat(seen).hasSize(1);
+        assertThat(seen.getFirst().getParent()).isEqualTo(temp);
+        assertThat(seen.getFirst().getFileName().toString()).startsWith("cinefilm-auto-check");
+        assertThat(seen.getFirst()).doesNotExist();
+    }
+
+    @Test
+    void theWorkDirectoryIsDeletedWhenTheRunFails() {
+        List<Path> seen = new ArrayList<>();
+
+        int code = CreditsAutoCheckMain.runInWorkDir(new String[] {"--stills"}, new PrintStream(outBytes),
+            new PrintStream(errBytes), temp, work -> {
+                seen.add(work);
+                return job;
+            });
+
+        assertThat(code).isEqualTo(1);
+        assertThat(seen.getFirst()).doesNotExist();
+    }
+
+    @Test
+    void aWorkDirectoryThatCannotBeMadeExitsOneWithoutMakingTheJob() {
+        int code = CreditsAutoCheckMain.runInWorkDir(new String[0], new PrintStream(outBytes),
+            new PrintStream(errBytes), temp.resolve("no/such/parent"), work -> {
+                throw new AssertionError("the job must not be made");
+            });
+
+        assertThat(code).isEqualTo(1);
+        assertThat(err()).isEqualTo("auto-check: NoSuchFileException: could not make a work directory\n");
     }
 
     @Test
