@@ -28,6 +28,7 @@ const row = (over = {}) => ({
 describe('rowLines', () => {
   it.each([
     ['PLEX', 'From Plex · 1:52:10'],
+    ['AUTO', 'Detected · 1:52:10'],
     ['OWNER', 'Yours · 1:52:10'],
     [null, 'Not settled yet · 1:52:10'],
   ])(
@@ -36,13 +37,6 @@ describe('rowLines', () => {
       expect(rowLines(row({ markerMs: 6730000, source }))).toEqual({ two, three: null });
     },
   );
-
-  it('shows an automatic marker with no time and no line three', () => {
-    expect(rowLines(row({ markerMs: 6730000, source: 'AUTO' }))).toEqual({
-      two: 'Set automatically',
-      three: null,
-    });
-  });
 
   it.each([
     [{ state: 'NONE', markerMs: null }, 'Plex has no marker for this film'],
@@ -148,10 +142,11 @@ describe('paging', () => {
 });
 
 describe('filterOf', () => {
-  it('takes the four filters and falls back to Needs a look', () => {
-    expect(['none', 'plex', 'owner', 'all'].map(filterOf)).toEqual([
+  it('takes the five filters and falls back to Needs a look', () => {
+    expect(['none', 'plex', 'auto', 'owner', 'all'].map(filterOf)).toEqual([
       'none',
       'plex',
+      'auto',
       'owner',
       'all',
     ]);

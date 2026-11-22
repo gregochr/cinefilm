@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe('Library: the End credits card', () => {
-  it('shows the three counts and a Review end credits… link to the list', async () => {
+  it('shows the four counts and a Review end credits… link to the list', async () => {
     installFetch();
     renderApp('/admin/library');
 
@@ -20,6 +20,7 @@ describe('Library: the End credits card', () => {
     expect(items.map((item) => item.textContent)).toEqual([
       'Needs a look3',
       'From Plex1',
+      'Detected2',
       'Yours1',
     ]);
     expect(within(card).getByRole('link', { name: 'Review end credits…' })).toHaveAttribute(
@@ -125,7 +126,7 @@ describe('Library: the End credits card', () => {
       within(card)
         .getAllByRole('listitem')
         .map((item) => item.textContent),
-    ).toEqual(['Needs a look–', 'From Plex–', 'Yours–']);
+    ).toEqual(['Needs a look–', 'From Plex–', 'Detected–', 'Yours–']);
     await act(async () => release(respond(fixtures.adminCredits)));
 
     await waitFor(() => expect(card).toHaveTextContent('Needs a look3'));

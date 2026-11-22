@@ -9,6 +9,8 @@ public enum CreditsFilter {
     NONE,
     /** Editions whose marker came from Plex. */
     PLEX,
+    /** Editions whose marker the detector set ({@code AUTO}). */
+    AUTO,
     /** Editions whose marker the owner set. */
     OWNER,
     /** Every visible edition. */
@@ -18,7 +20,8 @@ public enum CreditsFilter {
      * Reads the query parameter's value.
      *
      * @param value the text after {@code filter=}
-     * @return the filter, or null when the text is none of {@code none}, {@code plex}, {@code owner}, {@code all}
+     * @return the filter, or null when the text is none of {@code none}, {@code plex}, {@code auto},
+     *     {@code owner}, {@code all}
      */
     public static CreditsFilter parse(String value) {
         for (CreditsFilter filter : values()) {
@@ -41,6 +44,10 @@ public enum CreditsFilter {
 
     /** The source a filter accepts; a placeholder (never compared) for {@code ALL} and {@code NONE}. */
     CreditsMarkerSource source() {
-        return this == OWNER ? CreditsMarkerSource.OWNER : CreditsMarkerSource.PLEX;
+        return switch (this) {
+            case OWNER -> CreditsMarkerSource.OWNER;
+            case AUTO -> CreditsMarkerSource.AUTO;
+            default -> CreditsMarkerSource.PLEX;
+        };
     }
 }

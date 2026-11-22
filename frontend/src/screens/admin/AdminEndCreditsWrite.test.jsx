@@ -158,7 +158,7 @@ describe('End credits list: Set and Clear', () => {
     expect((await open('Film 1')).queryByRole('button', { name: 'Clear my time' })).toBeNull();
     const panel = await open('Film 2');
     expect(panel.getByRole('button', { name: 'Clear my time' })).toHaveAccessibleDescription(
-      'Goes back to Plex’s marker, or none',
+      'Goes back to Plex’s marker, the detected time, or none',
     );
 
     await userEvent.click(panel.getByRole('button', { name: 'Clear my time' }));

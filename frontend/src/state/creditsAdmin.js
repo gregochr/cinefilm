@@ -9,7 +9,7 @@ import { lockText } from './lockText.js';
 export const EARLIER_MS = 30000;
 
 /** The filters, in tab order; each is also the `filter` the server takes and the `?show=` value. */
-export const FILTERS = ['none', 'plex', 'owner', 'all'];
+export const FILTERS = ['none', 'plex', 'auto', 'owner', 'all'];
 
 /** The filter a `?show=` value names; anything else is the default, "Needs a look". */
 export function filterOf(value) {
@@ -19,6 +19,7 @@ export function filterOf(value) {
 function sourceLabel(row) {
   if (row.source === 'OWNER') return creditsRow.yours;
   if (row.source === 'PLEX') return creditsRow.fromPlex;
+  if (row.source === 'AUTO') return creditsRow.detected;
   return creditsRow.notSettled;
 }
 
@@ -48,8 +49,6 @@ function reasonText(row) {
  * marker, says why. Line one (title, year, edition) is the component's.
  */
 export function rowLines(row) {
-  // Version 2's time is not shown in 3b (credits-3b-admin-plan.md, "No version 2 results in 3b").
-  if (row.source === 'AUTO') return { two: creditsRow.setAutomatically, three: null };
   if (row.markerMs != null) {
     return { two: `${sourceLabel(row)} · ${formatResume(row.markerMs)}`, three: null };
   }
