@@ -622,7 +622,7 @@ SQL
 ```
 
 `-A -t -F ','` prints plain `edition_id,media_file_id` lines with no header. An edition with no original file
-(renditions only, or emptied by an Edit editions move) still prints, as `edition_id,` with no file id, so the deny
+(should one exist) still prints, as `edition_id,` with no file id, so the deny
 file names every edition. The file lands on the host. Send it to
 the planner; it holds ids only.
 
