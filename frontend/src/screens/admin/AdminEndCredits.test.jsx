@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
@@ -121,6 +121,7 @@ describe('End credits list: paging', () => {
 
     expect(await screen.findByText('Film 1')).toBeInTheDocument();
     expect(screen.getByText('Showing 1–25 of 52')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Pages' })).toBeInTheDocument();
     const previous = screen.getByRole('button', { name: 'Previous' });
     expect(previous).toHaveAttribute('aria-disabled', 'true');
     await userEvent.click(previous);
@@ -169,6 +170,28 @@ describe('End credits list: paging', () => {
     expect(screen.getByText('Showing 1–25 of 52')).toBeInTheDocument();
     release(respond(pageOf(1)));
     expect(await screen.findByText('Showing 26–50 of 52')).toBeInTheDocument();
+  });
+
+  it('shows the skeleton, not the last rows, when Check again re-reads a page that failed', async () => {
+    let release;
+    let reads = 0;
+    serve((filter, page) => {
+      if (page === 0) return respond(pageOf(0));
+      if (++reads === 1) return respond(null, 500);
+      return new Promise((resolve) => {
+        release = () => resolve(respond(pageOf(1)));
+      });
+    });
+    renderApp(PATH);
+    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Check again' }));
+
+    expect(await screen.findByRole('status', { name: 'Loading end credits' })).toBeInTheDocument();
+    expect(screen.queryByText('Film 1')).toBeNull();
+    release();
+    expect(await screen.findByText('Film 26')).toBeInTheDocument();
   });
 
   it('goes back to page 0 when the tab changes', async () => {
@@ -409,31 +432,6 @@ describe('End credits list: a row’s panel', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'From Plex 1' }));
 
     expect(screen.queryByRole('group')).toBeNull();
-  });
-
-  it('says "No still for this time" when a still fails, and Try again shows it again, only on a press', async () => {
-    installFetch();
-    renderApp(PATH);
-    await screen.findByRole('list', { name: 'End credits' });
-    await userEvent.click(lookButtons()[0]);
-    const [earlier, at] = stills();
-
-    fireEvent.load(earlier);
-    fireEvent.error(at);
-
-    expect(screen.getByText('No still for this time')).toBeInTheDocument();
-    expect(stills()).toHaveLength(1);
-    // Nothing retries on its own: once the pending work has settled the failure and the single image stand.
-    await act(async () => {});
-    expect(screen.getByText('No still for this time')).toBeInTheDocument();
-    expect(stills()).toHaveLength(1);
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-
-    expect(screen.queryByText('No still for this time')).toBeNull();
-    expect(stills().map((img) => img.getAttribute('src'))).toEqual([
-      '/api/editions/33/still?atMs=6690000',
-      '/api/editions/33/still?atMs=6720000',
-    ]);
   });
 
   it('keeps a loaded still in place once its image has arrived', async () => {

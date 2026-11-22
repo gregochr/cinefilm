@@ -68,10 +68,17 @@ function Pager({ page, size, total, onPage }) {
 export default function AdminEndCredits() {
   const [params, setParams] = useSearchParams();
   const filter = filterOf(params.get('show'));
-  const { data, loading, error, reload, setPage } = useCreditsAdmin(filter, useSignInRecovery());
+  const signIns = useSignInRecovery();
+  const { data, loading, error, reload, setPage } = useCreditsAdmin(filter, signIns);
   const [openId, setOpenId] = useState(null);
   // After a page press the rows and pager stay while the next page loads, so the pressed button keeps focus.
   const [paged, setPaged] = useState(false);
+  // A sign-in starts a fresh read, so it shows the skeleton, not the rows from before.
+  const [seenSignIns, setSeenSignIns] = useState(signIns);
+  if (seenSignIns !== signIns) {
+    setSeenSignIns(signIns);
+    setPaged(false);
+  }
   const goTo = (next) => {
     setOpenId(null);
     setPaged(true);
@@ -95,7 +102,13 @@ export default function AdminEndCredits() {
     );
   } else if (error || !view) {
     body = (
-      <AdminErrorBanner onRetry={reload} retryLabel={creditsPage.checkAgain}>
+      <AdminErrorBanner
+        onRetry={() => {
+          setPaged(false);
+          reload();
+        }}
+        retryLabel={creditsPage.checkAgain}
+      >
         {creditsPage.loadError}
       </AdminErrorBanner>
     );

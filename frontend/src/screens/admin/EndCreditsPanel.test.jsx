@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { fixtures } from '../../test/mockApi.jsx';
@@ -19,7 +19,9 @@ describe('EndCreditsPanel', () => {
       '/api/editions/33/still?atMs=6690000',
       '/api/editions/33/still?atMs=6720000',
     ]);
-    expect(screen.getByText('30 s earlier', { exact: false })).toBeInTheDocument();
+    const [earlier, atTime] = screen.getAllByRole('figure');
+    expect(earlier).toHaveTextContent(/^30 s earlier · 1:51:30$/);
+    expect(atTime).toHaveTextContent(/^At the time · 1:52:00$/);
   });
 
   it('floors the earlier still at 0 for a marker near the start', () => {
@@ -53,6 +55,10 @@ describe('EndCreditsPanel', () => {
 
     fireEvent.error(first);
 
+    expect(screen.getByText('No still for this time')).toBeInTheDocument();
+    expect(screen.getAllByRole('img')).toHaveLength(1);
+    // Nothing retries on its own: once the pending work has settled the failure and the single image stand.
+    await act(async () => {});
     expect(screen.getByText('No still for this time')).toBeInTheDocument();
     expect(screen.getAllByRole('img')).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
