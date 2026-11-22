@@ -647,8 +647,9 @@ describe('Edit editions: closing, focus and the keyboard', () => {
   it('pulls focus back in when it was somewhere outside', async () => {
     installFetch();
     const { user } = await open();
-    // The dialog's focus-on-ready effect may still be pending after the region renders: settle it before moving focus.
-    await act(async () => {});
+    // After the ready render the dialog moves focus to the first Edition select, in an effect that may run later:
+    // wait for that before moving focus away, or it can steal the Tab.
+    await waitFor(() => expect(editionSelect(PT1)).toHaveFocus());
 
     act(() => document.activeElement.blur());
     await user.tab();
