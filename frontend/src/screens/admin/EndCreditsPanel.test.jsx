@@ -88,6 +88,8 @@ describe('EndCreditsPanel: the time field, Set and Clear', () => {
     expect(field()).toHaveAccessibleDescription(
       'Hours, minutes and seconds, like 1:52:10, or minutes and seconds, like 52:10',
     );
+    // Both formats need a colon, which a digits-only keyboard does not have.
+    expect(field()).toHaveAttribute('inputmode', 'text');
     expect(field()).not.toHaveAttribute('aria-invalid');
     expect(screen.getByRole('button', { name: 'Show stills' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Set this time' })).toBeInTheDocument();

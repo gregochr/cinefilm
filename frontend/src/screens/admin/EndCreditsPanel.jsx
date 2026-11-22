@@ -124,7 +124,7 @@ export default function EndCreditsPanel({ row, id, busy, failure, onSet, onClear
             <input
               id={fieldId}
               type="text"
-              inputMode="numeric"
+              inputMode="text"
               autoComplete="off"
               className="admin__number"
               value={draft}
