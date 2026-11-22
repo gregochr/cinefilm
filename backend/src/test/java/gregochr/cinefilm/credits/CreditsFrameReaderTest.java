@@ -1046,6 +1046,71 @@ class CreditsFrameReaderTest {
             .containsOnly(5_000L);
     }
 
+    @Test
+    void aSingleFrameReadReturnsTheFrameAtTheOffsetWithoutCheckingTheDuration() {
+        try (Job job = reader().open(FILM, 1, () -> { })) {
+            assertThat(job.frameOrEnd(5_000_000)).isPresent();
+        }
+
+        assertThat(ffmpeg.commands).hasSize(1);
+        assertThat(ffmpeg.commands.getFirst()).containsSequence("-ss", "5000.000");
+    }
+
+    @Test
+    void aSingleFrameReadThatWroteNoFrameIsTheEndOfTheFileNotAFailure() {
+        ffmpeg.writesNothingAt = ms -> ms == 700_000;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThat(job.frameOrEnd(700_000)).isEmpty();
+            assertThat(job.frameOrEnd(10_000)).isPresent();
+        }
+    }
+
+    @Test
+    void aSingleFrameReadThatFailsIsAReadFailure() {
+        ffmpeg.failOnCall = 1;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(() -> job.frameOrEnd(10_000)).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("ffmpeg exited with status 1");
+        }
+    }
+
+    @Test
+    void theFullFrameCommandKeepsTheFilesOwnSizeAndWritesAPng() {
+        Path output = Path.of("/cache/full.png");
+
+        assertThat(CreditsFrameReader.fullFrameCommand(10, "ffmpeg", FILM, 90_500, output)).containsExactly(
+            "nice", "-n", "10", "ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-protocol_whitelist", "file",
+            "-threads", "1", "-ss", "90.500", "-i", FILM.toString(), "-map", "0:v:0", "-frames:v", "1", "-an", "-sn",
+            "-dn", "-vf", "scale='trunc(iw*sar/2)*2':ih,setsar=1", "-c:v", "png", "-f", "image2", "-y",
+            "/cache/full.png");
+    }
+
+    @Test
+    void aFullFrameReadReturnsTheBytesFfmpegWroteAndDeletesThem() {
+        ffmpeg.garbage = new byte[] {9, 8, 7};
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThat(job.fullPngOrEnd(5_000)).contains(new byte[] {9, 8, 7});
+            assertThat(onlyJobDirectory()).isEmptyDirectory();
+        }
+    }
+
+    @Test
+    void aFullFrameReadThatWroteNoFrameIsTheEndOfTheFile() {
+        ffmpeg.writeNothing = true;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThat(job.fullPngOrEnd(9_000_000)).isEmpty();
+        }
+    }
+
+    @Test
+    void aFullFrameReadThatFailsIsAReadFailure() {
+        ffmpeg.failOnCall = 1;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(() -> job.fullPngOrEnd(10_000)).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("ffmpeg exited with status 1");
+        }
+    }
+
     private Path onlyJobDirectory() {
         try (var children = Files.list(cache.resolve("credits"))) {
             List<Path> dirs = children.toList();
