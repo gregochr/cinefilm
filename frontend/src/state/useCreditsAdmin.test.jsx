@@ -1,10 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
-import { useCreditsAdmin } from './useCreditsAdmin.js';
+import { COUNTS_FOLLOW_UP_MS, useCreditsAdmin, useCreditsCounts } from './useCreditsAdmin.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const COUNTS = { none: 3, plex: 1, owner: 1, all: 5 };
@@ -152,5 +153,131 @@ describe('useCreditsAdmin', () => {
     act(() => result.current.reload());
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.loading).toBe(false);
+  });
+});
+
+describe('useCreditsCounts', () => {
+  it('returns the three counts from the first page of "Needs a look"', async () => {
+    const fetchMock = serve((filter, page) => respond(pageOf(filter, page, 1, 3)));
+    const { result } = renderHook(() => useCreditsCounts(0, 'v1'));
+    expect(result.current.counts).toBeNull();
+
+    await waitFor(() => expect(result.current.counts).toEqual(COUNTS));
+
+    expect(credits(fetchMock)).toEqual(['/api/admin/credits?filter=none&page=0']);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('has no counts after a failed read, then has them after Check again', async () => {
+    let fail = true;
+    serve((filter, page) => (fail ? respond(null, 500) : respond(pageOf(filter, page, 1, 3))));
+    const { result } = renderHook(() => useCreditsCounts(0, 'v1'));
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(result.current.counts).toBeNull();
+
+    fail = false;
+    act(() => result.current.reload());
+
+    await waitFor(() => expect(result.current.counts).toEqual(COUNTS));
+  });
+
+  it('reads again when the sign-in recovery count changes', async () => {
+    const fetchMock = serve((filter, page) => respond(pageOf(filter, page, 1, 3)));
+    const { result, rerender } = renderHook(({ count }) => useCreditsCounts(count, 'v1'), {
+      initialProps: { count: 0 },
+    });
+    await waitFor(() => expect(result.current.counts).not.toBeNull());
+
+    rerender({ count: 1 });
+
+    await waitFor(() => expect(credits(fetchMock)).toHaveLength(2));
+  });
+
+  it('reads again, and shows the new counts, when the library-change version changes', async () => {
+    let none = 3;
+    const fetchMock = serve((filter, page) =>
+      respond({ ...pageOf(filter, page, 1, none), counts: { ...COUNTS, none } }),
+    );
+    const { result, rerender } = renderHook(({ version }) => useCreditsCounts(0, version), {
+      initialProps: { version: 'a|0' },
+    });
+    await waitFor(() => expect(result.current.counts?.none).toBe(3));
+
+    none = 2;
+    rerender({ version: 'b|0' });
+
+    await waitFor(() => expect(result.current.counts?.none).toBe(2));
+    expect(credits(fetchMock)).toHaveLength(2);
+  });
+
+  describe('the follow-up read', () => {
+    let none;
+    let fetchMock;
+    /** Mounts on version "a", loads, then holds the timers (only those): the clock moves through `advance` alone. */
+    async function mount() {
+      none = 3;
+      fetchMock = serve((filter, page) =>
+        respond({ ...pageOf(filter, page, 1, none), counts: { ...COUNTS, none } }),
+      );
+      const hook = renderHook(({ version }) => useCreditsCounts(0, version), {
+        initialProps: { version: 'a' },
+      });
+      await waitFor(() => expect(hook.result.current.counts?.none).toBe(3));
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      return hook;
+    }
+    const advance = (ms) => act(() => vi.advanceTimersByTimeAsync(ms));
+
+    it('makes no read 15 s after mount, only after a later change of key', async () => {
+      await mount();
+
+      await advance(COUNTS_FOLLOW_UP_MS * 2);
+
+      expect(credits(fetchMock)).toHaveLength(1);
+    });
+
+    it('reads once more after the delay, showing the new numbers, and not again', async () => {
+      const { result, rerender } = await mount();
+      rerender({ version: 'b' });
+      await advance(0);
+      expect(credits(fetchMock)).toHaveLength(2);
+      none = 1;
+
+      await advance(COUNTS_FOLLOW_UP_MS - 1);
+      expect(credits(fetchMock)).toHaveLength(2);
+      await advance(1);
+
+      expect(credits(fetchMock)).toHaveLength(3);
+      expect(result.current.counts?.none).toBe(1);
+      await advance(COUNTS_FOLLOW_UP_MS * 3);
+      expect(credits(fetchMock)).toHaveLength(3);
+    });
+
+    it('gives two changes of key 3 s apart one follow-up, 15 s after the second', async () => {
+      const { rerender } = await mount();
+      rerender({ version: 'b' });
+      await advance(3000);
+      rerender({ version: 'c' });
+      await advance(0);
+      expect(credits(fetchMock)).toHaveLength(3);
+
+      await advance(COUNTS_FOLLOW_UP_MS - 1);
+      expect(credits(fetchMock)).toHaveLength(3);
+      await advance(1);
+      expect(credits(fetchMock)).toHaveLength(4);
+      await advance(COUNTS_FOLLOW_UP_MS * 3);
+      expect(credits(fetchMock)).toHaveLength(4);
+    });
+
+    it('leaves no timer behind when it unmounts with a follow-up waiting', async () => {
+      const { rerender, unmount } = await mount();
+      rerender({ version: 'b' });
+      await advance(0);
+      expect(vi.getTimerCount()).toBe(1);
+
+      unmount();
+
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });
