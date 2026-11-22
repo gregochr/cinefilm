@@ -11,6 +11,8 @@ import EndCreditsPanel from './EndCreditsPanel.jsx';
 import SectionTitle from './SectionTitle.jsx';
 import { useSignInRecovery } from './useSignInRecovery.js';
 
+const PANEL_PREFIX = 'admin-credits-panel';
+
 /** One edition: its title (year muted, the edition's name when the film has more than one), source and time, reason. */
 function CreditsRow({ row, open, onToggle }) {
   const panelDomId = useId();
@@ -122,6 +124,7 @@ export default function AdminEndCredits() {
         label={creditsPage.tabsLabel}
         tabs={tabs}
         selected={filter}
+        panelPrefix={PANEL_PREFIX}
         onSelect={(key) => {
           setOpenId(null);
           setParams({ show: key }, { replace: true });
@@ -130,7 +133,7 @@ export default function AdminEndCredits() {
       <section
         className="admin__card"
         role="tabpanel"
-        id={panelId(filter)}
+        id={panelId(filter, PANEL_PREFIX)}
         aria-labelledby={tabId(filter)}
       >
         {body}

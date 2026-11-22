@@ -261,6 +261,18 @@ describe('End credits list: a row’s panel', () => {
     ]);
   });
 
+  it('has the selected tab name the tab panel that exists', async () => {
+    installFetch();
+    renderApp(PATH);
+
+    const tab = await screen.findByRole('tab', { name: 'Needs a look 3' });
+    const panel = screen.getByRole('tabpanel');
+
+    expect(tab).toHaveAttribute('aria-controls', 'admin-credits-panel-none');
+    expect(document.getElementById(tab.getAttribute('aria-controls'))).toBe(panel);
+    expect(panel).toHaveAttribute('aria-labelledby', tab.id);
+  });
+
   it('has the button describe its panel with aria-expanded and aria-controls', async () => {
     installFetch();
     renderApp(PATH);

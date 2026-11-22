@@ -3,7 +3,7 @@ import { tabAfterKey } from '../../state/adminSubtitles.js';
 
 /** The ids a tab and its panel use to name each other. */
 export const tabId = (key) => `admin-subtitles-tab-${key}`;
-export const panelId = (key) => `admin-subtitles-panel-${key}`;
+export const panelId = (key, prefix = 'admin-subtitles-panel') => `${prefix}-${key}`;
 
 /**
  * A real `tablist` for panels that switch in place (unlike the section nav, which changes address). `tabs` are
@@ -11,7 +11,13 @@ export const panelId = (key) => `admin-subtitles-panel-${key}`;
  * in the tab order (roving tabindex); ArrowLeft and ArrowRight move between tabs and wrap, Home and End jump to the
  * first and last, and the tab that is moved to is selected and focused at once.
  */
-export default function AdminTabList({ label, tabs, selected, onSelect }) {
+export default function AdminTabList({
+  label,
+  tabs,
+  selected,
+  onSelect,
+  panelPrefix = 'admin-subtitles-panel',
+}) {
   const refs = useRef({});
   const keys = tabs.map((tab) => tab.key);
   const onKeyDown = (event) => {
@@ -33,7 +39,7 @@ export default function AdminTabList({ label, tabs, selected, onSelect }) {
           role="tab"
           id={tabId(tab.key)}
           aria-selected={selected === tab.key}
-          aria-controls={panelId(tab.key)}
+          aria-controls={panelId(tab.key, panelPrefix)}
           tabIndex={selected === tab.key ? 0 : -1}
           className="admin__tab"
           onClick={() => onSelect(tab.key)}
