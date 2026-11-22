@@ -77,31 +77,35 @@ export default function AdminEndCredits() {
     setPaged(true);
     setPage(next);
   };
+  // The last page that had rows: what stays on screen while a pressed page (or its step back) loads.
+  const [shown, setShown] = useState(null);
+  if (data && data.items.length > 0 && data !== shown) setShown(data);
+  const view = loading && paged ? shown : data;
   const tabs = FILTERS.map((key) => ({
     key,
     label: creditsPage.tabs[key],
     count: data ? data.counts[key] : null,
   }));
   let body;
-  if (loading && !(paged && data && data.items.length > 0)) {
+  if (loading && !view) {
     body = (
       <div role="status" aria-label={creditsPage.loadingLabel}>
         <SkeletonBlock style={{ height: 60 }} />
       </div>
     );
-  } else if (error || !data) {
+  } else if (error || !view) {
     body = (
       <AdminErrorBanner onRetry={reload} retryLabel={creditsPage.checkAgain}>
         {creditsPage.loadError}
       </AdminErrorBanner>
     );
-  } else if (data.items.length === 0) {
+  } else if (view.items.length === 0) {
     body = <p className="admin__text">{creditsPage.empty}</p>;
   } else {
     body = (
       <>
         <ul className="admin__todo-rows" aria-label={creditsPage.listLabel}>
-          {data.items.map((row) => (
+          {view.items.map((row) => (
             <CreditsRow
               key={row.editionId}
               row={row}
@@ -110,7 +114,7 @@ export default function AdminEndCredits() {
             />
           ))}
         </ul>
-        <Pager page={data.page} size={data.size} total={data.total} onPage={goTo} />
+        <Pager page={view.page} size={view.size} total={view.total} onPage={goTo} />
       </>
     );
   }

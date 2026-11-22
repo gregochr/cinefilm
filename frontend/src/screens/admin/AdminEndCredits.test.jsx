@@ -204,10 +204,14 @@ describe('End credits list: paging', () => {
     // A read of the same page: the rows went meanwhile (Check again after a failure re-reads it).
     await userEvent.click(screen.getByRole('button', { name: 'Previous' }));
     expect(await screen.findByText('Film 1')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    const next = screen.getByRole('button', { name: 'Next' });
+    await userEvent.click(next);
 
     await waitFor(() => expect(creditsCalls(fetchMock)).toHaveLength(5));
+    // The empty answer is not shown: the pressed button keeps focus and the earlier range stays.
     expect(screen.queryByText('No films here')).toBeNull();
+    expect(next).toHaveFocus();
+    expect(screen.getByText('Showing 1–25 of 52')).toBeInTheDocument();
     release();
     expect(
       creditsCalls(fetchMock)

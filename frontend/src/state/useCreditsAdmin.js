@@ -25,7 +25,9 @@ export function useCreditsAdmin(filter, signInCount) {
     if (stepBackTo !== page) setPage(stepBackTo);
   }, [stepBackTo, page, setPage]);
 
-  return { ...read, page, setPage };
+  // Data for another page, or an empty answer about to step back, is not this page's answer: still loading.
+  const stale = data != null && data.page !== page;
+  return { ...read, loading: loading || stale || stepBackTo !== page, page, setPage };
 }
 
 /** The three counts the Library card shows, read from the first page of "Needs a look". */
