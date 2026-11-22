@@ -16,10 +16,11 @@ public final class CreditsAdminDtos {
      *
      * @param none editions with no source (a marker with no source yet included)
      * @param plex editions whose marker came from Plex
+     * @param auto editions whose marker the detector set
      * @param owner editions whose marker the owner set
      * @param all every visible edition
      */
-    public record Counts(long none, long plex, long owner, long all) {
+    public record Counts(long none, long plex, long auto, long owner, long all) {
     }
 
     /**
@@ -60,6 +61,23 @@ public final class CreditsAdminDtos {
      * @param items the page's rows
      */
     public record CreditsList(Counts counts, int page, int size, long total, List<CreditsRow> items) {
+    }
+
+    /**
+     * One edition step 3 would mark {@code AUTO}.
+     *
+     * @param editionId the edition
+     * @param filmId its film
+     * @param mediaFileId the last part's file
+     * @param path the file's path relative to the library root ({@code /media} in the container)
+     * @param offsetMs the detection's start in file time
+     * @param kind {@code CRAWL} or {@code CARD}, by which opening the detection's first reason matched
+     * @param startMs the detected start in edition time
+     * @param markerMs the {@code AUTO} marker in edition time
+     * @param owner true when the edition's current source is {@code OWNER}
+     */
+    public record AutoCandidate(long editionId, long filmId, long mediaFileId, String path, long offsetMs,
+                                CreditsApply.AutoKind kind, long startMs, long markerMs, boolean owner) {
     }
 
     /**

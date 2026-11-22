@@ -9,7 +9,7 @@ import { lockText } from './lockText.js';
 export const EARLIER_MS = 30000;
 
 /** The filters, in tab order; each is also the `filter` the server takes and the `?show=` value. */
-export const FILTERS = ['none', 'plex', 'owner', 'all'];
+export const FILTERS = ['none', 'plex', 'auto', 'owner', 'all'];
 
 /** The filter a `?show=` value names; anything else is the default, "Needs a look". */
 export function filterOf(value) {
@@ -19,6 +19,7 @@ export function filterOf(value) {
 function sourceLabel(row) {
   if (row.source === 'OWNER') return creditsRow.yours;
   if (row.source === 'PLEX') return creditsRow.fromPlex;
+  if (row.source === 'AUTO') return creditsRow.detected;
   return creditsRow.notSettled;
 }
 
@@ -48,8 +49,6 @@ function reasonText(row) {
  * marker, says why. Line one (title, year, edition) is the component's.
  */
 export function rowLines(row) {
-  // Version 2's time is not shown in 3b (credits-3b-admin-plan.md, "No version 2 results in 3b").
-  if (row.source === 'AUTO') return { two: creditsRow.setAutomatically, three: null };
   if (row.markerMs != null) {
     return { two: `${sourceLabel(row)} · ${formatResume(row.markerMs)}`, three: null };
   }
@@ -60,11 +59,11 @@ export function rowLines(row) {
 }
 
 /**
- * The time a row's panel starts from: the marker (never an automatic one), else Plex's refused time, else the default end screen point. Null
+ * The time a row's panel starts from: the marker (Plex's, the detected or the owner's), else Plex's refused time, else the default end screen point. Null
  * when the film's length is unknown and there is neither.
  */
 export function panelTimeMs(row) {
-  if (row.markerMs != null && row.source !== 'AUTO') return row.markerMs;
+  if (row.markerMs != null) return row.markerMs;
   if (row.plex.state === 'REFUSED' && row.plex.markerMs != null) return row.plex.markerMs;
   return row.runtimeMs ? Math.floor(row.runtimeMs * END_OVERLAY_FRACTION) : null;
 }

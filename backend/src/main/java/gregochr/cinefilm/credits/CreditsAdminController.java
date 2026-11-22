@@ -4,6 +4,8 @@ import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsList;
 import gregochr.cinefilm.credits.CreditsAdminDtos.CreditsRow;
 import gregochr.cinefilm.credits.CreditsAdminDtos.MarkerUpdate;
+import gregochr.cinefilm.credits.CreditsAdminDtos.AutoCandidate;
+import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,14 +23,26 @@ public class CreditsAdminController {
 
     private final CreditsAdminService credits;
 
-    /** Creates the controller over the credits service. */
-    public CreditsAdminController(CreditsAdminService credits) {
+    private final CreditsAutoCandidates candidates;
+
+    /** Creates the controller over the credits service and the {@code AUTO} candidates. */
+    public CreditsAdminController(CreditsAdminService credits, CreditsAutoCandidates candidates) {
         this.credits = credits;
+        this.candidates = candidates;
+    }
+
+    /**
+     * The editions step 3 would mark {@code AUTO}, as if the switch were on and no owner's marker were set (the
+     * owner's own flagged). 409 {@code No deny list} when no pass has a deny list in force.
+     */
+    @GetMapping("/api/admin/credits/auto-candidates")
+    List<AutoCandidate> autoCandidates() {
+        return candidates.candidates();
     }
 
     /**
      * One page of editions with their credits markers. {@code filter} is {@code none} (the default), {@code plex},
-     * {@code owner} or {@code all}; {@code page} is 0-based (default 0); {@code size} is 1 to
+     * {@code auto}, {@code owner} or {@code all}; {@code page} is 0-based (default 0); {@code size} is 1 to
      * {@link CreditsAdminService#MAX_SIZE} (default 25). A parameter that is present must be valid: anything
      * else, or a page whose first row would sit past {@link Integer#MAX_VALUE}, is a 400 {@code Invalid request}.
      */

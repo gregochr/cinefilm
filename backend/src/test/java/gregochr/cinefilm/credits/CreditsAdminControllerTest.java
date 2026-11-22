@@ -41,13 +41,62 @@ class CreditsAdminControllerTest {
 
     private static final CreditsRow ROW = new CreditsRow(11, 5, "Heat", 1995, "Original", 2, 6_000_000L,
         5_000_000L, CreditsMarkerSource.PLEX, new Plex(PlexState.USABLE, 5_000_000L));
-    private static final CreditsList LIST = new CreditsList(new Counts(4, 3, 2, 9), 1, 25, 4, List.of(ROW));
+    private static final CreditsList LIST = new CreditsList(new Counts(4, 3, 1, 2, 9), 1, 25, 4, List.of(ROW));
 
     @Autowired
     private MockMvc mvc;
 
     @MockitoBean
     private CreditsAdminService credits;
+
+    @MockitoBean
+    private CreditsAutoCandidates candidates;
+
+    // ---- GET /api/admin/credits/auto-candidates ----
+
+    private static final String CANDIDATES = "/api/admin/credits/auto-candidates";
+
+    @Test
+    void autoCandidatesAnswersTheListWithEveryField() throws Exception {
+        when(candidates.candidates()).thenReturn(List.of(new CreditsAdminDtos.AutoCandidate(11, 5, 21, "Dir/a.m4v",
+            5_000_000L, CreditsApply.AutoKind.CARD, 5_100_000L, 5_120_000L, true)));
+
+        String body = mvc.perform(get(CANDIDATES).with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].editionId").value(11))
+            .andExpect(jsonPath("$[0].filmId").value(5))
+            .andExpect(jsonPath("$[0].mediaFileId").value(21))
+            .andExpect(jsonPath("$[0].path").value("Dir/a.m4v"))
+            .andExpect(jsonPath("$[0].offsetMs").value(5_000_000))
+            .andExpect(jsonPath("$[0].kind").value("CARD"))
+            .andExpect(jsonPath("$[0].startMs").value(5_100_000))
+            .andExpect(jsonPath("$[0].markerMs").value(5_120_000))
+            .andExpect(jsonPath("$[0].owner").value(true))
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(names(JsonMapper.builder().build().readTree(body).get(0))).containsExactlyInAnyOrder("editionId",
+            "filmId", "mediaFileId", "path", "offsetMs", "kind", "startMs", "markerMs", "owner");
+    }
+
+    @Test
+    void autoCandidatesWithNoDenyListIs409WithTheServicesText() throws Exception {
+        when(candidates.candidates()).thenThrow(new ConflictException("No deny list"));
+
+        mvc.perform(get(CANDIDATES).with(user("owner")))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("No deny list"));
+    }
+
+    @Test
+    void autoCandidatesIsAGetSoItNeedsNoCsrfHeaderButSignedOutIs401() throws Exception {
+        when(candidates.candidates()).thenReturn(List.of());
+
+        mvc.perform(get(CANDIDATES).with(user("owner"))).andExpect(status().isOk());
+        mvc.perform(get(CANDIDATES))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
 
     @Test
     void noParametersAsksForTheFirstPageOfNeedsALookWithTwentyFiveRows() throws Exception {
@@ -69,12 +118,22 @@ class CreditsAdminControllerTest {
     }
 
     @Test
+    void theAutoFilterReachesTheService() throws Exception {
+        when(credits.list(CreditsFilter.AUTO, 0, 25)).thenReturn(LIST);
+
+        mvc.perform(get("/api/admin/credits?filter=auto").with(user("owner"))).andExpect(status().isOk());
+
+        verify(credits).list(CreditsFilter.AUTO, 0, 25);
+    }
+
+    @Test
     void theAnswerUsesTheFieldNamesTheScreenReads() throws Exception {
         when(credits.list(CreditsFilter.NONE, 0, 25)).thenReturn(LIST);
 
         mvc.perform(get("/api/admin/credits").with(user("owner")))
             .andExpect(jsonPath("$.counts.none").value(4))
             .andExpect(jsonPath("$.counts.plex").value(3))
+            .andExpect(jsonPath("$.counts.auto").value(1))
             .andExpect(jsonPath("$.counts.owner").value(2))
             .andExpect(jsonPath("$.counts.all").value(9))
             .andExpect(jsonPath("$.page").value(1))
@@ -101,7 +160,7 @@ class CreditsAdminControllerTest {
 
         JsonNode json = JsonMapper.builder().build().readTree(body);
         assertThat(names(json)).containsExactlyInAnyOrder("counts", "page", "size", "total", "items");
-        assertThat(names(json.get("counts"))).containsExactlyInAnyOrder("none", "plex", "owner", "all");
+        assertThat(names(json.get("counts"))).containsExactlyInAnyOrder("none", "plex", "auto", "owner", "all");
         assertThat(names(json.get("items").get(0))).containsExactlyInAnyOrder("editionId", "filmId", "title", "year",
             "editionName", "editionCount", "runtimeMs", "markerMs", "source", "plex");
         assertThat(names(json.get("items").get(0).get("plex"))).containsExactlyInAnyOrder("state", "markerMs");
@@ -112,7 +171,7 @@ class CreditsAdminControllerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"filter=", "filter=None", "filter=auto", "filter=all,plex", "page=-1", "page=", "page=x",
+    @ValueSource(strings = {"filter=", "filter=None", "filter=all,plex", "page=-1", "page=", "page=x",
         "page=1.5", "page=99999999999", "page=21474837&size=100", "size=0", "size=101", "size=-5", "size=", "size=ten"})
     void aParameterThatIsPresentButInvalidIs400(String query) throws Exception {
         mvc.perform(get("/api/admin/credits?" + query).with(user("owner")))

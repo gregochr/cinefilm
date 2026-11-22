@@ -472,4 +472,45 @@ class CreditsApplyTest {
         assertThat(CreditsApply.apply(ONE_PART, FILE, 5_020_000L, CreditsMarkerSource.AUTO, null,
             inputs(true, true, older, movedIn, found(5_000_000, CRAWL)))).isEqualTo(NONE);
     }
+
+    // ---- the candidates: step 3 with the source left out ----
+
+    @Test
+    void aCrawlCandidateCarriesItsKindOffsetStartAndMarker() {
+        assertThat(CreditsApply.candidate(ONE_PART, FILE, null, on(found(5_000_000, CRAWL))))
+            .isEqualTo(new CreditsApply.AutoMarker(CreditsApply.AutoKind.CRAWL, 5_000_000, 5_000_000, 5_020_000));
+    }
+
+    @Test
+    void aCardCandidateIsOfKindCardAndTwoPartsTurnTheOffsetIntoEditionTime() {
+        assertThat(CreditsApply.candidate(TWO_PARTS, FILE, null, on(found(1_000_000, CARDS))))
+            .isEqualTo(new CreditsApply.AutoMarker(CreditsApply.AutoKind.CARD, 1_000_000, 5_000_000, 5_020_000));
+    }
+
+    @Test
+    void aCardCandidateIsNoneWhileCardsAreOff() {
+        assertThat(CreditsApply.candidate(ONE_PART, FILE, null,
+            inputs(true, false, EMPTY_LIST, DEV_FILM, found(5_000_000, CARDS)))).isNull();
+    }
+
+    @Test
+    void aUsablePlexRowMeansNoCandidateButAnUnusableOneDoesNot() {
+        AutoInputs in = on(found(5_000_000, CRAWL));
+
+        assertThat(CreditsApply.candidate(ONE_PART, FILE, new PlexRow(FILE, 4_000_000), in)).isNull();
+        assertThat(CreditsApply.candidate(ONE_PART, FILE, new PlexRow("4000000001:1", 4_000_000), in)).isNotNull();
+    }
+
+    @Test
+    void noInputsMeansNoCandidate() {
+        assertThat(CreditsApply.candidate(ONE_PART, FILE, null, null)).isNull();
+    }
+
+    @Test
+    void aDeniedEditionIsNoCandidate() {
+        DenyList list = new DenyList(Set.of(), Set.of(), Set.of(), Set.of(EDITION));
+
+        assertThat(CreditsApply.candidate(ONE_PART, FILE, null,
+            inputs(true, true, list, DEV_FILM, found(5_000_000, CRAWL)))).isNull();
+    }
 }

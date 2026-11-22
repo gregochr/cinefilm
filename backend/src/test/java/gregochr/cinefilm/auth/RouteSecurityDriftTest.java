@@ -117,6 +117,7 @@ class RouteSecurityDriftTest {
             "POST /api/admin/subtitles/{id}/attach", "POST /api/admin/subtitles/{id}/detach",
             "PUT /api/admin/subtitles/{id}/offset", "POST /api/admin/subtitles/{id}/verify",
             "DELETE /api/admin/subtitles/{id}/verify", "GET /api/admin/credits",
+            "GET /api/admin/credits/auto-candidates",
             "PUT /api/admin/editions/{id}/credits", "DELETE /api/admin/editions/{id}/credits");
     }
 

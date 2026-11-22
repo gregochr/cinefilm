@@ -123,10 +123,11 @@ class CreditsAdminIntegrationTest extends IntegrationTestBase {
 
         assertThat(titles(CreditsFilter.NONE)).containsExactly("Alpha", "Bravo");
         assertThat(titles(CreditsFilter.PLEX)).containsExactly("Charlie");
+        assertThat(titles(CreditsFilter.AUTO)).containsExactly("Echo");
         assertThat(titles(CreditsFilter.OWNER)).containsExactly("Delta");
         assertThat(titles(CreditsFilter.ALL)).containsExactly("Alpha", "Bravo", "Charlie", "Delta", "Echo");
         CreditsList all = service.list(CreditsFilter.ALL, 0, 25);
-        assertThat(all.counts()).isEqualTo(new gregochr.cinefilm.credits.CreditsAdminDtos.Counts(2, 1, 1, 5));
+        assertThat(all.counts()).isEqualTo(new gregochr.cinefilm.credits.CreditsAdminDtos.Counts(2, 1, 1, 1, 5));
         assertThat(all.total()).isEqualTo(5);
         assertThat(service.list(CreditsFilter.PLEX, 0, 25).total()).isEqualTo(1);
     }

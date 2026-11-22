@@ -137,6 +137,37 @@ class CreditsAutoReaderTest {
     }
 
     @Test
+    void theCandidateReadsGoAheadWithTheSwitchOffAndTheirInputsSayOn() {
+        Edition edition = anEdition(7);
+        CreditsDetection row = crawl(7, FINGERPRINT, 5_000_000);
+        when(detections.findAllById(List.of(7L))).thenReturn(List.of(row));
+        when(editions.findFilmRowsByIdIn(List.of(7L))).thenReturn(List.of(
+            new EditionFilmRow(7L, 107L, 603L, "The Matrix", 1999, null, null)));
+        when(films.findUnitRowsByIdIn(List.of(999L))).thenReturn(List.of(
+            new UnitRow(999L, 604L, "Reloaded", 2003, null, null)));
+        CreditsAutoReader reader = reader(false, false);
+        DenyList list = denyFile("film 999").list();
+
+        Map<Long, String> listed = reader.candidateListedUnitKeys(list);
+        AutoInputs inputs = reader.candidateLookup(List.of(edition), list, listed).inputs(edition);
+
+        assertThat(listed).containsExactlyEntriesOf(Map.of(999L, "tmdb:604"));
+        assertThat(inputs.enabled()).isTrue();
+        assertThat(inputs.cards()).isFalse();
+        assertThat(inputs.detection().offsetMs()).isEqualTo(5_000_000L);
+    }
+
+    @Test
+    void theCandidateReadsWithNoDenyListReadNothingAndGiveNoInputs() {
+        Edition edition = anEdition(7);
+        CreditsAutoReader reader = reader(true, true);
+
+        assertThat(reader.candidateListedUnitKeys(null)).isEmpty();
+        assertThat(reader.candidateLookup(List.of(edition), null, Map.of()).inputs(edition)).isNull();
+        verifyNoInteractions(editions, films, detections);
+    }
+
+    @Test
     void aListNamingNoFilmAsksForNoFilm() {
         assertThat(reader(true, true).listedUnitKeys(denyFile("file 1", "unit tmdb:1").list())).isEmpty();
         verifyNoInteractions(films);

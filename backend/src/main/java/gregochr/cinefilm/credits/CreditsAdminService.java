@@ -170,6 +170,7 @@ public class CreditsAdminService {
         long total = switch (filter) {
             case NONE -> counts.none();
             case PLEX -> counts.plex();
+            case AUTO -> counts.auto();
             case OWNER -> counts.owner();
             case ALL -> counts.all();
         };
@@ -215,6 +216,7 @@ public class CreditsAdminService {
     private static Counts counts(List<SourceCount> grouped) {
         long none = 0;
         long plex = 0;
+        long auto = 0;
         long owner = 0;
         long all = 0;
         for (SourceCount group : grouped) {
@@ -223,11 +225,13 @@ public class CreditsAdminService {
                 none += group.count();
             } else if (group.source() == CreditsMarkerSource.PLEX) {
                 plex += group.count();
-            } else if (group.source() == CreditsMarkerSource.OWNER) {
+            } else if (group.source() == CreditsMarkerSource.AUTO) {
+                auto += group.count();
+            } else {
                 owner += group.count();
             }
         }
-        return new Counts(none, plex, owner, all);
+        return new Counts(none, plex, auto, owner, all);
     }
 
     private static CreditsRow row(Edition edition, int editionCount, Map<Long, PlexCreditsMarker> rows) {

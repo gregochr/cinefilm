@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,6 +74,7 @@ public class CreditsFrameReader {
     private static final String FRAME_FILE = "frame.pgm";
     private static final String DENSE_PATTERN = "d_%05d.pgm";
     private static final String RGB_FRAME_FILE = "frame.ppm";
+    private static final String FULL_FRAME_FILE = "full.png";
     private static final String RGB_DENSE_PATTERN = "r_%05d.ppm";
     /** The pixel format of the grey frames the active area and the product's rules read (limited range). */
     public static final String GREY_FORMAT = "gray";
@@ -185,6 +187,27 @@ public class CreditsFrameReader {
         List<String> command = prefix(niceness, binary);
         command.addAll(List.of("-ss", seekTime(seekMs), "-i", source.toAbsolutePath().toString(), "-map", "0:v:0",
             "-frames:v", "1", "-an", "-sn", "-dn", "-vf", FILTER + ",format=" + pixelFormat, "-f", "image2", "-y",
+            output.toString()));
+        return List.copyOf(command);
+    }
+
+    /** The filter of a full-size still: only the un-squeeze of a non-square pixel aspect, no scale to a width. */
+    static final String FULL_FILTER = "scale='trunc(iw*sar/2)*2':ih,setsar=1";
+
+    /**
+     * The command that writes the one frame at a seek time at the file's own resolution, as a PNG in colour.
+     *
+     * @param niceness the niceness to run under; 0 or less runs without {@code nice}
+     * @param binary the ffmpeg executable
+     * @param source the media file (absolute)
+     * @param seekMs where in the file to take the frame
+     * @param output the PNG file to write
+     * @return the argument list
+     */
+    static List<String> fullFrameCommand(int niceness, String binary, Path source, long seekMs, Path output) {
+        List<String> command = prefix(niceness, binary);
+        command.addAll(List.of("-ss", seekTime(seekMs), "-i", source.toAbsolutePath().toString(), "-map", "0:v:0",
+            "-frames:v", "1", "-an", "-sn", "-dn", "-vf", FULL_FILTER, "-c:v", "png", "-f", "image2", "-y",
             output.toString()));
         return List.copyOf(command);
     }
@@ -305,6 +328,36 @@ public class CreditsFrameReader {
                 frames.add(grab(offset));
             }
             return frames;
+        }
+
+        /**
+         * One frame at the file's own resolution (only a non-square pixel aspect is un-squeezed), as PNG bytes in
+         * colour, or empty when ffmpeg exits 0 and writes no frame (past the end of the file).
+         *
+         * @param offsetMs where in the file to take it, 0 or more
+         * @return the PNG, or empty when there is no frame there
+         * @throws ReadException when ffmpeg fails or times out, or the file cannot be read
+         */
+        public Optional<byte[]> fullPngOrEnd(long offsetMs) {
+            checkpoint.run();
+            Path output = dir.resolve(FULL_FRAME_FILE);
+            deleteFile(output);
+            run(fullFrameCommand(niceness, ffmpeg, source, offsetMs, output), SEEK_TIMEOUT,
+                "the frame at " + seekTime(offsetMs));
+            return Files.exists(output) ? Optional.of(take(output)) : Optional.empty();
+        }
+
+        /**
+         * One grey frame by a single-frame seek, or empty when ffmpeg exits 0 and writes no frame (a seek past the end
+         * of the file, or into a stretch with no picture). The offset is caller input and is not checked against the
+         * duration, which this read does not use.
+         *
+         * @param offsetMs where in the file to take it, 0 or more
+         * @return the frame, or empty when there is none there
+         * @throws ReadException when ffmpeg fails, times out or writes nothing readable
+         */
+        public Optional<GreyFrame> frameOrEnd(long offsetMs) {
+            return Optional.ofNullable(grab(offsetMs, true));
         }
 
         /**

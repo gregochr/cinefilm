@@ -123,6 +123,25 @@ public final class CreditsApply {
                              UnitInputs film, Map<Long, String> listedFilmUnitKeys, Detection detection) {
     }
 
+    /** Which opening of a {@code FOUND} reason an {@code AUTO} candidate matched. */
+    public enum AutoKind {
+        /** Text on a dark screen moves up steadily. */
+        CRAWL,
+        /** Cards of text on a dark screen change. */
+        CARD
+    }
+
+    /**
+     * What step 3 produces for an edition.
+     *
+     * @param kind which opening the detection's first reason matched
+     * @param offsetMs the detection's start inside the last part's file (file time)
+     * @param startMs the detected start in edition milliseconds
+     * @param markerMs the {@code AUTO} marker in edition milliseconds
+     */
+    public record AutoMarker(AutoKind kind, long offsetMs, long startMs, long markerMs) {
+    }
+
     private CreditsApply() {
     }
 
@@ -141,8 +160,8 @@ public final class CreditsApply {
             || list.films().stream().anyMatch(id -> unitKey.equals(listedFilmUnitKeys.get(id)));
     }
 
-    /** Step 3's marker in edition milliseconds, or null when step 3 does not hold. */
-    private static Long autoMarker(List<Part> parts, String lastFingerprint, AutoInputs auto) {
+    /** Step 3's result, or null when step 3 does not hold. */
+    private static AutoMarker autoMarker(List<Part> parts, String lastFingerprint, AutoInputs auto) {
         Detection d = auto.detection();
         if (!auto.enabled() || auto.denyList() == null || auto.film().filmTmdbId() == null || d == null
             || d.verdict() != CreditsVerdict.FOUND || d.offsetMs() == null
@@ -176,7 +195,27 @@ public final class CreditsApply {
         if (!EditionGuard.plausible(start, total)) {
             return null;
         }
-        return Math.min(start + AUTO_MARGIN_MS, total - CreditsTuning.MIN_BEFORE_END_MS);
+        return new AutoMarker(crawl ? AutoKind.CRAWL : AutoKind.CARD, d.offsetMs(), start,
+            Math.min(start + AUTO_MARGIN_MS, total - CreditsTuning.MIN_BEFORE_END_MS));
+    }
+
+    /**
+     * What step 3 would mark an edition with, whatever the edition's current source is: for the candidates list, the
+     * edition evaluated as if its source were null (an owner's marker is not looked at). Plex's marker still wins,
+     * exactly as in {@link #apply}, so an edition with a usable Plex row has no candidate. The caller builds
+     * {@code auto} as if the switch were on.
+     *
+     * @param parts the edition's original parts in play order (may be empty)
+     * @param lastFingerprint the last part's file's current fingerprint; null when unknown
+     * @param plexRow Plex's row for the last part's file; null when there is none
+     * @param auto step 3's inputs; null (no film) gives no candidate
+     * @return step 3's result; null when the edition would not get an {@code AUTO} marker
+     */
+    public static AutoMarker candidate(List<Part> parts, String lastFingerprint, PlexRow plexRow, AutoInputs auto) {
+        if (auto == null || plexStatus(parts, lastFingerprint, plexRow).state() == PlexState.USABLE) {
+            return null;
+        }
+        return autoMarker(parts, lastFingerprint, auto);
     }
 
     /**
@@ -215,9 +254,9 @@ public final class CreditsApply {
             return new Applied(status.markerMs(), CreditsMarkerSource.PLEX);
         }
         if (auto != null) {
-            Long autoMarker = autoMarker(parts, lastFingerprint, auto);
+            AutoMarker autoMarker = autoMarker(parts, lastFingerprint, auto);
             if (autoMarker != null) {
-                return new Applied(autoMarker, CreditsMarkerSource.AUTO);
+                return new Applied(autoMarker.markerMs(), CreditsMarkerSource.AUTO);
             }
         }
         return new Applied(null, null);
