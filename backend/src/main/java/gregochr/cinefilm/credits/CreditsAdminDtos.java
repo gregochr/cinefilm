@@ -16,10 +16,11 @@ public final class CreditsAdminDtos {
      *
      * @param none editions with no source (a marker with no source yet included)
      * @param plex editions whose marker came from Plex
+     * @param auto editions whose marker the detector set
      * @param owner editions whose marker the owner set
      * @param all every visible edition
      */
-    public record Counts(long none, long plex, long owner, long all) {
+    public record Counts(long none, long plex, long auto, long owner, long all) {
     }
 
     /**

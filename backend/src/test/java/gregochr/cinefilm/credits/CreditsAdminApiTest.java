@@ -109,6 +109,7 @@ class CreditsAdminApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.items.length()").value(5))
             .andExpect(jsonPath("$.counts.none").value(2))
             .andExpect(jsonPath("$.counts.plex").value(2))
+            .andExpect(jsonPath("$.counts.auto").value(0))
             .andExpect(jsonPath("$.counts.owner").value(1))
             .andExpect(jsonPath("$.counts.all").value(5));
     }
@@ -120,12 +121,13 @@ class CreditsAdminApiTest extends ApiTestBase {
         mvc.perform(get("/api/admin/credits?filter=owner"))
             .andExpect(jsonPath("$.counts.none").value(2))
             .andExpect(jsonPath("$.counts.plex").value(2))
+            .andExpect(jsonPath("$.counts.auto").value(0))
             .andExpect(jsonPath("$.counts.owner").value(1))
             .andExpect(jsonPath("$.counts.all").value(5));
     }
 
     @Test
-    void anAutoEditionAppearsOnlyUnderAll() throws Exception {
+    void anAutoEditionAppearsUnderAutoAndAllAndInNoOtherFilter() throws Exception {
         seed("Alpha", 2000, null, null);
         seed("Auto", 2001, 5_000_000L, CreditsMarkerSource.AUTO);
 
@@ -134,6 +136,12 @@ class CreditsAdminApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.items[0].title").value("Alpha"));
         mvc.perform(get("/api/admin/credits?filter=plex")).andExpect(jsonPath("$.items.length()").value(0));
         mvc.perform(get("/api/admin/credits?filter=owner")).andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(get("/api/admin/credits?filter=auto"))
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].title").value("Auto"))
+            .andExpect(jsonPath("$.items[0].source").value("AUTO"))
+            .andExpect(jsonPath("$.counts.auto").value(1));
         mvc.perform(get("/api/admin/credits?filter=all"))
             .andExpect(jsonPath("$.items.length()").value(2))
             .andExpect(jsonPath("$.items[1].source").value("AUTO"))

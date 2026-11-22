@@ -7,7 +7,7 @@ import { useLibraryChanges } from './useLibraryChanges.js';
 import { useSignInRecovery } from './useSignInRecovery.js';
 
 /**
- * Library's "End credits" card: how many films need a look, have Plex's marker and have one the owner set, and the
+ * Library's "End credits" card: how many films need a look, have Plex's marker, have a detected one and have one the owner set, and the
  * way into the list. The counts come from the list's own first read.
  */
 export default function EndCreditsCard() {
@@ -20,6 +20,7 @@ export default function EndCreditsCard() {
   const tiles = [
     { key: 'none', label: creditsCard.needs },
     { key: 'plex', label: creditsCard.plex },
+    { key: 'auto', label: creditsCard.auto },
     { key: 'owner', label: creditsCard.owner },
   ];
   return (

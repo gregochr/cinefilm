@@ -117,7 +117,7 @@ class CreditsAdminServiceTest {
     }
 
     @Test
-    void theFourCountsAddUpAndNoSourceCountsAMarkerNotSettledYet() {
+    void theFiveCountsAddUpAndNoSourceCountsAMarkerNotSettledYet() {
         when(editions.countVisibleBySource()).thenReturn(List.of(new SourceCount(null, 5),
             new SourceCount(CreditsMarkerSource.PLEX, 3), new SourceCount(CreditsMarkerSource.OWNER, 2),
             new SourceCount(CreditsMarkerSource.AUTO, 1)));
@@ -126,7 +126,7 @@ class CreditsAdminServiceTest {
 
         CreditsList list = service().list(CreditsFilter.PLEX, 0, 25);
 
-        assertThat(list.counts()).isEqualTo(new CreditsAdminDtos.Counts(5, 3, 2, 11));
+        assertThat(list.counts()).isEqualTo(new CreditsAdminDtos.Counts(5, 3, 1, 2, 11));
         assertThat(list.total()).isEqualTo(3);
         assertThat(list.items()).isEmpty();
     }
@@ -134,7 +134,10 @@ class CreditsAdminServiceTest {
     @Test
     void theTotalIsTheChosenFiltersCount() {
         when(editions.countVisibleBySource()).thenReturn(List.of(new SourceCount(null, 5),
-            new SourceCount(CreditsMarkerSource.PLEX, 3), new SourceCount(CreditsMarkerSource.OWNER, 2)));
+            new SourceCount(CreditsMarkerSource.PLEX, 3), new SourceCount(CreditsMarkerSource.OWNER, 2),
+            new SourceCount(CreditsMarkerSource.AUTO, 1)));
+        when(editions.findCreditsPageIds(false, false, CreditsMarkerSource.AUTO, PageRequest.of(0, 25)))
+            .thenReturn(List.of());
         when(editions.findCreditsPageIds(false, true, CreditsMarkerSource.PLEX, PageRequest.of(0, 25)))
             .thenReturn(List.of());
         when(editions.findCreditsPageIds(false, false, CreditsMarkerSource.OWNER, PageRequest.of(0, 25)))
@@ -144,7 +147,8 @@ class CreditsAdminServiceTest {
 
         assertThat(service().list(CreditsFilter.NONE, 0, 25).total()).isEqualTo(5);
         assertThat(service().list(CreditsFilter.OWNER, 0, 25).total()).isEqualTo(2);
-        assertThat(service().list(CreditsFilter.ALL, 0, 25).total()).isEqualTo(10);
+        assertThat(service().list(CreditsFilter.AUTO, 0, 25).total()).isEqualTo(1);
+        assertThat(service().list(CreditsFilter.ALL, 0, 25).total()).isEqualTo(11);
     }
 
     @Test
