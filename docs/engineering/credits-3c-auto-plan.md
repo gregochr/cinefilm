@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after five adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after six adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -102,7 +102,8 @@ side out itself.
     them** (the ids come from a read-only query the owner runs at G0, given the film ids and answering edition and
     `media_file_id`s only);
   - every film, unit key and file of a unit that the manifest has on both sides or excludes as `SPLIT_CONFLICT`;
-  - any edition G1 judges unclear, as an `edition` entry (never `film`, so rule 6 doesn't take its collection).
+  - any edition G1 judges unclear, as an `edition` entry and a `file` entry for each of its parts (file ids survive
+    a re-arrangement or a merge), never `film`, so rule 6 doesn't take its collection.
 
   At G0 the planner's script also checks, offline, that the hash side agrees with the manifest for every manifest
   film that carry-over did not move.
@@ -136,7 +137,8 @@ side out itself.
 - `CreditsDetected`, a new event, is published by `CreditsDetectionService` **after it releases the lock**. It is
   only published when the saved row is a version 2 `FOUND` or replaces one. It asks the applier for a pass, as the
   3a-2b triggers do: one more pass at most. A re-analysis of unchanged results starts no passes.
-- The pass's log line gains the `AUTO` count set. Once per pass it says why `AUTO` is off when it is (the switch is
+- The pass's log line gains the number of editions that are `AUTO` after the pass, changed or not (as the `PLEX`
+  count is). Once per pass it says why `AUTO` is off when it is (the switch is
   off, or the deny list is unreadable). Never a title or an id.
 
 ## The gate (before the owner switches `AUTO` on)
@@ -156,7 +158,7 @@ waits for the release it needs:
   - The planner judges each sheet, in this order:
     1. **early:**
        - tile 4 or 5 shows story picture or story text (an epilogue card) and no credits; or
-       - story picture appears in tiles 4–9 before the first tile that is credits only; or
+       - story picture or story text appears in tiles 4–9 before the first tile that is credits only; or
        - story picture appears in tiles 6–9 after credits were seen while the marker is more than 15 minutes before
          the edition's end (text in the story, not a mid-credits scene);
     2. **unclear:** story picture after credits were seen with the marker 15 minutes or less from the end (a
@@ -164,7 +166,7 @@ waits for the release it needs:
        the planner can't read at sheet size (a full-size still may be taken first), or a candidate the tool could
        not read;
     3. otherwise **clear**.
-  - An unclear edition goes on the deny list as `edition <id>`, and nothing else changes.
+  - An unclear edition goes on the deny list (its `edition` and `file` entries), and nothing else changes.
   - Any early card turns cards off. **Any early crawl ends 3c: `AUTO` stays off altogether.**
 - **An end is final:** retrying a kind that a gate ended needs a revised plan and a fresh gate. Denying an early
   film and switching on anyway is not allowed.
@@ -174,7 +176,8 @@ waits for the release it needs:
     said so), and recreates the container.
   - The candidates are fetched again. Their `(editionId, markerMs)` pairs not flagged `owner` must all be among
     G1's clear pairs, owner-flagged ones included (cards only while cards are on); a candidate that dropped out
-    (a Plex marker arrived, say) is fine. The pass's logged `AUTO` count must equal the number of those pairs.
+    (a Plex marker arrived, say) is fine. The `AUTO` count logged by the last pass before the candidates were fetched must equal the number of
+    those pairs.
   - **A pair outside G1's clear pairs:** the owner switches off and recreates, and G1 judges every such pair before
     switching on again.
 
@@ -203,6 +206,7 @@ Each at most 1,500 changed lines, tests included.
       - each of the six deny rules, rule 5 with an edition moved by a merge and rule 6 with a new film sharing a
         listed film's current unit key;
       - an unmatched film (`tmdb_id` null) never `AUTO`;
+      - an unclear edition's file moved to a new edition stays denied;
       - the switch off clearing `AUTO`;
       - an unreadable list keeping a still-valid `AUTO` and clearing a stale one.
     - The parser's test: the header, the count, the four entry kinds, comments, and malformed lines.
@@ -215,7 +219,8 @@ Each at most 1,500 changed lines, tests included.
     list, through the same code as the pass.
   - Log fields.
   - Tests:
-    - `CreditsApplierTest`: the log counts and the header's date.
+    - `CreditsApplierTest`: the log counts, including a second pass that changes nothing and still logs the full
+      `AUTO` count, and the header's date.
     - `CreditsAdminServiceTest`: Clear landing on `AUTO`, and Clear with the list unreadable.
     - The reader's test.
     - `CreditsApplierIntegrationTest`: an `AUTO` set and kept, a hidden edition marked, the query count per batch
