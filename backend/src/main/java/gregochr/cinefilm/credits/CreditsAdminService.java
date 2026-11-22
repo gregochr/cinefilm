@@ -227,7 +227,7 @@ public class CreditsAdminService {
                 plex += group.count();
             } else if (group.source() == CreditsMarkerSource.AUTO) {
                 auto += group.count();
-            } else if (group.source() == CreditsMarkerSource.OWNER) {
+            } else {
                 owner += group.count();
             }
         }
