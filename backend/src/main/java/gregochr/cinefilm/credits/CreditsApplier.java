@@ -320,16 +320,7 @@ public class CreditsApplier {
     /** Reads, computes and writes one batch: a fixed number of reads however many editions it holds. */
     private Batch applyBatch(List<Long> batch, DenyList list, Map<Long, String> listedUnitKeys) {
         List<Edition> loaded = editions.findWithFilesByIdIn(batch);
-        List<Long> lastPartIds = new ArrayList<>();
-        for (Edition edition : loaded) {
-            List<MediaFile> originals = edition.originalParts();
-            if (!originals.isEmpty()) {
-                lastPartIds.add(originals.get(originals.size() - 1).getId());
-            }
-        }
-        Map<Long, PlexCreditsMarker> rows = lastPartIds.isEmpty() ? Map.of()
-            : markers.findAllById(lastPartIds).stream()
-                .collect(Collectors.toMap(PlexCreditsMarker::getMediaFileId, m -> m));
+        Map<Long, PlexCreditsMarker> rows = plexRows(markers, loaded);
         CreditsAutoReader.Lookup lookup = auto.lookup(loaded, list, listedUnitKeys);
         int plexSet = 0;
         int autoSet = 0;
@@ -364,6 +355,39 @@ public class CreditsApplier {
             inProgress = states.countInProgressAtOrPastMarker(toSave.stream().map(Edition::getId).toList());
         }
         return new Batch(plexSet, autoSet, toSave.size(), cleared, ownerKept, inProgress);
+    }
+
+    /** Plex's rows for the last parts of these editions, by media file id: one read however many editions. */
+    static Map<Long, PlexCreditsMarker> plexRows(PlexCreditsMarkerRepository markers, List<Edition> loaded) {
+        List<Long> lastPartIds = new ArrayList<>();
+        for (Edition edition : loaded) {
+            List<MediaFile> originals = edition.originalParts();
+            if (!originals.isEmpty()) {
+                lastPartIds.add(originals.get(originals.size() - 1).getId());
+            }
+        }
+        return lastPartIds.isEmpty() ? Map.of()
+            : markers.findAllById(lastPartIds).stream()
+                .collect(Collectors.toMap(PlexCreditsMarker::getMediaFileId, m -> m));
+    }
+
+    /**
+     * What step 3 would mark one edition with, over the same parts and Plex row as {@link #applyEdition}: for the
+     * candidates list. The edition's source is not looked at; a usable Plex row means no candidate.
+     *
+     * @param edition the edition, with its files loaded
+     * @param rows Plex's rows by media file id
+     * @param autoInputs step 3's inputs built as if the switch were on; null gives none
+     * @return step 3's result; null when the edition would not get an {@code AUTO} marker
+     */
+    static CreditsApply.AutoMarker candidateOf(Edition edition, Map<Long, PlexCreditsMarker> rows,
+                                               AutoInputs autoInputs) {
+        List<MediaFile> originals = edition.originalParts();
+        List<Part> parts = originals.stream().map(f -> new Part(f.getId(), f.timelineDurationMs())).toList();
+        MediaFile last = originals.isEmpty() ? null : originals.get(originals.size() - 1);
+        PlexCreditsMarker row = last == null ? null : rows.get(last.getId());
+        return CreditsApply.candidate(parts, last == null ? null : last.fingerprint(),
+            row == null ? null : new PlexRow(row.getFingerprint(), row.getStartMs()), autoInputs);
     }
 
     /**

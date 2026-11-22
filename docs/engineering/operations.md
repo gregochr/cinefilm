@@ -558,6 +558,145 @@ grep -c '^CINEFILM_CREDITS_DATASET_ENABLED=' .env                  # prints 0
 export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm
 ```
 
+## Credits AUTO (3c, on dockermacmini)
+
+Version 2's detections as `AUTO` end-credits markers, for editions with no usable Plex marker
+(`credits-3c-auto-plan.md`). Off until the owner switches it on at G2. Everything here that is library data (the deny
+file, the candidates list, the query results) stays on the server or the planner's Mac, **never in the repository**.
+
+### The deny file
+
+The planner writes it from the manifest and L1's labels (the plan's "The test split"). The owner puts it on the
+server and **recreates the container after every replacement** (the file is read only by a pass, and a start-up pass
+runs on every recreate).
+
+- **Where:** `${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/credits-auto/deny.txt`, mounted read-only into the
+  container at `/credits-auto` (`deploy/docker-compose.yml`). The container's user (uid 1001) must be able to read it.
+- **The keys** in `~/cinefilm/.env` (Spring binds them to `cinefilm.credits.auto.*`):
+
+  | Key | Value | Default |
+  |---|---|---|
+  | `CINEFILM_CREDITS_AUTO_DENYLIST` | `/credits-auto/deny.txt` | empty (no deny list: the app boots, `AUTO` stays off) |
+  | `CINEFILM_CREDITS_AUTO_ENABLED` | `true` to switch `AUTO` on | `false` |
+  | `CINEFILM_CREDITS_AUTO_CARDS` | `false` to turn card results off (G1 may say so) | `true` |
+
+- **Put it in place (once), and after every new file:**
+
+  ```bash
+  sudo mkdir -p /home/gregochr/cinefilm-data/credits-auto
+  sudo chmod 755 /home/gregochr/cinefilm-data/credits-auto
+  # copy the file the planner gave you to /home/gregochr/cinefilm-data/credits-auto/deny.txt (scp from the Mac), then:
+  sudo chmod 644 /home/gregochr/cinefilm-data/credits-auto/deny.txt
+  cd ~/cinefilm
+  [ -z "$(tail -c1 .env)" ] || echo >> .env                            # make sure the last line ends in a newline
+  sed -i '/^CINEFILM_CREDITS_AUTO_DENYLIST=/d' .env
+  echo 'CINEFILM_CREDITS_AUTO_DENYLIST=/credits-auto/deny.txt' >> .env
+  grep -c '^CINEFILM_CREDITS_AUTO_DENYLIST=' .env                      # prints 1; never print the whole .env
+  export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm   # recreates it; do it when nothing is playing
+  ```
+- **Check it was read.** The start-up pass logs the header's date and count, never an entry:
+
+  ```bash
+  docker logs cinefilm 2>&1 | grep 'Credits deny file' | tail -3
+  ```
+
+  Expect `Credits deny file: read (manifest <date>, <n> entries)`, with the date and count the planner gave. Two other
+  lines mean it was not read: `could not be read and no earlier copy exists` (the file is missing, not readable by
+  uid 1001, or malformed: no deny list is in force) and `could not be read, so the copy read earlier stays in force`
+  (a later pass could not read it; the old copy is used, in full).
+
+### G0: the edition query (read-only)
+
+The planner gives a list of film ids; this answers `edition id` and `media_file_id` pairs for those films' editions
+and their original parts, so the deny file can name every edition and file. It returns no title and no path. Replace
+the `VALUES` rows with the film ids and paste the whole thing:
+
+```bash
+docker exec -i cinefilm-db psql -U cinefilm -d cinefilm -v ON_ERROR_STOP=1 -q -A -t -F ',' <<'SQL' > g0-ids.csv
+SELECT e.id AS edition_id, m.id AS media_file_id
+FROM (VALUES (1001), (1002)) AS f(film_id)
+JOIN edition e ON e.film_id = f.film_id
+JOIN media_file m ON m.edition_id = e.id AND m.kind = 'ORIGINAL'
+ORDER BY e.id, m.id;
+SQL
+```
+
+`-A -t -F ','` prints plain `edition_id,media_file_id` lines with no header. The file lands on the host. Send it to
+the planner; it holds ids only.
+
+### Fetching the candidates (G1, G2)
+
+`GET /api/admin/credits/auto-candidates` answers the editions step 3 would mark `AUTO`, computed as if the switch were
+on and as if no owner's marker were set (those are flagged `"owner": true`), from the deny list the latest pass kept in
+force. It needs the owner's signed-in session, so **the owner runs it**: sign in with the command in "Credits
+classifier: the 10-film dataset trial", step 2 (the password is typed only at the hidden prompt), then:
+
+```bash
+curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/auto-candidates > auto-candidates.json
+curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X DELETE http://127.0.0.1:8090/api/session; rm -f ~/cf-jar   # sign out
+```
+
+It answers 409 `{"error":"No deny list"}` until a pass has read a readable deny file (the log line above). A `GET`
+needs no `X-CineFilm` header. Each item is `{editionId, filmId, mediaFileId, path, offsetMs, kind, startMs, markerMs,
+owner}`: `path` is relative to `/media`, `offsetMs` is where the credits start inside the last part's file (file
+time), `kind` is `CRAWL` or `CARD`, and `startMs` and `markerMs` are edition time (`markerMs` is the start plus 20 s,
+capped 60 s before the end). The file holds library paths: keep it off the repository.
+
+### The follow-up query (read-only; after G2)
+
+Lists version 2's `FOUND` rows that sit more than 15 s before Plex's marker for the same file, joined on the
+`media_file_id`s the planner gives (the development films' labelled files that no deny rule holds for). Ids and times
+only. Replace the `VALUES` rows:
+
+```bash
+docker exec -i cinefilm-db psql -U cinefilm -d cinefilm -v ON_ERROR_STOP=1 -q -A -t -F ',' <<'SQL' > followup.csv
+SELECT m.id AS media_file_id, m.edition_id, d.offset_ms AS v2_start_file_ms, p.start_ms AS plex_start_file_ms,
+       p.start_ms - d.offset_ms AS v2_early_by_ms
+FROM (VALUES (2001), (2002)) AS f(media_file_id)
+JOIN media_file m ON m.id = f.media_file_id
+JOIN credits_detection d ON d.media_file_id = m.id
+JOIN plex_credits_marker p ON p.media_file_id = m.id
+WHERE d.verdict = 'FOUND' AND d.analysis_version = 2 AND d.offset_ms IS NOT NULL
+  AND d.fingerprint = p.fingerprint
+  AND p.start_ms - d.offset_ms > 15000
+ORDER BY v2_early_by_ms DESC;
+SQL
+```
+
+Both times are **file time** inside the same file: `credits_detection.offset_ms` is where version 2 saw the credits
+start in the last original part, and `plex_credits_marker.start_ms` is Plex's marker moved into that same file
+(`V24`). Same file, same clock, so they compare directly with no edition-time conversion; they differ from edition
+time only for a multi-part edition's earlier parts, which have no detection rows. The query requires the two rows'
+fingerprints to be equal (both describe the same copy of the file). Columns: `media_file_id` and `edition_id` (the
+file and the edition it belongs to), `v2_start_file_ms` (version 2's start), `plex_start_file_ms` (Plex's start),
+`v2_early_by_ms` (Plex's minus version 2's, always above 15,000). No test-side id may be in the list; the query
+produces rows only for the ids it is given.
+
+### The sheet tool's command
+
+Added by 3c-2.
+
+### Switching on and off
+
+1. **On (G2, after 3c-3 is released).** Put the final deny file in place and recreate (above). Then:
+
+   ```bash
+   cd ~/cinefilm
+   [ -z "$(tail -c1 .env)" ] || echo >> .env
+   sed -i '/^CINEFILM_CREDITS_AUTO_ENABLED=/d' .env
+   echo 'CINEFILM_CREDITS_AUTO_ENABLED=true' >> .env
+   # only if G1 turned cards off:
+   # sed -i '/^CINEFILM_CREDITS_AUTO_CARDS=/d' .env && echo 'CINEFILM_CREDITS_AUTO_CARDS=false' >> .env
+   export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm
+   docker logs cinefilm 2>&1 | grep -E 'Credits apply pass|Credits AUTO is off' | tail -3
+   ```
+
+   The pass line says `N with an automatic marker`; `Credits AUTO is off: <reason>` says why it is not on (the switch,
+   or no deny list in force). Then fetch the candidates again and run the G2 comparison ("The gate" in the plan).
+2. **Off.** The same way with `CINEFILM_CREDITS_AUTO_ENABLED=false` (or delete the line), recreate, and check the log
+   shows `Credits AUTO is off: the switch is off`. The next pass clears every `AUTO` marker back to the 97% fallback;
+   markers the owner set (**Set**) and Plex's are untouched.
+
 ## Deferred (not built yet)
 
 Playwright E2E and axe a11y in CI, ZAP, release changelog
