@@ -616,12 +616,14 @@ docker exec -i cinefilm-db psql -U cinefilm -d cinefilm -v ON_ERROR_STOP=1 -q -A
 SELECT e.id AS edition_id, m.id AS media_file_id
 FROM (VALUES (1001), (1002)) AS f(film_id)
 JOIN edition e ON e.film_id = f.film_id
-JOIN media_file m ON m.edition_id = e.id AND m.kind = 'ORIGINAL'
+LEFT JOIN media_file m ON m.edition_id = e.id AND m.kind = 'ORIGINAL'
 ORDER BY e.id, m.id;
 SQL
 ```
 
-`-A -t -F ','` prints plain `edition_id,media_file_id` lines with no header. The file lands on the host. Send it to
+`-A -t -F ','` prints plain `edition_id,media_file_id` lines with no header. An edition with no original file
+(renditions only, or emptied by an Edit editions move) still prints, as `edition_id,` with no file id, so the deny
+file names every edition. The file lands on the host. Send it to
 the planner; it holds ids only.
 
 ### Fetching the candidates (G1, G2)
