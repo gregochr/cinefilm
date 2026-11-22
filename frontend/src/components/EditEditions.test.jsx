@@ -647,6 +647,9 @@ describe('Edit editions: closing, focus and the keyboard', () => {
   it('pulls focus back in when it was somewhere outside', async () => {
     installFetch();
     const { user } = await open();
+    // After the ready render the dialog moves focus to the first Edition select, in an effect that may run later:
+    // wait for that before moving focus away, or it can steal the Tab.
+    await waitFor(() => expect(editionSelect(PT1)).toHaveFocus());
 
     act(() => document.activeElement.blur());
     await user.tab();
@@ -735,20 +738,21 @@ describe('Edit editions: motion', () => {
   it('fades out for about 150 ms before it closes', async () => {
     installFetch();
     const onClose = vi.fn();
-    const user = userEvent.setup();
     render(<EditEditions film={FILM} onClose={onClose} onSaved={vi.fn()} />);
     await screen.findByRole('region', { name: 'Edition Extended Edition' });
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
-    const timers = vi.spyOn(window, 'setTimeout');
+    // The fade is on a fake clock (installed after the dialog opened on real timers), so no load can outrun it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    const fade = timers.mock.calls.find(([, ms]) => ms === 150);
-    expect(fade).toBeDefined();
     expect(onClose).not.toHaveBeenCalled();
-    act(() => fade[0]());
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS - 1));
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(onClose).toHaveBeenCalledTimes(1);
-    timers.mockRestore();
   });
 
   it('with reduced motion it closes at once', async () => {
