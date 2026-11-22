@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after six adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after seven adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -135,8 +135,12 @@ side out itself.
 ## Triggers, logs
 
 - `CreditsDetected`, a new event, is published by `CreditsDetectionService` **after it releases the lock**. It is
-  only published when the saved row is a version 2 `FOUND` or replaces one. It asks the applier for a pass, as the
-  3a-2b triggers do: one more pass at most. A re-analysis of unchanged results starts no passes.
+  published for every stored row that is a version 2 `FOUND` or replaces one (a re-analysis under a new fingerprint
+  with the same result included), and never for a save that stored nothing (`DROPPED`, `BUSY`) or another verdict
+  over another verdict. It asks the applier for a pass, as the 3a-2b triggers do: one more pass at most.
+- **`FilmMatchFixed`** (Fix match, which can change a film's TMDB id, title, year, collection or owning film) also
+  asks for a pass, so a re-matched or joined film's deny rules apply at once. 3c-1c also checks for any other path
+  that changes those fields without a scan, Plex import, Edit editions save or Fix match, and adds it the same way.
 - The pass's log line gains the number of editions that are `AUTO` after the pass, changed or not (as the `PLEX`
   count is). Once per pass it says why `AUTO` is off when it is (the switch is
   off, or the deny list is unreadable). Never a title or an id.
@@ -174,12 +178,13 @@ waits for the release it needs:
   - The planner gives the owner the final deny file.
   - The owner copies it, sets `CINEFILM_CREDITS_AUTO_ENABLED=true` (and `CINEFILM_CREDITS_AUTO_CARDS=false` if G1
     said so), and recreates the container.
-  - The candidates are fetched again. Their `(editionId, markerMs)` pairs not flagged `owner` must all be among
-    G1's clear pairs, owner-flagged ones included (cards only while cards are on); a candidate that dropped out
-    (a Plex marker arrived, say) is fine. The `AUTO` count logged by the last pass before the candidates were fetched must equal the number of
-    those pairs.
-  - **A pair outside G1's clear pairs:** the owner switches off and recreates, and G1 judges every such pair before
-    switching on again.
+  - The owner waits for a pass log line after which no pass is pending, then fetches the candidates again. Every
+    pair `(editionId, markerMs)` among them **not** flagged `owner` must be one G1 judged clear (G1's clear pairs
+    include those judged for owner-flagged candidates; cards only while cards are on). A candidate that dropped out
+    (a Plex marker arrived, say) is fine. There is no count to match: the candidates and the pass are the same code,
+    pinned by 3c-1d's integration test.
+  - **A pair G1 did not judge clear:** the owner switches off and recreates, G1 judges every such pair, and G2 is
+    run again.
 
 ## Follow-up (owner, 2026-11-22)
 
@@ -215,19 +220,22 @@ Each at most 1,500 changed lines, tests included.
   - The properties, the compose mount and the file reader.
   - The pass's batched read gains the `credits_detection` rows and the unit key's inputs (including every listed
     film's current unit key, for rule 6), with a fixed number of queries per batch.
-  - The Clear plumbing: `CreditsAdminService.clear` gets the detection row, the switch, the cards flag and the deny
-    list, through the same code as the pass.
+  - The Clear plumbing: `CreditsAdminService.clear` (and 3c-1d's candidates) read the same inputs as the pass: the
+    detection row, the switch, the cards flag, the deny list, the film's unit key inputs and `tmdb_id`, and every
+    listed film's current unit key, through the same code.
   - Log fields.
   - Tests:
     - `CreditsApplierTest`: the log counts, including a second pass that changes nothing and still logs the full
       `AUTO` count, and the header's date.
-    - `CreditsAdminServiceTest`: Clear landing on `AUTO`, and Clear with the list unreadable.
+    - `CreditsAdminServiceTest`: Clear landing on `AUTO`; Clear with the list unreadable; Clear landing on step 4,
+      not `AUTO`, for an edition denied by rule 2, by rule 6, and for an unmatched film.
     - The reader's test.
     - `CreditsApplierIntegrationTest`: an `AUTO` set and kept, a hidden edition marked, the query count per batch
       fixed.
 - **3c-1c, the trigger.** `CreditsDetected`, published by `CreditsDetectionService` after the lock, and its
-  listener. Tests: `CreditsDetectionServiceTest` (published after the lock, only for a version 2 `FOUND` or a
-  replaced one) and `CreditsApplierTest` (the event asks for a pass).
+  listener, and `FilmMatchFixed` asking for a pass. Tests: `CreditsDetectionServiceTest` (published after the lock;
+  for a version 2 `FOUND` or a replaced one; the same result under a new fingerprint publishes; nothing for
+  `DROPPED` or `BUSY`) and `CreditsApplierTest` (each event asks for a pass).
 - **3c-1d, the candidates and the runbook.**
   - `GET /api/admin/credits/auto-candidates` returns
     `[{editionId, filmId, mediaFileId, path, offsetMs, kind, startMs, markerMs, owner}]`:
