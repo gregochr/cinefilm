@@ -59,11 +59,11 @@ export function rowLines(row) {
 }
 
 /**
- * The time a row's panel starts from: the marker (never an automatic one), else Plex's refused time, else the default end screen point. Null
+ * The time a row's panel starts from: the marker (Plex's, the detected or the owner's), else Plex's refused time, else the default end screen point. Null
  * when the film's length is unknown and there is neither.
  */
 export function panelTimeMs(row) {
-  if (row.markerMs != null && row.source !== 'AUTO') return row.markerMs;
+  if (row.markerMs != null) return row.markerMs;
   if (row.plex.state === 'REFUSED' && row.plex.markerMs != null) return row.plex.markerMs;
   return row.runtimeMs ? Math.floor(row.runtimeMs * END_OVERLAY_FRACTION) : null;
 }

@@ -86,17 +86,17 @@ describe('panelTimeMs', () => {
   });
 });
 
-describe('panelTimeMs for an automatic marker', () => {
-  it('ignores the automatic time and falls to Plex’s refused time', () => {
+describe('panelTimeMs for a detected marker', () => {
+  it('starts at the detected time, over Plex’s refused time', () => {
     expect(
       panelTimeMs(
         row({ markerMs: 6730000, source: 'AUTO', plex: { state: 'REFUSED', markerMs: 2467000 } }),
       ),
-    ).toBe(2467000);
+    ).toBe(6730000);
   });
 
-  it('ignores the automatic time and falls to 97% of the runtime', () => {
-    expect(panelTimeMs(row({ markerMs: 6730000, source: 'AUTO' }))).toBe(6984000);
+  it('starts at the detected time, not 97% of the runtime', () => {
+    expect(panelTimeMs(row({ markerMs: 6730000, source: 'AUTO' }))).toBe(6730000);
   });
 });
 
