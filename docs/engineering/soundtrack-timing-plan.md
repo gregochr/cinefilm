@@ -271,7 +271,8 @@ well, whether or not the scan counted them; the report lists them and which film
 - **The absolute answers** each pass, as stated above.
 - **Useful coverage:** at least 70% of the sample's eligible real forced files come out `ALIGNED` in the frozen record. Eligible means 8 or more cues
   in the forced file itself, counted before any fit, so no fit result can make a sampled file ineligible; a sampled
-  file that could not be mapped or fitted counts as eligible and not `ALIGNED`. This is reported beside the ear-check's precision.
+  file with 8 or more cues that could not be mapped or fitted counts as eligible and not `ALIGNED`; one with fewer is
+  ineligible whether or not it was mapped. This is reported beside the ear-check's precision.
 - **Which score is built:** for each score, every gate above that applies to it must pass.
   - **B** first, if its gates pass in this order: the decoy screen and the decoy minimum; never confident and wrong;
     robustness; useful coverage; the absolute answers on `tiny`; |the bias| at most 300 ms (the report
