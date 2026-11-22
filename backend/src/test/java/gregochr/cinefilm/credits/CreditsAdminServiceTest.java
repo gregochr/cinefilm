@@ -307,6 +307,21 @@ class CreditsAdminServiceTest {
     }
 
     @Test
+    void anUnknownOrHiddenEditionIs404BeforeAMissingTimeOrABadOneIsLookedAt() {
+        Edition hidden = seeded(8, "Hidden", 2000, null, null);
+        hidden.originalParts().get(0).setPresence(Presence.MISSING);
+        when(editions.findWithFilesAndFilmByIdIn(List.of(7L))).thenReturn(List.of());
+        when(editions.findWithFilesAndFilmByIdIn(List.of(8L))).thenReturn(List.of(hidden));
+
+        assertThatThrownBy(() -> service().set(7, null)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+        assertThatThrownBy(() -> service().set(8, null)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+        assertThatThrownBy(() -> service().set(7, 1_000L)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+    }
+
+    @Test
     void anEditionWithNoTimelineSaysItsLengthIsNotKnown() {
         Edition edition = seeded(7, "No Length", 2000, null, null);
         MediaFile part = edition.originalParts().get(0);
