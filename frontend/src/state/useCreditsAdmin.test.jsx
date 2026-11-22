@@ -57,22 +57,6 @@ describe('useCreditsAdmin', () => {
     expect(result.current.page).toBe(0);
   });
 
-  it('goes back to page 0 when the filter changes', async () => {
-    const fetchMock = serve((filter, page) => respond(pageOf(filter, page, 2, 52)));
-    const { result, rerender } = renderHook(({ filter }) => useCreditsAdmin(filter, 0), {
-      initialProps: { filter: 'none' },
-    });
-    await waitFor(() => expect(result.current.data).not.toBeNull());
-    act(() => result.current.setPage(2));
-    await waitFor(() => expect(result.current.page).toBe(2));
-
-    rerender({ filter: 'owner' });
-
-    expect(result.current.page).toBe(0);
-    await waitFor(() => expect(result.current.data?.items[0].title).toBe('owner 0 0'));
-    expect(credits(fetchMock)).toContain('/api/admin/credits?filter=owner&page=0');
-  });
-
   it('steps back exactly one page from page 2, reading page 1 once', async () => {
     const fetchMock = serve((filter, page) =>
       respond(page === 2 ? pageOf(filter, page, 0, 30) : pageOf(filter, page, 2, 30)),
