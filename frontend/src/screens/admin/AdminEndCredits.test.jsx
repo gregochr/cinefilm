@@ -311,6 +311,37 @@ describe('End credits list: loading and failing', () => {
     expect(creditsCalls(fetchMock)).toHaveLength(2);
   });
 
+  it('keeps the error banner and Check again when Next fails and Check again fails too', async () => {
+    serve((filter, page) => (page === 0 ? respond(pageOf(0)) : respond(null, 500)));
+    renderApp(PATH);
+    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Couldn’t load the end credits list.',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Check again' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Couldn’t load the end credits list.',
+    );
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading end credits' })).toBeNull();
+  });
+
+  it('shows the error banner when a tab read fails after leaving a later page', async () => {
+    serve((filter, page) => (filter === 'plex' ? respond(null, 500) : respond(pageOf(page))));
+    renderApp(PATH);
+    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Showing 26–50 of 52')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: /From Plex/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Couldn’t load the end credits list.',
+    );
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
+  });
+
   it('after a 401, signing in through the sign-in card loads the list', async () => {
     let signedIn = false;
     const fetchMock = installFetch((method, url, init) => {

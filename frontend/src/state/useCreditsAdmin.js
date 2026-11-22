@@ -10,6 +10,8 @@ import { useResource } from './useResource.js';
  */
 export function useCreditsAdmin(filter, signInCount) {
   const [at, setAt] = useState({ filter, page: 0 });
+  // A new filter starts at page 0: the stored page is reset, so coming back to an old filter doesn't reopen its page.
+  if (at.filter !== filter) setAt({ filter, page: 0 });
   const page = at.filter === filter ? at.page : 0;
   const read = useResource(`admin-credits:${filter}:${page}:${signInCount}`, (options) =>
     adminApi.credits(filter, page, options),
@@ -27,14 +29,7 @@ export function useCreditsAdmin(filter, signInCount) {
 
   // Data for another page, or an empty answer about to step back, is not this page's answer: still loading.
   const stale = data != null && data.page !== page;
-  return { ...read, loading: loading || stale || stepBackTo !== page, page, setPage };
-}
-
-/** The three counts the Library card shows, read from the first page of "Needs a look". */
-export function useCreditsCounts(signInCount) {
-  const { data, loading, error, reload } = useResource(
-    `admin-credits-counts:${signInCount}`,
-    (options) => adminApi.credits('none', 0, options),
-  );
-  return { counts: data?.counts ?? null, loading, error, reload };
+  // A failed read wins: the old data stays in `read` on failure, and must not keep the screen on its skeleton.
+  const waiting = !read.error && (loading || stale || stepBackTo !== page);
+  return { ...read, loading: waiting, page, setPage };
 }
