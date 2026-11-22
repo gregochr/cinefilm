@@ -23,7 +23,8 @@ class LabelsOptionsTest {
     @Test
     void parsesTheRequiredFlagsAndNormalisesThePrefix() {
         assertThat(LabelsOptions.parse(args())).isEqualTo(new LabelsOptions(Path.of("a"), Path.of("e.csv"),
-            Path.of("p.txt"), "/Volumes/Media Library/Movies/", LocalDate.of(2026, 11, 13), Path.of("o"), null, null));
+            Path.of("p.txt"), "/Volumes/Media Library/Movies/", LocalDate.of(2026, 11, 13), Path.of("o"), null, null,
+            null));
     }
 
     @Test
@@ -32,6 +33,20 @@ class LabelsOptionsTest {
 
         assertThat(options.previousSplit()).isEqualTo(Path.of("s.json"));
         assertThat(options.exclusions()).isEqualTo(Path.of("x.csv"));
+    }
+
+    @Test
+    void parsesTheLookedAtFlag() {
+        assertThat(LabelsOptions.parse(args("--looked-at", "seen.txt")).lookedAt()).isEqualTo(Path.of("seen.txt"));
+        assertThat(LabelsOptions.parse(args()).lookedAt()).isNull();
+    }
+
+    @Test
+    void theLookedAtFlagNeedsAValueAndCannotBeRepeated() {
+        assertThatThrownBy(() -> LabelsOptions.parse(args("--looked-at")))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("flag --looked-at needs a value");
+        assertThatThrownBy(() -> LabelsOptions.parse(args("--looked-at", "a", "--looked-at", "b")))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("flag --looked-at given twice");
     }
 
     @Test

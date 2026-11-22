@@ -27,9 +27,13 @@ class LabelsJobTest {
     Path temp;
 
     private LabelsOptions options(Path out, Path previous, Path exclusions) {
+        return options(out, previous, exclusions, null);
+    }
+
+    private LabelsOptions options(Path out, Path previous, Path exclusions, Path lookedAt) {
         return new LabelsOptions(FIXTURES.resolve("archive"), FIXTURES.resolve("export.csv"),
             FIXTURES.resolve("preseed.txt"), PlexRules.prefix(LearnFixtures.PREFIX), LocalDate.of(2026, 11, 13), out,
-            previous, exclusions);
+            previous, exclusions, lookedAt);
     }
 
     private static List<String> lines(Path file) throws IOException {
@@ -176,6 +180,7 @@ class LabelsJobTest {
               MARKER_BEFORE_WINDOW: 1
               OWNER_EXCLUDED: 1
               SPLIT_CONFLICT: 0
+              LOOKED_AT: 0
             leading_island files: 1
             archive items parsed: 19
             archive keys listed in a section with no item file, not parsed: 1 [12]
@@ -186,6 +191,8 @@ class LabelsJobTest {
             units split across sides: 0
             films kept on their old side after changing unit: 0
             films excluded as SPLIT_CONFLICT: 0
+            looked-at film ids given: 0, films excluded as LOOKED_AT: 0
+            files of looked-at films on test that keep an earlier exclusion reason: 0
             owner exclusions: 1
               116: Plex marker is wrong: stills, not credits
             """);
@@ -218,6 +225,156 @@ class LabelsJobTest {
             .contains("labelled files: 6 (dev 3, test 3)\n").contains("leading_island files: 0\n");
     }
 
+    private Path lookedAtFile(String text) throws IOException {
+        Path file = temp.resolve("looked-at.txt");
+        Files.writeString(file, text);
+        return file;
+    }
+
+    @Test
+    void aLookedAtFilmOnTestByItsHashIsExcludedAndOneOnDevelopmentIsNot() throws IOException {
+        Path seen = lookedAtFile("# G1\n\n17\n1\n");
+        LabelsJob.run(options(temp, null, FIXTURES.resolve("exclusions.csv"), seen));
+        Path labels = temp.resolve("labels-2026-11-13.json");
+
+        JsonNode rho = labelOf(labels, 117);
+        assertThat(rho.path("excluded").asString()).isEqualTo("LOOKED_AT");
+        assertThat(rho.path("side").asString()).isEqualTo("test");
+        assertThat(rho.path("fold").isNull()).isTrue();
+        assertThat(rho.path("credits")).isEmpty();
+        assertThat(labelOf(labels, 101).path("excluded").isNull()).isTrue();
+        assertThat(labelOf(labels, 101).path("side").asString()).isEqualTo("dev");
+        List<String> split = lines(temp.resolve("split-2026-11-13.json"));
+        assertThat(split).contains("{\"film_id\":17,\"unit_key\":\"tmdb:1017\",\"side\":\"test\",\"fold\":null,"
+            + "\"looked_at\":true},", "{\"film_id\":1,\"unit_key\":\"tmdb:1001\",\"side\":\"dev\",\"fold\":0},");
+        String report = Files.readString(temp.resolve("labels-2026-11-13-report.txt"));
+        assertThat(report).contains("  LOOKED_AT: 1\n").contains("excluded files: 13\n")
+            .contains("looked-at film ids given: 2, films excluded as LOOKED_AT: 1 [17]\n")
+            .contains("keep an earlier exclusion reason: 0\n");
+    }
+
+    @Test
+    void aLookedAtFilmWhoseFileWasAlreadyExcludedKeepsItsReasonAndIsCountedApart() throws IOException {
+        LabelsJob.run(options(temp, null, FIXTURES.resolve("exclusions.csv"), lookedAtFile("6\n")));
+
+        assertThat(labelOf(temp.resolve("labels-2026-11-13.json"), 106).path("excluded").asString())
+            .isEqualTo("NO_CREDITS_MARKER");
+        assertThat(lines(temp.resolve("split-2026-11-13.json"))).contains("{\"film_id\":6,"
+            + "\"unit_key\":\"title:zetafilm|\",\"side\":\"test\",\"fold\":null,\"looked_at\":true},");
+        assertThat(Files.readString(temp.resolve("labels-2026-11-13-report.txt"))).contains("  LOOKED_AT: 0\n")
+            .contains("looked-at film ids given: 1, films excluded as LOOKED_AT: 0\n")
+            .contains("keep an earlier exclusion reason: 1\n");
+    }
+
+    @Test
+    void aLookedAtEntryOfAPreviousManifestStaysExcludedEvenWithoutTheList() throws IOException {
+        Path previous = temp.resolve("previous.json");
+        Files.writeString(previous, "{\"date\":\"2026-11-01\",\"films\":[{\"film_id\":17,\"unit_key\":\"tmdb:1017\","
+            + "\"side\":\"test\",\"fold\":null,\"looked_at\":true}],\"looks\":[]}");
+
+        LabelsJob.run(options(temp, previous, null));
+
+        assertThat(labelOf(temp.resolve("labels-2026-11-13.json"), 117).path("excluded").asString())
+            .isEqualTo("LOOKED_AT");
+        assertThat(lines(temp.resolve("split-2026-11-13.json"))).contains("{\"film_id\":17,"
+            + "\"unit_key\":\"tmdb:1017\",\"side\":\"test\",\"fold\":null,\"looked_at\":true},");
+    }
+
+    @Test
+    void aFlaggedFilmWithAnEarlierReasonAndAListedDevelopmentFilmAreCountedByTheirOwnRules() throws IOException {
+        Path previous = temp.resolve("previous.json");
+        Files.writeString(previous, "{\"date\":\"2026-11-01\",\"films\":[{\"film_id\":6,"
+            + "\"unit_key\":\"title:zetafilm|\",\"side\":\"test\",\"fold\":null,\"looked_at\":true}],\"looks\":[]}");
+
+        LabelsJob.run(options(temp, previous, null, lookedAtFile("5\n")));
+
+        assertThat(Files.readString(temp.resolve("labels-2026-11-13-report.txt")))
+            .contains("keep an earlier exclusion reason: 1\n");
+        assertThat(labelOf(temp.resolve("labels-2026-11-13.json"), 106).path("excluded").asString())
+            .isEqualTo("NO_CREDITS_MARKER");
+    }
+
+    @Test
+    void aListedNewcomerJoiningATestUnitThroughRuleTwoIsExcludedAndCounted() throws IOException {
+        Path previous = temp.resolve("previous.json");
+        Files.writeString(previous, "{\"date\":\"2026-11-01\",\"films\":[{\"film_id\":91,"
+            + "\"unit_key\":\"tmdb:1001\",\"side\":\"test\",\"fold\":null}],\"looks\":[]}");
+
+        LabelsJob.run(options(temp, previous, null, lookedAtFile("1\n")));
+
+        JsonNode alpha = labelOf(temp.resolve("labels-2026-11-13.json"), 101);
+        assertThat(alpha.path("excluded").asString()).isEqualTo("LOOKED_AT");
+        assertThat(alpha.path("side").asString()).isEqualTo("test");
+        assertThat(Files.readString(temp.resolve("labels-2026-11-13-report.txt"))).contains("  LOOKED_AT: 1\n")
+            .contains("looked-at film ids given: 1, films excluded as LOOKED_AT: 1 [1]\n")
+            .contains("keep an earlier exclusion reason: 0\n");
+    }
+
+    @Test
+    void aListedConflictFilmOnTestKeepsItsReasonThisRunAndIsExcludedAsLookedAtOnTheNext() throws IOException {
+        Path first = temp.resolve("first.json");
+        Files.writeString(first, "{\"date\":\"2026-11-01\",\"films\":[{\"film_id\":90,"
+            + "\"unit_key\":\"tmdb:1017\",\"side\":\"dev\",\"fold\":1},{\"film_id\":91,"
+            + "\"unit_key\":\"tmdb:1017\",\"side\":\"test\",\"fold\":null}],\"looks\":[]}");
+        Path run1 = temp.resolve("run1");
+        Path run2 = temp.resolve("run2");
+
+        LabelsJob.run(options(run1, first, null, lookedAtFile("17\n")));
+
+        assertThat(labelOf(run1.resolve("labels-2026-11-13.json"), 117).path("excluded").asString())
+            .isEqualTo("SPLIT_CONFLICT");
+        assertThat(lines(run1.resolve("split-2026-11-13.json"))).contains("{\"film_id\":17,"
+            + "\"unit_key\":\"tmdb:1017\",\"side\":\"test\",\"fold\":null,\"looked_at\":true},");
+        assertThat(Files.readString(run1.resolve("labels-2026-11-13-report.txt"))).contains("  LOOKED_AT: 0\n")
+            .contains("looked-at film ids given: 1, films excluded as LOOKED_AT: 0\n")
+            .contains("keep an earlier exclusion reason: 1\n");
+
+        LabelsJob.run(options(run2, run1.resolve("split-2026-11-13.json"), null));
+
+        assertThat(labelOf(run2.resolve("labels-2026-11-13.json"), 117).path("excluded").asString())
+            .isEqualTo("LOOKED_AT");
+        assertThat(Files.readString(run2.resolve("labels-2026-11-13-report.txt")))
+            .contains("films excluded as SPLIT_CONFLICT: 0\n")
+            .contains("looked-at film ids given: 0, films excluded as LOOKED_AT: 1 [17]\n");
+    }
+
+    @Test
+    void aFilmKeepingItsTestSideFromAnOlderManifestIsExcludedWhenListed() throws IOException {
+        Path previous = temp.resolve("previous.json");
+        Files.writeString(previous, "{\"date\":\"2026-11-01\",\"films\":[{\"film_id\":1,\"unit_key\":\"tmdb:1001\","
+            + "\"side\":\"test\",\"fold\":null}],\"looks\":[]}");
+
+        LabelsJob.run(options(temp, previous, null, lookedAtFile("1")));
+
+        assertThat(labelOf(temp.resolve("labels-2026-11-13.json"), 101).path("excluded").asString())
+            .isEqualTo("LOOKED_AT");
+    }
+
+    @Test
+    void aLookedAtFlagOnADevelopmentFilmInThePreviousManifestIsRejected() {
+        assertThatThrownBy(() -> LabelsJob.validate(manifest("{\"date\":\"d\",\"films\":[{\"film_id\":1,"
+            + "\"unit_key\":\"tmdb:1\",\"side\":\"dev\",\"fold\":0,\"looked_at\":true}]}")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("previous split film 1 is looked_at but not on the test side");
+    }
+
+    @Test
+    void theLookedAtFileSkipsBlankAndCommentLinesAndReadsIds() throws IOException {
+        assertThat(LabelsJob.lookedAt(lookedAtFile("# seen\n\n  12  \n   # more\n7\r\n12\n")))
+            .containsExactlyInAnyOrder(12L, 7L);
+    }
+
+    @Test
+    void aLookedAtFileThatIsMissingOrNotAFileOrHasABadLineIsRefused() throws IOException {
+        Path missing = temp.resolve("nope.txt");
+        assertThatThrownBy(() -> LabelsJob.lookedAt(missing)).isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("--looked-at file is missing or not a file: " + missing);
+        assertThatThrownBy(() -> LabelsJob.lookedAt(temp)).isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("--looked-at file is missing or not a file: " + temp);
+        assertThatThrownBy(() -> LabelsJob.lookedAt(lookedAtFile("3\nabc\n")))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("looked-at line is not a film id: abc");
+    }
+
     @Test
     void aMissingOwnerExclusionsFileOrNoFlagMeansNoExclusions() throws IOException {
         LabelsJob.run(options(temp, null, temp.resolve("nothing.csv")));
@@ -243,7 +400,7 @@ class LabelsJobTest {
     @Test
     void anUnreadableInputIsAnIoError() {
         LabelsOptions missing = new LabelsOptions(FIXTURES.resolve("archive"), FIXTURES.resolve("nope.csv"),
-            FIXTURES.resolve("preseed.txt"), "/p/", LocalDate.of(2026, 11, 13), temp, null, null);
+            FIXTURES.resolve("preseed.txt"), "/p/", LocalDate.of(2026, 11, 13), temp, null, null, null);
         LabelsOptions noPrevious = options(temp, temp.resolve("nope.json"), null);
 
         assertThatThrownBy(() -> LabelsJob.run(missing)).isInstanceOf(NoSuchFileException.class);
@@ -330,7 +487,7 @@ class LabelsJobTest {
         Path export = temp.resolve("empty.csv");
         Files.writeString(export, String.join(",", ExportReader.COLUMNS) + "\n");
         LabelsOptions options = new LabelsOptions(FIXTURES.resolve("archive"), export, FIXTURES.resolve("preseed.txt"),
-            "/p/", LocalDate.of(2026, 11, 13), temp.resolve("out"), null, null);
+            "/p/", LocalDate.of(2026, 11, 13), temp.resolve("out"), null, null, null);
 
         LabelsJob.run(options);
 
