@@ -61,6 +61,9 @@ class CreditsDenyFileTest {
         assertThat(parse("# cinefilm-deny 2026-11-13")).isEmpty();
         assertThat(parse("# cinefilm-deny 2026-11-13 x")).isEmpty();
         assertThat(parse("# cinefilm-deny 2026-11-13 -1")).isEmpty();
+        assertThat(parse("# cinefilm-deny 2026-11-13 ")).isEmpty();
+        assertThat(parse("# cinefilm-deny 2026-11-13 1234567890")).isEmpty();
+        assertThat(parse("# cinefilm-deny 2026-11-13 123456789")).isEmpty();
         assertThat(parse("# cinefilm-deny 2026-11-13 1 2", "film 1")).isEmpty();
         assertThat(parse("# cinefilm-deny  1", "film 1")).isEmpty();
         assertThat(parse("#cinefilm-deny 2026-11-13 1", "film 1")).isEmpty();
