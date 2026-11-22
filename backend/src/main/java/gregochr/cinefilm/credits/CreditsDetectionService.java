@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,7 @@ public class CreditsDetectionService {
     private final CreditsFrameReader reader;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
+    private final ApplicationEventPublisher events;
 
     /**
      * A file to analyse.
@@ -73,7 +75,8 @@ public class CreditsDetectionService {
     public CreditsDetectionService(EditionRepository editions, MediaFileRepository files,
                                    CreditsDetectionRepository detections, EmbeddedCueStartsRepository cueStarts,
                                    PlaybackStateRepository states, CreditsFrameReader reader, LibraryLock lock,
-                                   PlatformTransactionManager transactions) {
+                                   PlatformTransactionManager transactions,
+                                   ApplicationEventPublisher events) {
         this.editions = editions;
         this.files = files;
         this.detections = detections;
@@ -82,6 +85,7 @@ public class CreditsDetectionService {
         this.reader = reader;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
+        this.events = events;
     }
 
     /**
@@ -180,26 +184,38 @@ public class CreditsDetectionService {
      * @param due the file as it was when analysed
      * @param result what was found
      * @param now the time to stamp
-     * @return {@code SAVED}; {@code DROPPED} when the file changed or went meanwhile; {@code BUSY} when a scan or an
-     *     edit holds the lock (the result is lost and the file is analysed again later)
+     * @return {@code SAVED} (and {@link CreditsDetected} is published once the lock is released, when a version 2
+     *     {@code FOUND} was stored or replaced); {@code DROPPED} when the file changed or went meanwhile;
+     *     {@code BUSY} when a scan or an edit holds the lock (the result is lost and the file is analysed again later)
      */
     public SaveOutcome save(DueFile due, CreditsResult result, Instant now) {
         if (!lock.tryAcquire(LibraryLock.CREDITS)) {
             return SaveOutcome.BUSY;
         }
+        Saved saved;
         try {
-            return tx.execute(status -> saveLocked(due, result, now));
+            saved = tx.execute(status -> saveLocked(due, result, now));
         } finally {
             lock.release();
         }
+        if (saved.detected()) {
+            events.publishEvent(new CreditsDetected());
+        }
+        return saved.outcome();
     }
 
-    private SaveOutcome saveLocked(DueFile due, CreditsResult result, Instant now) {
+    /** What the locked write did, and whether a version 2 {@code FOUND} was stored or replaced by it. */
+    private record Saved(SaveOutcome outcome, boolean detected) {
+    }
+
+    private Saved saveLocked(DueFile due, CreditsResult result, Instant now) {
         MediaFile file = files.findById(due.mediaFileId()).orElse(null);
         if (file == null || file.getPresence() != Presence.PRESENT || !due.fingerprint().equals(file.fingerprint())) {
-            return SaveOutcome.DROPPED;
+            return new Saved(SaveOutcome.DROPPED, false);
         }
         CreditsDetection row = detections.findById(file.getId()).orElseGet(CreditsDetection::new);
+        boolean replacesAutoFound = row.getVerdict() == CreditsVerdict.FOUND
+            && row.getAnalysisVersion() == CreditsApply.AUTO_ANALYSIS_VERSION;
         row.setMediaFileId(file.getId());
         row.setFingerprint(due.fingerprint());
         row.setAnalysisVersion(CreditsTuning.ANALYSIS_VERSION);
@@ -210,6 +226,8 @@ public class CreditsDetectionService {
             : reasons.substring(0, CreditsDetection.MAX_REASONS));
         row.setCheckedAt(now);
         detections.save(row);
-        return SaveOutcome.SAVED;
+        boolean storesAutoFound = result.verdict() == CreditsVerdict.FOUND
+            && CreditsTuning.ANALYSIS_VERSION == CreditsApply.AUTO_ANALYSIS_VERSION;
+        return new Saved(SaveOutcome.SAVED, storesAutoFound || replacesAutoFound);
     }
 }

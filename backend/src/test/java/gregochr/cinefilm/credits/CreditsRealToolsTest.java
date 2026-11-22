@@ -115,7 +115,7 @@ class CreditsRealToolsTest {
     private CreditsDetectionService detection() {
         // Only the reader and the cue starts are used by detect(); a read of the cue starts finds nothing.
         return new CreditsDetectionService(null, null, null, mock(EmbeddedCueStartsRepository.class), null, reader(),
-            null, mock(PlatformTransactionManager.class));
+            null, mock(PlatformTransactionManager.class), event -> { });
     }
 
     @Test

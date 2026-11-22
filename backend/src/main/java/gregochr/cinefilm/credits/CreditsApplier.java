@@ -9,6 +9,7 @@ import gregochr.cinefilm.credits.CreditsDenyFile.Parsed;
 import gregochr.cinefilm.film.CreditsMarkerSource;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.FilmMatchFixed;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.library.EditionsArranged;
 import gregochr.cinefilm.library.LibraryLock;
@@ -151,6 +152,18 @@ public class CreditsApplier {
     /** Asks for a pass after an Edit editions save (editions, parts or markers may have moved). */
     @EventListener
     public void onEditionsArranged(EditionsArranged event) {
+        requestPass();
+    }
+
+    /** Asks for a pass after a version 2 {@code FOUND} was stored or replaced (an {@code AUTO} marker may follow). */
+    @EventListener
+    public void onCreditsDetected(CreditsDetected event) {
+        requestPass();
+    }
+
+    /** Asks for a pass after a Fix match (a film's id, title, year or collection may have changed the deny rules). */
+    @EventListener
+    public void onFilmMatchFixed(FilmMatchFixed event) {
         requestPass();
     }
 
