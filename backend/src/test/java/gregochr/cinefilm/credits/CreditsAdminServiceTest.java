@@ -11,6 +11,7 @@ import static gregochr.cinefilm.credits.CreditsAutoTestData.tmdbOn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -527,25 +528,44 @@ class CreditsAdminServiceTest {
         assertAuto(edition, row);
     }
 
+    /**
+     * A reader whose repositories answer exactly what {@link #autoCase} stubs (a version 2 crawl at 5,000,000 ms and
+     * a matched development-side film), so step 3 would land on AUTO unless the check under test stops it. Answers,
+     * not stubs: the check short-circuits before these reads, and an unused stub would fail strict stubs.
+     */
+    private CreditsAutoReader validReads(boolean enabled) {
+        long tmdb = tmdbOn(Side.DEV, 1);
+        EditionRepository filmRows = mock(EditionRepository.class,
+            invocation -> List.of(new EditionFilmRow(7L, 7L, tmdb, "Heat", 1995, null, null)));
+        CreditsDetectionRepository crawls = mock(CreditsDetectionRepository.class,
+            invocation -> List.of(crawl(7, FINGERPRINT, 5_000_000)));
+        return new CreditsAutoReader(filmRows, films, crawls, enabled, true);
+    }
+
+    private CreditsRow clearWith(CreditsAutoReader reader) {
+        return new CreditsAdminService(editions, markers, lock, keeper, reader, transactions).clear(7);
+    }
+
     @Test
-    void clearingWithNoListInForceLandsOnTheFallbackNotAuto() {
-        autoEnabled = true;
+    void clearingWithNoListInForceLandsOnTheFallbackNotAutoEvenWithAValidDetection() {
         Edition edition = seeded(7, "Heat", 1995, 5_500_000L, CreditsMarkerSource.OWNER);
+        edition.getFilm().setTmdbId(tmdbOn(Side.DEV, 1));
         stubWriteAndAnswer(edition, null);
 
-        CreditsRow row = service().clear(7);
+        CreditsRow row = clearWith(validReads(true));
 
         assertCleared(edition, row);
     }
 
     @Test
-    void clearingWithTheSwitchOffLandsOnTheFallbackWhateverTheListInForce() {
+    void clearingWithTheSwitchOffLandsOnTheFallbackEvenWithAListInForceAndAValidDetection() {
         Edition edition = seeded(7, "Heat", 1995, 5_500_000L, CreditsMarkerSource.OWNER);
+        edition.getFilm().setTmdbId(tmdbOn(Side.DEV, 1));
         stubWriteAndAnswer(edition, null);
         when(denyReader.read()).thenReturn(Optional.of(denyFile("file 999")));
         keeper.refresh();
 
-        CreditsRow row = service().clear(7);
+        CreditsRow row = clearWith(validReads(false));
 
         assertCleared(edition, row);
     }
