@@ -1,6 +1,6 @@
 # Credits 3c: `AUTO` markers from version 2 — plan
 
-Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after three adversarial reviews. It
+Written 2026-11-22, after 3b merged (#282–#288), and revised the same day after four adversarial reviews. It
 specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spec had to settle. Where this file and
 `credits-detection-plan.md` differ on `AUTO`, this file wins.
 
@@ -12,7 +12,9 @@ specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spe
   first asked with a wrong claim (that version 2 was never more than 15 s early), then asked again with the right
   figure from the recorded breach, and the answer stood. That figure stays off this public file, as the breach's
   counts do ("Not looked at before L5" in the classifier plan). The 20 s margin is added to every `AUTO` marker, and
-  the owner fixes any film with **Set**.
+  the owner fixes any film with **Set**. **Read as covering every `AUTO` set after the switch-on** that G1 never
+  saw: new films, a replaced file re-analysed, a film whose Plex row went stale or unusable, a film that leaves the
+  deny list under a new manifest. All of them are the same unchecked case the owner accepted.
 - **2026-11-22: the "zero early against Plex" check of `credits-phase3-plan.md`'s outline is dropped.** Its only
   role was to tell whether films nobody checks can take `AUTO`, and the owner answered that with the breach's figure
   in hand. Every film the switch-on marks is still checked by stills (G1). Dropping it also removes the one count
@@ -35,7 +37,8 @@ Per edition, the first that holds wins (steps 1, 2 and 4 are unchanged from 3a):
 1. source `OWNER`: unchanged.
 2. a usable Plex row (`PlexState.USABLE`): Plex's time, source `PLEX`.
 3. **`AUTO`**, only when the switch is on, the deny list was read for this pass, and the edition is not denied
-   ("The test split"), from the last part's `credits_detection` row when it:
+   ("The test split"), and the film is matched (`film.tmdb_id` not null: an unmatched copy or cut has a `title:`
+   unit key that the deny rules can't tie to a listed film), from the last part's `credits_detection` row when it:
    - has verdict `FOUND`, a non-null `offset_ms`, and `analysis_version` exactly **2**
      (`CreditsApply.AUTO_ANALYSIS_VERSION`);
    - has a fingerprint equal to the last part's current fingerprint;
@@ -140,32 +143,39 @@ side out itself.
 **Pre-registered here, before any sheet is seen.** Only pass or fail goes into this file, never a title. Each step
 waits for the release it needs:
 
-- **G0, the deny file** (after 3c-1c is released). The planner writes it ("The test split"). The owner copies it to
+- **G0, the deny file** (after 3c-1d is released). The planner writes it ("The test split"). The owner copies it to
   the server and sets `CINEFILM_CREDITS_AUTO_DENYLIST`, and recreates the container; the switch stays off.
 - **G1, every candidate by stills** (after 3c-2 is released).
-  - The candidates list (3c-1c) names every edition step 3 would mark, computed as if the switch were on and as if
-    the source were null, so editions the owner set are included (flagged `owner`).
+  - The candidates list (3c-1d) names every edition step 3 would mark, computed as if the switch were on and as if
+    the source were null, so editions the owner set are included (flagged `owner`). It covers the same editions as
+    the pass, **hidden editions included**.
   - The 3c-2 tool writes one sheet per candidate. Its nine tiles are, in edition time: the start − 10 s, the start,
     the start + 10 s, the marker, and the marker + 15, + 30, + 60, + 120 and + 240 s. Tiles 1–3 are context.
+  - **Story picture** means picture with no credit text on it. Credits over picture are never story picture.
   - The planner judges each sheet, in this order:
-    1. **early:** tile 4 or 5 shows story picture or story text (an epilogue card) and no credits, or story picture
-       appears in tiles 4–9 before the first tile that is credits only;
-    2. **unclear:** picture in a tile after credits were seen (credits over picture, outtakes, a mid-credits scene),
-       anything that is neither clearly credits nor black, text the planner can't read at sheet size (a full-size
-       still may be taken first), or a candidate the tool could not read;
+    1. **early:**
+       - tile 4 or 5 shows story picture or story text (an epilogue card) and no credits; or
+       - story picture appears in tiles 4–9 before the first tile that is credits only; or
+       - story picture appears in tiles 6–9 after credits were seen while the marker is more than 15 minutes before
+         the edition's end (text in the story, not a mid-credits scene);
+    2. **unclear:** story picture after credits were seen with the marker 15 minutes or less from the end (a
+       mid-credits scene), credits over picture, outtakes, anything that is neither clearly credits nor black, text
+       the planner can't read at sheet size (a full-size still may be taken first), or a candidate the tool could
+       not read;
     3. otherwise **clear**.
   - An unclear film goes on the deny list, and nothing else changes.
-  - Any early card turns cards off. **Any early crawl ends 3c without crawl `AUTO`.**
+  - Any early card turns cards off. **Any early crawl ends 3c: `AUTO` stays off altogether.**
 - **An end is final:** retrying a kind that a gate ended needs a revised plan and a fresh gate. Denying an early
   film and switching on anyway is not allowed.
 - **G2, switching on** (after 3c-3 is released, so Admin shows Detected).
   - The planner gives the owner the final deny file.
   - The owner copies it, sets `CINEFILM_CREDITS_AUTO_ENABLED=true` (and `CINEFILM_CREDITS_AUTO_CARDS=false` if G1
     said so), and recreates the container.
-  - The pass that follows logs the `AUTO` count. It must equal the clear crawl candidates, plus the clear card
-    candidates while cards are on, less the candidates flagged `owner` (those stay `OWNER`).
-  - **A different count:** the owner switches off and recreates. The candidates are fetched again, and G1 covers
-    every new one before switching on again.
+  - The candidates are fetched again. Their set of `(editionId, markerMs)`, less those flagged `owner`, must equal
+    G1's clear set (clear cards only while cards are on), less its `owner` ones. The pass's logged `AUTO` count
+    must equal its size.
+  - **Any difference:** the owner switches off and recreates, and G1 covers every new or changed candidate before
+    switching on again.
 
 ## Follow-up (owner, 2026-11-22)
 
@@ -189,33 +199,37 @@ Each at most 1,500 changed lines, tests included.
       - the start at the guard's lower bound and just under it, the cap at `total − 60 s`, `toGlobal` refusing;
       - a two-part edition;
       - `OWNER` and `PLEX` still winning;
-      - each of the four deny rules;
+      - each of the six deny rules, rule 5 with an edition moved by a merge and rule 6 with a new film sharing a
+        listed film's current unit key;
+      - an unmatched film (`tmdb_id` null) never `AUTO`;
       - the switch off clearing `AUTO`;
       - an unreadable list keeping a still-valid `AUTO` and clearing a stale one.
-    - The parser's test: the header, the count, the three entry kinds, comments, and malformed lines.
+    - The parser's test: the header, the count, the four entry kinds, comments, and malformed lines.
     - `CreditsSplitTest`: the product's unit key equals L1's for the same fixture rows.
 - **3c-1b, wiring.**
   - The properties, the compose mount and the file reader.
-  - The pass's batched read gains the `credits_detection` rows and the unit key's inputs, with a fixed number of
-    queries per batch.
-  - `CreditsDetected`, published after the lock, and its listener.
+  - The pass's batched read gains the `credits_detection` rows and the unit key's inputs (including every listed
+    film's current unit key, for rule 6), with a fixed number of queries per batch.
   - The Clear plumbing: `CreditsAdminService.clear` gets the detection row, the switch, the cards flag and the deny
     list, through the same code as the pass.
   - Log fields.
   - Tests:
-    - `CreditsApplierTest`: the event triggers a pass, the log counts, and the header's date.
-    - `CreditsDetectionServiceTest`: published after the lock, only for a version 2 `FOUND` or a replaced one.
+    - `CreditsApplierTest`: the log counts and the header's date.
     - `CreditsAdminServiceTest`: Clear landing on `AUTO`, and Clear with the list unreadable.
     - The reader's test.
-    - `CreditsApplierIntegrationTest`: an `AUTO` set and kept, with the query count per batch fixed.
-- **3c-1c, the candidates and the runbook.**
+    - `CreditsApplierIntegrationTest`: an `AUTO` set and kept, a hidden edition marked, the query count per batch
+      fixed.
+- **3c-1c, the trigger.** `CreditsDetected`, published by `CreditsDetectionService` after the lock, and its
+  listener. Tests: `CreditsDetectionServiceTest` (published after the lock, only for a version 2 `FOUND` or a
+  replaced one) and `CreditsApplierTest` (the event asks for a pass).
+- **3c-1d, the candidates and the runbook.**
   - `GET /api/admin/credits/auto-candidates` returns
     `[{editionId, filmId, mediaFileId, path, offsetMs, kind, startMs, markerMs, owner}]`:
     - `path` is relative to `/media`;
     - `offsetMs` is file time, for the tool;
     - `startMs` and `markerMs` are edition time.
 
-    It is computed by the same code. It answers 409 "No deny list" when the file can't be read. It goes in
+    It is computed by the same code, over the same editions as the pass (hidden ones included). It answers 409 "No deny list" when the file can't be read. It goes in
     `foundation-plan.md` and `RouteSecurityDriftTest`, with the service and controller tests (401 and missing CSRF).
   - `operations.md`:
     - the G0 edition query and the follow-up query;
