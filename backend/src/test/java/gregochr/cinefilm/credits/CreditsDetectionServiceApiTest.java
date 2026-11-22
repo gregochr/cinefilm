@@ -441,7 +441,7 @@ class CreditsDetectionServiceApiTest extends ApiTestBase {
     private CreditsDetectionService serviceReading(FakeFfmpeg ffmpeg) {
         CreditsFrameReader reader = new CreditsFrameReader(ffmpeg, "ffmpeg", 0, cache.toString());
         return new CreditsDetectionService(editions, mediaFiles, detections, cueStarts, states, reader, lock,
-            transactions, event -> { });
+            transactions, duration -> { }, event -> { });
     }
 
     /** A film of picture whose credits start crawling up at {@link #CREDITS_AT}. */

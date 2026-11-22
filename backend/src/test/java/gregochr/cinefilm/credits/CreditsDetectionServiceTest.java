@@ -34,6 +34,7 @@ import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
 import gregochr.cinefilm.subtitle.EmbeddedCueStarts;
 import gregochr.cinefilm.subtitle.EmbeddedCueStartsRepository;
+import gregochr.cinefilm.tmdb.Sleeper;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -94,6 +95,8 @@ class CreditsDetectionServiceTest {
     @Mock
     private ApplicationEventPublisher publisher;
 
+    private final List<Duration> sleeps = new ArrayList<>();
+    private Sleeper sleeper = sleeps::add;
     private final LibraryLock lock = new LibraryLock();
     private final Runnable checkpoint = () -> { };
     private CreditsDetectionService service;
@@ -101,7 +104,7 @@ class CreditsDetectionServiceTest {
     @BeforeEach
     void setUp() {
         service = new CreditsDetectionService(editions, files, detections, cueStarts, states, reader, lock,
-            transactions, publisher);
+            transactions, duration -> sleeper.sleep(duration), publisher);
     }
 
     // ---- Fixtures ------------------------------------------------------------------------------------------------
@@ -677,7 +680,7 @@ class CreditsDetectionServiceTest {
         noPreviousRow();
         LibraryLock spyLock = org.mockito.Mockito.spy(lock);
         service = new CreditsDetectionService(editions, files, detections, cueStarts, states, reader, spyLock,
-            transactions, publisher);
+            transactions, duration -> sleeper.sleep(duration), publisher);
 
         service.save(DUE, found(), NOW);
 
@@ -754,6 +757,49 @@ class CreditsDetectionServiceTest {
         assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.DROPPED);
 
         verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void aLockBusyOnceThenFreeSavesAndPublishesAfterOneWait() {
+        transaction();
+        noPreviousRow();
+        assertThat(lock.tryAcquire(LibraryLock.CREDITS)).isTrue();
+        sleeper = duration -> {
+            sleeps.add(duration);
+            lock.release();
+        };
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.SAVED);
+
+        assertThat(sleeps).containsExactly(CreditsDetectionService.SAVE_LOCK_WAIT);
+        verify(publisher).publishEvent(new CreditsDetected());
+    }
+
+    @Test
+    void aLockBusyOnEveryAttemptIsBusyAfterWaitingBetweenTheAttemptsOnly() {
+        assertThat(lock.tryAcquire(LibraryLock.CREDITS)).isTrue();
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.BUSY);
+
+        assertThat(sleeps).hasSize(CreditsDetectionService.SAVE_LOCK_ATTEMPTS - 1)
+            .containsOnly(CreditsDetectionService.SAVE_LOCK_WAIT);
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void anInterruptWhileWaitingForTheLockIsBusyAndKeepsTheInterruptFlag() {
+        assertThat(lock.tryAcquire(LibraryLock.CREDITS)).isTrue();
+        sleeper = duration -> {
+            throw new InterruptedException("stop");
+        };
+        try {
+            assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.BUSY);
+
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            verifyNoInteractions(publisher);
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     @Test
