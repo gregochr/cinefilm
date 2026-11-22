@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -33,6 +34,7 @@ import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
 import gregochr.cinefilm.subtitle.EmbeddedCueStarts;
 import gregochr.cinefilm.subtitle.EmbeddedCueStartsRepository;
+import gregochr.cinefilm.tmdb.Sleeper;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,8 +45,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.SimpleTransactionStatus;
@@ -88,6 +92,11 @@ class CreditsDetectionServiceTest {
     @Mock
     private PlatformTransactionManager transactions;
 
+    @Mock
+    private ApplicationEventPublisher publisher;
+
+    private final List<Duration> sleeps = new ArrayList<>();
+    private Sleeper sleeper = sleeps::add;
     private final LibraryLock lock = new LibraryLock();
     private final Runnable checkpoint = () -> { };
     private CreditsDetectionService service;
@@ -95,7 +104,7 @@ class CreditsDetectionServiceTest {
     @BeforeEach
     void setUp() {
         service = new CreditsDetectionService(editions, files, detections, cueStarts, states, reader, lock,
-            transactions);
+            transactions, duration -> sleeper.sleep(duration), publisher);
     }
 
     // ---- Fixtures ------------------------------------------------------------------------------------------------
@@ -643,5 +652,165 @@ class CreditsDetectionServiceTest {
 
         assertThat(lock.holder()).isNull();
         verify(transactions).commit(status);
+    }
+
+    // ---- The CreditsDetected trigger -----------------------------------------------------------------------------
+
+    private void previousRow(CreditsVerdict verdict, int version) {
+        MediaFile file = savedFile();
+        when(files.findById(10L)).thenReturn(Optional.of(file));
+        CreditsDetection existing = new CreditsDetection();
+        existing.setMediaFileId(10L);
+        existing.setFingerprint("old");
+        existing.setAnalysisVersion(version);
+        existing.setVerdict(verdict);
+        existing.setReasons("old");
+        existing.setCheckedAt(NOW.minusSeconds(60));
+        when(detections.findById(10L)).thenReturn(Optional.of(existing));
+    }
+
+    private void noPreviousRow() {
+        when(files.findById(10L)).thenReturn(Optional.of(savedFile()));
+        when(detections.findById(10L)).thenReturn(Optional.empty());
+    }
+
+    @Test
+    void aVersionTwoFoundPublishesCreditsDetectedOnlyAfterTheLockIsReleased() {
+        transaction();
+        noPreviousRow();
+        LibraryLock spyLock = org.mockito.Mockito.spy(lock);
+        service = new CreditsDetectionService(editions, files, detections, cueStarts, states, reader, spyLock,
+            transactions, duration -> sleeper.sleep(duration), publisher);
+
+        service.save(DUE, found(), NOW);
+
+        InOrder order = inOrder(spyLock, publisher);
+        order.verify(spyLock).release();
+        order.verify(publisher).publishEvent(new CreditsDetected());
+    }
+
+    @Test
+    void theSameResultUnderANewFingerprintPublishesToo() {
+        transaction();
+        previousRow(CreditsVerdict.FOUND, CreditsApply.AUTO_ANALYSIS_VERSION);
+
+        service.save(DUE, found(), NOW);
+
+        verify(publisher).publishEvent(new CreditsDetected());
+    }
+
+    @Test
+    void anUnsureResultReplacingAVersionTwoFoundPublishes() {
+        transaction();
+        previousRow(CreditsVerdict.FOUND, CreditsApply.AUTO_ANALYSIS_VERSION);
+
+        service.save(DUE, new CreditsResult(CreditsVerdict.UNSURE, null, List.of("x")), NOW);
+
+        verify(publisher).publishEvent(new CreditsDetected());
+    }
+
+    @Test
+    void aNotFoundResultReplacingAVersionTwoFoundPublishes() {
+        transaction();
+        previousRow(CreditsVerdict.FOUND, CreditsApply.AUTO_ANALYSIS_VERSION);
+
+        service.save(DUE, new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("x")), NOW);
+
+        verify(publisher).publishEvent(new CreditsDetected());
+    }
+
+    @Test
+    void aNotFoundResultReplacingAVersionOneFoundPublishesNothing() {
+        transaction();
+        previousRow(CreditsVerdict.FOUND, 1);
+
+        service.save(DUE, new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("x")), NOW);
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void anotherVerdictReplacingAnotherVerdictPublishesNothing() {
+        transaction();
+        previousRow(CreditsVerdict.UNSURE, CreditsApply.AUTO_ANALYSIS_VERSION);
+
+        service.save(DUE, new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("x")), NOW);
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void aNonFoundResultWithNoPreviousRowPublishesNothing() {
+        transaction();
+        noPreviousRow();
+
+        service.save(DUE, new CreditsResult(CreditsVerdict.UNSURE, null, List.of("x")), NOW);
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void aDroppedSavePublishesNothing() {
+        transaction();
+        when(files.findById(10L)).thenReturn(Optional.empty());
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.DROPPED);
+
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void aLockBusyOnceThenFreeSavesAndPublishesAfterOneWait() {
+        transaction();
+        noPreviousRow();
+        assertThat(lock.tryAcquire(LibraryLock.CREDITS)).isTrue();
+        sleeper = duration -> {
+            sleeps.add(duration);
+            lock.release();
+        };
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.SAVED);
+
+        assertThat(sleeps).containsExactly(CreditsDetectionService.SAVE_LOCK_WAIT);
+        verify(publisher).publishEvent(new CreditsDetected());
+    }
+
+    @Test
+    void aLockBusyOnEveryAttemptIsBusyAfterWaitingBetweenTheAttemptsOnly() {
+        assertThat(lock.tryAcquire(LibraryLock.CREDITS)).isTrue();
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.BUSY);
+
+        assertThat(sleeps).hasSize(CreditsDetectionService.SAVE_LOCK_ATTEMPTS - 1)
+            .containsOnly(CreditsDetectionService.SAVE_LOCK_WAIT);
+        verifyNoInteractions(publisher);
+    }
+
+    @Test
+    void anInterruptWhileWaitingForTheLockIsBusyAndKeepsTheInterruptFlag() {
+        assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
+        sleeper = duration -> {
+            sleeps.add(duration);
+            throw new InterruptedException("stop");
+        };
+        try {
+            assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.BUSY);
+
+            assertThat(sleeps).as("the wait stopped at the first interrupt").hasSize(1);
+            assertThat(lock.heldBy(LibraryLock.SCAN)).isTrue();
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            verifyNoInteractions(publisher);
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void aBusySavePublishesNothing() {
+        assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.BUSY);
+
+        verifyNoInteractions(publisher);
     }
 }

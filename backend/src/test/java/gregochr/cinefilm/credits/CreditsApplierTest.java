@@ -25,6 +25,7 @@ import gregochr.cinefilm.film.EditionRepository.EditionFilmRow;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaKind;
+import gregochr.cinefilm.film.FilmMatchFixed;
 import gregochr.cinefilm.library.EditionsArranged;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.library.ScanFinished;
@@ -501,8 +502,10 @@ class CreditsApplierTest {
         applier.onPlexImportFinished(new PlexImportFinished());
         applier.onPlexCreditsImportFinished(new PlexCreditsImportFinished());
         applier.onEditionsArranged(new EditionsArranged());
+        applier.onCreditsDetected(new CreditsDetected());
+        applier.onFilmMatchFixed(new FilmMatchFixed());
 
-        assertServedAndApplied(5);
+        assertServedAndApplied(7);
     }
 
     @Test
@@ -529,6 +532,8 @@ class CreditsApplierTest {
         applier.onPlexImportFinished(new PlexImportFinished());
         applier.onPlexCreditsImportFinished(new PlexCreditsImportFinished());
         applier.onEditionsArranged(new EditionsArranged());
+        applier.onCreditsDetected(new CreditsDetected());
+        applier.onFilmMatchFixed(new FilmMatchFixed());
         applier.requestPass();
         applier.retryIfRefused();
 
@@ -649,6 +654,10 @@ class CreditsApplierTest {
         assertThat(CreditsApplier.class.getMethod("onPlexCreditsImportFinished", PlexCreditsImportFinished.class)
             .isAnnotationPresent(EventListener.class)).isTrue();
         assertThat(CreditsApplier.class.getMethod("onEditionsArranged", EditionsArranged.class)
+            .isAnnotationPresent(EventListener.class)).isTrue();
+        assertThat(CreditsApplier.class.getMethod("onCreditsDetected", CreditsDetected.class)
+            .isAnnotationPresent(EventListener.class)).isTrue();
+        assertThat(CreditsApplier.class.getMethod("onFilmMatchFixed", FilmMatchFixed.class)
             .isAnnotationPresent(EventListener.class)).isTrue();
     }
 
