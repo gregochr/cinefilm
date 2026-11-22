@@ -291,7 +291,8 @@ well, whether or not the scan counted them; the report lists them and which film
   forced-file fit it showed outside the absolute answers). Other films mapped before the draw are in the frame like any other
   (none of their forced-file results has been seen): one the draw picks is a full sample member, one it does not
   pick is reported only. A sampled file that
-  cannot be mapped or fitted stays in every count as not `ALIGNED`, is reported, and is never replaced. Maps are run in nightly batches in that sample's order. Between batches the report shows only map
+  cannot be mapped or fitted counts as not `ALIGNED` wherever it is counted (in useful coverage only if its cue
+  count makes it eligible), is reported, and is never replaced. Maps are run in nightly batches in that sample's order. Between batches the report shows only map
   counts and cost, never a gate result, a verdict or an `ALIGNED` count. When all 60 are mapped, everything is frozen
   and evaluated **once**. Useful coverage, robustness, the real-file decoys, the ear-check draw and its count use
   only the forced files of those 60 media files. The absolute answers are judged on their own (above) and never
