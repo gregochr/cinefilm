@@ -22,7 +22,7 @@ describe('creditsAdminCopy', () => {
     expect(creditsRow.noMarker(97)).toBe('No marker · the end screen shows at 97%');
     expect(creditsRow.fromPlex).toBe('From Plex');
     expect(creditsRow.yours).toBe('Yours');
-    expect(creditsRow.detected).toBe('Detected');
+    expect(creditsRow.setAutomatically).toBe('Set automatically');
     expect(creditsRow.notSettled).toBe('Not settled yet');
   });
 

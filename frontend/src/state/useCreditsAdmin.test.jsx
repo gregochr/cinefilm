@@ -86,6 +86,28 @@ describe('useCreditsAdmin', () => {
     await waitFor(() => expect(result.current.data?.items).toHaveLength(2));
   });
 
+  it('steps back exactly one page from page 2, reading page 1 once', async () => {
+    const fetchMock = serve((filter, page) =>
+      respond(page === 2 ? pageOf(filter, page, 0, 30) : pageOf(filter, page, 2, 30)),
+    );
+    const { result } = renderHook(() => useCreditsAdmin('none', 0));
+    await waitFor(() => expect(result.current.data).not.toBeNull());
+    act(() => result.current.setPage(1));
+    await waitFor(() => expect(result.current.data?.page).toBe(1));
+
+    act(() => result.current.setPage(2));
+
+    await waitFor(() => expect(result.current.data?.page).toBe(1));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.page).toBe(1);
+    expect(credits(fetchMock)).toEqual([
+      '/api/admin/credits?filter=none&page=0',
+      '/api/admin/credits?filter=none&page=1',
+      '/api/admin/credits?filter=none&page=2',
+      '/api/admin/credits?filter=none&page=1',
+    ]);
+  });
+
   it('stays on page 0 when the filter has no films at all', async () => {
     serve((filter, page) => respond(pageOf(filter, page, 0, 0)));
     const { result } = renderHook(() => useCreditsAdmin('none', 0));

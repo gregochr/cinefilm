@@ -73,8 +73,11 @@ export default function AdminEndCredits() {
     useSignInRecovery(),
   );
   const [openId, setOpenId] = useState(null);
+  // After a page press the rows and pager stay while the next page loads, so the pressed button keeps focus.
+  const [paged, setPaged] = useState(false);
   const goTo = (next) => {
     setOpenId(null);
+    setPaged(true);
     setPage(next);
   };
   const tabs = FILTERS.map((key) => ({
@@ -83,7 +86,7 @@ export default function AdminEndCredits() {
     count: data ? data.counts[key] : null,
   }));
   let body;
-  if (loading) {
+  if (loading && !(paged && data)) {
     body = (
       <div role="status" aria-label={creditsPage.loadingLabel}>
         <SkeletonBlock style={{ height: 60 }} />
@@ -127,6 +130,7 @@ export default function AdminEndCredits() {
         panelPrefix={PANEL_PREFIX}
         onSelect={(key) => {
           setOpenId(null);
+          setPaged(false);
           setParams({ show: key }, { replace: true });
         }}
       />

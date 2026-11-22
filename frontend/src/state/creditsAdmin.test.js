@@ -22,13 +22,19 @@ describe('rowLines', () => {
     ['PLEX', 'From Plex · 1:52:10'],
     ['OWNER', 'Yours · 1:52:10'],
     [null, 'Not settled yet · 1:52:10'],
-    ['AUTO', 'Detected · 1:52:10'],
   ])(
     'with a marker from %s, line two names the source and the time and there is no line three',
     (source, two) => {
       expect(rowLines(row({ markerMs: 6730000, source }))).toEqual({ two, three: null });
     },
   );
+
+  it('shows an automatic marker with no time and no line three', () => {
+    expect(rowLines(row({ markerMs: 6730000, source: 'AUTO' }))).toEqual({
+      two: 'Set automatically',
+      three: null,
+    });
+  });
 
   it.each([
     [{ state: 'NONE', markerMs: null }, 'Plex has no marker for this film'],
@@ -75,6 +81,20 @@ describe('panelTimeMs', () => {
 
   it('is null with no marker and no runtime', () => {
     expect(panelTimeMs(row({ runtimeMs: null }))).toBeNull();
+  });
+});
+
+describe('panelTimeMs for an automatic marker', () => {
+  it('ignores the automatic time and falls to Plex’s refused time', () => {
+    expect(
+      panelTimeMs(
+        row({ markerMs: 6730000, source: 'AUTO', plex: { state: 'REFUSED', markerMs: 2467000 } }),
+      ),
+    ).toBe(2467000);
+  });
+
+  it('ignores the automatic time and falls to 97% of the runtime', () => {
+    expect(panelTimeMs(row({ markerMs: 6730000, source: 'AUTO' }))).toBe(6984000);
   });
 });
 

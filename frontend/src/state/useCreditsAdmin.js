@@ -17,8 +17,10 @@ export function useCreditsAdmin(filter, signInCount) {
   const { data, loading } = read;
   const setPage = useCallback((next) => setAt({ filter, page: next }), [filter]);
 
-  // A page that came back empty while the filter still has films steps back one.
-  const stepBackTo = data && !loading ? pageAfterRead(page, data.items.length, data.total) : page;
+  // A page that came back empty while the filter still has films steps back one. Only an answer for this very page
+  // counts: the render after the step still holds the old page's data until the next read starts.
+  const answered = data && !loading && data.page === page;
+  const stepBackTo = answered ? pageAfterRead(page, data.items.length, data.total) : page;
   useEffect(() => {
     if (stepBackTo !== page) setPage(stepBackTo);
   }, [stepBackTo, page, setPage]);

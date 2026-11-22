@@ -40,7 +40,7 @@ export const creditsPanel = {
 export const creditsRow = {
   fromPlex: 'From Plex',
   yours: 'Yours',
-  detected: 'Detected',
+  setAutomatically: 'Set automatically',
   notSettled: 'Not settled yet',
   noMarker: (percent) => `No marker · the end screen shows at ${percent}%`,
   plexNone: 'Plex has no marker for this film',

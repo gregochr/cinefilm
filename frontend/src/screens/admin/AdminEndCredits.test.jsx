@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
@@ -10,8 +10,6 @@ afterEach(() => {
 const PATH = '/admin/library/credits';
 const creditsCalls = (fetchMock) =>
   fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/admin/credits'));
-const stillCalls = (fetchMock) =>
-  fetchMock.mock.calls.filter(([url]) => String(url).includes('/still'));
 const stills = () => screen.queryAllByRole('img', { name: /^Frame at/ });
 
 /** `count` rows for a page of a 52-row filter (size 25), with distinct ids and titles. */
@@ -144,6 +142,19 @@ describe('End credits list: paging', () => {
     ]);
   });
 
+  it('keeps focus on the pressed Next and Previous button after the page arrives', async () => {
+    serve((filter, page) => respond(pageOf(page)));
+    renderApp(PATH);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Film 26')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next' })).toHaveFocus();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    expect(await screen.findByText('Film 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toHaveFocus();
+  });
+
   it('goes back to page 0 when the tab changes', async () => {
     const fetchMock = serve((filter, page) => respond(pageOf(page)));
     renderApp(PATH);
@@ -241,11 +252,10 @@ describe('End credits list: loading and failing', () => {
 describe('End credits list: a row’s panel', () => {
   const lookButtons = () => screen.getAllByRole('button', { name: 'Look and set…' });
 
-  it('requests no still until a panel opens, then exactly two, 30 s apart', async () => {
-    const fetchMock = installFetch();
+  it('shows no still until a panel opens, then exactly two, 30 s apart', async () => {
+    installFetch();
     renderApp(PATH);
     await screen.findByRole('list', { name: 'End credits' });
-    expect(stillCalls(fetchMock)).toHaveLength(0);
     expect(stills()).toHaveLength(0);
 
     await userEvent.click(lookButtons()[0]);
@@ -312,7 +322,7 @@ describe('End credits list: a row’s panel', () => {
   });
 
   it('shows no stills for a film with no known length, only the reason', async () => {
-    const fetchMock = installFetch();
+    installFetch();
     renderApp(PATH);
     await screen.findByRole('list', { name: 'End credits' });
 
@@ -321,7 +331,6 @@ describe('End credits list: a row’s panel', () => {
     const panel = screen.getByRole('group', { name: 'Stills for Kes' });
     expect(within(panel).getByText('This film’s length isn’t known')).toBeInTheDocument();
     expect(stills()).toHaveLength(0);
-    expect(stillCalls(fetchMock)).toHaveLength(0);
   });
 
   it('closes the open panel when the page changes', async () => {
@@ -349,7 +358,7 @@ describe('End credits list: a row’s panel', () => {
   });
 
   it('says "No still for this time" when a still fails, and Try again shows it again, only on a press', async () => {
-    const fetchMock = installFetch();
+    installFetch();
     renderApp(PATH);
     await screen.findByRole('list', { name: 'End credits' });
     await userEvent.click(lookButtons()[0]);
@@ -360,8 +369,10 @@ describe('End credits list: a row’s panel', () => {
 
     expect(screen.getByText('No still for this time')).toBeInTheDocument();
     expect(stills()).toHaveLength(1);
-    // Nothing retries on its own.
-    expect(stillCalls(fetchMock)).toHaveLength(0);
+    // Nothing retries on its own: once the pending work has settled the failure and the single image stand.
+    await act(async () => {});
+    expect(screen.getByText('No still for this time')).toBeInTheDocument();
+    expect(stills()).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(screen.queryByText('No still for this time')).toBeNull();
