@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fixtures } from '../../test/mockApi.jsx';
 import EndCreditsPanel from './EndCreditsPanel.jsx';
 
@@ -67,5 +67,188 @@ describe('EndCreditsPanel', () => {
       '/api/editions/33/still?atMs=6690000',
       '/api/editions/33/still?atMs=6720000',
     ]);
+  });
+});
+
+describe('EndCreditsPanel: the time field, Set and Clear', () => {
+  const field = () => screen.getByLabelText('End credits start at');
+  const owner = { ...alien, markerMs: 6730000, source: 'OWNER' };
+  const open = (row = alien, props = {}) => {
+    const handlers = { onSet: vi.fn(), onClear: vi.fn(), onEdit: vi.fn() };
+    render(
+      <EndCreditsPanel row={row} id="p" busy={false} failure={null} {...handlers} {...props} />,
+    );
+    return handlers;
+  };
+
+  it('is labelled, hinted and prefilled with the panel’s time', () => {
+    open();
+
+    expect(field()).toHaveValue('1:52:00');
+    expect(field()).toHaveAccessibleDescription(
+      'Hours, minutes and seconds, like 1:52:10, or minutes and seconds, like 52:10',
+    );
+    expect(field()).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByRole('button', { name: 'Show stills' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Set this time' })).toBeInTheDocument();
+  });
+
+  it('reloads both stills at the typed time with Show stills, and sends nothing', async () => {
+    const { onSet } = open();
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), '1:54:00');
+    await userEvent.click(screen.getByRole('button', { name: 'Show stills' }));
+
+    expect(srcs()).toEqual([
+      '/api/editions/33/still?atMs=6810000',
+      '/api/editions/33/still?atMs=6840000',
+    ]);
+    expect(onSet).not.toHaveBeenCalled();
+  });
+
+  it('keeps the stills where they were when Show stills gets a time that will not do', async () => {
+    open();
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'soon');
+    await userEvent.click(screen.getByRole('button', { name: 'Show stills' }));
+
+    expect(srcs()).toEqual([
+      '/api/editions/33/still?atMs=6690000',
+      '/api/editions/33/still?atMs=6720000',
+    ]);
+    expect(screen.getByRole('alert')).toHaveTextContent('Use h:mm:ss or m:ss, for example 1:52:10');
+  });
+
+  it('sends the typed time, in milliseconds, with Set this time or Enter', async () => {
+    const { onSet } = open();
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), '1:52:10');
+    await userEvent.click(screen.getByRole('button', { name: 'Set this time' }));
+    await userEvent.type(field(), '{Enter}');
+
+    expect(onSet).toHaveBeenNthCalledWith(1, 6730000);
+    expect(onSet).toHaveBeenNthCalledWith(2, 6730000);
+  });
+
+  it('refuses a time that will not parse, and one outside the guard, with the error described by the field', async () => {
+    const { onSet } = open();
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), '1:2:3:4');
+    await userEvent.click(screen.getByRole('button', { name: 'Set this time' }));
+
+    const message = screen.getByRole('alert');
+    expect(message).toHaveTextContent('Use h:mm:ss or m:ss, for example 1:52:10');
+    expect(field()).toHaveAttribute('aria-invalid', 'true');
+    expect(field()).toHaveAccessibleDescription(
+      `Hours, minutes and seconds, like 1:52:10, or minutes and seconds, like 52:10 ${message.textContent}`,
+    );
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), '1:09:35');
+    await userEvent.click(screen.getByRole('button', { name: 'Set this time' }));
+    // alien runs 6,960,000 ms: 60% in is 1:09:36, and 60 s before the end is 1:55:00.
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'That time is outside where end credits can start (1:09:36 to 1:55:00)',
+    );
+    await userEvent.clear(field());
+    await userEvent.type(field(), '1:55:01');
+    await userEvent.click(screen.getByRole('button', { name: 'Set this time' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('(1:09:36 to 1:55:00)');
+    expect(onSet).not.toHaveBeenCalled();
+  });
+
+  it('takes the error away, and tells the page, when the time is edited', async () => {
+    const { onEdit } = open();
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Set this time' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    await userEvent.type(field(), '1');
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(field()).not.toHaveAttribute('aria-invalid');
+    expect(onEdit).toHaveBeenCalled();
+  });
+
+  it('does nothing on Set while a write is in flight, and the button stays focusable', async () => {
+    const { onSet } = open(alien, { busy: true });
+    const set = screen.getByRole('button', { name: 'Set this time' });
+
+    await userEvent.click(set);
+
+    expect(set).toHaveAttribute('aria-disabled', 'true');
+    expect(onSet).not.toHaveBeenCalled();
+  });
+
+  it('shows what the server said about the time as the field’s error, and any other refusal as an alert', () => {
+    const { unmount } = render(
+      <EndCreditsPanel
+        row={alien}
+        id="p"
+        busy={false}
+        failure={{
+          editionId: 33,
+          kind: 'field',
+          text: 'That time is outside where end credits can start',
+        }}
+        onSet={vi.fn()}
+        onClear={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'That time is outside where end credits can start',
+    );
+    expect(field()).toHaveAttribute('aria-invalid', 'true');
+    unmount();
+
+    open(alien, { failure: { editionId: 33, kind: 'alert', text: 'A Plex import is running.' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('A Plex import is running.');
+    expect(field()).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('has Clear my time, with its hint, only on a Yours row', async () => {
+    const first = render(
+      <EndCreditsPanel
+        row={alien}
+        id="p"
+        busy={false}
+        failure={null}
+        onSet={vi.fn()}
+        onClear={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Clear my time' })).toBeNull();
+    first.unmount();
+
+    const { onClear } = open(owner);
+    const clear = screen.getByRole('button', { name: 'Clear my time' });
+    expect(clear).toHaveAccessibleDescription('Goes back to Plex’s marker, or none');
+    await userEvent.click(clear);
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing on Clear while a write is in flight', async () => {
+    const { onClear } = open(owner, { busy: true });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear my time' }));
+
+    expect(onClear).not.toHaveBeenCalled();
+  });
+
+  it('has no field and no stills without a runtime, but Clear my time on a Yours row', () => {
+    open({ ...owner, runtimeMs: null });
+
+    expect(screen.queryByLabelText('End credits start at')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show stills' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set this time' })).toBeNull();
+    expect(screen.queryAllByRole('img')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Clear my time' })).toBeInTheDocument();
   });
 });

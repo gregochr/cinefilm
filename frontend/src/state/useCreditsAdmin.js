@@ -33,3 +33,15 @@ export function useCreditsAdmin(filter, signInCount) {
   const waiting = !read.error && (loading || stale || stepBackTo !== page);
   return { ...read, loading: waiting, page, setPage };
 }
+
+/**
+ * The three counts the Library card shows, read from the first page of "Needs a look". `version` (the shell's
+ * `settledAt|changed`) is part of the request, so a scan or Plex import finishing reads the counts again.
+ */
+export function useCreditsCounts(signInCount, version) {
+  const { data, loading, error, reload } = useResource(
+    `admin-credits-counts:${signInCount}:${version}`,
+    (options) => adminApi.credits('none', 0, options),
+  );
+  return { counts: data?.counts ?? null, loading, error, reload };
+}

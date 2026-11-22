@@ -120,6 +120,10 @@ export const adminApi = {
   saveEditions: (filmId, request) => put(`/api/admin/films/${filmId}/editions`, request),
   plex: (options) => get('/api/admin/plex', options),
   startPlexImport: () => post('/api/admin/plex/import'),
+  /** Sets the owner's end-credits time on an edition (whole seconds, in ms); answers the edition's new row. */
+  setCredits: (id, markerMs) => put(`/api/admin/editions/${id}/credits`, { markerMs }),
+  /** Clears the owner's time on an edition; answers its new row. */
+  clearCredits: (id) => del(`/api/admin/editions/${id}/credits`),
   /** The one-off import of Plex's credits markers: status with progress and the last report. */
   plexCredits: (options) => get('/api/admin/plex/credits', options),
   startPlexCreditsImport: () => post('/api/admin/plex/credits/import'),

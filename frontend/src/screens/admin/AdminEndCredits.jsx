@@ -1,20 +1,32 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { Button } from '../../components/Button.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
-import { filterOf, FILTERS, hasNextPage, pagingText, rowLines } from '../../state/creditsAdmin.js';
-import { creditsPage } from '../../state/creditsAdminCopy.js';
+import { useAdminContext } from '../../state/adminContext.js';
+import {
+  filterOf,
+  FILTERS,
+  focusTargetAfter,
+  hasNextPage,
+  neighboursOf,
+  pagingText,
+  rowLines,
+} from '../../state/creditsAdmin.js';
+import { creditsPage, creditsToast } from '../../state/creditsAdminCopy.js';
 import { useCreditsAdmin } from '../../state/useCreditsAdmin.js';
+import { useCreditsWrite } from '../../state/useCreditsWrite.js';
 import AdminTabList, { panelId, tabId } from './AdminTabList.jsx';
 import EndCreditsPanel from './EndCreditsPanel.jsx';
 import SectionTitle from './SectionTitle.jsx';
+import { useFallbackFocus } from './useFallbackFocus.js';
 import { useSignInRecovery } from './useSignInRecovery.js';
 
 const PANEL_PREFIX = 'admin-credits-panel';
+const lookId = (editionId) => `admin-credits-look-${editionId}`;
 
 /** One edition: its title (year muted, the edition's name when the film has more than one), source and time, reason. */
-function CreditsRow({ row, open, onToggle }) {
+function CreditsRow({ row, open, onToggle, write }) {
   const panelDomId = useId();
   const { two, three } = rowLines(row);
   return (
@@ -31,11 +43,26 @@ function CreditsRow({ row, open, onToggle }) {
         {three ? <p className="admin__todo-line">{three}</p> : null}
       </div>
       <div className="admin__actions admin__todo-actions">
-        <Button aria-expanded={open} aria-controls={panelDomId} onClick={onToggle}>
+        <Button
+          id={lookId(row.editionId)}
+          aria-expanded={open}
+          aria-controls={panelDomId}
+          onClick={onToggle}
+        >
           {creditsPage.look}
         </Button>
       </div>
-      {open ? <EndCreditsPanel row={row} id={panelDomId} /> : null}
+      {open ? (
+        <EndCreditsPanel
+          row={row}
+          id={panelDomId}
+          busy={write.busy}
+          failure={write.failure?.editionId === row.editionId ? write.failure : null}
+          onSet={(markerMs) => write.submit(row, 'set', markerMs)}
+          onClear={() => write.submit(row, 'clear')}
+          onEdit={write.clearFailure}
+        />
+      ) : null}
     </li>
   );
 }
@@ -71,6 +98,20 @@ export default function AdminEndCredits() {
   const signIns = useSignInRecovery();
   const { data, loading, error, reload, setPage } = useCreditsAdmin(filter, signIns);
   const [openId, setOpenId] = useState(null);
+  const { showToast, armFocusFallback, takeFocusFallback } = useAdminContext();
+  const writer = useCreditsWrite();
+  // The panel that is open now, read when a write ends; and whether the owner has moved on (another panel, page or
+  // tab) since the write began, which stops focus being taken from where they went.
+  const openRef = useRef(null);
+  openRef.current = openId;
+  const moved = useRef(false);
+  const pending = useRef(null);
+  // Every way the owner changes what is open comes through here: a stale refusal does not follow to the next panel.
+  const showPanel = (next) => {
+    moved.current = true;
+    writer.clearFailure();
+    setOpenId(next);
+  };
   // After a page press the rows and pager stay while the next page loads, so the pressed button keeps focus.
   const [paged, setPaged] = useState(false);
   // A sign-in starts a fresh read, so it shows the skeleton, not the rows from before.
@@ -80,7 +121,7 @@ export default function AdminEndCredits() {
     setPaged(false);
   }
   const goTo = (next) => {
-    setOpenId(null);
+    showPanel(null);
     setPaged(true);
     setPage(next);
   };
@@ -88,6 +129,51 @@ export default function AdminEndCredits() {
   const [shown, setShown] = useState(null);
   if (data && data.items.length > 0 && data !== shown) setShown(data);
   const view = loading ? (paged ? shown : null) : data;
+
+  // A write is never cancelled (the server may have made it). A refusal shows in the row's panel, or in the toast when
+  // the owner has left that panel. A success closes the panel, reads the list again and, when it has arrived, the
+  // effect below moves focus. The fallback is armed first so a list with no row left lands on the section title.
+  const submit = async (row, verb, markerMs) => {
+    if (writer.busy) return;
+    const rowId = row.editionId;
+    const before = { data, page: view.page, neighbours: neighboursOf(view.items, rowId) };
+    armFocusFallback();
+    moved.current = false;
+    const outcome = await writer.run(rowId, verb, markerMs);
+    if (outcome.ignored) return;
+    if (!outcome.ok) {
+      takeFocusFallback();
+      const { failure } = outcome;
+      if (failure.kind === 'gone') reload();
+      if (failure.text && openRef.current !== rowId) showToast(failure.text);
+      return;
+    }
+    showToast(verb === 'set' ? creditsToast.set : creditsToast.cleared);
+    pending.current = { rowId, ...before };
+    // Its panel closes; another one the owner has opened since is left alone.
+    if (openRef.current === rowId) setOpenId(null);
+    setPaged(true);
+    reload();
+  };
+
+  // The list has been read again after a write: focus the row's own button if the row is still there, else the next
+  // row's, else the previous row's; after a step back, the new page's last row. A failed read or an owner who moved
+  // on keeps focus where it is. With no row left, `useFallbackFocus` (armed in `submit`) takes it to the title.
+  useEffect(() => {
+    const p = pending.current;
+    if (!p || loading || (data === p.data && !error)) return;
+    pending.current = null;
+    if (error || moved.current) {
+      takeFocusFallback();
+      return;
+    }
+    const target = focusTargetAfter(p.rowId, p.neighbours, data.items, data.page < p.page);
+    if (target != null) document.getElementById(lookId(target))?.focus();
+  }, [data, loading, error, takeFocusFallback]);
+  const [settled, setSettled] = useState(data);
+  if (!loading && data !== settled) setSettled(data);
+  useFallbackFocus(settled);
+
   const tabs = FILTERS.map((key) => ({
     key,
     label: creditsPage.tabs[key],
@@ -123,7 +209,8 @@ export default function AdminEndCredits() {
               key={row.editionId}
               row={row}
               open={openId === row.editionId}
-              onToggle={() => setOpenId(openId === row.editionId ? null : row.editionId)}
+              onToggle={() => showPanel(openId === row.editionId ? null : row.editionId)}
+              write={{ ...writer, submit }}
             />
           ))}
         </ul>
@@ -143,7 +230,7 @@ export default function AdminEndCredits() {
         selected={filter}
         panelPrefix={PANEL_PREFIX}
         onSelect={(key) => {
-          setOpenId(null);
+          showPanel(null);
           setPaged(false);
           setParams({ show: key }, { replace: true });
         }}

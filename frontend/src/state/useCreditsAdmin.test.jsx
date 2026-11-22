@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
-import { useCreditsAdmin } from './useCreditsAdmin.js';
+import { useCreditsAdmin, useCreditsCounts } from './useCreditsAdmin.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -152,5 +152,60 @@ describe('useCreditsAdmin', () => {
     act(() => result.current.reload());
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.loading).toBe(false);
+  });
+});
+
+describe('useCreditsCounts', () => {
+  it('returns the three counts from the first page of "Needs a look"', async () => {
+    const fetchMock = serve((filter, page) => respond(pageOf(filter, page, 1, 3)));
+    const { result } = renderHook(() => useCreditsCounts(0, 'v1'));
+    expect(result.current.counts).toBeNull();
+
+    await waitFor(() => expect(result.current.counts).toEqual(COUNTS));
+
+    expect(credits(fetchMock)).toEqual(['/api/admin/credits?filter=none&page=0']);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('has no counts after a failed read, then has them after Check again', async () => {
+    let fail = true;
+    serve((filter, page) => (fail ? respond(null, 500) : respond(pageOf(filter, page, 1, 3))));
+    const { result } = renderHook(() => useCreditsCounts(0, 'v1'));
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(result.current.counts).toBeNull();
+
+    fail = false;
+    act(() => result.current.reload());
+
+    await waitFor(() => expect(result.current.counts).toEqual(COUNTS));
+  });
+
+  it('reads again when the sign-in recovery count changes', async () => {
+    const fetchMock = serve((filter, page) => respond(pageOf(filter, page, 1, 3)));
+    const { result, rerender } = renderHook(({ count }) => useCreditsCounts(count, 'v1'), {
+      initialProps: { count: 0 },
+    });
+    await waitFor(() => expect(result.current.counts).not.toBeNull());
+
+    rerender({ count: 1 });
+
+    await waitFor(() => expect(credits(fetchMock)).toHaveLength(2));
+  });
+
+  it('reads again, and shows the new counts, when the library-change version changes', async () => {
+    let none = 3;
+    const fetchMock = serve((filter, page) =>
+      respond({ ...pageOf(filter, page, 1, none), counts: { ...COUNTS, none } }),
+    );
+    const { result, rerender } = renderHook(({ version }) => useCreditsCounts(0, version), {
+      initialProps: { version: 'a|0' },
+    });
+    await waitFor(() => expect(result.current.counts?.none).toBe(3));
+
+    none = 2;
+    rerender({ version: 'b|0' });
+
+    await waitFor(() => expect(result.current.counts?.none).toBe(2));
+    expect(credits(fetchMock)).toHaveLength(2);
   });
 });
