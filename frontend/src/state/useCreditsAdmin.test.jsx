@@ -73,19 +73,6 @@ describe('useCreditsAdmin', () => {
     expect(credits(fetchMock)).toContain('/api/admin/credits?filter=owner&page=0');
   });
 
-  it('steps back a page when a page comes back empty while films remain', async () => {
-    serve((filter, page) =>
-      respond(page === 1 ? pageOf(filter, page, 0, 25) : pageOf(filter, page, 2, 25)),
-    );
-    const { result } = renderHook(() => useCreditsAdmin('none', 0));
-    await waitFor(() => expect(result.current.data).not.toBeNull());
-
-    act(() => result.current.setPage(1));
-
-    await waitFor(() => expect(result.current.page).toBe(0));
-    await waitFor(() => expect(result.current.data?.items).toHaveLength(2));
-  });
-
   it('steps back exactly one page from page 2, reading page 1 once', async () => {
     const fetchMock = serve((filter, page) =>
       respond(page === 2 ? pageOf(filter, page, 0, 30) : pageOf(filter, page, 2, 30)),

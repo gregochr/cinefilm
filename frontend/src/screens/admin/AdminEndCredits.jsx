@@ -68,10 +68,7 @@ function Pager({ page, size, total, onPage }) {
 export default function AdminEndCredits() {
   const [params, setParams] = useSearchParams();
   const filter = filterOf(params.get('show'));
-  const { data, loading, error, reload, page, setPage } = useCreditsAdmin(
-    filter,
-    useSignInRecovery(),
-  );
+  const { data, loading, error, reload, setPage } = useCreditsAdmin(filter, useSignInRecovery());
   const [openId, setOpenId] = useState(null);
   // After a page press the rows and pager stay while the next page loads, so the pressed button keeps focus.
   const [paged, setPaged] = useState(false);
@@ -86,7 +83,7 @@ export default function AdminEndCredits() {
     count: data ? data.counts[key] : null,
   }));
   let body;
-  if (loading && !(paged && data)) {
+  if (loading && !(paged && data && data.items.length > 0)) {
     body = (
       <div role="status" aria-label={creditsPage.loadingLabel}>
         <SkeletonBlock style={{ height: 60 }} />
@@ -113,7 +110,7 @@ export default function AdminEndCredits() {
             />
           ))}
         </ul>
-        <Pager page={page} size={data.size} total={data.total} onPage={goTo} />
+        <Pager page={data.page} size={data.size} total={data.total} onPage={goTo} />
       </>
     );
   }
