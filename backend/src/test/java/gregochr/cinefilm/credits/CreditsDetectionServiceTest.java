@@ -788,13 +788,16 @@ class CreditsDetectionServiceTest {
 
     @Test
     void anInterruptWhileWaitingForTheLockIsBusyAndKeepsTheInterruptFlag() {
-        assertThat(lock.tryAcquire(LibraryLock.CREDITS)).isTrue();
+        assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
         sleeper = duration -> {
+            sleeps.add(duration);
             throw new InterruptedException("stop");
         };
         try {
             assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.BUSY);
 
+            assertThat(sleeps).as("the wait stopped at the first interrupt").hasSize(1);
+            assertThat(lock.heldBy(LibraryLock.SCAN)).isTrue();
             assertThat(Thread.currentThread().isInterrupted()).isTrue();
             verifyNoInteractions(publisher);
         } finally {
