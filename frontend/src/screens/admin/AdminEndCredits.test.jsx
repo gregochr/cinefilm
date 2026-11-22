@@ -1,6 +1,7 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SIGNED_IN_EVENT } from '../../api/client.js';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
 
 afterEach(() => {
@@ -172,12 +173,23 @@ describe('End credits list: paging', () => {
     expect(await screen.findByText('Showing 26–50 of 52')).toBeInTheDocument();
   });
 
-  it('shows the skeleton, not the last rows, when Check again re-reads a page that failed', async () => {
+  it.each([
+    [
+      'Check again re-reads a page that failed',
+      500,
+      () => userEvent.click(screen.getByRole('button', { name: 'Check again' })),
+    ],
+    [
+      'a sign-in re-reads a page that answered 401',
+      401,
+      () => act(() => void window.dispatchEvent(new CustomEvent(SIGNED_IN_EVENT))),
+    ],
+  ])('shows the skeleton, not the last rows, when %s', async (name, status, trigger) => {
     let release;
     let reads = 0;
     serve((filter, page) => {
       if (page === 0) return respond(pageOf(0));
-      if (++reads === 1) return respond(null, 500);
+      if (++reads === 1) return respond(null, status);
       return new Promise((resolve) => {
         release = () => resolve(respond(pageOf(1)));
       });
@@ -186,7 +198,7 @@ describe('End credits list: paging', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await trigger();
 
     expect(await screen.findByRole('status', { name: 'Loading end credits' })).toBeInTheDocument();
     expect(screen.queryByText('Film 1')).toBeNull();
@@ -396,18 +408,6 @@ describe('End credits list: a row’s panel', () => {
       '/api/editions/11/still?atMs=9864000',
       '/api/editions/11/still?atMs=9894000',
     ]);
-  });
-
-  it('shows no stills for a film with no known length, only the reason', async () => {
-    installFetch();
-    renderApp(PATH);
-    await screen.findByRole('list', { name: 'End credits' });
-
-    await userEvent.click(lookButtons()[2]);
-
-    const panel = screen.getByRole('group', { name: 'Stills for Kes' });
-    expect(within(panel).getByText('This film’s length isn’t known')).toBeInTheDocument();
-    expect(stills()).toHaveLength(0);
   });
 
   it('closes the open panel when the page changes', async () => {

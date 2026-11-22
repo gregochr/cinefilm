@@ -63,6 +63,9 @@ describe('EndCreditsPanel', () => {
     expect(screen.getAllByRole('img')).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(screen.queryByText('No still for this time')).toBeNull();
-    expect(screen.getAllByRole('img')).toHaveLength(2);
+    expect(srcs()).toEqual([
+      '/api/editions/33/still?atMs=6690000',
+      '/api/editions/33/still?atMs=6720000',
+    ]);
   });
 });
