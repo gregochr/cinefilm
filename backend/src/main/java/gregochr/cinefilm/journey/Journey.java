@@ -31,6 +31,8 @@ public class Journey {
 
     private Long deviceId;
 
+    private Long trainRunId;
+
     @Column(length = 40)
     private String osVersion;
 
