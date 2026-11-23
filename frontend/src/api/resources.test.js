@@ -5,6 +5,7 @@ import {
   collectionsApi,
   editionsApi,
   filmsApi,
+  healthApi,
   homeApi,
   mediaFilesApi,
   peopleApi,
@@ -426,5 +427,202 @@ describe('Forced subtitle resources', () => {
     expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/verify', method: 'POST' });
     await adminApi.unverifySubtitle(5);
     expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/verify', method: 'DELETE' });
+  });
+});
+
+describe('API resources: an id is one segment of the path', () => {
+  const HOSTILE = '7/../x?y#z';
+  const SAFE = '7%2F..%2Fx%3Fy%23z';
+
+  it.each([
+    ['filmsApi.get', () => filmsApi.get(HOSTILE), `/api/films/${SAFE}`],
+    [
+      'filmsApi.savePreferences',
+      () => filmsApi.savePreferences(HOSTILE, {}),
+      `/api/films/${SAFE}/preferences`,
+    ],
+    ['peopleApi.get', () => peopleApi.get(HOSTILE), `/api/people/${SAFE}`],
+    ['collectionsApi.get', () => collectionsApi.get(HOSTILE), `/api/collections/${SAFE}`],
+    [
+      'editionsApi.reportProgress',
+      () => editionsApi.reportProgress(HOSTILE, 5),
+      `/api/editions/${SAFE}/progress`,
+    ],
+    [
+      'editionsApi.setWatched',
+      () => editionsApi.setWatched(HOSTILE, true),
+      `/api/editions/${SAFE}/watched`,
+    ],
+    [
+      'editionsApi.setHiddenFromContinueWatching',
+      () => editionsApi.setHiddenFromContinueWatching(HOSTILE, true),
+      `/api/editions/${SAFE}/continue-watching`,
+    ],
+    [
+      'editionsApi.restoreState',
+      () => editionsApi.restoreState(HOSTILE, {}),
+      `/api/editions/${SAFE}/playback-state`,
+    ],
+    ['sessionsApi.create', () => sessionsApi.create(HOSTILE, {}), `/api/editions/${SAFE}/sessions`],
+    ['sessionsApi.remove', () => sessionsApi.remove(HOSTILE), `/api/sessions/${SAFE}`],
+    ['healthApi.report', () => healthApi.report(HOSTILE, {}), `/api/playback-health/${SAFE}`],
+    [
+      'adminApi.matchSearch',
+      () => adminApi.matchSearch(HOSTILE, { query: 'q' }),
+      `/api/admin/films/${SAFE}/match?query=q`,
+    ],
+    [
+      'adminApi.applyMatch',
+      () => adminApi.applyMatch(HOSTILE, 3),
+      `/api/admin/films/${SAFE}/match`,
+    ],
+    [
+      'adminApi.leaveUnmatched',
+      () => adminApi.leaveUnmatched(HOSTILE),
+      `/api/admin/films/${SAFE}/leave-unmatched`,
+    ],
+    ['adminApi.putBack', () => adminApi.putBack(HOSTILE), `/api/admin/films/${SAFE}/put-back`],
+    ['adminApi.editions', () => adminApi.editions(HOSTILE), `/api/admin/films/${SAFE}/editions`],
+    [
+      'adminApi.saveEditions',
+      () => adminApi.saveEditions(HOSTILE, {}),
+      `/api/admin/films/${SAFE}/editions`,
+    ],
+    [
+      'adminApi.setCredits',
+      () => adminApi.setCredits(HOSTILE, 1000),
+      `/api/admin/editions/${SAFE}/credits`,
+    ],
+    [
+      'adminApi.clearCredits',
+      () => adminApi.clearCredits(HOSTILE),
+      `/api/admin/editions/${SAFE}/credits`,
+    ],
+    [
+      'adminApi.stopTranscodingSession',
+      () => adminApi.stopTranscodingSession(HOSTILE),
+      `/api/admin/transcoding/sessions/${SAFE}`,
+    ],
+    [
+      'adminApi.playbackRecord',
+      () => adminApi.playbackRecord(HOSTILE),
+      `/api/admin/playback-health/${SAFE}`,
+    ],
+    [
+      'adminApi.subtitleCues',
+      () => adminApi.subtitleCues(HOSTILE),
+      `/api/admin/subtitles/${SAFE}/cues`,
+    ],
+    [
+      'adminApi.attachSubtitle',
+      () => adminApi.attachSubtitle(HOSTILE, { editionId: 1, part: null }),
+      `/api/admin/subtitles/${SAFE}/attach`,
+    ],
+    [
+      'adminApi.detachSubtitle',
+      () => adminApi.detachSubtitle(HOSTILE),
+      `/api/admin/subtitles/${SAFE}/detach`,
+    ],
+    [
+      'adminApi.setSubtitleOffset',
+      () => adminApi.setSubtitleOffset(HOSTILE, 500),
+      `/api/admin/subtitles/${SAFE}/offset`,
+    ],
+    [
+      'adminApi.verifySubtitle',
+      () => adminApi.verifySubtitle(HOSTILE),
+      `/api/admin/subtitles/${SAFE}/verify`,
+    ],
+    [
+      'adminApi.unverifySubtitle',
+      () => adminApi.unverifySubtitle(HOSTILE),
+      `/api/admin/subtitles/${SAFE}/verify`,
+    ],
+    [
+      'adminApi.removeSubtitle',
+      () => adminApi.removeSubtitle(HOSTILE),
+      `/api/admin/subtitles/${SAFE}`,
+    ],
+    [
+      'adminApi.setForcedNeed',
+      () => adminApi.setForcedNeed(HOSTILE, 'NEEDED'),
+      `/api/admin/films/${SAFE}/forced-need`,
+    ],
+    [
+      'adminApi.setFullNeed',
+      () => adminApi.setFullNeed(HOSTILE, 'NEEDED'),
+      `/api/admin/films/${SAFE}/full-need`,
+    ],
+    [
+      'adminApi.searchOpenSubtitles',
+      () => adminApi.searchOpenSubtitles(HOSTILE, 'full'),
+      `/api/admin/editions/${SAFE}/opensubtitles?kind=full`,
+    ],
+    [
+      'adminApi.downloadOpenSubtitles',
+      () => adminApi.downloadOpenSubtitles(HOSTILE, { fileId: 9, kind: 'full' }),
+      `/api/admin/editions/${SAFE}/opensubtitles/download`,
+    ],
+  ])('%s sends the id as one segment', async (_name, call, expected) => {
+    const last = stubFetch();
+    await call();
+    expect(last().path).toBe(expected);
+  });
+
+  it.each([
+    ['editionsApi.streamUrl', () => editionsApi.streamUrl(HOSTILE), `/api/editions/${SAFE}/stream`],
+    [
+      'editionsApi.subtitleUrl (edition)',
+      () => editionsApi.subtitleUrl(HOSTILE, 2),
+      `/api/editions/${SAFE}/subtitles/2.vtt`,
+    ],
+    [
+      'editionsApi.subtitleUrl (index)',
+      () => editionsApi.subtitleUrl(4, HOSTILE),
+      `/api/editions/4/subtitles/${SAFE}.vtt`,
+    ],
+    [
+      'editionsApi.forcedSubtitleUrl',
+      () => editionsApi.forcedSubtitleUrl(HOSTILE),
+      `/api/editions/${SAFE}/forced-subtitles.vtt`,
+    ],
+    [
+      'editionsApi.fullSubtitleUrl',
+      () => editionsApi.fullSubtitleUrl(HOSTILE),
+      `/api/editions/${SAFE}/full-subtitles.vtt`,
+    ],
+    [
+      'editionsApi.stillUrl',
+      () => editionsApi.stillUrl(HOSTILE, 0),
+      `/api/editions/${SAFE}/still?atMs=0`,
+    ],
+    [
+      'mediaFilesApi.subtitleUrl (file)',
+      () => mediaFilesApi.subtitleUrl(HOSTILE, 2),
+      `/api/media-files/${SAFE}/subtitles/2.vtt`,
+    ],
+    [
+      'mediaFilesApi.subtitleUrl (index)',
+      () => mediaFilesApi.subtitleUrl(4, HOSTILE),
+      `/api/media-files/4/subtitles/${SAFE}.vtt`,
+    ],
+  ])('%s builds the id as one segment', (_name, build, expected) => {
+    expect(build()).toBe(expected);
+  });
+
+  it('encodes the version of the forced subtitle URL', () => {
+    expect(editionsApi.forcedSubtitleUrl(1, 'a&b')).toBe(
+      '/api/editions/1/forced-subtitles.vtt?v=a%26b',
+    );
+  });
+
+  it('encodes the version of the full subtitle URL', () => {
+    expect(editionsApi.fullSubtitleUrl(1, 'a&b')).toBe(
+      '/api/editions/1/full-subtitles.vtt?v=a%26b',
+    );
+  });
+
+  it('refuses a dot segment instead of sending it', () => {
+    expect(() => filmsApi.get('..')).toThrow(RangeError);
   });
 });
