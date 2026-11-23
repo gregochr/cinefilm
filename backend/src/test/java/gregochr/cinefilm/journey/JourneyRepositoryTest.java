@@ -81,6 +81,15 @@ class JourneyRepositoryTest extends ApiTestBase {
     }
 
     @Test
+    void theLockedFinderFindsAJourneyByItsIdAndNothingForAnUnknownOne() {
+        Long id = journeys.saveAndFlush(journey(1_000_000L, 1, null)).getId();
+        entityManager.clear();
+
+        assertThat(journeys.findLockedById(id).orElseThrow().getRunStartedMs()).isEqualTo(1_000_000L);
+        assertThat(journeys.findLockedById(id + 1)).isEmpty();
+    }
+
+    @Test
     void theListIsNewestRunFirstAndSegmentsInOrder() {
         journeys.saveAndFlush(journey(1_000_000L, 2, null));
         journeys.saveAndFlush(journey(3_000_000L, 1, null));

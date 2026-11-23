@@ -14,6 +14,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import gregochr.cinefilm.ApiTestBase;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -186,6 +187,30 @@ class JourneySampleRepositoryTest extends ApiTestBase {
             .containsExactly(
                 tuple(1, 0), tuple(1, 1),
                 tuple(2, 0), tuple(2, 1));
+    }
+
+    @Test
+    void theSpanIsTheEarliestAndTheLatestSampleTimeOfTheJourneyAlone() {
+        Long journeyId = newJourney();
+        Long otherId = journeys.saveAndFlush(journey(2_000_000L, 1, null)).getId();
+        samples.saveAndFlush(sample(journeyId, 2));
+        samples.saveAndFlush(sample(journeyId, 1));
+        samples.saveAndFlush(sample(journeyId, 3));
+        samples.saveAndFlush(sample(otherId, 9));
+        entityManager.clear();
+
+        SampleSpan span = samples.spanOf(journeyId);
+
+        assertThat(span.earliest()).isEqualTo(Instant.parse("2024-03-31T23:30:30Z"));
+        assertThat(span.latest()).isEqualTo(Instant.parse("2024-03-31T23:31:30Z"));
+    }
+
+    @Test
+    void theSpanOfAJourneyWithNoSampleIsBothNull() {
+        SampleSpan span = samples.spanOf(newJourney());
+
+        assertThat(span.earliest()).isNull();
+        assertThat(span.latest()).isNull();
     }
 
     @Test
