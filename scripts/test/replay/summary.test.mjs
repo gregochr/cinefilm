@@ -54,6 +54,7 @@ describe('summarise', () => {
       '  time on each rung: 720p 1000 s, 360p 2000 s',
       'Samples: 3, longest gap 40 s, 2 showed direct play',
       'Playhead: 1.2 s at +5 s, then 46 s at +50 s',
+      'Segments: none recorded',
       'Presses: place card On a train, "Try again" 2 times',
       'Held back:',
       '  POST /api/editions/N/watched: 2',
@@ -123,6 +124,33 @@ describe('summarise', () => {
     const lines = summarise(dirty);
     assert.ok(lines.length > 15);
     for (const line of lines) assert.match(line, /^[\x20-\x7e]{0,300}$/, line.slice(0, 60));
+  });
+
+  test('segments: how many, failed, cancelled, unfinished, and the median and 10th percentile speed', () => {
+    const done = (kbit) => ({ status: 200, bytes: kbit * 125, totalMs: 1000, failed: false, canceled: false, unfinished: false });
+    const entries = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map(done);
+    const bad = [
+      { ...done(5), failed: true }, { ...done(5), canceled: true }, { ...done(5), unfinished: true, bytes: null },
+      { ...done(5), status: 404 },
+    ];
+    const lines = summarise(results({ segments: { capped: false, segments: [...bad, ...entries] } }));
+    assert.ok(lines.includes(
+      'Segments: 14 recorded, 1 failed, 1 cancelled, 1 unfinished, median 550 kbit/s, 10th percentile 100 kbit/s',
+    ), lines.join('\n'));
+    const odd = summarise(results({ segments: { segments: [done(100), done(300), done(900)] } }));
+    assert.ok(odd.includes('Segments: 3 recorded, 0 failed, 0 cancelled, 0 unfinished, median 300 kbit/s, '
+      + '10th percentile 100 kbit/s'));
+  });
+
+  test('segments: none, no speed to speak of, and a full list are said so', () => {
+    assert.ok(summarise(results({ segments: { segments: [] } })).includes('Segments: none recorded'));
+    assert.ok(summarise(results({ segments: 'bad' })).includes('Segments: none recorded'));
+    const failed = { status: null, bytes: null, totalMs: null, failed: true, canceled: false, unfinished: false };
+    assert.ok(summarise(results({ segments: { segments: [failed] } })).includes(
+      'Segments: 1 recorded, 1 failed, 0 cancelled, 0 unfinished, no speed',
+    ));
+    const full = summarise(results({ segments: { capped: true, segments: [failed] } }));
+    assert.ok(full.some((line) => line.startsWith('Segments: 1 recorded') && line.endsWith('(list full: later ones not recorded)')));
   });
 
   test('samples: how many, the longest gap, how many showed direct play, the playhead first and last', () => {

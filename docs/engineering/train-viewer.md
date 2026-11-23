@@ -69,7 +69,7 @@ seconds, that could not be read (a page whose renderer has died answers nothing;
 ## The results
 
 `~/cinefilm-viewer/runs/<YYYYMMDD-HHMMSS>/` (local time the run began; readable by the owner alone, never in a
-checkout). The three JSON files are written with the first sample, again whenever a minute has passed since the last
+checkout). The four JSON files are written with the first sample, again whenever a minute has passed since the last
 write, and at the end, each time whole (a temporary file renamed onto the real name), so a laptop that dies leaves the
 last good files, with `ended` null: the run had not ended. `summary.txt` is written at the end only. The writes made
 during the run do not hold up the film's requests; the last one is made after Chrome has gone. A write that fails
@@ -82,8 +82,45 @@ short (a second Ctrl-C, a crash or a kill at that moment): it is safe to delete.
 | `samples.json` | every five seconds: what the screen said, the playhead, the buffer, the four flags (direct play, signed out, stopped, a "Try again" offered), milliseconds since the film opened and the time of day |
 | `health.json` | the playback records the player sent, as it sent them: how many, how many could not be read, and for each viewing its id, how many were sent and the latest (this includes the network operator's name, the browser's name and the screen size) |
 | `held.json` | the run's facts and how it ended, what was held back (method, address shape, count: never a header, a cookie or a body), the presses, the page's errors, the warnings |
+| `segments.json` | every media segment download the page made, one entry each (see below) |
 
-`summary.txt` is made from the other three. The samples carry the time of day, so a run lays beside the logger's log.
+`summary.txt` is made from the other files. The samples carry the time of day, so a run lays beside the logger's log.
+
+### `segments.json`
+
+Every download of a media segment, so that each download's speed can be laid beside the train's position (a minute's
+median in `health.json` hides a ten-second drop). It is made from Chrome's `Network` events for `GET` requests to the
+site's own origin whose path is `/api/sessions/<id>/<rung>/<file>` and whose file is not a playlist (`.m3u8`). The
+session id, the query and the address are never stored. Playlists are counted, not listed. The guard (`guard.mjs`)
+answers only writes, so a request it handled on purpose is never an entry; it almost never fails a `GET` (only when its
+own handling of a request throws), so a failure here is the network's.
+Every request to the site is paused by the guard before it goes on, and Chrome's start time comes before that pause, so
+`ttfbMs` and `totalMs` include the guard's round trip and the speeds are slightly low.
+Written with the other files, each time whole, and on every way a run ends, signal and crash included.
+Chrome's own times are used (the same clock the page's requests are measured on), not the viewer's.
+
+```
+{ "cap": 20000, "capped": false, "dropped": 0, "playlists": 41, "segments": [ { ... } ] }
+```
+
+| Field | Meaning |
+|---|---|
+| `cap`, `capped`, `dropped` | the list holds at most `cap` (20,000) segments; `capped` is true when later ones were left out, `dropped` is how many |
+| `playlists` | how many playlist requests were seen (not listed) |
+| `rung` | the rung in the address, such as `720p` |
+| `file` | the file name, such as `seg-12.ts` |
+| `status` | the HTTP status, null when no answer came |
+| `bytes` | bytes on the wire (`encodedDataLength`), null for a download that failed, was cancelled or had not finished |
+| `startMs` | when the request began, milliseconds since 1970 (Chrome's `wallTime`); null when Chrome gave none |
+| `ttfbMs` | from the request's start to the first byte of its answer (the headers' start, else their end), in ms; includes any wait for a connection; null when Chrome gave no timing (a cached answer) |
+| `totalMs` | from the request's start to its finish, failure or cancelling, in ms; null while unfinished |
+| `failed` | the download failed (not cancelled); `errorText` says how |
+| `canceled` | Chrome says the page cancelled it (the player aborts a download it no longer wants) |
+| `errorText` | Chrome's error text (`net::ERR_...`), printable and cut at 100 characters; null when none |
+| `unfinished` | true for a request still in flight when the results were written (the last write is made after Chrome has gone, so these were cut off) |
+
+Speed in kbit/s is `bytes * 8 / totalMs`, for a finished download with a 2xx status only. `summary.txt` has one line:
+segments recorded, failed, cancelled, unfinished, and the median and 10th-percentile speed.
 
 ## What a run changes on the server
 

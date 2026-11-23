@@ -1,0 +1,3 @@
+### Added — the train viewer records every media segment download
+
+The headless viewer now keeps `segments.json` in each run's results: one entry per segment download (rung, file name, status, bytes on the wire, start time, time to first byte, total time, and whether it failed or was cancelled), up to 20,000, written with the other result files on every way a run ends. `summary.txt` gains a line with the segments recorded, failed, cancelled, unfinished and the median and 10th-percentile speed in kbit/s. For the 26 Nov journey: per-download speeds can be laid beside the train's position, which a minute's median hid. Scripts only; no server release.

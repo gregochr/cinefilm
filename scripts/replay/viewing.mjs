@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { launchChrome, sleep, within } from './cdp.mjs';
 import { SAMPLE, cleanSample, consoleText, keepAwake, notePageError, standStillWarning } from './drive.mjs';
 import { attachGuard } from './guard.mjs';
+import { attachSegments } from './segments.mjs';
 import { summarise } from './summary.mjs';
 import { printable } from './text.mjs';
 import {
@@ -465,8 +466,8 @@ async function writePrivateAsync(file, text, afs, superseded) {
   }
 }
 
-// What a write holds: the three files' text (built whole before anything is written), and the summary's lines.
-function resultFiles({ run, report, facts, final }) {
+// What a write holds: the four files' text (built whole before anything is written), and the summary's lines.
+function resultFiles({ run, report, segmentReport, facts, final }) {
   const readable = report.records.reduce((sum, viewing) => sum + viewing.count, 0);
   const files = {
     samples: run.samples,
@@ -485,43 +486,47 @@ function resultFiles({ run, report, facts, final }) {
       pageErrors: run.pageErrors,
       warnings: run.warnings,
     },
+    segments: segmentReport,
   };
   const texts = Object.entries(files).map(([name, data]) => [`${name}.json`, JSON.stringify(data, null, 1)]);
   return { texts, lines: final ? summarise(files) : [] };
 }
 
 /**
- * Writes `samples.json`, `health.json` and `held.json` (each whole) in a folder of `runs/` named from the time the run
+ * Writes `samples.json`, `health.json`, `held.json` and `segments.json` (each whole) in a folder of `runs/` named from the time the run
  * began (never from an option): folder 700, files 600. They hold the samples, the playback records as the app sent
  * them (the guard's copy), what was held, the presses, the page's errors, the warnings and how the run ended: `ended`
  * is null until the last write (`final`), which also writes `summary.txt`. No header, no cookie, nothing of any other
  * request. Synchronous. Returns `{ dir, lines }` (the folder, and the summary's lines when final); throws when it
  * cannot be written. `io` (`write(file, text)`, `rename(from, to)`, `remove(file)`) is for tests.
  */
-export function writeResults({ runsDir, began, run, report, facts, final = true, io = realIo }) {
+export function writeResults({
+  runsDir, began, run, report, segmentReport = NO_SEGMENTS, facts, final = true, io = realIo,
+}) {
   const dir = join(runsDir, runName(began));
   ownerDir(dir);
-  const { texts, lines } = resultFiles({ run, report, facts, final });
+  const { texts, lines } = resultFiles({ run, report, segmentReport, facts, final });
   for (const [name, text] of texts) writePrivate(join(dir, name), text, io);
   if (final) writePrivate(join(dir, 'summary.txt'), `${lines.join('\n')}\n`, io);
   return { dir, lines };
 }
 
 /**
- * The write made while the run goes: the same three files (not the last write), written without holding the process
+ * The write made while the run goes: the same four files (not the last write), written without holding the process
  * up, so that the guard goes on answering the page's paused requests meanwhile. `superseded()` says the last write has
  * been made (see `writePrivateAsync`). `afs` is for tests.
  */
 export async function writeResultsAsync({
-  runsDir, began, run, report, facts, afs = realAsyncFs, superseded = () => false,
+  runsDir, began, run, report, segmentReport = NO_SEGMENTS, facts, afs = realAsyncFs, superseded = () => false,
 }) {
   const dir = join(runsDir, runName(began));
   ownerDir(dir);
-  const { texts } = resultFiles({ run, report, facts, final: false });
+  const { texts } = resultFiles({ run, report, segmentReport, facts, final: false });
   for (const [name, text] of texts) await writePrivateAsync(join(dir, name), text, afs, superseded);
   return { dir, lines: [] };
 }
 
+const NO_SEGMENTS = { cap: 0, capped: false, dropped: 0, playlists: 0, segments: [] };
 const NO_REPORT = { held: [], heldDropped: 0, records: [], notRead: 0, failed: 0, rejected: 0 };
 
 /**
@@ -540,7 +545,10 @@ export function resultsWriter(ctx, { began, runsDir }) {
       film: opt.film, title: run.film?.title ?? null, runtimeMs: run.film?.runtimeMs ?? null, site: opt.site,
       beganAt: began, runMs: ctx.opened === null ? null : Math.round(deps.clock.mono() - ctx.opened),
     };
-    return { runsDir, began, run, report: ctx.guard?.report() ?? NO_REPORT, facts };
+    return {
+      runsDir, began, run, report: ctx.guard?.report() ?? NO_REPORT,
+      segmentReport: ctx.segments?.report() ?? NO_SEGMENTS, facts,
+    };
   };
   return {
     async keep() {
@@ -572,7 +580,7 @@ export function resultsWriter(ctx, { began, runsDir }) {
       state.done = true;
       const io = { ...realIo, ...ctx.deps.io };
       const sweep = () => {
-        for (const name of ['samples', 'health', 'held']) {
+        for (const name of ['samples', 'health', 'held', 'segments']) {
           try {
             io.remove(join(runsDir, runName(began), `${name}.json.async.tmp`));
           } catch {
@@ -770,6 +778,7 @@ async function play(ctx) {
   ctx.chrome = chrome;
   ctx.page = chrome.page;
   ctx.guard = await deps.guard(ctx.page, { site: opt.site });
+  ctx.segments = await deps.segments(ctx.page, { site: opt.site });
   await ctx.page.send('Page.enable');
   await ctx.page.send('Runtime.enable');
   listenToPage(ctx.page, run);
@@ -806,7 +815,9 @@ export async function viewing(deps) {
     samples: [], pageErrors: [], warnings: [], presses: { place: null, retries: 0 }, placeTried: false, ended: null,
     film: null, unread: 0,
   };
-  const ctx = { deps: full, run, opt, held, chrome: null, page: null, guard: null, opened: null };
+  const ctx = {
+    deps: full, run, opt, held, chrome: null, page: null, guard: null, segments: null, opened: null,
+  };
   held.run = run;
   const writer = resultsWriter(ctx, { began: full.clock.wall(), runsDir: join(viewerHome, 'runs') });
   held.writeNow = deps.writeNow ?? writer.final; // (`deps.writeNow` is a test's own writer)
@@ -850,6 +861,7 @@ function withDefaults(deps) {
     within: deps.within ?? within,
     launch: deps.launch ?? launchChrome,
     guard: deps.guard ?? attachGuard,
+    segments: deps.segments ?? attachSegments,
     lock: deps.lock ?? takeLock,
     folders: deps.folders ?? makeFolders,
     free: deps.free ?? checkProfileFree,
