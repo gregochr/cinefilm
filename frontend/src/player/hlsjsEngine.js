@@ -9,12 +9,16 @@
 // hold reads the engine's own fragment rates, timed from `loading.start`, and the rate of the fragment in flight,
 // re-read every HOLD_CHECK_MS (floor-hold-by-time-plan.md). Above 480p Auto climbs only on headroom
 // (champagne.js, step-up-bank-plan.md): the cap is the lower of the step gate and that ceiling, worked out in
-// one place (`applyCap`) whatever the ladder.
+// one place (`applyCap`) whatever the ladder. When the bank is full Auto may throw away the film from 300 s ahead
+// and fetch it again one rung higher, up to 480p (rebank.js, step-up-bank-plan.md): `minAutoBitrate` is raised to
+// that rung, then the buffer is flushed from a fragment start. `writeFloor` is the only writer of that setting:
+// the larger of the hold's floor and the re-bank's.
 import { bankedAhead } from './buffered.js';
 import { champagneBase, champagneCeiling } from './champagne.js';
 import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
+import { REBANK_DONE_AT_S, REBANK_UNDO_BELOW_S, rebankDecision } from './rebank.js';
 import { createStepGate } from './stepGate.js';
 import { addSample, fragmentKbps, lowerMiddle, networkGeneration } from './throughput.js';
 
@@ -137,7 +141,16 @@ export function startHlsJs({
   let timer = null; // the one pending restart, if any
   const hold = createFloorHold();
   let holdLevel = null; // the 360p level of a ladder with a 240p bottom (the only kind that is held)
-  let floorSet = 0;
+  let floorSet = 0; // what `minAutoBitrate` was last set to
+  let holdFloor = 0; // the floor hold's share of it (bit/s)
+  let rebankFloor = 0; // the re-bank's share: the new rung's bitrate while a re-bank is under way
+  let flushed = false; // BUFFER_FLUSHED has come since the re-bank's flush was asked for
+  let banked = []; // the fragments in the buffer, { start, end, level }, from FRAG_BUFFERED
+  let loading = false; // a media fragment has been asked for and is not yet buffered
+  let lastTroubleAt = null; // when fragment trouble or a stall was last seen (ms on `now`)
+  let lastStepDownAt = null;
+  let lastRebankAt = null;
+  let lastUndoAt = null;
   let fetched = null; // the level hls.js is fetching (LEVEL_SWITCHING), null until the first
   let troubled = false; // a fragment timed out or got no answer, and none has loaded since
   let samples = []; // the newest fragment rates (kbit/s) for the hold, under `samplesNetwork`
@@ -147,9 +160,30 @@ export function startHlsJs({
   let inFlight = null; // the fragment hls.js is loading, whose rate so far the release reads
   let holdTimer = null; // the one check of the in-flight rate, running while a fragment loads
 
+  // The one writer of `minAutoBitrate`: the larger of the hold's floor and the re-bank's.
+  const writeFloor = () => {
+    const floor = Math.max(holdFloor, rebankFloor);
+    if (floor === floorSet) return;
+    floorSet = floor;
+    hls.config.minAutoBitrate = floor;
+  };
+
+  // Ends a re-bank: the floor comes off first, then the ten minutes of cool-down start. Events that say the link
+  // or the playhead is not to be trusted (a seek, a restart, a stall, trouble, a new network, destroy) always
+  // start it; the others use `undoIfRebanking`.
+  const undoRebank = () => {
+    rebankFloor = 0;
+    writeFloor();
+    lastUndoAt = now();
+  };
+  const undoIfRebanking = () => {
+    if (rebankFloor > 0) undoRebank();
+  };
+
   // The samples, emptied first when the network has changed since they were taken.
   const currentSamples = () => {
     if (samplesNetwork !== networkGeneration()) {
+      undoRebank();
       samples = [];
       headroom = [];
       retriedRun = 0;
@@ -200,10 +234,65 @@ export function startHlsJs({
       applied >= holdLevel &&
       fetched !== null &&
       fetched >= holdLevel;
-    const floor = engaged ? bitrate : 0;
-    if (floor === floorSet) return;
-    floorSet = floor;
-    hls.config.minAutoBitrate = floor;
+    const wasEngaged = holdFloor > 0;
+    holdFloor = engaged ? bitrate : 0;
+    if (wasEngaged && !engaged) undoIfRebanking(); // the hold let go: the bank is no longer deep and safe
+    writeFloor();
+  };
+
+  // Banked fragments still in the buffer: an entry stays while its middle is inside a buffered range.
+  const pruneBanked = () => {
+    const { buffered } = video;
+    banked = banked.filter((f) => {
+      const mid = (f.start + f.end) / 2;
+      for (let i = 0; i < buffered.length; i += 1) {
+        if (buffered.start(i) <= mid && mid <= buffered.end(i)) return true;
+      }
+      return false;
+    });
+  };
+
+  // Re-bank, once per tick: undo it when the bank runs low, call it done when the bank is back, and otherwise ask
+  // `rebankDecision`. The floor is raised BEFORE the flush, so hls.js refetches at the new rung and not the old.
+  // Auto only; a pinned quality never re-banks.
+  const rebankStep = () => {
+    if (!auto) return;
+    const aheadS = bankedAhead(video);
+    if (rebankFloor > 0) {
+      if (aheadS < REBANK_UNDO_BELOW_S) {
+        undoRebank();
+      } else if (flushed && aheadS >= REBANK_DONE_AT_S) {
+        rebankFloor = 0; // no cool-down: the next rung can come after the quiet time
+        lastRebankAt = now();
+        writeFloor();
+      }
+      return;
+    }
+    pruneBanked();
+    const decision = rebankDecision({
+      levels: hls.levels,
+      applied,
+      banked,
+      playhead: video.currentTime,
+      aheadS,
+      headroom,
+      inFlight: loading,
+      troubled,
+      now: now(),
+      lastTroubleAt,
+      lastStepDownAt,
+      lastRebankAt,
+      lastUndoAt,
+    });
+    if (!decision) return;
+    rebankFloor = hls.levels[decision.level].bitrate;
+    flushed = false;
+    writeFloor();
+    hls.trigger(Events.BUFFER_FLUSHING, {
+      startOffset: decision.from,
+      endOffset: Infinity,
+      type: null,
+    });
   };
 
   // The one place the cap is worked out: the step gate's level, never above the champagne ceiling. A gate level
@@ -256,6 +345,8 @@ export function startHlsJs({
     clearTimeout(timer);
     timer = null;
     stopHoldTimer(); // the fragment in flight is aborted by the reload
+    loading = false;
+    undoRebank();
     // What was earned before the break is earned again: the rates are forgotten and the cap falls at once.
     ceiling = champagneBase(hls.levels ?? []);
     headroom = [];
@@ -288,11 +379,22 @@ export function startHlsJs({
 
   const onWaiting = () => {
     gate.trouble();
+    lastTroubleAt = now();
+    undoRebank();
     reevaluateHold();
   };
+  // The bank is full, so hls.js is mostly idle and sends no fragment events: the re-bank is read on timeupdate.
+  const onTimeUpdate = () => {
+    applyCap();
+    rebankStep();
+  };
+  const onSeeking = () => {
+    undoRebank();
+    applyCap();
+  };
   video.addEventListener('waiting', onWaiting);
-  video.addEventListener('timeupdate', applyCap);
-  video.addEventListener('seeking', applyCap);
+  video.addEventListener('timeupdate', onTimeUpdate);
+  video.addEventListener('seeking', onSeeking);
 
   hls.on(Events.MANIFEST_PARSED, (_event, data) => {
     top = data.levels.length - 1;
@@ -319,6 +421,7 @@ export function startHlsJs({
   hls.on(Events.LEVEL_SWITCHING, (_event, data) => {
     // hls.js has come up from a lower level to the cap: the healthy minute starts now.
     const arrived = auto && fetched !== null && fetched < data.level && data.level === applied;
+    if (fetched !== null && data.level < fetched) lastStepDownAt = now();
     fetched = data.level;
     const rung = rungForLevel(session.renditions, hls.levels[data.level]);
     if (!rung) return;
@@ -333,12 +436,34 @@ export function startHlsJs({
   // few bytes behind a round trip, so it says nothing about the link.
   hls.on(Events.FRAG_LOADING, (_event, data) => {
     if (!auto || data.frag?.sn === 'initSegment') return;
+    loading = true;
     inFlight = data.frag;
     holdTimer ??= setInterval(applyCap, HOLD_CHECK_MS);
   });
 
   // hls.js gave up on the fragment for a faster level: nothing is in flight any more.
-  hls.on(Events.FRAG_LOAD_EMERGENCY_ABORTED, stopHoldTimer);
+  hls.on(Events.FRAG_LOAD_EMERGENCY_ABORTED, () => {
+    loading = false;
+    stopHoldTimer();
+  });
+
+  // A fragment is in the buffer: it joins the list the re-bank reads, and nothing is loading any more. `loading`
+  // is cleared here, not on FRAG_LOADED, because a fragment loaded but not yet appended would land after a flush
+  // as an island at the old rung. If an event is missed and `loading` sticks true, the only cost is that no
+  // re-bank starts (safe); the next fragment's FRAG_LOADING and FRAG_BUFFERED put it right.
+  hls.on(Events.FRAG_BUFFERED, (_event, data) => {
+    loading = false;
+    const frag = data.frag;
+    if (!frag || frag.sn === 'initSegment' || (frag.type && frag.type !== 'main')) return;
+    const entry = { start: frag.start, end: frag.start + frag.duration, level: frag.level };
+    banked = [...banked.filter((f) => f.start !== entry.start), entry];
+    rebankStep();
+  });
+
+  hls.on(Events.BUFFER_FLUSHED, () => {
+    pruneBanked();
+    if (rebankFloor > 0) flushed = true;
+  });
 
   hls.on(Events.FRAG_LOADED, (_event, data) => {
     stopReconnecting();
@@ -381,6 +506,8 @@ export function startHlsJs({
       (data.details === ErrorDetails.FRAG_LOAD_ERROR && !data.response?.code)
     ) {
       gate.trouble();
+      lastTroubleAt = now();
+      undoRebank();
       if (auto && fetched !== null) gateCap = gate.switched(fetched);
       troubled = true;
       samples = []; // what was measured before the trouble says nothing about the link now
@@ -390,6 +517,7 @@ export function startHlsJs({
       stopHoldTimer();
       applyCap();
     }
+    if (String(data.details ?? '').startsWith('frag')) loading = false; // a failed fragment is not loading
     if (data.response?.code === 410) {
       // Admin stopped this playback on purpose: no new session, no retry (owner 2026-11-15).
       if (!lost) {
@@ -420,10 +548,11 @@ export function startHlsJs({
       clearTimeout(timer);
       timer = null;
       stopHoldTimer();
+      undoRebank();
       window.removeEventListener('online', onOnline);
       video.removeEventListener('waiting', onWaiting);
-      video.removeEventListener('timeupdate', applyCap);
-      video.removeEventListener('seeking', applyCap);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('seeking', onSeeking);
       hls.destroy();
     },
   };
