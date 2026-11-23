@@ -4,6 +4,7 @@ import static gregochr.cinefilm.TestData.NOW;
 
 import gregochr.cinefilm.health.PlaybackHealth;
 import java.time.Instant;
+import java.time.LocalDate;
 
 /** Made-up rows for the journey tables' tests: every value is invented. */
 public final class JourneyTestData {
@@ -32,13 +33,54 @@ public final class JourneyTestData {
     }
 
     /** A journey with every column given its own value. */
-    public static Journey fullJourney(Long deviceId) {
+    public static Journey fullJourney(Long deviceId, Long trainRunId) {
         Journey journey = journey(1_000_000L, 2, deviceId);
+        journey.setTrainRunId(trainRunId);
         journey.setOsVersion("TestOS 1.2");
         journey.setTravelClass("first");
         journey.setTrainUnit("Unit-000");
         journey.setSourceFile("test-log.jsonl");
         return journey;
+    }
+
+    /** A made-up train run: a uid, a date and the headcode, with only the required columns. */
+    public static TrainRun trainRun(String timetableUid, LocalDate runDate) {
+        TrainRun run = new TrainRun();
+        run.setTimetableUid(timetableUid);
+        run.setRunDate(runDate);
+        run.setHeadcode("9Z99");
+        run.setImportedAt(NOW);
+        return run;
+    }
+
+    /** A train run with every column given its own value. */
+    public static TrainRun fullTrainRun() {
+        TrainRun run = trainRun("X12345", LocalDate.of(2030, 1, 15));
+        run.setOperator("Test Rail Company");
+        run.setSource("https://example.invalid/run");
+        return run;
+    }
+
+    /** A call with only its key and place. */
+    public static TrainRunCall call(Long trainRunId, int seq) {
+        TrainRunCall call = new TrainRunCall();
+        call.setTrainRunId(trainRunId);
+        call.setSeq(seq);
+        call.setLocation("Alpha Junction");
+        return call;
+    }
+
+    /** A call with every column given its own value. */
+    public static TrainRunCall fullCall(Long trainRunId) {
+        TrainRunCall call = call(trainRunId, 4);
+        call.setLocation("Beta Parkway");
+        call.setPlannedArrival(NOW.plusSeconds(1));
+        call.setPlannedDeparture(NOW.plusSeconds(2));
+        call.setPlannedPass(NOW.plusSeconds(3));
+        call.setActualArrival(NOW.plusSeconds(4));
+        call.setActualDeparture(NOW.plusSeconds(5));
+        call.setActualPass(NOW.plusSeconds(6));
+        return call;
     }
 
     /** A sample with every column given its own value. */
