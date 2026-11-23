@@ -5,6 +5,7 @@ import static gregochr.cinefilm.health.HealthSamples.client;
 import static gregochr.cinefilm.health.HealthSamples.example;
 import static gregochr.cinefilm.health.HealthSamples.text;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.health.HealthDtos.ChartPart;
@@ -57,7 +58,8 @@ class PlaybackHealthViewingsTest extends ApiTestBase {
         row.setUpdatedAt(updatedAt);
         row.setSeq(1);
         row.setSummary(text(report));
-        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, problem ? 1_000 : 0, 900L, problem, "train"));
+        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, problem ? 1_000 : 0, 900L, problem,
+            "train", "person"));
         return health.saveAndFlush(row);
     }
 
@@ -101,7 +103,7 @@ class PlaybackHealthViewingsTest extends ApiTestBase {
     void aJoinedViewingSumsItsPartsAndKeepsTheFirstPartsStartupAndKey() {
         Instant start = NOW.minusSeconds(86_400);
         PlaybackHealth a = playback(1, start, start.plusSeconds(600), 100_000, true);
-        a.setFigures(new HealthFigures(100_000, 1, 1_000, 2_000L, true, "train"));
+        a.setFigures(new HealthFigures(100_000, 1, 1_000, 2_000L, true, "train", "person"));
         health.saveAndFlush(a);
         playback(1, start.plusSeconds(606), start.plusSeconds(1_200), 90_000, false);
 
@@ -206,6 +208,22 @@ class PlaybackHealthViewingsTest extends ApiTestBase {
         playback(5, NOW.minusSeconds(2_000), NOW.minusSeconds(1_000), 180_001, false);
 
         assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(4, 3));
+    }
+
+    @Test
+    void theCountsLeaveOutARobotsViewingButTheChartKeepsItWithItsSource() {
+        Instant start = NOW.minusSeconds(86_400);
+        PlaybackHealth person = playback(1, start, start.plusSeconds(600), 200_000, false);
+        PlaybackHealth robot = playback(1, start.plusSeconds(606), start.plusSeconds(1_200), 200_000, false);
+        robot.setSource("robot");
+        ObjectNode headless = report(OPERATOR, "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/150.0.0.0", null, null);
+        robot.setSummary(text(headless));
+        health.saveAndFlush(robot);
+
+        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(1, 1));
+        assertThat(service.chart(null).sessions()).extracting(ChartRow::playbackId, ChartRow::source)
+            .containsExactly(tuple(person.getPlaybackId(), "person"),
+                tuple(robot.getPlaybackId(), "robot"));
     }
 
     @Test

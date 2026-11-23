@@ -27,7 +27,7 @@ describe('Admin Playback section', () => {
   it('counts the log against the server’s total', async () => {
     installFetch();
     renderApp('/admin/playback');
-    expect(await screen.findByText('Showing 5 of 5')).toBeInTheDocument();
+    expect(await screen.findByText('Showing 6 of 6')).toBeInTheDocument();
   });
 
   it('no longer shows the old Transcoding or Playback health cards', async () => {

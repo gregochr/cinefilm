@@ -183,6 +183,25 @@ export const playbackChart = {
     { key: 'away', label: 'Away' }, // AR4
     { key: 'train', label: 'Train' }, // AR4
   ],
+  sourcesLabel: 'Watched or headless', // planner, journey-data-plan
+  sources: [
+    { key: 'person', label: 'Watched' }, // planner, journey-data-plan
+    { key: 'robot', label: 'Headless' }, // planner, journey-data-plan
+    { key: 'all', label: 'Both' }, // planner, journey-data-plan
+  ],
+  // The first tile's words and the summary's note, by the control above, so they stay true of what is counted.
+  watchedBySource: {
+    person: 'sessions watched', // planner, 5a-2 (AR4: "films watched")
+    robot: 'headless runs', // planner, journey-data-plan
+    all: 'sessions, headless included', // planner, journey-data-plan
+  },
+  summaryNotes: {
+    person: '',
+    robot: ' (headless runs only)', // planner, journey-data-plan
+    all: ' (headless runs included)', // planner, journey-data-plan
+  },
+  headlessRun: 'Headless run', // planner, journey-data-plan
+  headlessColumn: 'headless run', // planner, journey-data-plan
   tiles: {
     watched: 'sessions watched', // planner, 5a-2 (AR4: "films watched")
     withoutStall: 'played without a stall', // AR4
@@ -236,7 +255,9 @@ export const playbackLog = {
     { key: 'all', label: 'All' }, // AR4
     { key: 'films', label: 'Films only (3 min+)' }, // AR4
     { key: 'problems', label: 'With problems' }, // AR4
+    { key: 'robots', label: 'Headless runs' }, // planner, journey-data-plan
   ],
+  headlessRun: 'Headless run', // planner, journey-data-plan
   tableLabel: 'Playbacks, newest first', // planner, 5b
   columns: ['Started', 'Film', 'Watched', 'Where', 'Start', 'Stalls', 'Quality'], // AR4 (the eighth column, the buttons, has no heading)
   actionsColumn: 'Details', // planner, 5b: the screen-reader heading of AR4's unlabelled column
@@ -254,6 +275,7 @@ export const playbackLog = {
     all: 'No playbacks recorded yet.', // planner, 5b (the old Playback health card's line)
     films: 'No plays of 3 minutes or more.', // planner, 5b
     problems: 'No plays with problems.', // planner, 5b
+    robots: 'No headless runs.', // planner, journey-data-plan
   },
   loadingLabel: 'Loading the playback log', // planner, 5b
   loadError: 'Couldn’t load the playback log.', // planner, 5b

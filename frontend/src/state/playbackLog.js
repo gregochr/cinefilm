@@ -7,6 +7,7 @@ import {
   deviceLabel,
   environmentLabel,
   FILM_SESSION_MIN_MS,
+  isHeadless,
   operatorName,
   rungParts,
   speedText,
@@ -22,12 +23,14 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * The list route's parameters for a filter and a zero-based page. The server does the filtering: "films" is
- * `minWatchedMs` at the film-session minimum, "problems" is `problems=true`, "all" sends only the paging.
+ * `minWatchedMs` at the film-session minimum, "problems" is `problems=true`, "robots" is `source=robot` (the headless
+ * viewer's runs), "all" sends only the paging. The other filters send no `source`, so they list both kinds.
  */
 export function logQuery(filter, page) {
   const paging = { page, size: LOG_PAGE_SIZE };
   if (filter === 'films') return { minWatchedMs: FILM_SESSION_MIN_MS, ...paging };
   if (filter === 'problems') return { problems: true, ...paging };
+  if (filter === 'robots') return { source: 'robot', ...paging };
   return paging;
 }
 
@@ -63,7 +66,7 @@ export function logRow(row) {
     started: formatScanTime(row.startedAt),
     browsing: isBrowsing(row),
     watched: watchedText(report.watchedMs),
-    where: `${environmentLabel(report.environment)} · ${deviceLabel(report.client?.userAgent, report.client?.touch)}`,
+    where: `${environmentLabel(report.environment)} · ${isHeadless(row) ? copy.headlessRun : deviceLabel(report.client?.userAgent, report.client?.touch)}`,
     start: report.startupMs == null ? '—' : `${(num(report.startupMs) / 1000).toFixed(1)} s`,
     stalls,
     stalled: stalls > 0,

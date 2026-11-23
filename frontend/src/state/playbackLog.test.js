@@ -36,6 +36,13 @@ describe('logQuery', () => {
   it('asks the server for the plays with problems', () => {
     expect(logQuery('problems', 1)).toEqual({ problems: true, page: 1, size: 50 });
   });
+
+  it('asks the server for the headless runs, and the other filters send no source', () => {
+    expect(logQuery('robots', 3)).toEqual({ source: 'robot', page: 3, size: 50 });
+    for (const filter of ['all', 'films', 'problems']) {
+      expect(logQuery(filter, 0)).not.toHaveProperty('source');
+    }
+  });
 });
 
 describe('isBrowsing', () => {
@@ -126,6 +133,14 @@ describe('logRow', () => {
       stalls: 0,
       quality: '—',
     });
+  });
+});
+
+describe('logRow for a headless run', () => {
+  it('says "Headless run" where a person row has the device', () => {
+    const robot = fixtures.adminPlaybackHealth.playbacks.find((row) => row.source === 'robot');
+    expect(logRow(robot).where).toBe('Home · Headless run');
+    expect(logRow(HEAT_NOW).where).toBe('Home · Mac');
   });
 });
 

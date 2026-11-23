@@ -84,7 +84,7 @@ class PlaybackHealthSummaryTest {
     private static PlaybackHealth film(String playbackId, long filmId, long watchedMs, boolean problem) {
         PlaybackHealth row = stored(playbackId, text(example()), "home");
         row.setFilmId(filmId);
-        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home"));
+        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home", "person"));
         return row;
     }
 

@@ -51,9 +51,12 @@ public final class HealthDtos {
     public record PlaybackList(List<PlaybackRow> playbacks) {
     }
 
-    /** One viewing as Admin sees it; {@code report} is the stored report as JSON. */
+    /**
+     * One viewing as Admin sees it; {@code report} is the stored report as JSON. {@code source} is {@code person} or
+     * {@code robot} (the headless viewer), see {@link HealthFigures}.
+     */
     public record PlaybackRow(String playbackId, Long filmId, String filmTitle, Long editionId, Instant startedAt,
-                              Instant updatedAt, JsonNode report) {
+                              Instant updatedAt, String source, JsonNode report) {
     }
 
     /** Response of {@code GET /api/admin/playback-health} with a filter or a page: one page and the count of all. */
@@ -65,7 +68,8 @@ public final class HealthDtos {
      * {@code ViewingJoiner}), the time on each rung and the browser's own description of itself. {@code playbackId} is
      * the first part's; {@code watchedMs}, {@code stallCount} and {@code stallMs} are sums; {@code rungMs} is summed
      * per rung (null when no part's stored report can be read); {@code startupMs}, {@code environment},
-     * {@code userAgent} and {@code touch} are the first part's. {@code startedAt} is the first part's start and
+     * {@code userAgent}, {@code touch} and {@code source} are the first part's. {@code startedAt} is the first
+     * part's start and
      * {@code endedAt} the last part's last report. {@code parts} lists the playbacks, oldest first, never empty.
      * {@code touch} is the client's touch hint ({@link ClientInfo}); it is left out of the answer when the report has
      * none, so an old row reads as it did.
@@ -74,7 +78,7 @@ public final class HealthDtos {
                            long stallCount, long stallMs, Long startupMs, String environment,
                            Map<String, Long> rungMs, String userAgent,
                            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean touch, Instant endedAt,
-                           List<ChartPart> parts) {
+                           String source, List<ChartPart> parts) {
     }
 
     /** One playback of a {@link ChartRow}: its id, when it started and last reported, what it played, where. */

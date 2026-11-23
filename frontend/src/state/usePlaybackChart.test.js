@@ -124,4 +124,23 @@ describe('usePlaybackChart', () => {
     expect(result.current.error).toBeNull();
     expect(api.charts()).toHaveLength(2);
   });
+
+  it('starts on the people, and switching the source reads nothing from the server', async () => {
+    const api = server();
+    const { result } = renderHook(() => usePlaybackChart());
+    expect(result.current.source).toBe('person');
+    await loaded(result);
+    expect(result.current.sessions).toHaveLength(4);
+
+    act(() => result.current.setSource('robot'));
+    expect(result.current.sessions.map((s) => s.source)).toEqual(['robot']);
+    expect(result.current.tiles.watched).toBe(1);
+    expect(result.current.selected.source).toBe('robot');
+    expect(result.current.summary).toContain('in 30 days (headless runs only):');
+
+    act(() => result.current.setSource('all'));
+    expect(result.current.sessions).toHaveLength(5);
+    expect(result.current.summary).toContain('(headless runs included):');
+    expect(api.charts()).toHaveLength(1);
+  });
 });

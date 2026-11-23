@@ -71,6 +71,9 @@ public class PlaybackHealth {
     @Column(length = 16)
     private String environment;
 
+    @Column(nullable = false, length = 16)
+    private String source = HealthFigures.PERSON;
+
     /** Copies the queryable figures from a report's {@link HealthFigures}. */
     public void setFigures(HealthFigures figures) {
         watchedMs = figures.watchedMs();
@@ -79,5 +82,6 @@ public class PlaybackHealth {
         startupMs = figures.startupMs();
         hasProblem = figures.hasProblem();
         environment = figures.environment();
+        source = figures.source();
     }
 }

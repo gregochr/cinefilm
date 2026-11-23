@@ -6,6 +6,7 @@ import {
   STALL_COLOUR,
   stalledNote,
   startupText,
+  watchedTileLabel,
 } from '../state/playbackChart.js';
 import { usePlaybackChart } from '../state/usePlaybackChart.js';
 import AdminErrorBanner from './AdminErrorBanner.jsx';
@@ -31,10 +32,10 @@ function Segmented({ label, options, value, onChange }) {
   );
 }
 
-function Tiles({ tiles }) {
+function Tiles({ tiles, source }) {
   const note = stalledNote(tiles.stalledEnvironment);
   const items = [
-    { key: 'watched', value: tiles.watched, label: copy.tiles.watched },
+    { key: 'watched', value: tiles.watched, label: watchedTileLabel(source) },
     { key: 'ok', value: tiles.withoutStall, label: copy.tiles.withoutStall, tone: 'ok' },
     {
       key: 'stalled',
@@ -105,7 +106,7 @@ export default function PlaybackChartPanel() {
   } else {
     body = (
       <>
-        <Tiles tiles={chart.tiles} />
+        <Tiles tiles={chart.tiles} source={chart.source} />
         <p id={summaryId} className="sr-only">
           {chart.summary}
         </p>
@@ -146,6 +147,12 @@ export default function PlaybackChartPanel() {
             options={copy.environments}
             value={chart.environment}
             onChange={chart.setEnvironment}
+          />
+          <Segmented
+            label={copy.sourcesLabel}
+            options={copy.sources}
+            value={chart.source}
+            onChange={chart.setSource}
           />
         </div>
       </div>

@@ -37,7 +37,7 @@ import tools.jackson.databind.node.ObjectNode;
 class PlaybackHealthIntegrationTest extends IntegrationTestBase {
 
     private static final String ID = "3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b";
-    private static final HealthFigures FIGURES = new HealthFigures(300_000, 1, 500, 800L, true, "away");
+    private static final HealthFigures FIGURES = new HealthFigures(300_000, 1, 500, 800L, true, "away", "person");
 
     @Autowired
     private PlaybackHealthRepository health;
@@ -156,11 +156,24 @@ class PlaybackHealthIntegrationTest extends IntegrationTestBase {
         health.saveAndFlush(row(ID, 1, "{}"));
 
         inNewTransaction(() -> health.replaceIfNewer(ID, 2, "{}", NOW,
-            new HealthFigures(0, 0, 0, null, false, null)));
+            new HealthFigures(0, 0, 0, null, false, null, "person")));
 
         PlaybackHealth stored = health.findByPlaybackId(ID).orElseThrow();
         assertThat(stored.getStartupMs()).isNull();
         assertThat(stored.getEnvironment()).isNull();
+    }
+
+    @Test
+    void aStoredRobotReportReadsBackAsARobotAndANewRowDefaultsToAPerson() {
+        health.saveAndFlush(row(ID, 1, "{}"));
+        assertThat(health.findByPlaybackId(ID).orElseThrow().getSource()).isEqualTo("person");
+
+        inNewTransaction(() -> health.replaceIfNewer(ID, 2, "{}", NOW,
+            new HealthFigures(0, 0, 0, null, false, null, HealthFigures.ROBOT)));
+
+        assertThat(health.findByPlaybackId(ID).orElseThrow().getSource()).isEqualTo("robot");
+        assertThat(jdbc.queryForObject("SELECT source FROM playback_health WHERE playback_id = ?", String.class, ID))
+            .isEqualTo("robot");
     }
 
     @Test
