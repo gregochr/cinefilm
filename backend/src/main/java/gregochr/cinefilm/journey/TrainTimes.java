@@ -128,7 +128,7 @@ public final class TrainTimes {
             LocalTime time = LocalTime.parse(clock);
             LocalDateTime at = LocalDateTime.of(day, time);
             if (previous != null && at.isBefore(previous)) {
-                if (Duration.between(at, previous).compareTo(HALF_DAY) <= 0) {
+                if (!at.plus(HALF_DAY).isBefore(previous)) {
                     throw new BadRequestException(TrainFileRules.INVALID);
                 }
                 day = day.plusDays(1);
