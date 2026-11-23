@@ -1067,26 +1067,62 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     it('counts the transfer from 4000 ms after the first byte, not at 3900 ms', () => {
       const { hls, setClock } = armed();
       hls.fragLoading(loadingFrag(0, 20_000, 5_000)); // first byte at 5 s, a trickle
-      setClock(5_000 + IN_FLIGHT_MIN_AGE_MS - 100);
-      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      setClock(5_000 + 3_900);
+      vi.advanceTimersByTime(2_000);
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
-      setClock(5_000 + IN_FLIGHT_MIN_AGE_MS);
-      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      setClock(5_000 + 4_000);
+      vi.advanceTimersByTime(2_000);
       expect(hls.config.minAutoBitrate).toBe(0);
     });
 
     it('does not read the rate of a fragment that was aborted or has ended', () => {
       const { hls, setClock } = armed();
-      const aborted = loadingFrag(0, 0);
+      // A trickle that would release the hold if it were read: 20,000 bytes in 4 s from the first byte.
+      const aborted = loadingFrag(0, 20_000, 1_000);
       aborted.stats.aborted = true;
       hls.fragLoading(aborted);
-      setClock(IN_FLIGHT_MIN_AGE_MS);
-      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      setClock(5_000);
+      vi.advanceTimersByTime(2_000);
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
-      const ended = loadingFrag(0, 0);
-      ended.stats.loading.end = 500; // the failed attempt of a retry
+      const ended = loadingFrag(0, 20_000, 1_000);
+      ended.stats.loading.end = 4_500; // the failed attempt of a retry
       hls.fragLoading(ended);
-      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      vi.advanceTimersByTime(2_000);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+    });
+
+    it('pins the check interval at 2 s and the minimum age at 4 s', () => {
+      expect(HOLD_CHECK_MS).toBe(2000);
+      expect(IN_FLIGHT_MIN_AGE_MS).toBe(4000);
+    });
+
+    it('does not release before the 2 s tick, and does at it', () => {
+      const { hls, setClock } = armed();
+      hls.fragLoading(loadingFrag(0, 20_000, 1_000)); // a trickle, 4 s old at the clock below
+      setClock(5_000);
+      vi.advanceTimersByTime(1_999);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+      vi.advanceTimersByTime(1);
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('reads the newest three samples for the release: a slow one third-newest releases', () => {
+      const { hls } = armed();
+      const slow = { loaded: 12_500, loading: { start: 0, first: 1, end: 1000 } }; // 100 kbit/s
+      hls.fragLoaded(slow);
+      hls.fragLoaded(stats);
+      hls.fragLoaded(stats); // the slow one is third-newest
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('does not read a slow sample that is fourth-newest', () => {
+      const { hls } = armed();
+      const slow = { loaded: 12_500, loading: { start: 0, first: 1, end: 1000 } };
+      hls.fragLoaded(slow);
+      hls.fragLoaded(stats);
+      hls.fragLoaded(stats);
+      expect(hls.config.minAutoBitrate).toBe(0);
+      hls.fragLoaded(stats); // three fast samples after it: the slow one is fourth-newest
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
     });
 

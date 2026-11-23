@@ -123,12 +123,10 @@ describe('createFloorHold', () => {
       [327, 480],
       [330, 1_870],
     ];
-    for (const [aheadS, kbps] of minutes) {
-      hold.update({ aheadS, armKbps: kbps, releaseKbps: kbps, rateKbps: RATE });
-    }
-    expect(hold.update({ aheadS: 330, armKbps: 1_870, releaseKbps: 1_870, rateKbps: RATE })).toBe(
-      true,
-    );
+    minutes.forEach(([aheadS, kbps], i) => {
+      const armed = hold.update({ aheadS, armKbps: kbps, releaseKbps: kbps, rateKbps: RATE });
+      if (i > 0) expect(armed, `minute ${i}`).toBe(true);
+    });
   });
 
   it('releases on a single fragment well under the minute’s median', () => {
