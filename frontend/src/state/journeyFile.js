@@ -14,7 +14,7 @@ export const MAX_ROUNDS = 2000;
 export const MAX_MODEMS = 16;
 export const MAX_REQUEST_CHARS = 4_000_000;
 
-/** The contract's ranges, one row per field. `max` is a text's greatest length; `lowOpen` excludes `lo`. */
+/** The contract's ranges, one row per field. `max` is a text's greatest length (a hex text's greatest digit count); `lowOpen` excludes `lo`. */
 export const RANGES = {
   runStartedMs: { kind: 'int', lo: MS_LOW, hi: MS_HIGH },
   sourceFile: { kind: 'text', max: 200 },
@@ -69,13 +69,14 @@ export const RANGES = {
   technology: { kind: 'text', max: 40 },
   rssi: { kind: 'int', lo: -200, hi: 0 },
   operatorId: { kind: 'digits', max: 10 },
-  cellId: { kind: 'int', lo: 0, hi: 2 ** 40 },
+  cellId: { kind: 'hex', max: 10 },
 };
 
 const FEED_WHOLE = /^-?\d{1,15}$/;
 const FEED_DECIMAL = /^-?\d{1,15}(\.\d{1,15})?$/;
 const PRINTABLE = /^[ -~]+$/;
 const DIGITS = /^\d+$/;
+const HEX = /^[0-9a-fA-F]+$/;
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -87,6 +88,11 @@ function good(name, raw, fromFeed) {
   if (r.kind === 'text' || r.kind === 'digits') {
     if (typeof raw !== 'string' || raw.length > r.max || !PRINTABLE.test(raw)) return undefined;
     return r.kind === 'digits' && !DIGITS.test(raw) ? undefined : raw;
+  }
+  if (r.kind === 'hex') {
+    return typeof raw === 'string' && raw.length <= r.max && HEX.test(raw)
+      ? parseInt(raw, 16)
+      : undefined;
   }
   let n;
   if (fromFeed) {
