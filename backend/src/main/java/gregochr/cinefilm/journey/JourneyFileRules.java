@@ -186,7 +186,8 @@ public final class JourneyFileRules {
         }
         for (Decimal<T> decimal : decimals) {
             Double value = decimal.get().apply(record);
-            if (value != null && !(Double.isFinite(value) && value <= decimal.high()
+            // A value that is not a finite number (NaN or an infinity) falls outside every range and is refused.
+            if (value != null && !(value <= decimal.high()
                 && (decimal.lowOpen() ? value > decimal.low() : value >= decimal.low()))) {
                 return false;
             }
