@@ -6,6 +6,8 @@ import static gregochr.cinefilm.journey.JourneyTestData.fullTrainRun;
 import static gregochr.cinefilm.journey.JourneyTestData.journey;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.config.NotFoundException;
@@ -18,6 +20,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -36,6 +40,9 @@ class JourneyServiceTest {
     private TrainRunRepository runs;
     @Mock
     private JourneyTrainService trains;
+
+    @Captor
+    private ArgumentCaptor<Journey> deleted;
 
     private JourneyService service;
 
@@ -106,6 +113,30 @@ class JourneyServiceTest {
             "Testbook9,9");
         assertThat(entries).extracting(e -> e.train() == null ? null : e.train().uid())
             .containsExactly("X12345", "X12345", null);
+    }
+
+    @Test
+    void aJourneyWithATrainIsDeletedAndItsRunSwept() {
+        Journey journey = withId(journey(1_000L, 1, null), 31L);
+        journey.setTrainRunId(7L);
+        when(journeys.findLockedById(31L)).thenReturn(Optional.of(journey));
+
+        service.delete(31L);
+
+        verify(journeys).delete(deleted.capture());
+        assertThat(deleted.getValue().getId()).isEqualTo(31L);
+        verify(trains).sweep(7L);
+    }
+
+    @Test
+    void aJourneyWithoutATrainIsDeletedAndNothingIsSwept() {
+        when(journeys.findLockedById(32L)).thenReturn(Optional.of(withId(journey(1_000L, 1, null), 32L)));
+
+        service.delete(32L);
+
+        verify(journeys).delete(deleted.capture());
+        assertThat(deleted.getValue().getId()).isEqualTo(32L);
+        verifyNoInteractions(trains);
     }
 
     @Test
