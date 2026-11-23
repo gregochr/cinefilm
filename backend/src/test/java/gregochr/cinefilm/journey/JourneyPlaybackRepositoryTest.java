@@ -130,4 +130,19 @@ class JourneyPlaybackRepositoryTest extends ApiTestBase {
         assertThat(health.findById(recordId)).isEmpty();
         assertThat(playbackRecord(PLAYBACK_B)).isNotNull();
     }
+
+    @Test
+    void theCountsOfEveryJourneyAreItsLinksAndLeaveOutAJourneyWithNone() {
+        Long two = storedJourney(2_000_000L);
+        Long one = storedJourney(3_000_000L);
+        storedJourney(4_000_000L);
+        Long recordA = playbackRecord(PLAYBACK_A);
+        Long recordB = playbackRecord(PLAYBACK_B);
+        links.saveAllAndFlush(List.of(link(two, recordA), link(two, recordB), link(one, recordA)));
+        entityManager.clear();
+
+        List<LinkCount> counts = links.countsOfEveryJourney();
+
+        assertThat(counts).containsExactlyInAnyOrder(new LinkCount(two, 2), new LinkCount(one, 1));
+    }
 }

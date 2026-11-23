@@ -14,4 +14,9 @@ public interface JourneySampleRepository extends JpaRepository<JourneySample, Jo
     @Query("select new gregochr.cinefilm.journey.SampleSpan(min(s.sampledAt), max(s.sampledAt)) "
         + "from JourneySample s where s.journeyId = :journeyId")
     SampleSpan spanOf(Long journeyId);
+
+    /** The count, earliest and latest {@code sampledAt} of the samples of every journey that has any. */
+    @Query("select new gregochr.cinefilm.journey.SampleStats(s.journeyId, count(s), min(s.sampledAt), "
+        + "max(s.sampledAt)) from JourneySample s group by s.journeyId")
+    List<SampleStats> statsOfEveryJourney();
 }
