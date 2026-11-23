@@ -181,7 +181,8 @@ jobs:
         if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          pip install diff-cover==10.0.0
+          # Wheels only: no package's setup script runs at install time.
+          pip install --only-binary :all: diff-cover==10.0.0
           git fetch --no-tags origin "${{ github.base_ref }}"
           set +e
           diff-cover backend/target/site/jacoco/jacoco.xml \
@@ -273,9 +274,10 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      # --ignore-scripts: no dependency's install script runs (the lockfile's only one is fsevents, macOS only).
       - name: Install dependencies
         if: needs.changes.outputs.docs_only != 'true'
-        run: cd frontend && npm ci
+        run: cd frontend && npm ci --ignore-scripts
 
       - name: Lint
         if: needs.changes.outputs.docs_only != 'true'
@@ -308,7 +310,8 @@ jobs:
         if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          pip install diff-cover==10.0.0
+          # Wheels only: no package's setup script runs at install time.
+          pip install --only-binary :all: diff-cover==10.0.0
           git fetch --no-tags origin "${{ github.base_ref }}"
           sed 's#^SF:#SF:frontend/#' frontend/coverage/lcov.info > "$RUNNER_TEMP/lcov-root.info"
           set +e

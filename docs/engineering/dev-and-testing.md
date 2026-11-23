@@ -573,9 +573,16 @@ cancels superseded runs of the same ref.
 | `changes` | `Detect docs-only change` | Classifies the PR diff. |
 | `backend` | `Backend — Build, Test & Coverage` | `./mvnw clean verify` in full (Checkstyle, tests incl. Testcontainers integration, JaCoCo per class and bundle, SpotBugs + FindSecBugs), then the integration test count, then on PRs diff-cover at 90% of changed `backend/src/main` lines (JaCoCo XML). Uploads the JaCoCo and SpotBugs reports. 25 min timeout (was 20 before the ffmpeg retry budget). |
 | `shell` | `Shell — ShellCheck & script tests` | Pinned ShellCheck v0.11.0 (`-o check-unassigned-uppercase`) over `scripts/*.sh`, `scripts/lib/*.sh` and `scripts/test/*.sh`, then `bash scripts/test/run-all.sh`: the tests stub `npx`/`sleep` on PATH to prove `npm-audit.sh` (clean passes, findings fail without retry, transport errors retry with 15s/30s backoff, exhausted retries fail) and run `ci-docs-only.sh` against throwaway git repos. Run both locally the same way. Also runs a pinned actionlint (`rhysd/actionlint:1.7.12`, which shellchecks `run:` blocks too) over `.github/workflows/`: run `actionlint` locally before pushing a workflow change; `.github/actionlint.yaml` lists the self-hosted runner label (`cinefilm-prod`). It first sets up Node 24, because `replay-rig.test.sh` runs the home replay rig's tests with `node --test` (the rig's and the train viewer's: `home-replay.md`, `train-viewer.md`); run locally they need Node 22 or newer. |
-| `frontend` | `Frontend — Lint, Test & Build` | `npm ci`, `npm run lint`, `npm run format:check` (Prettier), `npm run test:coverage` (95/90 per file plus the global floor), on PRs diff-cover at 90% of changed `frontend/src` lines (lcov, with the `SF:` prefix rewrite), `scripts/npm-audit.sh frontend high`, `npm run build`. 20 min timeout. |
+| `frontend` | `Frontend — Lint, Test & Build` | `npm ci --ignore-scripts`, `npm run lint`, `npm run format:check` (Prettier), `npm run test:coverage` (95/90 per file plus the global floor), on PRs diff-cover at 90% of changed `frontend/src` lines (lcov, with the `SF:` prefix rewrite), `scripts/npm-audit.sh frontend high`, `npm run build`. 20 min timeout. |
 | `docker` | `Docker — image builds` | Builds the production `Dockerfile` (SPA, jar, ffmpeg runtime) without pushing, then checks it runs as uid 1001 with `ffmpeg`, `ffprobe` and `vainfo` present. The Mac has no Docker, so this is the only proof the image builds. 20 min timeout. |
 | `sonar` | `SonarQube Cloud — Analysis` | Needs `backend` and `frontend`. Downloads their artifacts (`backend-sonar-inputs`: classes, test classes and dependency jars; `jacoco-report`; `frontend-lcov`), rewrites the lcov `SF:` paths, and runs the pinned `sonarqube-scan-action` with `sonar.qualitygate.wait=true`, so the job fails when the quality gate on **new code** fails. Config: `sonar-project.properties` (backend, frontend, `scripts/`, Dockerfiles, `deploy/`, `.github/`). **Advisory, not a required check** (see `code-quality-plan.md` phase 4). Skips and reports success when `SONAR_TOKEN` is empty: fork PRs, and `deploy.yml`'s reuse of this workflow. 15 min timeout. |
+
+**Installs run no package scripts.** `npm ci` in CI, in the Stryker workflow and in the image carries
+`--ignore-scripts`, and CI's `pip install` of diff-cover carries `--only-binary :all:`, so a dependency cannot run code
+of its own at install time (SonarQube rules `S6505` and `S8541`). Nothing needs a script today: the only package in
+`frontend/package-lock.json` with one is `fsevents`, which is for macOS and is not installed on the runners or in the
+image. A dependency that needs its script later will fail where it is first used: run that one package's script in the
+step that needs it (`npm rebuild <package>`) and say why in the PR. `npm ci` on a developer's machine is unchanged.
 
 **The backend job's ffmpeg install** (`scripts/ci-install-ffmpeg.sh`, tests in `scripts/test/ci-install-ffmpeg.test.sh`).
 `RealToolsTest` needs ffmpeg, and two outages shaped the step. 2026-11-11, DNS: `apt-get update` alone took six minutes,
@@ -626,7 +633,7 @@ percentages must be real numbers; "No lines with coverage information" on a diff
 the path mapping is wrong):
 
 ```bash
-pip install diff-cover==10.0.0
+pip install --only-binary :all: diff-cover==10.0.0
 git fetch origin main
 diff-cover backend/target/site/jacoco/jacoco.xml --src-roots backend/src/main/java --compare-branch=origin/main --fail-under=90
 sed 's#^SF:#SF:frontend/#' frontend/coverage/lcov.info > /tmp/lcov-root.info
