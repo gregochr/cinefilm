@@ -50,6 +50,16 @@ const IDLE = {
   onConfirm: () => {},
 };
 
+const TRAINING = {
+  openId: null,
+  busy: false,
+  failure: null,
+  onOpen: () => {},
+  onClose: () => {},
+  onGive: () => {},
+  onEdit: () => {},
+};
+
 describe('JourneyList', () => {
   it('shows a labelled static skeleton before the first answer', () => {
     render(
@@ -59,6 +69,7 @@ describe('JourneyList', () => {
         error={null}
         onRetry={() => {}}
         deleting={IDLE}
+        training={TRAINING}
       />,
     );
 
@@ -68,7 +79,14 @@ describe('JourneyList', () => {
 
   it('says one sentence when nothing is stored', () => {
     render(
-      <JourneyList journeys={[]} loading={false} error={null} onRetry={() => {}} deleting={IDLE} />,
+      <JourneyList
+        journeys={[]}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        deleting={IDLE}
+        training={TRAINING}
+      />,
     );
 
     expect(screen.getByText('No journeys yet. Import a log above.')).toBeInTheDocument();
@@ -83,6 +101,7 @@ describe('JourneyList', () => {
         error={null}
         onRetry={() => {}}
         deleting={IDLE}
+        training={TRAINING}
       />,
     );
 
@@ -110,6 +129,7 @@ describe('JourneyList', () => {
         error={new Error('x')}
         onRetry={onRetry}
         deleting={IDLE}
+        training={TRAINING}
       />,
     );
 
@@ -129,6 +149,7 @@ describe('JourneyList deleting', () => {
         error={null}
         onRetry={() => {}}
         deleting={{ ...IDLE, ...deleting }}
+        training={TRAINING}
       />,
     );
     return within(screen.getByRole('list', { name: 'Stored journeys' })).getAllByRole('listitem');
@@ -199,6 +220,134 @@ describe('JourneyList deleting', () => {
   });
 });
 
+describe('JourneyList training', () => {
+  const rowOf = (journeys, training) => {
+    render(
+      <JourneyList
+        journeys={journeys}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        deleting={IDLE}
+        training={{ ...TRAINING, ...training }}
+      />,
+    );
+    return within(screen.getByRole('list', { name: 'Stored journeys' })).getAllByRole('listitem');
+  };
+  const ADD_NO_SAMPLES = 'Add train file to the journey with no samples';
+  const REPLACE_OLD =
+    'Replace train file of the journey logged 4 Mar 2030, 22:00 to 5 Mar 2030, 00:47';
+
+  it('gives each row its own button, Add train file… for none and Replace train file… for one', () => {
+    const rows = rowOf([NEWER, stored()]);
+
+    expect(within(rows[0]).getByRole('button', { name: ADD_NO_SAMPLES })).toHaveTextContent(
+      'Add train file…',
+    );
+    expect(within(rows[1]).getByRole('button', { name: REPLACE_OLD })).toHaveTextContent(
+      'Replace train file…',
+    );
+  });
+
+  it('tells the page which journey was pressed', async () => {
+    const onOpen = vi.fn();
+    const rows = rowOf([NEWER, stored()], { onOpen });
+
+    await userEvent.click(within(rows[1]).getByRole('button', { name: REPLACE_OLD }));
+
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(12);
+  });
+
+  it('opens the panel in the row whose id is open and in no other', () => {
+    const rows = rowOf([NEWER, stored()], { openId: 12 });
+
+    expect(
+      within(rows[1]).getByRole('group', { name: 'Train file for this journey' }),
+    ).toBeInTheDocument();
+    expect(within(rows[0]).queryByRole('group')).not.toBeInTheDocument();
+    expect(within(rows[1]).getByRole('button', { name: REPLACE_OLD })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
+
+  it('tells the page which journey the chosen file is for, and whether it had a train', async () => {
+    const onGive = vi.fn();
+    const rows = rowOf([NEWER, stored()], { openId: 12, onGive });
+    const text = JSON.stringify({
+      uid: 'X12345',
+      date: '2030-03-04',
+      headcode: '9Z99',
+      calls: [{ location: 'Alpha Junction' }, { location: 'Theta Central' }],
+    });
+    await userEvent.upload(
+      within(rows[1]).getByLabelText('Train file'),
+      new File([text], 'run.json'),
+    );
+
+    await userEvent.click(await within(rows[1]).findByRole('button', { name: 'Replace train' }));
+
+    expect(onGive).toHaveBeenCalledExactlyOnceWith(12, JSON.parse(text), true);
+  });
+
+  it('tells the page the journey had no train when it had none', async () => {
+    const onGive = vi.fn();
+    const rows = rowOf([NEWER, stored()], { openId: 20, onGive });
+    const text = JSON.stringify({
+      uid: 'X12345',
+      date: '2030-03-04',
+      headcode: '9Z99',
+      calls: [{ location: 'Alpha Junction' }, { location: 'Theta Central' }],
+    });
+    await userEvent.upload(
+      within(rows[0]).getByLabelText('Train file'),
+      new File([text], 'run.json'),
+    );
+
+    await userEvent.click(await within(rows[0]).findByRole('button', { name: 'Add train' }));
+
+    expect(onGive).toHaveBeenCalledExactlyOnceWith(20, JSON.parse(text), false);
+  });
+
+  it('tells the page the panel is closed and that a file was chosen', async () => {
+    const onClose = vi.fn();
+    const onEdit = vi.fn();
+    const rows = rowOf([NEWER, stored()], { openId: 12, onClose, onEdit });
+    await userEvent.upload(
+      within(rows[1]).getByLabelText('Train file'),
+      new File(['{}'], 'run.json'),
+    );
+
+    await userEvent.click(within(rows[1]).getByRole('button', { name: 'Cancel' }));
+
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no refusal in a panel when it was for another row', () => {
+    const failure = { id: 20, kind: 'alert', text: 'Couldn’t store the train. Try again.' };
+    const rows = rowOf([NEWER, stored()], { openId: 12, failure });
+
+    expect(within(rows[1]).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows a refusal in the open panel of its own row', () => {
+    const failure = { id: 12, kind: 'alert', text: 'Couldn’t store the train. Try again.' };
+    const rows = rowOf([NEWER, stored()], { openId: 12, failure });
+
+    expect(within(rows[1]).getByRole('alert')).toHaveTextContent(
+      'Couldn’t store the train. Try again.',
+    );
+  });
+
+  it('puts the train button and the delete button on the row side by side, train first', () => {
+    const rows = rowOf([stored()]);
+
+    const buttons = within(rows[0]).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent)).toEqual(['Replace train file…', 'Delete…']);
+  });
+});
+
 describe('JourneyList retrying', () => {
   const FAILED = new Error('x');
   const view = (journeys, loading, error) => (
@@ -208,6 +357,7 @@ describe('JourneyList retrying', () => {
       error={error}
       onRetry={() => {}}
       deleting={IDLE}
+      training={TRAINING}
     />
   );
   /** Rows shown, a read again failed, "Check again" pressed and its read now under way. */
@@ -257,6 +407,51 @@ describe('JourneyList retrying', () => {
     rerender(view([stored()], false, null));
 
     expect(screen.getByRole('heading', { level: 2, name: 'Stored journeys' })).not.toHaveFocus();
+  });
+
+  it('leaves focus on the page when a retry fails, the rows not being on show while it ran', async () => {
+    const { rerender } = await retrying();
+    act(() => screen.getByRole('button', { name: 'Check again' }).blur());
+    expect(document.body).toHaveFocus();
+
+    rerender(view([stored()], false, FAILED));
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Stored journeys' })).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
+  });
+});
+
+describe('JourneyList when a read again fails', () => {
+  const withOutside = (error) => (
+    <>
+      <button type="button">Outside</button>
+      <JourneyList
+        journeys={[stored()]}
+        loading={false}
+        error={error}
+        onRetry={() => {}}
+        deleting={IDLE}
+        training={TRAINING}
+      />
+    </>
+  );
+
+  it('takes focus to the heading when it had fallen to the page', () => {
+    const { rerender } = render(withOutside(null));
+    expect(document.body).toHaveFocus();
+
+    rerender(withOutside(new Error('x')));
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Stored journeys' })).toHaveFocus();
+  });
+
+  it('leaves focus on a real element outside the list', () => {
+    const { rerender } = render(withOutside(null));
+    act(() => screen.getByRole('button', { name: 'Outside' }).focus());
+
+    rerender(withOutside(new Error('x')));
+
+    expect(screen.getByRole('button', { name: 'Outside' })).toHaveFocus();
   });
 });
 

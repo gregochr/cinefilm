@@ -32,7 +32,7 @@ export default function JourneyDelete({ journey, open, busy, problem, onOpen, on
   };
   if (!open) {
     return (
-      <div className="admin__actions admin__todo-actions">
+      <div className="admin__actions admin__todo-actions journey-row__delete">
         <Button
           id={deleteButtonId(journey.id)}
           ref={openRef}
