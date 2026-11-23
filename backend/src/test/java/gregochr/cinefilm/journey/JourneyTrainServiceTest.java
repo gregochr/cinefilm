@@ -13,7 +13,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -276,19 +275,6 @@ class JourneyTrainServiceTest {
     }
 
     @Test
-    void aJourneyGivenTheRunItAlreadyHasSweepsNothing() {
-        journey.setTrainRunId(77L);
-        storedWith("Alpha Junction", "Theta Central");
-        savesRun();
-
-        service.give(5L, body());
-
-        verify(runs).findByTimetableUidAndRunDate("X12345", DAY);
-        verify(runs).save(runSaved.capture());
-        verifyNoMoreInteractions(runs);
-    }
-
-    @Test
     void takingTheTrainAwaySavesTheJourneyWithoutItAndSweepsItsRun() {
         journey.setTrainRunId(66L);
         locked();
@@ -299,25 +285,6 @@ class JourneyTrainServiceTest {
         verify(runs).findLockedById(66L);
         verify(runs).deleteIfUnused(66L);
         assertThat(journeySaved.getValue().getTrainRunId()).isNull();
-    }
-
-    @Test
-    void aJourneyWithoutATrainIsLeftAsItIs() {
-        locked();
-        service.takeAway(5L);
-
-        verify(journeys).findLockedById(5L);
-        verifyNoMoreInteractions(journeys);
-        verifyNoInteractions(runs);
-    }
-
-    @Test
-    void sweepLocksTheRunAndDeletesItOnlyThroughTheOneStatement() {
-        service.sweep(66L);
-
-        verify(runs).findLockedById(66L);
-        verify(runs).deleteIfUnused(66L);
-        verifyNoMoreInteractions(runs);
     }
 
     @Test

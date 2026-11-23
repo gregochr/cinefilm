@@ -80,7 +80,9 @@ public class JourneyTrainService {
         Long previous = journey.getTrainRunId();
         journey.setTrainRunId(runId);
         journeys.save(journey);
-        if (previous != null && !previous.equals(runId)) {
+        if (previous != null) {
+            // Whichever run it was: one still in use (even the run just given) is not deleted, and this transaction
+            // already holds its lock.
             sweep(previous);
         }
         return new Stored(file.uid(), file.date(), file.headcode(), file.calls().size());

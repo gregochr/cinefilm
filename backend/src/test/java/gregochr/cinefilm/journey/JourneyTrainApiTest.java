@@ -172,6 +172,22 @@ class JourneyTrainApiTest extends ApiTestBase {
     }
 
     @Test
+    void takingTheTrainFromAJourneyThatHasNoneIs204AndLeavesTheOtherRunsAlone() throws Exception {
+        give(second, example()).andExpect(status().isOk());
+        readBack();
+        Long runId = trainOf(second);
+
+        takeAway(first).andExpect(status().isNoContent());
+
+        readBack();
+        assertThat(journeys.findById(first)).isPresent();
+        assertThat(trainOf(first)).isNull();
+        assertThat(trainOf(second)).isEqualTo(runId);
+        assertThat(runs.count()).isEqualTo(1);
+        assertThat(calls.count()).isEqualTo(8);
+    }
+
+    @Test
     void aJourneyGivenAnotherTrainLosesTheFirstRun() throws Exception {
         give(first, example()).andExpect(status().isOk());
         readBack();
