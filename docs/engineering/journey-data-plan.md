@@ -137,14 +137,16 @@ below.
      fact stop.
    - **The file gives clock times; the server makes the instants.** Whoever makes the file copies the times as the
      railway shows them, to the half minute, and the running date. The server walks the planned times in order
-     from that date by Britain's clock (`Europe/London`): a time may not be earlier than the one before it, except
-     by more than twelve hours, which is midnight passing. Each actual time is put on the day that brings it
+     from that date by Britain's clock (`Europe/London`): a time may not be earlier on the clock than the one
+     before it, except by more than twelve hours, which is midnight passing (clock hours, so the same on every
+     day of the year). Each actual time is put on the day that brings it
      nearest its call's planned time of the same kind (arrival with arrival, departure with departure, pass with
      pass) or, where the call has none of that kind (a train planned to pass that in fact stopped), the call's
      first planned time; exactly as near on two days, it is the later. So nobody can get the time zone, summer
      time or midnight wrong by hand. On the two days a year the clocks change, a time in the hour that is skipped
-     is moved on by that hour and a time in the hour that comes twice is taken as the first of the two: a train
-     that ran through that second hour is an hour out or refused, which is accepted.
+     is moved on by that hour and a time in the hour that comes twice is taken as the first of the two; a planned
+     time that would then fall before the one before it is refused. A train that ran through that second hour is
+     an hour out or refused, which is accepted.
    - **A file is the train's whole run, origin to destination,** not the owner's stretch of it. Giving a journey a
      train finds the run by its key or makes it. A run already stored is replaced by the file only when the file
      begins and ends at the places the stored run does (otherwise it is refused: one stretch must not wipe the
@@ -172,9 +174,17 @@ below.
 - `GET /api/admin/playback-health`: a new optional parameter `source` (`person` or `robot`; without it both, as
   today; anything else is a 400); every row gains `source`. `/chart`: every session gains `source` (no parameter).
   `GET /api/admin/playback-health/{playbackId}`: the row gains `source`.
-- `POST /api/admin/journeys` (one file; answers the journeys made and the records linked), `GET
-  /api/admin/journeys`, `GET /api/admin/journeys/{id}` (the samples and modem samples as compact rows), `DELETE
-  /api/admin/journeys/{id}`.
+- `POST /api/admin/journeys` (one file; answers the journeys made and the records linked).
+- `GET /api/admin/journeys`: 200 with `{ journeys: [...] }`, every journey, the newest run first and a run's
+  segments in order. Each: `id`, `runStartedMs`, `segment`, `trainUnit`, `travelClass`, `osVersion`,
+  `loggerVersion`, `sourceFile`, `importedAt`; `device` (`{ model, cpu, cores, threads, memoryBytes }` or null);
+  `samples` (the count), `from` and `to` (its first and last sample's time; null with no sample), `linked` (the
+  count of playback records linked); `train` (`{ uid, date, headcode }` or null).
+- `DELETE /api/admin/journeys/{id}`: 204; the journey's samples, modems and links go with it, and its train's
+  run when no other journey has it. 404 `No such journey`; 409 `Try again` for two requests that clash. Once
+  every journey of a file is deleted the file can be imported again.
+- `GET /api/admin/journeys/{id}` (the samples and modem samples as compact rows, the run and its calls): later,
+  with the view that reads it.
 - `PUT /api/admin/journeys/{id}/train` (one train file; decision 9) and `DELETE /api/admin/journeys/{id}/train`.
 
 ## The train's file (`PUT /api/admin/journeys/{id}/train`)
@@ -298,10 +308,15 @@ Each one owns its own contract rows in `foundation-plan.md`, its HTTP contract t
      time, an actual time on the day nearest its planned one). About 500 lines.
    - **its two calls:** giving a journey its train and taking it away (the same run given twice, a run shared by
      two journeys, another day refused), with the contract's rows. About 1,000 lines. After the import.
-6. **Reading and deleting** (backend): the three other calls. The list carries each journey's headcode and
-   running date where it has a train; one journey's answer carries the run and its calls; deleting a journey
-   calls the one sweep of decision 9, and a test holds that a run shared by two journeys outlives the first
-   delete. About 700 lines.
+6. **Reading and deleting** (backend), in two, in the order the page needs them:
+   - **the list and the delete:** `GET /api/admin/journeys` and `DELETE /api/admin/journeys/{id}`. The list
+     carries each journey's own columns, its device, the count and the first and last time of its samples, the
+     count of its linked records, and its train's timetable id, running date and headcode where it has one;
+     deleting a journey calls the one sweep of decision 9, and a test holds that a run shared by two journeys
+     outlives the first delete. About 750 lines. Admin's page needs no more than these.
+   - **one journey read back:** `GET /api/admin/journeys/{id}`, the samples and modem samples as compact rows,
+     the run and its calls. Nothing reads it until the journey is laid out in time (8), so it is built after
+     the page, with that view's needs in hand.
 7. **Admin's Journeys page**: choose a file, see what will be sent, import, add the train's file, list, delete; the reading and trimming
    of the file under `frontend/src/state`; a short manual, `docs/engineering/journeys.md`. About 1,100 lines.
 8. **Later, with two journeys in hand:** the journey laid out in time, each modem's signal and the passengers

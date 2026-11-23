@@ -64,8 +64,9 @@ cache only changes that helper.
 - **Journey data (V37):** six tables hold the owner's train-journey logs: `device` (a kind of laptop), `journey`,
   `journey_sample`, `journey_modem`, `journey_modem_sample` and `journey_playback`. A journey is one stretch (segment)
   of one logger run on one train unit; its samples are the logger's 30-second rounds, and `journey_playback` links it
-  to the playback records watched during it (those links go when the capped record goes). Tables only, no endpoint
-  yet; see `journey-data-plan.md`. **Which train it was (V38):** a `train_run` is one train service on one running date
+  to the playback records watched during it (those links go when the capped record goes). They are filled by Admin's
+  import (`POST /api/admin/journeys`, under "Journey data API" below); see `journey-data-plan.md`.
+  **Which train it was (V38):** a `train_run` is one train service on one running date
   (its timetable uid and date are unique, with the headcode, operator, source and the time it was stored), kept once
   however many journeys were on it; a `train_run_call` is one timing point of it, in order (`seq` from 0), with the
   place and the planned and actual arrival, departure and pass times; and `journey.train_run_id` points a journey at
