@@ -32,6 +32,9 @@ public final class TrainFileRules {
     /** {@code HH:MM} or {@code HH:MM:SS}: two ASCII digits each, seconds 00 or 30. */
     private static final Pattern CLOCK = Pattern.compile("([01][0-9]|2[0-3]):[0-5][0-9](:(00|30))?");
 
+    /** {@code YYYY-MM-DD}: four ASCII digits, two, two (ISO parsing alone would take a signed, padded year). */
+    private static final Pattern DATE_FORM = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
+
     /** A text: its name, its longest length (the shortest is 1), whether it must be there, and where to read it. */
     record Text<T>(String name, int max, boolean required, Function<T, String> get) {
     }
@@ -91,7 +94,7 @@ public final class TrainFileRules {
 
     /** {@code YYYY-MM-DD}, a real calendar date inside the range. */
     private static boolean date(String value) {
-        if (value == null) {
+        if (value == null || !DATE_FORM.matcher(value).matches()) {
             return false;
         }
         try {
