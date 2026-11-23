@@ -22,9 +22,10 @@ async function look(file) {
 /**
  * The import card: choose a logger file, read it here in the browser, see what will be sent, then send it. Nothing is
  * sent before "Import". One import at a time; a file chosen while one is in flight is ignored (and the input emptied,
- * so the same file can be chosen again). Of two files chosen in a row only the last one shows.
+ * so the same file can be chosen again). Of two files chosen in a row only the last one shows. `onImported` is called
+ * after a 201, so the page can read the stored journeys again.
  */
-export default function JourneyImport() {
+export default function JourneyImport({ onImported }) {
   const inputId = useId();
   const input = useRef(null);
   const { showToast } = useAdminContext();
@@ -57,6 +58,7 @@ export default function JourneyImport() {
     const outcome = await writer.run(choice.request);
     if (outcome.ignored || !outcome.ok) return;
     showToast(importToast(outcome.response));
+    onImported();
     // The input is gone with the page, so there is nothing left to clear or focus.
     const field = input.current;
     if (!field) return;

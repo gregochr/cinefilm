@@ -13,6 +13,23 @@ export const journeysPage = {
   title: 'Train journeys',
 };
 
+export const journeyList = {
+  title: 'Stored journeys',
+  label: 'Stored journeys',
+  loadingLabel: 'Loading journeys',
+  loadError: 'Couldn’t load the journeys.',
+  checkAgain: 'Check again',
+  empty: 'No journeys yet. Import a log above.',
+  noSamples: 'No samples',
+  unitNotNamed: 'Unit not named',
+  part: (n) => `part ${n}`,
+  classes: { standard: 'Standard', first: 'First' },
+  rounds: (n) => count(n, 'round', 'rounds'),
+  viewings: (n) => (n === 0 ? 'no viewings' : count(n, 'viewing', 'viewings')),
+  train: (headcode, date) => `Train ${headcode} on ${date}`,
+  noTrain: 'No train yet',
+};
+
 export const journeyImport = {
   title: 'Import a journey',
   text: 'Choose a log the train feed logger wrote. It is read here, in this browser, and only what is listed below is sent.',
