@@ -19,8 +19,8 @@ import java.util.Set;
 record CreditsFeaturesOptions(Path data, Path labels, Path out, Set<Long> ids, boolean look) {
 
     private static final List<String> REQUIRED = List.of("data", "labels", "out");
-    private static final String IDS = "ids";
-    private static final String LOOK = "--look";
+    private static final String IDS_FLAG = "ids";
+    private static final String LOOK_FLAG = "--look";
     private static final String LOOK_VALUE = "L5";
 
     /**
@@ -36,11 +36,11 @@ record CreditsFeaturesOptions(Path data, Path labels, Path out, Set<Long> ids, b
         boolean look = false;
         for (int i = 0; i < args.length; i++) {
             String name = args[i];
-            if (name.equals(LOOK)) {
+            if (name.equals(LOOK_FLAG)) {
                 throw new IllegalArgumentException("flag --look needs a value: --look=" + LOOK_VALUE);
             }
-            if (name.startsWith(LOOK + "=")) {
-                if (!name.equals(LOOK + "=" + LOOK_VALUE)) {
+            if (name.startsWith(LOOK_FLAG + "=")) {
+                if (!name.equals(LOOK_FLAG + "=" + LOOK_VALUE)) {
                     throw new IllegalArgumentException("--look must be " + LOOK_VALUE + ": " + name);
                 }
                 if (look) {
@@ -50,7 +50,7 @@ record CreditsFeaturesOptions(Path data, Path labels, Path out, Set<Long> ids, b
                 continue;
             }
             String flag = name.startsWith("--") ? name.substring(2) : name;
-            if (flag.equals(name) || !REQUIRED.contains(flag) && !IDS.equals(flag)) {
+            if (flag.equals(name) || !REQUIRED.contains(flag) && !IDS_FLAG.equals(flag)) {
                 throw new IllegalArgumentException("unknown argument " + name);
             }
             if (i + 1 >= args.length) {
@@ -66,6 +66,6 @@ record CreditsFeaturesOptions(Path data, Path labels, Path out, Set<Long> ids, b
             }
         }
         return new CreditsFeaturesOptions(Path.of(flags.get("data")), Path.of(flags.get("labels")),
-            Path.of(flags.get("out")), DatasetMeasureOptions.ids(flags.get(IDS)), look);
+            Path.of(flags.get("out")), DatasetMeasureOptions.ids(flags.get(IDS_FLAG)), look);
     }
 }

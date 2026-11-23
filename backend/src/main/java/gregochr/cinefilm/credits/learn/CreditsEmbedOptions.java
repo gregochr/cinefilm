@@ -18,7 +18,7 @@ import java.util.Map;
 record CreditsEmbedOptions(Path data, Path features, Path encoder, Path out, boolean look) {
 
     private static final List<String> REQUIRED = List.of("data", "features", "encoder", "out");
-    private static final String LOOK = "--look";
+    private static final String LOOK_FLAG = "--look";
     private static final String LOOK_VALUE = "L5";
 
     /**
@@ -34,11 +34,11 @@ record CreditsEmbedOptions(Path data, Path features, Path encoder, Path out, boo
         boolean look = false;
         for (int i = 0; i < args.length; i++) {
             String name = args[i];
-            if (name.equals(LOOK)) {
+            if (name.equals(LOOK_FLAG)) {
                 throw new IllegalArgumentException("flag --look needs a value: --look=" + LOOK_VALUE);
             }
-            if (name.startsWith(LOOK + "=")) {
-                if (!name.equals(LOOK + "=" + LOOK_VALUE)) {
+            if (name.startsWith(LOOK_FLAG + "=")) {
+                if (!name.equals(LOOK_FLAG + "=" + LOOK_VALUE)) {
                     throw new IllegalArgumentException("--look must be " + LOOK_VALUE + ": " + name);
                 }
                 if (look) {

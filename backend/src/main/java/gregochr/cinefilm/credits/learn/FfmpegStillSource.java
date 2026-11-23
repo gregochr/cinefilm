@@ -19,22 +19,31 @@ final class FfmpegStillSource implements StillSource {
 
     @Override
     public Reading open(Path file) {
-        CreditsFrameReader.Job job = reader.open(file, UNUSED_DURATION_MS, () -> { }, 0);
-        return new Reading() {
-            @Override
-            public Optional<GreyFrame> frameAt(long fileMs) {
-                return job.frameOrEnd(fileMs);
-            }
+        return new JobReading(reader.open(file, UNUSED_DURATION_MS, () -> { }, 0));
+    }
 
-            @Override
-            public Optional<byte[]> fullPngAt(long fileMs) {
-                return job.fullPngOrEnd(fileMs);
-            }
+    /** One open file: reads go to the job, and closing the reading closes the job, which deletes its directory. */
+    private static final class JobReading implements Reading {
 
-            @Override
-            public void close() {
-                job.close();
-            }
-        };
+        private final CreditsFrameReader.Job job;
+
+        JobReading(CreditsFrameReader.Job job) {
+            this.job = job;
+        }
+
+        @Override
+        public Optional<GreyFrame> frameAt(long fileMs) {
+            return job.frameOrEnd(fileMs);
+        }
+
+        @Override
+        public Optional<byte[]> fullPngAt(long fileMs) {
+            return job.fullPngOrEnd(fileMs);
+        }
+
+        @Override
+        public void close() {
+            job.close();
+        }
     }
 }
