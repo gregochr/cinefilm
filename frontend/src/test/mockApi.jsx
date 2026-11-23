@@ -223,6 +223,7 @@ export function defaultRoute(method, url, init = {}) {
   if (path === '/api/admin/transcoding') return json(adminTranscoding);
   if (/^\/api\/admin\/transcoding\/sessions\//.test(path)) return json(null, 204);
   if (/^\/api\/playback-health\/[^/]+$/.test(path)) return json(null, 204);
+  if (path === '/api/admin/journeys' && method === 'GET') return json({ journeys: [] });
   if (path === '/api/session') return json({ authenticated: true });
   return json(null, 404);
 }

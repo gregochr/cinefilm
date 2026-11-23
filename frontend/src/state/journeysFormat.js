@@ -1,5 +1,5 @@
 import { serverText } from '../api/client.js';
-import { journeyImport as copy } from './journeysCopy.js';
+import { journeyImport as copy, journeyList } from './journeysCopy.js';
 
 const DAY_AND_TIME = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/London',
@@ -30,6 +30,40 @@ export function loggedRange(fromMs, toMs) {
   const to = londonParts(toMs);
   const end = to.date === from.date ? to.time : `${to.date}, ${to.time}`;
   return `${from.date}, ${from.time} to ${end}`;
+}
+
+/** A calendar date ("2030-03-04") as "4 Mar 2030". It is a day, not a moment: no time zone is applied. */
+function calendarDate(isoDate) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return `${day} ${MONTHS[month - 1]} ${year}`;
+}
+
+/**
+ * The lines of a stored journey's row; `all` is every journey in the list (a run's other segments are told by their
+ * `runStartedMs`). `second` is the parts that have something to say, joined with " · "; `fourth` is null when neither
+ * the file's name nor the laptop's model is known.
+ */
+export function journeyLines(journey, all) {
+  const { from, to, device } = journey;
+  const hasParts = all.some((j) => j.id !== journey.id && j.runStartedMs === journey.runStartedMs);
+  const second = [
+    journey.trainUnit ?? journeyList.unitNotNamed,
+    hasParts ? journeyList.part(journey.segment + 1) : null,
+    journeyList.classes[journey.travelClass],
+    journeyList.rounds(journey.samples),
+    journeyList.viewings(journey.linked),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const fourth = [journey.sourceFile, device?.model].filter(Boolean).join(' · ');
+  return {
+    title: from === null ? journeyList.noSamples : loggedRange(Date.parse(from), Date.parse(to)),
+    second,
+    third: journey.train
+      ? journeyList.train(journey.train.headcode, calendarDate(journey.train.date))
+      : journeyList.noTrain,
+    fourth: fourth || null,
+  };
 }
 
 /** "Ready to import: 363 rounds". */

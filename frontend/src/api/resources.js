@@ -132,6 +132,8 @@ export const adminApi = {
   /** The one-off import of Plex's credits markers: status with progress and the last report. */
   plexCredits: (options) => get('/api/admin/plex/credits', options),
   startPlexCreditsImport: () => post('/api/admin/plex/credits/import'),
+  /** Every stored journey, the newest run first: `{ journeys: [...] }`. */
+  journeys: (options) => get('/api/admin/journeys', options),
   /** Stores one train feed logger file, as `readJourneyLog` trimmed it; answers `{ journeys: [{ samples, linked, ... }] }`. */
   importJourney: (request) => post('/api/admin/journeys', request),
   transcoding: (options) => get('/api/admin/transcoding', options),

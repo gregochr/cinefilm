@@ -3,6 +3,7 @@ import { ApiError } from '../api/client.js';
 import {
   importFailure,
   importToast,
+  journeyLines,
   loggedRange,
   problemText,
   readyLine,
@@ -223,5 +224,95 @@ describe('importToast', () => {
     expect(importToast({ journeys: [{ samples: 5, linked: 0 }] })).toBe(
       'Imported 1 journey: 5 rounds, no viewings linked',
     );
+  });
+});
+
+const stored = (over = {}) => ({
+  id: 12,
+  runStartedMs: 1898891940000,
+  segment: 0,
+  trainUnit: 'Unit-001',
+  travelClass: 'standard',
+  osVersion: '15.1',
+  loggerVersion: 3,
+  sourceFile: 'train-feed-example.jsonl',
+  importedAt: '2030-03-05T09:00:00Z',
+  device: { model: 'ExampleBook1,1', cpu: 'Example chip', cores: 8, threads: 8, memoryBytes: 1 },
+  samples: 363,
+  from: '2030-03-04T22:00:00Z',
+  to: '2030-03-05T00:47:30Z',
+  linked: 2,
+  train: { uid: 'X12345', date: '2030-03-04', headcode: '9Z99' },
+  ...over,
+});
+const linesOf = (journey, others = []) => journeyLines(journey, [journey, ...others]);
+
+describe('journeyLines', () => {
+  it('writes every line of a journey that has everything', () => {
+    expect(linesOf(stored())).toEqual({
+      title: '4 Mar 2030, 22:00 to 5 Mar 2030, 00:47',
+      second: 'Unit-001 · Standard · 363 rounds · 2 viewings',
+      third: 'Train 9Z99 on 4 Mar 2030',
+      fourth: 'train-feed-example.jsonl · ExampleBook1,1',
+    });
+  });
+
+  it('says No samples for a journey with none, and still counts its rounds', () => {
+    const lines = linesOf(stored({ from: null, to: null, samples: 0, linked: 0 }));
+    expect(lines.title).toBe('No samples');
+    expect(lines.second).toBe('Unit-001 · Standard · 0 rounds · no viewings');
+  });
+
+  it('says Unit not named when there is no unit', () => {
+    expect(linesOf(stored({ trainUnit: null })).second).toBe(
+      'Unit not named · Standard · 363 rounds · 2 viewings',
+    );
+  });
+
+  it('leaves the class out when there is none and writes First', () => {
+    expect(linesOf(stored({ travelClass: null })).second).toBe(
+      'Unit-001 · 363 rounds · 2 viewings',
+    );
+    expect(linesOf(stored({ travelClass: 'first' })).second).toBe(
+      'Unit-001 · First · 363 rounds · 2 viewings',
+    );
+  });
+
+  it('says 1 round and 1 viewing, and no viewings', () => {
+    expect(linesOf(stored({ samples: 1, linked: 1 })).second).toBe(
+      'Unit-001 · Standard · 1 round · 1 viewing',
+    );
+    expect(linesOf(stored({ linked: 0 })).second).toBe(
+      'Unit-001 · Standard · 363 rounds · no viewings',
+    );
+  });
+
+  it('numbers the segments of one run from part 1, and leaves the part out of a journey alone', () => {
+    const first = stored({ id: 12, segment: 0 });
+    const second = stored({ id: 13, segment: 1 });
+    expect(linesOf(first, [second]).second).toBe(
+      'Unit-001 · part 1 · Standard · 363 rounds · 2 viewings',
+    );
+    expect(linesOf(second, [first]).second).toBe(
+      'Unit-001 · part 2 · Standard · 363 rounds · 2 viewings',
+    );
+    expect(linesOf(first, [stored({ id: 14, runStartedMs: 1898000000000 })]).second).toBe(
+      'Unit-001 · Standard · 363 rounds · 2 viewings',
+    );
+  });
+
+  it('says No train yet when it has none', () => {
+    expect(linesOf(stored({ train: null })).third).toBe('No train yet');
+  });
+
+  it('writes a summer running date as it is given', () => {
+    const train = { uid: 'X12345', date: '2030-07-15', headcode: '9Z99' };
+    expect(linesOf(stored({ train })).third).toBe('Train 9Z99 on 15 Jul 2030');
+  });
+
+  it('writes the fourth line from the file and the model, from either, or leaves it null', () => {
+    expect(linesOf(stored({ device: null })).fourth).toBe('train-feed-example.jsonl');
+    expect(linesOf(stored({ sourceFile: null })).fourth).toBe('ExampleBook1,1');
+    expect(linesOf(stored({ sourceFile: null, device: null })).fourth).toBeNull();
   });
 });
