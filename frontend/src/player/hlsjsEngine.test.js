@@ -1599,6 +1599,17 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
       expect(env.hls.autoLevelCapping).toBe(3);
     });
 
+    it('forgets the rates from before the trouble: stale fast ones do not carry a rung back', () => {
+      const env = climb(full, 20_000, 1);
+      for (let i = 0; i < 8; i += 1) env.hls.fragLoaded(frag(20_000));
+      trouble(env.hls);
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(100));
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(100));
+      expect(env.hls.autoLevelCapping).toBe(2);
+    });
+
     it.each([
       ['a ladder with a 360p hold', full, 3, 2],
       ['a ladder with no 360p level', noHold, 1, 0],

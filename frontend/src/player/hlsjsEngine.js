@@ -290,9 +290,9 @@ export function startHlsJs({
     holdLevel = qualifies ? index : null;
     if (auto) {
       // The playlist lists the session's start rung first, and a remembered fast speed could start at 720p or
-      // above with an empty bank: the start is clamped to the ceiling.
+      // above with an empty bank: `applyCap` clamps the start to the ceiling, which starts at the 480p level.
       ceiling = champagneBase(data.levels);
-      cap(gate.start(Math.min(data.firstLevel, ceiling)));
+      cap(gate.start(data.firstLevel));
     }
   });
 
