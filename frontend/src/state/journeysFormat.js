@@ -1,5 +1,5 @@
 import { serverText } from '../api/client.js';
-import { journeyDelete, journeyImport as copy, journeyList } from './journeysCopy.js';
+import { journeyDelete, journeyImport as copy, journeyList, journeyTrain } from './journeysCopy.js';
 
 const DAY_AND_TIME = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/London',
@@ -158,6 +158,69 @@ export function deleteFailure(error) {
   if (error?.status === 404) return { kind: 'gone', text: null };
   if (error?.status === 409) return { kind: 'alert', text: journeyDelete.conflict };
   return { kind: 'alert', text: journeyDelete.failed };
+}
+
+/** What a screen reader says for a row's train button: add or replace, and which journey, by the row's title. */
+export function trainSpoken(journey) {
+  const replacing = journey.train !== null;
+  if (journey.from === null) {
+    return replacing ? journeyTrain.spoken.replaceNoSamples : journeyTrain.spoken.addNoSamples;
+  }
+  const title = journeyTitle(journey);
+  return replacing ? journeyTrain.spoken.replace(title) : journeyTrain.spoken.add(title);
+}
+
+/** "Ready to send: train 9Z99". */
+export function trainReadyLine(summary) {
+  return journeyTrain.ready(summary.headcode);
+}
+
+const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/** What will be sent of a train file, as terms and values in the order shown. The date is as the file has it unless it is `YYYY-MM-DD`. */
+export function trainRows(summary) {
+  const { terms } = journeyTrain;
+  return [
+    { term: terms.uid, value: summary.uid },
+    {
+      term: terms.date,
+      value: ISO_DATE.test(summary.date) ? calendarDate(summary.date) : summary.date,
+    },
+    { term: terms.headcode, value: summary.headcode },
+    { term: terms.calls, value: summary.calls.toLocaleString('en-GB') },
+    { term: terms.from, value: summary.from },
+    { term: terms.to, value: summary.to },
+  ];
+}
+
+/** The sentence for a `readTrainFile` problem. */
+export function trainProblemText(problem) {
+  return journeyTrain.problems[problem];
+}
+
+/**
+ * How a failed train write reads: `kind` is `signin` (a 401: the sign-in card handles it, no text), `gone` (a 404: the
+ * journey was already deleted, told in a toast, no text) or `alert`, with the `text` for the panel. A 400 and a 409 are
+ * told apart by the server's own text.
+ */
+export function trainFailure(error) {
+  const said = serverText(error);
+  if (error?.status === 401) return { kind: 'signin', text: null };
+  if (error?.status === 404) return { kind: 'gone', text: null };
+  if (error?.status === 400) {
+    const didNotRun = said === 'The train did not run during this journey';
+    return { kind: 'alert', text: didNotRun ? journeyTrain.didNotRun : journeyTrain.refused };
+  }
+  if (error?.status === 409) {
+    const otherEnds = said === 'This train is stored with other end points';
+    return { kind: 'alert', text: otherEnds ? journeyTrain.otherEnds : journeyTrain.conflict };
+  }
+  return { kind: 'alert', text: journeyTrain.failed };
+}
+
+/** The toast for the 200: "Train 9Z99 added: 8 timing points", or "replaced" for a journey that had a train. */
+export function trainToast(response, replaced) {
+  return journeyTrain.toast(response.headcode, response.calls, replaced);
 }
 
 /**
