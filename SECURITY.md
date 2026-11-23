@@ -107,7 +107,10 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    train's system over `https` and, as that system is reported to use it, plain `http`, and it reads an `https`
    answer whose certificate is refused, marking it untrusted. What the feed says is logged and shown on the
    terminal as printable ASCII, limited in size and depth, and decides nothing beyond whether an address or one of
-   its parts counts as answering. Its log holds where the train went, so it is written under
+   its parts counts as answering. It also reads the laptop's own power, heat, load and memory figures from `pmset` and
+   `sysctl`, and the signal, noise, rate and channel of its own Wi-Fi link from `osascript` running one fixed script;
+   all by absolute path with no shell, logging only the parsed figures: no serial number, hardware id or address,
+   never the network's name or the access point's address, and never a scan. Its log holds where the train went, so it is written under
    `~/train-feed-logger/logs`, never inside a checkout, and is never committed. "No location is requested or
    stored" above still holds for the browser and the server.
 8. **Dependencies and CI.** No new dependency without a reason in the PR. OWASP/`npm audit` findings at High or above

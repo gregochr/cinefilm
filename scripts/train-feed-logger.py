@@ -24,6 +24,7 @@ newer, which is what stops an answer that has no length at the size limit, and r
 """
 import argparse
 import json
+import math
 import os
 import platform
 import re
@@ -36,12 +37,20 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlsplit
 
-VERSION = 2
+VERSION = 3
 DEFAULT_BASES = ["https://www.ombord.info/api/jsonp/", "http://www.ombord.info/api/jsonp/"]
 # "position" comes first: it is the one that decides whether an address is answering.
 PARTS = ["position", "connectivity", "users", "user", "system"]
 DEFAULT_PROBE = "https://www.gstatic.com/generate_204"
 CURL = "/usr/bin/curl"
+# The laptop's own state, each tool by its absolute path and never through a shell.
+SYSCTL = "/usr/sbin/sysctl"
+PMSET = "/usr/bin/pmset"
+OSASCRIPT = "/usr/bin/osascript"
+SIDE_WAIT_S = 14  # how long a round waits for each side thread (the internet check, the laptop's read)
+TOOL_TIMEOUT_S = 2  # for each tool; six calls one after another stay inside SIDE_WAIT_S
+TOOL_MAX_BYTES = 20000
+TEXT_MAX = 100  # characters of a device text kept
 MARK = "\n@@train-feed-logger@@ "
 DEFAULT_TIMEOUT_S = 8
 DEFAULT_SPEED_TIMEOUT_S = 12
@@ -51,7 +60,10 @@ SPEED_BYTES = 262144
 FEED_MAX_BYTES = 50000  # a hostile or broken feed must not make us hold a huge body
 PRINT_MAX = 40
 QUESTION = "Will a film be playing on this laptop during the journey? [Y/n] "
-ANSWER_WAIT_S = 60  # the question must never hold logging up
+CLASS_QUESTION = "Standard or first class? [S/f] "
+ANSWER_WAIT_S = 60  # the questions, together, must never hold logging up
+NO_FILM_NOTE = "\nNo answer: assuming a film will play."
+NO_CLASS_NOTE = "\nNo answer: the class is not recorded."
 PROBE_TIMEOUT_S = 10
 PROBE_MAX_BYTES = 65536  # only the status and the timing are used: the body is never kept
 TYPE_KEPT = 200  # characters of a content type kept in the log
@@ -78,6 +90,29 @@ CURL_ERRORS = {
 }
 UNTRUSTED = (51, 60)
 SCRIPT_SRC = re.compile(r'src="([^"]*)"')
+# One fixed script, passed as one argument with nothing put into it. It never asks for the network's name, the access
+# point's address, the laptop's hardware address or the country code, and never starts a scan: add no property to it.
+WIFI_SCRIPT = """ObjC.import('CoreWLAN');
+function run() {
+  try {
+    var i = $.CWWiFiClient.sharedWiFiClient.interface;
+    if (!i || i.isNil()) { return 'null'; }
+    var c = i.wlanChannel;
+    var has = c && !c.isNil();
+    return JSON.stringify({
+      on: Boolean(i.powerOn),
+      rssi: Number(i.rssiValue),
+      noise: Number(i.noiseMeasurement),
+      rate: Number(i.transmitRate),
+      phy: Number(i.activePHYMode),
+      channel: has ? Number(c.channelNumber) : null,
+      band: has ? Number(c.channelBand) : null,
+      width: has ? Number(c.channelWidth) : null
+    });
+  } catch (e) { return 'null'; }
+}
+"""
+WIFI_KEYS = ["wifi_rssi", "wifi_noise", "wifi_rate", "wifi_phy", "wifi_band", "wifi_width", "wifi_channel"]
 
 
 def curl_command(url, timeout, *options):
@@ -310,8 +345,9 @@ def sample_speed(url, timeout):
     return result
 
 
-def read_answer(question, timeout, stdin=None, select_fn=None):
-    """Prints the question and returns the line typed, or None when nobody answers within timeout or input ends."""
+def read_answer(question, timeout, stdin=None, select_fn=None, unanswered=NO_FILM_NOTE):
+    """Prints the question and returns the line typed, or None when nobody answers within timeout or input ends
+    (and then prints the note)."""
     stdin = stdin or sys.stdin
     select_fn = select_fn or select.select
     sys.stdout.write(question)
@@ -319,7 +355,7 @@ def read_answer(question, timeout, stdin=None, select_fn=None):
     ready, _, _ = select_fn([stdin], [], [], timeout)
     line = stdin.readline() if ready else ""
     if not line:
-        print("\nNo answer: assuming a film will play.")
+        print(unanswered)
         return None
     return line
 
@@ -329,8 +365,8 @@ def limited_asker(allowance, clock, reader):
     cannot hold the start for longer than that."""
     deadline = clock() + allowance
 
-    def ask(question):
-        return reader(question, max(0, deadline - clock()))
+    def ask(question, **more):
+        return reader(question, max(0, deadline - clock()), **more)
 
     return ask
 
@@ -355,6 +391,186 @@ def wants_speed(film, no_film, speed_site, is_tty, ask):
         if answer in ("n", "no"):
             return SPEED_SITE
     return None
+
+
+def wants_class(option, is_tty, ask):
+    """(travel class, where it came from): standard or first, from the option or from the answer; (None, None) when
+    nobody said (no answer in time, or no terminal to ask on). An answer starting with f is first, any other is
+    standard, an empty one included."""
+    if option:
+        return option, "option"
+    if not is_tty:
+        return None, None
+    answer = ask(CLASS_QUESTION, unanswered=NO_CLASS_NOTE)
+    if answer is None:
+        return None, None
+    return ("first" if answer.lstrip()[:1] in ("f", "F") else "standard"), "answer"
+
+
+def run_tool(command):
+    """The text a tool prints, or None when it is missing, fails, prints more than TOOL_MAX_BYTES or takes longer
+    than TOOL_TIMEOUT_S. No shell, and nothing it prints is passed on as it stands: only what a parser takes from it."""
+    deadline = time.monotonic() + TOOL_TIMEOUT_S
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL)
+    except (OSError, ValueError):
+        return None
+    got = []
+
+    def read():
+        try:
+            got.append(process.stdout.read(TOOL_MAX_BYTES + 1))
+        except (OSError, ValueError):
+            pass
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    reader.join(max(0, deadline - time.monotonic()))
+    done = not reader.is_alive()
+    code = None
+    if done and got and len(got[0]) <= TOOL_MAX_BYTES:
+        try:
+            code = process.wait(timeout=max(0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            code = None
+    if code is None:  # too slow or too much: it is stopped, never waited for
+        try:
+            process.kill()
+        except OSError:
+            pass
+        process.wait()
+    if done:
+        process.stdout.close()
+    if code != 0:
+        return None
+    return got[0].decode("utf-8", "replace")
+
+
+def device_text(line):
+    text = line.strip()
+    return text if 1 <= len(text) <= TEXT_MAX and all(" " <= c <= "~" for c in text) else None
+
+
+def device_number(line):
+    text = line.strip()
+    return int(text) if re.fullmatch(r"[0-9]{1,18}", text) and int(text) > 0 else None
+
+
+def parse_device(text):
+    """What kind of machine: model, cpu, cores, threads and memory_bytes from the five lines of one sysctl call, each
+    null when it is not what it should be. None when the answer is not five lines or nothing in it is usable."""
+    if text is None:
+        return None
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if len(lines) != 5:
+        return None
+    device = {"model": device_text(lines[0]), "cpu": device_text(lines[1]), "cores": device_number(lines[2]),
+              "threads": device_number(lines[3]), "memory_bytes": device_number(lines[4])}
+    return device if any(value is not None for value in device.values()) else None
+
+
+def read_device():
+    return parse_device(run_tool([SYSCTL, "-n", "hw.model", "machdep.cpu.brand_string", "hw.physicalcpu",
+                                  "hw.logicalcpu", "hw.memsize"]))
+
+
+def parse_batt(text):
+    """(power, battery, charge) from `pmset -g batt`: ac or battery from its first line, the percentage and the
+    word after it from its second. The battery's own id is never taken."""
+    lines = (text or "").split("\n")
+    power = battery = charge = None
+    if "'AC Power'" in lines[0][:200]:
+        power = "ac"
+    elif "'Battery Power'" in lines[0][:200]:
+        power = "battery"
+    if len(lines) > 1:
+        second = lines[1][:500]
+        found = re.search(r"(?<![0-9])([0-9]{1,6})%", second)
+        if found and int(found.group(1)) <= 100:
+            battery = int(found.group(1))
+        found = re.search(r"%;\s*([A-Za-z]{1,20})\s*(?:;|$)", second)
+        if found:
+            charge = found.group(1).lower()
+    return power, battery, charge
+
+
+def parse_low_power(text):
+    found = re.search(r"^\s*lowpowermode[ \t]+([01])[ \t]*$", text or "", re.M)
+    return int(found.group(1)) if found else None
+
+
+def parse_cpu_limit(text):
+    found = re.search(r"^\s*CPU_Speed_Limit\s*=\s*([0-9]{1,3})\s*$", text or "", re.M)
+    return int(found.group(1)) if found and int(found.group(1)) <= 100 else None
+
+
+def parse_load(text):
+    found = re.fullmatch(r"\s*\{\s*([0-9]+(?:\.[0-9]+)?)\s+[0-9]+(?:\.[0-9]+)?\s+[0-9]+(?:\.[0-9]+)?\s*\}\s*",
+                         text or "")
+    if not found:
+        return None
+    value = float(found.group(1))
+    return round(value, 2) if math.isfinite(value) and value <= 100000 else None
+
+
+def parse_swap(text):
+    found = re.search(r"\bused\s*=\s*([0-9]+(?:\.[0-9]+)?)M\b", text or "")
+    if not found:
+        return None
+    value = float(found.group(1))
+    return round(value, 1) if math.isfinite(value) and value <= 100000000 else None
+
+
+def is_number(value):
+    """A number that is not a boolean, a text, nan or infinity (an integer of any size is one: it is just out of range)."""
+    return not isinstance(value, bool) and (isinstance(value, int) or (isinstance(value, float) and math.isfinite(value)))
+
+
+def whole(value, low, high):
+    """The number as a whole number inside [low, high]; None for anything else (a boolean and a text included)."""
+    if not is_number(value):
+        return None
+    return int(value) if value == int(value) and low <= value <= high else None
+
+
+def parse_wifi_light(text):
+    """The seven wifi_ fields from the one line the fixed script prints; every one null unless the answer is an
+    object whose on is true and the value is a number inside its range."""
+    none = {key: None for key in WIFI_KEYS}
+    try:
+        data = json.loads((text or "").strip())
+    except (ValueError, RecursionError):
+        return none
+    if not isinstance(data, dict) or data.get("on") is not True:
+        return none
+    rate = data.get("rate")
+    if not is_number(rate) or not 0 < rate <= 100000 or round(rate, 1) <= 0:
+        rate = None
+    else:
+        rate = round(rate, 1)
+    return {
+        "wifi_rssi": whole(data.get("rssi"), -120, -1), "wifi_noise": whole(data.get("noise"), -120, -1),
+        "wifi_rate": rate, "wifi_phy": whole(data.get("phy"), 1, 20), "wifi_band": whole(data.get("band"), 1, 20),
+        "wifi_width": whole(data.get("width"), 1, 20), "wifi_channel": whole(data.get("channel"), 1, 233),
+    }
+
+
+def read_laptop(with_wifi=True):
+    """The laptop's own state, or None when nothing at all could be read (not a Mac). At most six tool calls, one
+    after another; a tool that fails gives null for its fields and nothing else."""
+    power, battery, charge = parse_batt(run_tool([PMSET, "-g", "batt"]))
+    laptop = {
+        "power": power, "battery": battery, "charge": charge,
+        "low_power": parse_low_power(run_tool([PMSET, "-g"])),
+        "cpu_limit": parse_cpu_limit(run_tool([PMSET, "-g", "therm"])),
+        "load": parse_load(run_tool([SYSCTL, "-n", "vm.loadavg"])),
+        "swap_mb": parse_swap(run_tool([SYSCTL, "-n", "vm.swapusage"])),
+    }
+    laptop.update(parse_wifi_light(run_tool([OSASCRIPT, "-l", "JavaScript", "-e", WIFI_SCRIPT]) if with_wifi else None))
+    return laptop if any(value is not None for value in laptop.values()) else None
 
 
 def wifi_link():
@@ -420,8 +636,9 @@ class Stop:
 
 class Logger:
     def __init__(self, bases, probe_url, read_wifi, timeout=DEFAULT_TIMEOUT_S, speed_site=None,
-                 speed_timeout=DEFAULT_SPEED_TIMEOUT_S, retry_every=DEFAULT_RETRY_EVERY):
+                 speed_timeout=DEFAULT_SPEED_TIMEOUT_S, retry_every=DEFAULT_RETRY_EVERY, laptop=None):
         self.bases = bases
+        self.laptop = laptop  # a function that reads the laptop's state, or None
         self.probe_url = probe_url
         self.read_wifi = read_wifi
         self.timeout = timeout
@@ -471,6 +688,14 @@ class Logger:
                 target=lambda: side.update(probe=probe(self.probe_url)), daemon=True))
         if self.read_wifi and n == 1:
             side_threads.append(threading.Thread(target=lambda: side.update(wifi=wifi_link()), daemon=True))
+        if self.laptop:
+            def read_state():
+                try:
+                    side.update(laptop=self.laptop())
+                except Exception:  # pylint: disable=broad-except
+                    pass  # an extra: whatever goes wrong in it must not touch the feed
+
+            side_threads.append(threading.Thread(target=read_state, daemon=True))
         for thread in side_threads:
             thread.start()
 
@@ -544,11 +769,13 @@ class Logger:
                 record["index"] = index["body"][:INDEX_KEPT] if index["ok"] else index.get("why")
 
         for thread in side_threads:
-            thread.join(timeout=14)
+            thread.join(timeout=SIDE_WAIT_S)
         if "probe" in side:
             record["probe"] = side["probe"]
         if side.get("wifi"):
             record["wifi"] = side["wifi"]
+        if side.get("laptop"):
+            record["laptop"] = side["laptop"]
         if self.speed_site:
             # Last, so it cannot disturb the timings above. And it fails closed: it is an extra, and the feed is what
             # the journey is for, so nothing that goes wrong in it may throw the rest of the record away.
@@ -672,7 +899,12 @@ def main():
     parser.add_argument("--retry-every", type=int, default=DEFAULT_RETRY_EVERY,
                         help="rounds between full checks of every address and of parts that keep failing "
                              "(default %d, at least 1)" % DEFAULT_RETRY_EVERY)
-    parser.add_argument("--no-wifi", action="store_true", help="do not read this Mac's own Wi-Fi link")
+    parser.add_argument("--no-wifi", action="store_true", help="do not read this Mac's own Wi-Fi link (neither the "
+                                                               "one read in round 1 nor the light one of each round)")
+    parser.add_argument("--no-laptop", action="store_true",
+                        help="do not read this laptop's kind and state (power, heat, load, memory, Wi-Fi link)")
+    parser.add_argument("--class", dest="travel_class", choices=["standard", "first"],
+                        help="the class travelled in: answers the question without asking")
     parser.add_argument("--no-awake", action="store_true", help="do not keep the Mac from idling to sleep")
     parser.add_argument("--speed-site", help="a site root to time a download from, when no film is playing "
                                              "(its first script must honour a Range request)")
@@ -694,9 +926,10 @@ def main():
     interval = args.interval
 
     try:
-        speed_site = wants_speed(args.film, args.no_film, args.speed_site,
-                                 sys.stdin.isatty() and sys.stdout.isatty(),
-                                 limited_asker(ANSWER_WAIT_S, time.monotonic, read_answer))
+        is_tty = sys.stdin.isatty() and sys.stdout.isatty()
+        ask = limited_asker(ANSWER_WAIT_S, time.monotonic, read_answer)  # the questions share one allowance
+        speed_site = wants_speed(args.film, args.no_film, args.speed_site, is_tty, ask)
+        travel_class, travel_class_from = wants_class(args.travel_class, is_tty, ask)
     except KeyboardInterrupt:
         return
 
@@ -753,15 +986,19 @@ def main():
     say("")
 
     now = time.time()
-    write({
+    start = {
         "t": int(now * 1000), "event": "start", "tool": "train-feed-logger", "version": VERSION,
         "bases": bases, "parts": PARTS, "probe": probe_url, "interval": interval,
         "speed_site": speed_site, "timeout": args.timeout, "curl": ".".join(str(part) for part in curl),
         "macos": platform.mac_ver()[0], "python": platform.python_version(),
-    })
+        "travel_class": travel_class, "travel_class_from": travel_class_from,
+    }
+    if not args.no_laptop:
+        start["device"] = read_device()  # once; null when it cannot be read
+    write(start)
 
     logger = Logger(bases, probe_url, not args.no_wifi, args.timeout, speed_site, args.speed_timeout,
-                    args.retry_every)
+                    args.retry_every, None if args.no_laptop else (lambda: read_laptop(not args.no_wifi)))
     next_at = time.monotonic()  # the schedule is not the wall clock; the records keep that
     n = 0
     while not stop.now:
