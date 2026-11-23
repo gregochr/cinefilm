@@ -24,6 +24,8 @@ export const HOLD_CHECK_MS = 2000;
 // A fragment in flight counts for the release only once it has been receiving this long, in ms, counted from
 // its first byte: a cold first byte can take seconds, and a fragment that stays silent is ended as trouble.
 export const IN_FLIGHT_MIN_AGE_MS = 4000;
+// Fragments in a row that needed a retry before the rates for the rungs above 480p are forgotten.
+export const RETRIED_CLEARS = 4;
 // How many of the newest fragment rates the release reads.
 const RELEASE_SAMPLES = 3;
 
@@ -140,6 +142,8 @@ export function startHlsJs({
   let troubled = false; // a fragment timed out or got no answer, and none has loaded since
   let samples = []; // the newest fragment rates (kbit/s) for the hold, under `samplesNetwork`
   let headroom = []; // the newest first-byte fragment rates (kbit/s), retried fragments left out
+  let retriedRun = 0; // fragments in a row that needed a retry
+  let retriedNow = false; // the fragment being handled needed one: the ceiling may not rise on it
   let samplesNetwork = networkGeneration();
   let inFlight = null; // the fragment hls.js is loading, whose rate so far the release reads
   let holdTimer = null; // the one check of the in-flight rate, running while a fragment loads
@@ -149,6 +153,7 @@ export function startHlsJs({
     if (samplesNetwork !== networkGeneration()) {
       samples = [];
       headroom = [];
+      retriedRun = 0;
       ceiling = champagneBase(hls.levels); // nothing measured on this link has earned a rung above 480p
       samplesNetwork = networkGeneration();
       hold.reset(); // the link it was armed on is gone
@@ -207,9 +212,10 @@ export function startHlsJs({
   const applyCap = () => {
     if (auto && gateCap !== null) {
       currentSamples();
-      ceiling = champagneCeiling({
+      const raised = champagneCeiling({
         levels: hls.levels,
-        heldCeiling: ceiling,
+        applied: applied ?? 0,
+        count: headroom.length,
         aheadS: bankedAhead(video),
         kbps: lowerMiddle(headroom),
         troubled,
@@ -219,6 +225,8 @@ export function startHlsJs({
           maxS: MAX_BUFFER_AHEAD_S,
         },
       });
+      // A fragment that needed a retry never lets the ceiling rise.
+      ceiling = retriedNow ? Math.min(raised, ceiling) : raised;
       if (gateCap > ceiling) gateCap = gate.switched(ceiling);
       const level = Math.min(gateCap, ceiling);
       if (level !== applied) {
@@ -249,6 +257,7 @@ export function startHlsJs({
     clearTimeout(timer);
     timer = null;
     stopHoldTimer(); // the fragment in flight is aborted by the reload
+    ceiling = champagneBase(hls.levels ?? []); // what was earned before the break is earned again
     if (hls.levels?.length) {
       hls.startLoad(video.readyState > 0 ? video.currentTime : config.startPosition);
     } else {
@@ -337,13 +346,24 @@ export function startHlsJs({
     if (data.frag?.sn !== 'initSegment') {
       currentSamples();
       samples = addSample(samples, loadedKbps(data.frag?.stats));
-      // A fragment that needed a retry says nothing about the link's rate.
-      if (!(data.frag?.stats?.retry > 0)) headroom = addSample(headroom, kbps);
+      if (data.frag?.stats?.retry > 0) {
+        // A fragment that needed a retry says nothing good about the link: it is no sample, the ceiling may not
+        // rise on it, and a run of RETRIED_CLEARS of them forgets the rates, so a link that is degrading
+        // fragment by fragment loses its rungs above 480p. Fewer would punish an encoder that is still
+        // catching up (503s) on the first fragments of a new rung.
+        retriedNow = true;
+        retriedRun += 1;
+        if (retriedRun >= RETRIED_CLEARS) headroom = [];
+      } else {
+        retriedRun = 0;
+        headroom = addSample(headroom, kbps);
+      }
     }
     applyCap();
     // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch, and
     // the step gate never runs ahead of the ceiling.
     if (auto && (fetched === null || fetched >= applied) && gateCap < ceiling) cap(gate.tick(top));
+    retriedNow = false;
   });
 
   hls.on(Events.ERROR, (_event, data) => {
@@ -364,6 +384,7 @@ export function startHlsJs({
       troubled = true;
       samples = []; // what was measured before the trouble says nothing about the link now
       headroom = [];
+      retriedRun = 0;
       hold.reset();
       stopHoldTimer();
       applyCap();

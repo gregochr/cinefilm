@@ -1400,6 +1400,8 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
     const env = champStart(ladder);
     env.hls.manifest(ladder.levels, first);
     env.hls.fetchLevel(env.hls.autoLevelCapping);
+    // Three rates are needed before a step up above 480p; the minute has not passed yet.
+    for (let i = 0; i < 2; i += 1) env.hls.fragLoaded(frag(kbps));
     for (let i = 0; i < rounds; i += 1) {
       env.advance(HEALTHY_MS);
       env.hls.fragLoaded(frag(kbps));
@@ -1464,6 +1466,8 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
       env.hls.manifest(full.levels, 2);
       env.hls.fetchLevel(2);
       env.setAhead(449);
+      env.hls.fragLoaded(frag(20_000));
+      env.hls.fragLoaded(frag(20_000));
       env.advance(HEALTHY_MS);
       env.hls.fragLoaded(frag(20_000));
       expect(env.hls.autoLevelCapping).toBe(2);
@@ -1501,6 +1505,44 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
       expect(env.hls.autoLevelCapping).toBe(3);
     });
 
+    it('needs 3 rates before the first step up: 2 are not enough, the 3rd is', () => {
+      const env = champStart(full);
+      env.hls.manifest(full.levels, 2);
+      env.hls.fetchLevel(2);
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(20_000));
+      env.hls.fragLoaded(frag(20_000));
+      expect(env.hls.autoLevelCapping).toBe(2);
+      env.hls.fragLoaded(frag(20_000));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+
+    it('does not let a retried fragment raise the ceiling: only a clean one does', () => {
+      const env = champStart(full);
+      env.hls.manifest(full.levels, 2);
+      env.hls.fetchLevel(2);
+      env.setAhead(449);
+      for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(frag(20_000));
+      env.advance(HEALTHY_MS);
+      env.setAhead(450); // the bank fills as the retried fragment lands
+      env.hls.fragLoaded(frag(20_000, { retry: 1 }));
+      expect(env.hls.autoLevelCapping).toBe(2);
+      env.hls.fragLoaded(frag(20_000));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+
+    it('does not step from 720p to 1080p while the bank is not full for 720p, however the ceiling was reached', () => {
+      const env = climb(full, 55_000, 1); // at 720p, the ceiling asked for 720p only
+      expect(env.hls.autoLevelCapping).toBe(3);
+      env.setAhead(200); // 720p's bank target is 256 s: 226 s counts as full
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(55_000));
+      expect(env.hls.autoLevelCapping).toBe(3);
+      env.setAhead(226);
+      env.hls.fragLoaded(frag(55_000));
+      expect(env.hls.autoLevelCapping).toBe(4);
+    });
+
     it('takes no rate from an init segment', () => {
       const { hls, advance } = champStart(full);
       hls.manifest(full.levels, 2);
@@ -1516,11 +1558,12 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
       hls.fetchLevel(2);
       advance(HEALTHY_MS);
       // 1,000,000 bytes in the 1,000 ms after the first byte (8,000 kbit/s), 6,000 ms after the request began.
-      hls.fragLoaded({
+      const delayed = {
         loaded: 1_000_000,
         retry: 0,
         loading: { start: 0, first: 5000, end: 6000 },
-      });
+      };
+      for (let i = 0; i < 3; i += 1) hls.fragLoaded(delayed);
       expect(hls.autoLevelCapping).toBe(3);
     });
   });
@@ -1573,9 +1616,30 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
       expect(env.hls.autoLevelCapping).toBe(3);
     });
 
-    it('leaves a retried fragment out: five retried slow ones change nothing', () => {
+    it('leaves a retried fragment out of the rates, and 4 retried in a row forget them all', () => {
       const env = onTop(7884);
-      for (let i = 0; i < 5; i += 1) env.hls.fragLoaded(frag(100, { retry: 1 }));
+      for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(frag(100, { retry: 1 }));
+      expect(env.hls.autoLevelCapping).toBe(3);
+      env.hls.fragLoaded(frag(100, { retry: 1 }));
+      expect(env.hls.autoLevelCapping).toBe(2); // the 480p level, whatever the old rates said
+    });
+
+    it('does not count 3 retried fragments and a clean one as a run: the run starts again', () => {
+      const env = onTop(7884);
+      for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(frag(100, { retry: 1 }));
+      env.hls.fragLoaded(frag(7884));
+      for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(frag(100, { retry: 1 }));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+
+    it('forgets a run of retried fragments on trouble too, so 3 more do not finish it', () => {
+      const env = onTop(7884);
+      for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(frag(100, { retry: 1 }));
+      trouble(env.hls);
+      for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(frag(7884));
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(100, { retry: 1 }));
+      env.hls.fragLoaded(frag(7884));
       expect(env.hls.autoLevelCapping).toBe(3);
     });
 
@@ -1592,7 +1656,7 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
       expect(env.hls.autoLevelCapping).toBe(3);
       trouble(env.hls);
       expect(env.hls.autoLevelCapping).toBe(2);
-      env.hls.fragLoaded(frag(20_000));
+      for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(frag(20_000));
       expect(env.hls.autoLevelCapping).toBe(2);
       env.advance(HEALTHY_MS);
       env.hls.fragLoaded(frag(20_000));
@@ -1626,6 +1690,17 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
         expect(env.hls.autoLevelCapping).toBe(base);
       },
     );
+
+    it('forgets the ceiling when it restarts after a fatal playlist error', () => {
+      const env = climb(full, 20_000, 1);
+      expect(env.hls.autoLevelCapping).toBe(3);
+      env.hls.error({ fatal: true, type: 'networkError', details: 'levelLoadError' });
+      vi.advanceTimersByTime(RECONNECT_MS);
+      expect(env.hls.startLoad).toHaveBeenCalledTimes(1);
+      // A retried fragment may not raise the ceiling, so what it keeps is only what was earned since the restart.
+      env.hls.fragLoaded(frag(20_000, { retry: 1 }));
+      expect(env.hls.autoLevelCapping).toBe(2);
+    });
 
     it('falls to the 480p level on the next played second after the network changes', () => {
       const env = climb(full, 20_000, 1);

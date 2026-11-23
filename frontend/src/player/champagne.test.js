@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BANK_MARGIN_S,
+  MIN_SAMPLES,
   STAY_FACTOR,
   STEP_UP_FACTOR,
   bankTargetS,
@@ -28,7 +29,8 @@ const ladder = [l240, l360, l480, l720, l1080];
 const ceiling = (over) =>
   champagneCeiling({
     levels: ladder,
-    heldCeiling: 2,
+    applied: 2,
+    count: 9,
     aheadS: 480,
     kbps: 100_000,
     troubled: false,
@@ -85,9 +87,26 @@ describe('champagneCeiling: headroom decides the rungs above 480p', () => {
     expect(ceiling({ kbps: 7883 })).toBe(2);
   });
 
-  it('steps up to 1080p only at 3 x its average (15,384 kbit/s), one rung at a time from the 480p level', () => {
-    expect(ceiling({ kbps: 15384 })).toBe(4);
-    expect(ceiling({ kbps: 15383 })).toBe(3);
+  it('steps up to 1080p only at 3 x its average (15,384 kbit/s), from 720p', () => {
+    expect(ceiling({ applied: 3, kbps: 15384 })).toBe(4);
+    expect(ceiling({ applied: 3, kbps: 15383 })).toBe(3);
+  });
+
+  it('grants one new rung at a time: only the rung above the cap in force, however fast the link', () => {
+    expect(ceiling({ applied: 2, kbps: 100_000 })).toBe(3);
+    expect(ceiling({ applied: 3, kbps: 100_000 })).toBe(4);
+  });
+
+  it('does not grant 1080p past a bank that is not full for 720p, even when the ceiling had room', () => {
+    expect(ceiling({ applied: 3, aheadS: 225, kbps: 100_000 })).toBe(3);
+    expect(ceiling({ applied: 3, aheadS: 226, kbps: 100_000 })).toBe(4);
+  });
+
+  it('needs 3 rates before any step up above 480p, and none to stay', () => {
+    expect(MIN_SAMPLES).toBe(3);
+    expect(ceiling({ count: 2, kbps: 20_000 })).toBe(2);
+    expect(ceiling({ count: 3, kbps: 20_000 })).toBe(3);
+    expect(ceiling({ count: 1, applied: 3, kbps: 20_000 })).toBe(3);
   });
 
   it('steps up only with the bank full for the rung stepped from: 450 s at 480p, not 449', () => {
@@ -97,21 +116,21 @@ describe('champagneCeiling: headroom decides the rungs above 480p', () => {
 
   it('judges the bank by the rung below, not by the rung stepped to', () => {
     // 720p's own target is 256 s (226 s full): enough in hand for 1080p from 720p, not for 720p from 480p.
-    expect(ceiling({ heldCeiling: 3, aheadS: 226, kbps: 20000 })).toBe(4);
-    expect(ceiling({ heldCeiling: 3, aheadS: 225, kbps: 20000 })).toBe(3);
-    expect(ceiling({ heldCeiling: 2, aheadS: 300, kbps: 20000 })).toBe(2);
+    expect(ceiling({ applied: 3, aheadS: 226, kbps: 20000 })).toBe(4);
+    expect(ceiling({ applied: 3, aheadS: 225, kbps: 20000 })).toBe(3);
+    expect(ceiling({ applied: 2, aheadS: 300, kbps: 20000 })).toBe(2);
   });
 
   it('keeps a rung it already has at 2 x its average (5,256 kbit/s for 720p) and no lower', () => {
-    expect(ceiling({ heldCeiling: 3, aheadS: 0, kbps: 5256 })).toBe(3);
-    expect(ceiling({ heldCeiling: 3, aheadS: 0, kbps: 5255 })).toBe(2);
+    expect(ceiling({ applied: 3, aheadS: 0, kbps: 5256 })).toBe(3);
+    expect(ceiling({ applied: 3, aheadS: 0, kbps: 5255 })).toBe(2);
   });
 
   it('falls to the highest rung that still passes, not straight to 480p', () => {
-    expect(ceiling({ heldCeiling: 4, aheadS: 0, kbps: 10256 })).toBe(4); // 2 x 1080p's average
-    expect(ceiling({ heldCeiling: 4, aheadS: 0, kbps: 10255 })).toBe(3);
-    expect(ceiling({ heldCeiling: 4, aheadS: 0, kbps: 5256 })).toBe(3);
-    expect(ceiling({ heldCeiling: 4, aheadS: 0, kbps: 5255 })).toBe(2);
+    expect(ceiling({ applied: 4, aheadS: 0, kbps: 10256 })).toBe(4); // 2 x 1080p's average
+    expect(ceiling({ applied: 4, aheadS: 0, kbps: 10255 })).toBe(3);
+    expect(ceiling({ applied: 4, aheadS: 0, kbps: 5256 })).toBe(3);
+    expect(ceiling({ applied: 4, aheadS: 0, kbps: 5255 })).toBe(2);
   });
 
   it('climbs through every rung: 1080p is not reached past a 720p that fails', () => {
@@ -125,19 +144,19 @@ describe('champagneCeiling: headroom decides the rungs above 480p', () => {
   });
 
   it('is the 480p level whatever the rate after fragment trouble, even for a rung held', () => {
-    expect(ceiling({ heldCeiling: 4, troubled: true, kbps: 100_000 })).toBe(2);
+    expect(ceiling({ applied: 4, troubled: true, kbps: 100_000 })).toBe(2);
   });
 
   it('on a ladder with no 240p bottom, still climbs from the 480p level', () => {
     const levels = [l360, l480, l720, l1080];
-    expect(ceiling({ levels, heldCeiling: 1, kbps: 7884 })).toBe(2);
-    expect(ceiling({ levels, heldCeiling: 1, kbps: 7883 })).toBe(1);
+    expect(ceiling({ levels, applied: 1, kbps: 7884 })).toBe(2);
+    expect(ceiling({ levels, applied: 1, kbps: 7883 })).toBe(1);
   });
 
   it('on a ladder with no 480p rung, climbs from the 360p level and judges its bank', () => {
     const levels = [l240, l360, l720, l1080];
-    expect(ceiling({ levels, heldCeiling: 1, aheadS: 450, kbps: 7884 })).toBe(2);
-    expect(ceiling({ levels, heldCeiling: 1, aheadS: 449, kbps: 7884 })).toBe(1);
+    expect(ceiling({ levels, applied: 1, aheadS: 450, kbps: 7884 })).toBe(2);
+    expect(ceiling({ levels, applied: 1, aheadS: 449, kbps: 7884 })).toBe(1);
   });
 
   it('on a ladder that stops at 480p, is the top', () => {
@@ -147,25 +166,25 @@ describe('champagneCeiling: headroom decides the rungs above 480p', () => {
 
   it('reaches a 15 Mbit/s copy rung only at 3 x its average (45,384 kbit/s), not a kbit/s under', () => {
     const levels = [l240, l360, l480, l720, copy15];
-    expect(ceiling({ levels, aheadS: 480, kbps: 55_000 })).toBe(4);
-    expect(ceiling({ levels, aheadS: 480, kbps: 45_384 })).toBe(4);
-    expect(ceiling({ levels, aheadS: 480, kbps: 45_383 })).toBe(3);
+    expect(ceiling({ levels, applied: 3, aheadS: 480, kbps: 55_000 })).toBe(4);
+    expect(ceiling({ levels, applied: 3, aheadS: 480, kbps: 45_384 })).toBe(4);
+    expect(ceiling({ levels, applied: 3, aheadS: 480, kbps: 45_383 })).toBe(3);
   });
 
   it('holds a copy rung down to 2 x (30,256 kbit/s)', () => {
     const levels = [l240, l360, l480, l720, copy15];
-    expect(ceiling({ levels, heldCeiling: 4, aheadS: 0, kbps: 30_256 })).toBe(4);
-    expect(ceiling({ levels, heldCeiling: 4, aheadS: 0, kbps: 30_255 })).toBe(3);
+    expect(ceiling({ levels, applied: 4, aheadS: 0, kbps: 30_256 })).toBe(4);
+    expect(ceiling({ levels, applied: 4, aheadS: 0, kbps: 30_255 })).toBe(3);
   });
 
   it('judges a level with no average by its bitrate', () => {
     const levels = [l480, { height: 720, bitrate: 3_000_000 }];
-    expect(ceiling({ levels, heldCeiling: 0, kbps: 9000 })).toBe(1);
-    expect(ceiling({ levels, heldCeiling: 0, kbps: 8999 })).toBe(0);
+    expect(ceiling({ levels, applied: 0, kbps: 9000 })).toBe(1);
+    expect(ceiling({ levels, applied: 0, kbps: 8999 })).toBe(0);
   });
 
   it('takes the ceiling to the lowest rung when the whole ladder is above 480 lines', () => {
-    expect(ceiling({ levels: [l720, l1080], heldCeiling: 0, kbps: 100_000, aheadS: 480 })).toBe(1);
-    expect(ceiling({ levels: [l720, l1080], heldCeiling: 0, kbps: null })).toBe(0);
+    expect(ceiling({ levels: [l720, l1080], applied: 0, kbps: 100_000, aheadS: 480 })).toBe(1);
+    expect(ceiling({ levels: [l720, l1080], applied: 0, kbps: null })).toBe(0);
   });
 });

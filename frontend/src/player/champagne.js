@@ -11,6 +11,8 @@ export const STEP_UP_FACTOR = 3;
 export const STAY_FACTOR = 2;
 /** A bank counts as full this many seconds short of hls.js's own target for the level fetched. */
 export const BANK_MARGIN_S = 30;
+/** Rates needed before any step up above 480p (staying on a rung needs none). */
+export const MIN_SAMPLES = 3;
 
 /**
  * Seconds of film hls.js keeps ahead while fetching a level of `maxBitrate` (bit/s): its own target,
@@ -38,19 +40,21 @@ export function champagneBase(levels) {
 /**
  * The highest level index Auto may reach: the 480p level (or the ladder's top, if lower) plus every rung above
  * it, climbing one rung at a time, whose test passes. `levels` are hls.js levels, lowest first. A rung up to
- * `heldCeiling` (the ceiling last returned) is kept at STAY_FACTOR times its average; any other needs
- * STEP_UP_FACTOR times, and `aheadS` seconds in hand of the bank hls.js fills at the rung below it (`bank`:
+ * `applied` (the cap Auto is under) is kept at STAY_FACTOR times its average; a new one needs STEP_UP_FACTOR
+ * times, at least MIN_SAMPLES rates (`count`), is only the rung directly above `applied` (one new rung at a
+ * time), and needs `aheadS` seconds in hand of the bank hls.js fills at the rung below it (`bank`:
  * `{ budgetBytes, minS, maxS }`). `kbps` is the lower middle of the recent first-byte fragment rates (null when
  * there are none); `troubled` is fragment trouble since the last load. With no rate or with trouble the
  * ceiling is the 480p level.
  */
-export function champagneCeiling({ levels, heldCeiling, aheadS, kbps, troubled, bank }) {
+export function champagneCeiling({ levels, applied, count, aheadS, kbps, troubled, bank }) {
   const base = champagneBase(levels);
   if (troubled || !Number.isFinite(kbps) || kbps <= 0) return base;
   let ceiling = base;
   for (let i = base + 1; i < levels.length; i += 1) {
     const ratio = (kbps * 1000) / averageOf(levels[i]);
-    const held = i <= heldCeiling;
+    const held = i <= applied;
+    if (!held && (i > applied + 1 || count < MIN_SAMPLES)) break; // one new rung at a time, on evidence
     const full = aheadS >= bankTargetS(peakOf(levels[i - 1]), bank) - BANK_MARGIN_S;
     const passes = held ? ratio >= STAY_FACTOR : ratio >= STEP_UP_FACTOR && full;
     if (!passes) break;
