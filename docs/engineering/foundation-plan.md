@@ -61,6 +61,12 @@ Film 1—1 FilmPreference                 defaultEditionId, lastEditionId, quali
 Images are TMDB paths; the frontend builds URLs through one helper (`imageUrl(path, size)`), so a later local image
 cache only changes that helper.
 
+- **Journey data (V37):** six tables hold the owner's train-journey logs: `device` (a kind of laptop), `journey`,
+  `journey_sample`, `journey_modem`, `journey_modem_sample` and `journey_playback`. A journey is one stretch (segment)
+  of one logger run on one train unit; its samples are the logger's 30-second rounds, and `journey_playback` links it
+  to the playback records watched during it (those links go when the capped record goes). Tables only, no endpoint
+  yet; see `journey-data-plan.md`.
+
 ## Behaviour rules the backend owns
 
 - **Watched (decision 1):** an edition becomes watched when a progress report reaches `creditsMarkerMs`, or 92% of
