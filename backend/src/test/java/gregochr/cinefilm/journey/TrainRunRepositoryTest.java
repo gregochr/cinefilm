@@ -225,6 +225,18 @@ class TrainRunRepositoryTest extends ApiTestBase {
     }
 
     @Test
+    void theLockedFinderByIdFindsAStoredRunHoldsTheLockAndGivesEmptyForAnUnknownOne() {
+        Long runId = newRun();
+        entityManager.clear();
+
+        TrainRun found = runs.findLockedById(runId).orElseThrow();
+
+        assertThat(found.getTimetableUid()).isEqualTo("X12345");
+        assertThat(entityManager.getLockMode(found)).isEqualTo(LockModeType.PESSIMISTIC_WRITE);
+        assertThat(runs.findLockedById(runId + 1)).isEmpty();
+    }
+
+    @Test
     void theLockedFinderFindsAStoredRunAndGivesEmptyForAnUnknownOne() {
         Long runId = newRun();
         entityManager.clear();

@@ -109,7 +109,9 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    train feed logger file in Admin (`POST /api/admin/journeys`). They are then in the database, in its dumps (rule 9)
    and in Admin's answers, and nowhere else. The device's addresses never leave the laptop, and the server refuses
    (400) a file that carries a name it does not know, a value of the wrong kind or one out of range, so nothing it
-   was not told to keep is stored. The raw logger files are never committed.
+   was not told to keep is stored. The raw logger files are never committed. The train's service (its timetable id,
+   headcode and its times at each timing point) is stored only when the owner gives a journey a train's file
+   (`PUT /api/admin/journeys/{id}/train`), and is the owner's travel as much as a position is.
    **The train feed logger** (`scripts/train-feed-logger.py`) is not the app: the owner runs it by hand on the
    laptop on a train, and it is in no image. It only reads: the train's own Wi-Fi system, one public address to
    time the internet and, when no film is playing, CineFilm's own page code to time a download. It asks the
