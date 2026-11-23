@@ -525,6 +525,22 @@ class JourneyFileRulesTest {
         assertValid(tree);
     }
 
+    @ParameterizedTest(name = "{0} {1}")
+    @MethodSource("notFinite")
+    void aDecimalThatIsNotFiniteIsRefused(String name, double value) {
+        ObjectNode tree = single();
+        firstSample(tree).put(name, value);
+        JourneyFile file = JourneyFileSamples.JSON.treeToValue(tree, JourneyFile.class);
+
+        assertThatThrownBy(() -> JourneyFileRules.validate(file)).isExactlyInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid journey file");
+    }
+
+    static Stream<Arguments> notFinite() {
+        return JourneyFileRules.SAMPLE_DECIMALS.stream().flatMap(d -> Stream.of(Double.NaN,
+            Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY).map(v -> Arguments.of(d.name(), v)));
+    }
+
     @Test
     void nothingButABadRequestIsEverThrownWhateverIsNull() {
         Sample empty = JourneyFileSamples.JSON.readValue("{}", Sample.class);
