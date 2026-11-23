@@ -161,7 +161,9 @@ below.
      taken away, or was deleted): one statement that deletes the run only if no journey points at it, in one place
      in the code, which the delete of a journey (the next pull request) calls too. Giving a train and taking one
      away both lock the journey first, so two requests about one journey run one after the other and the second
-     sees what the first left; finding a run to give to a journey locks the run. A clash between two requests (on
+     sees what the first left; finding a run to give to a journey locks the run, and so does the sweep before
+     its statement: two journeys on one run that let go of it at the same moment would otherwise each still see
+     the other on it, and the run would be left behind. A clash between two requests (on
      the run's unique key, on the journey's foreign key when a run is swept as another journey is given it, or
      two that wait on each other and the database ends one) is a 409, never a 500.
    - Which sample lies beside which timing point is computed from the two clocks when asked for, never stored.
