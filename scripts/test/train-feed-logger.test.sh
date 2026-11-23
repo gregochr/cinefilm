@@ -46,7 +46,7 @@ fresh_home() {
 # run_logger ARGS: runs the logger with no terminal. Sets OUT, RC, LOG (its log file), LOGDIR and RUN_HOME.
 run_logger() {
     fresh_home
-    OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake "$@" </dev/null 2>&1)
+    OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-laptop --no-awake "$@" </dev/null 2>&1)
     RC=$?
     LOG=""
     for LOG in "$LOGDIR"/*.jsonl; do break; done
@@ -59,7 +59,7 @@ start_bg() {
     shift
     mkdir -p "$TMP/$name.home"
     (
-        HOME="$TMP/$name.home" "$LOGGER" --no-wifi --no-awake "$@" </dev/null >"$TMP/$name.out" 2>&1
+        HOME="$TMP/$name.home" "$LOGGER" --no-wifi --no-laptop --no-awake "$@" </dev/null >"$TMP/$name.out" 2>&1
         echo $? >"$TMP/$name.rc"
     ) &
     PIDS+=("$!")
@@ -157,8 +157,12 @@ assert_eq "round 1 asked the one address" "[\"$BASE\"]" "$(jv "$LOG" 'L[1]["aske
 assert_eq "and round 2 too: the log says what was asked every round" "[\"$BASE\"]" "$(jv "$LOG" 'L[2]["asked"]')"
 assert_eq "round 2 says how the address stands" "{\"$BASE\": \"ok\"}" "$(jv "$LOG" 'L[2]["bases"]')"
 assert_eq "no speed sample without a terminal" false "$(jv "$LOG" '"speed" in L[1]')"
-assert_eq "start record: version 2" 2 "$(jv "$LOG" 'L[0]["version"]')"
+assert_eq "start record: version 3" 3 "$(jv "$LOG" 'L[0]["version"]')"
 assert_eq "start record: no speed site" null "$(jv "$LOG" 'L[0]["speed_site"]')"
+assert_eq "start record: nobody said the class (no terminal)" '[null, null]' \
+    "$(jv "$LOG" '[L[0]["travel_class"], L[0]["travel_class_from"]]')"
+assert_eq "start record: --no-laptop leaves the device out, and the round has no laptop" '[false, false]' \
+    "$(jv "$LOG" '["device" in L[0], "laptop" in L[1]]')"
 assert_eq "start record: the timeout" 3.0 "$(jv "$LOG" 'L[0]["timeout"]')"
 REAL_CURL=$(/usr/bin/curl --version | head -n 1 | cut -d ' ' -f 2 | grep -o '^[0-9.]*')  # not a suffix such as -DEV
 assert_eq "start record: the curl version, as this machine's curl reports it" "\"$REAL_CURL\"" "$(jv "$LOG" 'L[0]["curl"]')"
@@ -167,6 +171,22 @@ assert_contains "the line shows each link" "$OUT" "links: lte -62, disconnected 
 assert_contains "the line shows the internet check" "$OUT" "internet "
 assert_not_contains "a 204 needs no note" "$OUT" "(answered"
 assert_not_contains "no speed in the line" "$OUT" "speed"
+
+echo "the class travelled"
+run_logger --base "$BASE" --probe off --rounds 1 --class first
+assert_eq "--class first: exits 0" 0 "$RC"
+assert_eq "--class first: the start line says first, from the option" '["first", "option"]' \
+    "$(jv "$LOG" '[L[0]["travel_class"], L[0]["travel_class_from"]]')"
+run_logger --base "$BASE" --probe off --rounds 1 --class standard
+assert_eq "--class standard: the start line says standard, from the option" '["standard", "option"]' \
+    "$(jv "$LOG" '[L[0]["travel_class"], L[0]["travel_class_from"]]')"
+fresh_home
+OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-laptop --no-awake --base "$BASE" --probe off --rounds 1 \
+    --class business </dev/null 2>&1)
+assert_eq "--class business is refused" 2 "$?"
+assert_contains "and named" "$OUT" "--class"
+assert_eq "nothing was created for it" 0 "$(count_files "$RUN_HOME")"
+assert_file_lacks "the logger never uses a shell" "$LOGGER" "shell=True"
 
 echo "an internet check that answers 200, as a sign-in page does"
 run_logger --base "$BASE" --probe "http://127.0.0.1:$P/generate_200" --rounds 1
@@ -197,7 +217,7 @@ assert_eq "a probe address that is not http or https is not asked" \
 echo "default log directory, and who may read the log"
 HOME_DIR="$TMP/home"
 mkdir -p "$HOME_DIR"
-OUT=$(umask 022; HOME="$HOME_DIR" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 </dev/null 2>&1)
+OUT=$(umask 022; HOME="$HOME_DIR" "$LOGGER" --no-wifi --no-laptop --no-awake --base "$BASE" --probe off --rounds 1 </dev/null 2>&1)
 assert_eq "exits 0" 0 "$?"
 FOUND=0
 HOME_LOG=""
@@ -216,13 +236,13 @@ assert_eq "the log is for the owner alone" 600 "$(mode_of "$HOME_LOG")"
 fresh_home
 mkdir -p "$LOGDIR"
 chmod 755 "$LOGDIR"
-HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 >/dev/null 2>&1 </dev/null
+HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-laptop --no-awake --base "$BASE" --probe off --rounds 1 >/dev/null 2>&1 </dev/null
 assert_eq "an existing folder keeps its mode" 755 "$(mode_of "$LOGDIR")"
 assert_eq "and the log went into it" 1 "$(count_files "$LOGDIR")"
 
 echo "the log's place cannot be chosen, and a run from the repository stays out of it"
 fresh_home
-OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --log-dir "$TMP/elsewhere" --base "$BASE" --probe off \
+OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-laptop --no-awake --log-dir "$TMP/elsewhere" --base "$BASE" --probe off \
     --rounds 1 </dev/null 2>&1)
 assert_eq "--log-dir is refused" 2 "$?"
 assert_contains "and named" "$OUT" "--log-dir"
@@ -233,7 +253,7 @@ if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
     # --ignored, because .gitignore hides train-feed-*.jsonl: a log written into the checkout would not show otherwise.
     BEFORE=$(git -C "$REPO" status --porcelain --ignored)
     fresh_home
-    OUT=$(cd "$REPO" && HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 \
+    OUT=$(cd "$REPO" && HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-laptop --no-awake --base "$BASE" --probe off --rounds 1 \
         </dev/null 2>&1)
     assert_eq "a run started inside the repository exits 0" 0 "$?"
     assert_eq "its log is under HOME" 1 "$(count_files "$LOGDIR")"
@@ -313,7 +333,7 @@ echo "limits on the options"
 # refuse OPTION VALUE: exits 2, names the option, and writes no log.
 refuse() {
     fresh_home
-    OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 "$1" "$2" \
+    OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-laptop --no-awake --base "$BASE" --probe off --rounds 1 "$1" "$2" \
         </dev/null 2>&1)
     RC=$?
     assert_eq "$1 $2 is refused" 2 "$RC"
@@ -396,7 +416,7 @@ stop_with() {
     local sig="$1" pid watchdog tries=0
     shift
     fresh_home
-    HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --interval 1 "$@" \
+    HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-laptop --no-awake --base "$BASE" --probe off --interval 1 "$@" \
         </dev/null >"$TMP/stop.out" 2>&1 &
     pid=$!
     while ! grep -qs '"round":1' "$LOGDIR"/*.jsonl && [ "$tries" -lt 100 ]; do
@@ -439,7 +459,7 @@ assert_eq "and writes the stop line" '"stop"' "$(jv "$LOG" 'L[-1]["event"]')"
 
 echo "the window going away"
 fresh_home
-HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --interval 1 --rounds 3 \
+HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-laptop --no-awake --base "$BASE" --probe off --interval 1 --rounds 3 \
     </dev/null 2>"$TMP/pipe.err" | head -n 1 >/dev/null
 assert_eq "it still exits 0" 0 "${PIPESTATUS[0]}"
 for LOG in "$LOGDIR"/*.jsonl; do break; done
@@ -455,6 +475,8 @@ if [ "$(uname)" = Linux ]; then
     for LOG in "$LOGDIR"/*.jsonl; do break; done
     assert_eq "exits 0" 0 "$RC"
     assert_eq "no wifi reading" false "$(jv "$LOG" '"wifi" in L[1]')"
+    assert_eq "no device, and no laptop in the round: the tools are not there" '[null, false]' \
+        "$(jv "$LOG" '[L[0]["device"], "laptop" in L[1]]')"
     assert_eq "the feed was read" true "$(jv "$LOG" '"feed" in L[1]')"
 else
     echo "  SKIP the no-Wi-Fi-tools case: on a Mac it would read this machine's real Wi-Fi"
@@ -586,8 +608,8 @@ for stub in "8.3.0:curl 8.3.0 (x86_64-pc-linux-gnu) libcurl/8.3.0" "8.4.0:curl 8
     printf '#!/bin/sh\necho "%s"\n' "${stub#*:}" > "$TMP/curl-${stub%%:*}"
     chmod +x "$TMP/curl-${stub%%:*}"
 done
-RESULTS=$(python3 -B - "$LOGGER" "$TMP" "$FREE" 2>&1 <<'PY'
-import contextlib, importlib.util, io, json, os, shutil, sys, tempfile, types
+RESULTS=$(python3 -B - "$LOGGER" "$TMP" "$FREE" "$P" 2>&1 <<'PY'
+import contextlib, importlib.util, io, json, os, shutil, signal, sys, tempfile, time, types
 
 spec = importlib.util.spec_from_file_location("train_feed_logger", sys.argv[1])
 m = importlib.util.module_from_spec(spec)
@@ -944,7 +966,7 @@ def main_with(curl_path):
     home = tempfile.mkdtemp(dir=stubs)  # under the test's own temporary directory, removed with it
     saved = (m.CURL, sys.argv, os.environ.get("HOME"))
     m.CURL = curl_path
-    sys.argv = ["train-feed-logger.py", "--no-wifi", "--no-awake", "--probe", "off", "--rounds", "1",
+    sys.argv = ["train-feed-logger.py", "--no-wifi", "--no-laptop", "--no-awake", "--probe", "off", "--rounds", "1",
                 "--base", "http://127.0.0.1:%s/api/jsonp/" % sys.argv[3]]
     os.environ["HOME"] = home
     said = io.StringIO()
@@ -1091,6 +1113,415 @@ check("failure counts: a part that keeps failing is skipped on the address in us
 check("failure counts: they start again on another address", [None, "b.test"], [
     rounds[5].get("skipped"), rounds[5]["base"].split("/")[2]])
 check("failure counts: so the part is asked there", True, "user" in rounds[5]["feed"])
+
+# ---- the laptop's kind and state, and the class travelled (version 3) ----
+FEED_PORT = sys.argv[4]
+BATT_AC = "Now drawing from 'AC Power'\n -InternalBattery-0 (id=1234567)\t100%; charged; 0:00 remaining present: true\n"
+BATT_ON = "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=1234567)\t64%; discharging; 3:10 remaining present: true\n"
+BATT_CHARGING = "Now drawing from 'AC Power'\n -InternalBattery-0 (id=1234567)\t47%; charging; 1:05 remaining present: true\n"
+check("parse_batt: on AC, charged", ("ac", 100, "charged"), m.parse_batt(BATT_AC))
+check("parse_batt: on the battery, discharging", ("battery", 64, "discharging"), m.parse_batt(BATT_ON))
+check("parse_batt: on AC, charging", ("ac", 47, "charging"), m.parse_batt(BATT_CHARGING))
+check("parse_batt: the battery's id is nowhere in the answer", False, "1234567" in repr(m.parse_batt(BATT_ON)))
+check("parse_batt: a desktop has no second line", ("ac", None, None), m.parse_batt("Now drawing from 'AC Power'\n"))
+check("parse_batt: an empty answer", (None, None, None), m.parse_batt(""))
+check("parse_batt: nothing at all", (None, None, None), m.parse_batt(None))
+check("parse_batt: a power source it does not know", (None, 64, "discharging"),
+      m.parse_batt(BATT_ON.replace("Battery Power", "UPS Power")))
+check("parse_batt: a percentage out of range", ("ac", None, "charged"), m.parse_batt(BATT_AC.replace("100%", "150%")))
+check("parse_batt: a word where the number belongs", ("ac", None, "charged"), m.parse_batt(BATT_AC.replace("100%", "full%")))
+check("parse_batt: no estimate gives no charge word", ("battery", 64, None),
+      m.parse_batt(BATT_ON.replace("discharging; 3:10 remaining", "(no estimate)")))
+check("parse_batt: a charge word longer than 20 letters", ("battery", 64, None),
+      m.parse_batt(BATT_ON.replace("discharging", "d" * 21)))
+check("parse_batt: another short word is kept", ("battery", 64, "finishing"),
+      m.parse_batt(BATT_ON.replace("discharging", "finishing")))
+check("parse_batt: a very long first line", (None, None, None), m.parse_batt("x" * 30000 + "\n" + "y" * 30000))
+check("parse_batt: a very long second line", ("ac", None, None), m.parse_batt("Now drawing from 'AC Power'\n" + "y" * 30000))
+check("parse_batt: bytes that are not UTF-8", (None, None, None),
+      m.parse_batt(b"Now drawing from '\xff\xfe'\n \xff\xfe\n".decode("utf-8", "replace")))
+
+PM_G = "Active Profiles:\nBattery Power -1*\nCurrently in use:\n standby 1\n lowpowermode         %s\n womp 0\n"
+check("parse_low_power: 0", 0, m.parse_low_power(PM_G % "0"))
+check("parse_low_power: 1", 1, m.parse_low_power(PM_G % "1"))
+check("parse_low_power: no such line", None, m.parse_low_power(PM_G.replace("lowpowermode", "other")))
+check("parse_low_power: a value that is not 0 or 1", None, m.parse_low_power(PM_G % "2"))
+check("parse_low_power: a word where the number belongs", None, m.parse_low_power(PM_G % "yes"))
+check("parse_low_power: an empty answer", None, m.parse_low_power(""))
+check("parse_low_power: a very long line", None, m.parse_low_power(" lowpowermode " + "1" * 30000))
+THERM = ("Note: No thermal warning level has been recorded\n2026-01-01 00:00:00 +0000 CPU Power notify\n"
+         "\tCPU_Scheduler_Limit \t= 100\n\tCPU_Available_CPUs \t= 4\n\tCPU_Speed_Limit \t= %s\n")
+check("parse_cpu_limit: 75", 75, m.parse_cpu_limit(THERM % "75"))
+check("parse_cpu_limit: 100", 100, m.parse_cpu_limit(THERM % "100"))
+check("parse_cpu_limit: 0", 0, m.parse_cpu_limit(THERM % "0"))
+check("parse_cpu_limit: out of range", None, m.parse_cpu_limit(THERM % "101"))
+check("parse_cpu_limit: a word where the number belongs", None, m.parse_cpu_limit(THERM % "fast"))
+check("parse_cpu_limit: no such line, as on a Mac with an Apple chip", None,
+      m.parse_cpu_limit(THERM.replace("CPU_Speed_Limit", "Other_Limit") % "75"))
+check("parse_cpu_limit: an empty answer", None, m.parse_cpu_limit(""))
+check("parse_cpu_limit: a very long line", None, m.parse_cpu_limit("CPU_Speed_Limit = " + "1" * 30000))
+check("parse_load: the first of three", 1.5, m.parse_load("{ 1.50 1.60 1.70 }\n"))
+check("parse_load: whole numbers", 3.0, m.parse_load("{ 3 2 1 }"))
+check("parse_load: an empty answer", None, m.parse_load(""))
+check("parse_load: a word where a number belongs", None, m.parse_load("{ busy 1.0 1.0 }"))
+check("parse_load: only two numbers", None, m.parse_load("{ 1.0 2.0 }"))
+check("parse_load: a number out of range", None, m.parse_load("{ 99999999 1.0 1.0 }"))
+check("parse_load: a very long line", None, m.parse_load("{ " + "1" * 30000 + " 1 1 }"))
+SWAP = "total = 2048.00M  used = %s  free = 1535.50M  (encrypted)\n"
+check("parse_swap: the used figure", 512.5, m.parse_swap(SWAP % "512.50M"))
+check("parse_swap: none used", 0.0, m.parse_swap(SWAP % "0.00M"))
+check("parse_swap: a figure in another unit is not guessed", None, m.parse_swap(SWAP % "1.50G"))
+check("parse_swap: a word where the number belongs", None, m.parse_swap(SWAP % "lots M"))
+check("parse_swap: no used figure", None, m.parse_swap("total = 2048.00M\n"))
+check("parse_swap: an empty answer", None, m.parse_swap(""))
+check("parse_swap: a very long line", None, m.parse_swap("used = " + "1" * 30000 + "M"))
+
+DEVICE = "Mac99,9\nAcme Chip 9000 @ 3.00GHz\n6\n12\n34359738368\n"
+DEVICE_PARSED = {"model": "Mac99,9", "cpu": "Acme Chip 9000 @ 3.00GHz", "cores": 6, "threads": 12,
+                 "memory_bytes": 34359738368}
+check("parse_device: five lines", DEVICE_PARSED, m.parse_device(DEVICE))
+check("parse_device: no final line end", DEVICE_PARSED, m.parse_device(DEVICE.rstrip("\n")))
+check("parse_device: an empty answer", None, m.parse_device(""))
+check("parse_device: nothing at all", None, m.parse_device(None))
+check("parse_device: four lines are not guessed at", None, m.parse_device("Mac99,9\n6\n12\n34359738368\n"))
+check("parse_device: six lines are not guessed at", None, m.parse_device(DEVICE + "extra\n"))
+check("parse_device: zero cores", dict(DEVICE_PARSED, cores=None), m.parse_device(DEVICE.replace("\n6\n", "\n0\n")))
+check("parse_device: a negative number", dict(DEVICE_PARSED, threads=None), m.parse_device(DEVICE.replace("\n12\n", "\n-12\n")))
+check("parse_device: a number that is not whole", dict(DEVICE_PARSED, cores=None), m.parse_device(DEVICE.replace("\n6\n", "\n6.5\n")))
+check("parse_device: a word where a number belongs", dict(DEVICE_PARSED, threads=None),
+      m.parse_device(DEVICE.replace("\n12\n", "\nmany\n")))
+check("parse_device: a memory figure of twenty digits", dict(DEVICE_PARSED, memory_bytes=None),
+      m.parse_device(DEVICE.replace("34359738368", "1" * 20)))
+check("parse_device: a text of exactly 100 characters is kept", dict(DEVICE_PARSED, cpu="c" * 100),
+      m.parse_device(DEVICE.replace(DEVICE_PARSED["cpu"], "c" * 100)))
+check("parse_device: a text of 101 is not", dict(DEVICE_PARSED, cpu=None),
+      m.parse_device(DEVICE.replace(DEVICE_PARSED["cpu"], "c" * 101)))
+check("parse_device: a very long line", dict(DEVICE_PARSED, model=None),
+      m.parse_device(DEVICE.replace("Mac99,9", "m" * 30000)))
+check("parse_device: a text that is not ASCII", dict(DEVICE_PARSED, model=None), m.parse_device(DEVICE.replace("Mac99,9", "Café")))
+check("parse_device: bytes that are not UTF-8", dict(DEVICE_PARSED, model=None),
+      m.parse_device(DEVICE.replace("Mac99,9", b"\xff\xfe".decode("utf-8", "replace"))))
+check("parse_device: nothing usable", None, m.parse_device("\n\n\n\n\n"))
+
+GOOD_WIFI = '{"on":true,"rssi":-61,"noise":-90,"rate":433,"phy":5,"channel":44,"band":2,"width":3}'
+WIFI_PARSED = {"wifi_rssi": -61, "wifi_noise": -90, "wifi_rate": 433, "wifi_phy": 5, "wifi_band": 2, "wifi_width": 3,
+               "wifi_channel": 44}
+NO_WIFI = {key: None for key in m.WIFI_KEYS}
+
+
+def wifi_with(**changes):
+    data = json.loads(GOOD_WIFI)
+    for key, value in changes.items():
+        if isinstance(value, str) and value == "MISSING":
+            del data[key]
+        else:
+            data[key] = value
+    return json.dumps(data)
+
+
+def wifi_expect(**changes):
+    return dict(WIFI_PARSED, **changes)
+
+
+check("parse_wifi_light: a line of the real shape", WIFI_PARSED, m.parse_wifi_light(GOOD_WIFI + "\n"))
+check("parse_wifi_light: the seven keys", sorted(m.WIFI_KEYS), sorted(WIFI_PARSED))
+for name, text in [("null", "null"), ("an empty answer", ""), ("nothing", None), ("text that is not JSON", "no wifi here"),
+                   ("a JSON list", "[1, 2]"), ("a bare number", "5"), ("on false", wifi_with(on=False)),
+                   ("on as text", wifi_with(on="true")), ("on missing", wifi_with(on="MISSING")),
+                   ("bytes that are not UTF-8", b"\xff\xfe".decode("utf-8", "replace")),
+                   ("a very long number", '{"on":true,"rssi":' + "1" * 30000 + "}"),
+                   ("nesting too deep", "[" * 5000 + "]" * 5000)]:
+    check("parse_wifi_light: " + name + " gives seven nulls", NO_WIFI, m.parse_wifi_light(text))
+for name, changes, expected in [
+    ("a signal of 0", dict(rssi=0), dict(wifi_rssi=None)),
+    ("a signal of -120", dict(rssi=-120), dict(wifi_rssi=-120)),
+    ("a signal below -120", dict(rssi=-121), dict(wifi_rssi=None)),
+    ("a signal that is not whole", dict(rssi=-60.5), dict(wifi_rssi=None)),
+    ("a signal as text", dict(rssi="-61"), dict(wifi_rssi=None)),
+    ("a signal as a boolean", dict(rssi=True), dict(wifi_rssi=None)),
+    ("a noise of 0", dict(noise=0), dict(wifi_noise=None)),
+    ("a noise out of range", dict(noise=-200), dict(wifi_noise=None)),
+    ("a noise as a boolean", dict(noise=False), dict(wifi_noise=None)),
+    ("a rate of 0", dict(rate=0), dict(wifi_rate=None)),
+    ("a negative rate", dict(rate=-5), dict(wifi_rate=None)),
+    ("a rate of 100000", dict(rate=100000), dict(wifi_rate=100000)),
+    ("a rate above 100000", dict(rate=100001), dict(wifi_rate=None)),
+    ("a rate rounded to one decimal", dict(rate=433.26), dict(wifi_rate=433.3)),
+    ("a rate that rounds to nothing", dict(rate=0.04), dict(wifi_rate=None)),
+    ("a rate as text", dict(rate="433"), dict(wifi_rate=None)),
+    ("a rate as a boolean", dict(rate=True), dict(wifi_rate=None)),
+    ("a standard of 0", dict(phy=0), dict(wifi_phy=None)),
+    ("a standard of 21", dict(phy=21), dict(wifi_phy=None)),
+    ("a standard of 20", dict(phy=20), dict(wifi_phy=20)),
+    ("a band as text", dict(band="2"), dict(wifi_band=None)),
+    ("a band as a boolean", dict(band=True), dict(wifi_band=None)),
+    ("a width of 0", dict(width=0), dict(wifi_width=None)),
+    ("a channel of 0", dict(channel=0), dict(wifi_channel=None)),
+    ("a channel of 233", dict(channel=233), dict(wifi_channel=233)),
+    ("a channel of 234", dict(channel=234), dict(wifi_channel=None)),
+    ("a channel as text", dict(channel="44"), dict(wifi_channel=None)),
+    ("a channel that is null", dict(channel=None), dict(wifi_channel=None)),
+    ("a key missing", dict(noise="MISSING"), dict(wifi_noise=None)),
+    ("channel, band and width missing", dict(channel="MISSING", band="MISSING", width="MISSING"),
+     dict(wifi_channel=None, wifi_band=None, wifi_width=None)),
+]:
+    check("parse_wifi_light: " + name, wifi_expect(**expected), m.parse_wifi_light(wifi_with(**changes)))
+check("parse_wifi_light: NaN is not a number", wifi_expect(wifi_rssi=None),
+      m.parse_wifi_light(GOOD_WIFI.replace("-61", "NaN")))
+check("parse_wifi_light: infinity is not a number", wifi_expect(wifi_rate=None),
+      m.parse_wifi_light(GOOD_WIFI.replace("433", "Infinity")))
+script = m.WIFI_SCRIPT.lower()
+check("the fixed script asks for no name, address, country or scan", [], [
+    word for word in ("ssid", "hardwareaddress", "countrycode", "scan") if word in script])
+check("the fixed script keeps its Number() calls", 7, m.WIFI_SCRIPT.count("Number("))
+check("the tools are each an absolute path", ("/usr/sbin/sysctl", "/usr/bin/pmset", "/usr/bin/osascript"),
+      (m.SYSCTL, m.PMSET, m.OSASCRIPT))
+check("the limits are 2 seconds and 20,000 bytes, and six calls fit in a round's 14 seconds", (2, 20000, True),
+      (m.TOOL_TIMEOUT_S, m.TOOL_MAX_BYTES, 6 * m.TOOL_TIMEOUT_S < 14))
+
+
+def tool(name, body):
+    path = stubs + "/" + name
+    with open(path, "w") as out:
+        out.write("#!/bin/sh\n" + body + "\n")
+    os.chmod(path, 0o755)
+    return path
+
+
+check("run_tool: what a tool prints", "hello\n", m.run_tool([tool("tool-ok", "echo hello")]))
+check("run_tool: a tool that is missing", None, m.run_tool([stubs + "/tool-not-there"]))
+check("run_tool: a tool that exits non-zero, whatever it printed", None, m.run_tool([tool("tool-fails", "echo hello; exit 1")]))
+check("run_tool: exactly the limit is kept", 20000, len(m.run_tool([tool("tool-limit", "exec head -c 20000 /dev/zero")]) or ""))
+check("run_tool: one byte over the limit", None, m.run_tool([tool("tool-over", "exec head -c 20001 /dev/zero")]))
+began = time.monotonic()
+check("run_tool: a tool that never stops printing", None, m.run_tool([tool("tool-endless", "exec yes")]))
+check("run_tool: and is stopped at once", True, time.monotonic() - began < 2)
+real_timeout = m.TOOL_TIMEOUT_S
+m.TOOL_TIMEOUT_S = 0.5
+began = time.monotonic()
+try:
+    slow = m.run_tool([tool("tool-slow", "exec sleep 30")])
+    stalled = m.run_tool([tool("tool-stalled", "echo started; exec sleep 30")])
+finally:
+    m.TOOL_TIMEOUT_S = real_timeout
+check("run_tool: a tool that takes longer than its time", (None, None), (slow, stalled))
+check("run_tool: each was stopped after its time, not waited for", True, time.monotonic() - began < 3)
+check("run_tool: bytes that are not UTF-8 come back replaced", "��x\n",
+      m.run_tool([tool("tool-bytes", "printf '\\377\\376x\\n'")]))
+check("run_tool: it is no shell: a metacharacter in the path is only a path", None, m.run_tool([stubs + "/a;echo hi"]))
+
+TOOLS = tempfile.mkdtemp(dir=stubs)
+for name, text in [("batt", BATT_ON), ("therm", THERM % "75"), ("g", PM_G % "1"), ("device", DEVICE),
+                   ("load", "{ 1.50 1.60 1.70 }\n"), ("swap", SWAP % "512.50M"), ("wifi", GOOD_WIFI + "\n")]:
+    with open(TOOLS + "/" + name, "w") as out:
+        out.write(text)
+PMSET_BODY = ('case "$*" in\n "-g batt") cat %s/batt;;\n "-g therm") cat %s/therm;;\n "-g") cat %s/g;;\n *) exit 3;;\nesac'
+              % (TOOLS, TOOLS, TOOLS))
+SYSCTL_BODY = ('case "$*" in\n "-n vm.loadavg") cat %s/load;;\n "-n vm.swapusage") cat %s/swap;;\n'
+               ' "-n hw.model machdep.cpu.brand_string hw.physicalcpu hw.logicalcpu hw.memsize") cat %s/device;;\n'
+               ' *) exit 3;;\nesac' % (TOOLS, TOOLS, TOOLS))
+OSASCRIPT_BODY = 'printf "%%s\\n" "$@" > %s/osascript-called\ncat %s/wifi' % (TOOLS, TOOLS)
+GOOD_TOOLS = {"PMSET": tool("stand-in-pmset", PMSET_BODY), "SYSCTL": tool("stand-in-sysctl", SYSCTL_BODY),
+              "OSASCRIPT": tool("stand-in-osascript", OSASCRIPT_BODY)}
+LAPTOP = dict(power="battery", battery=64, charge="discharging", low_power=1, cpu_limit=75, load=1.5, swap_mb=512.5,
+              **WIFI_PARSED)
+
+
+def with_tools(overrides, call):
+    saved = {key: getattr(m, key) for key in overrides}
+    for key, value in overrides.items():
+        setattr(m, key, value)
+    try:
+        return call()
+    finally:
+        for key, value in saved.items():
+            setattr(m, key, value)
+
+
+def called():
+    return os.path.exists(TOOLS + "/osascript-called")
+
+
+check("read_laptop: every field, from stand-in tools", LAPTOP, with_tools(GOOD_TOOLS, m.read_laptop))
+with open(TOOLS + "/osascript-called") as marked:
+    check("read_laptop: the fixed script went to osascript as one argument", "-l\nJavaScript\n-e\n" + m.WIFI_SCRIPT + "\n",
+          marked.read())
+os.remove(TOOLS + "/osascript-called")
+check("read_laptop: with no Wi-Fi the seven fields are null", dict(LAPTOP, **NO_WIFI),
+      with_tools(GOOD_TOOLS, lambda: m.read_laptop(False)))
+check("read_laptop: and osascript was not called", False, called())
+check("read_device: five lines from a stand-in", DEVICE_PARSED, with_tools(GOOD_TOOLS, m.read_device))
+missing_all = {"PMSET": stubs + "/nope-1", "SYSCTL": stubs + "/nope-2", "OSASCRIPT": stubs + "/nope-3"}
+check("read_laptop: no tool at all (not a Mac) is None", None, with_tools(missing_all, m.read_laptop))
+check("read_device: no tool at all is None", None, with_tools(missing_all, m.read_device))
+for broken, what, nulls in [
+    ("PMSET", "pmset", ["power", "battery", "charge", "low_power", "cpu_limit"]),
+    ("SYSCTL", "sysctl", ["load", "swap_mb"]),
+    ("OSASCRIPT", "osascript", m.WIFI_KEYS),
+]:
+    for how, body in [("is missing", None), ("exits non-zero", "echo garbage; exit 1"), ("says something unexpected", "echo what"),
+                      ("prints more than the limit", "exec head -c 30000 /dev/zero")]:
+        path = stubs + "/nope-4" if body is None else tool("broken-" + what, body)
+        got = with_tools(dict(GOOD_TOOLS, **{broken: path}), m.read_laptop)
+        check("read_laptop: %s %s: only its fields are null" % (what, how), dict(LAPTOP, **{k: None for k in nulls}), got)
+m.TOOL_TIMEOUT_S = 0.5
+began = time.monotonic()
+try:
+    got = with_tools(dict(GOOD_TOOLS, SYSCTL=tool("slow-sysctl", "exec sleep 30")), m.read_laptop)
+finally:
+    m.TOOL_TIMEOUT_S = real_timeout
+check("read_laptop: a sysctl that takes too long: its fields are null, the others there", dict(LAPTOP, load=None, swap_mb=None), got)
+check("read_laptop: it took two waits of the time, not more", True, time.monotonic() - began < 3)
+
+
+def with_reader(reader):
+    logger = m.Logger(["http://a.test/api/jsonp/"], None, False, laptop=reader)
+    return with_fetch(lambda url, timeout, insecure=False, max_size=None: dict(GOOD), lambda: logger.round(1))
+
+
+def exploding():
+    raise ValueError("boom")
+
+
+record = with_reader(exploding)
+check("a laptop reader that fails does not lose the round's feed", (sorted(m.PARTS), False),
+      (sorted(record.get("feed", {})), "laptop" in record))
+record = with_reader(lambda: {"power": "ac"})
+check("a laptop reader's answer is the round's laptop", ({"power": "ac"}, sorted(m.PARTS)),
+      (record.get("laptop"), sorted(record["feed"])))
+check("a reader with nothing to say leaves the key out", False, "laptop" in with_reader(lambda: None))
+real_wait = m.SIDE_WAIT_S
+m.SIDE_WAIT_S = 0.2
+began = time.monotonic()
+try:
+    record = with_reader(lambda: time.sleep(2) or {"power": "ac"})
+finally:
+    m.SIDE_WAIT_S = real_wait
+check("a late laptop reader neither holds the round up nor leaves a laptop key, and the feed is kept",
+      (True, sorted(m.PARTS), False), (time.monotonic() - began < 1.5, sorted(record.get("feed", {})), "laptop" in record))
+check("no reader, no key", False, "laptop" in with_fetch(
+    lambda url, timeout, insecure=False, max_size=None: dict(GOOD),
+    lambda: m.Logger(["http://a.test/api/jsonp/"], None, False).round(1)))
+
+for name, answer, expected in [
+    ("f", "f\n", "first"), ("F", "F\n", "first"), ("first", "first\n", "first"), ("First with spaces", "  First \n", "first"),
+    ("s", "s\n", "standard"), ("standard", "standard\n", "standard"), ("an empty answer (Return)", "\n", "standard"),
+    ("something else", "x\n", "standard"), ("an empty text", "", "standard"),
+]:
+    asked = []
+    got = m.wants_class(None, True, lambda question, answer=answer, **more: asked.append((question, more)) or answer)
+    check("wants_class: " + name, (expected, "answer", [(m.CLASS_QUESTION, {"unanswered": m.NO_CLASS_NOTE})]),
+          (got[0], got[1], asked))
+check("wants_class: the question", "Standard or first class? [S/f] ", m.CLASS_QUESTION)
+check("wants_class: no answer in time is nobody saying", (None, None), m.wants_class(None, True, lambda question, **more: None))
+
+
+def must_not_ask(question, **more):
+    raise AssertionError("asked")
+
+
+check("wants_class: no terminal is nobody saying, and nothing is asked", (None, None), m.wants_class(None, False, must_not_ask))
+for option in ("standard", "first"):
+    check("wants_class: --class " + option + " asks nothing", (option, "option"), m.wants_class(option, True, must_not_ask))
+    check("wants_class: --class " + option + " beats no terminal", (option, "option"), m.wants_class(option, False, must_not_ask))
+
+
+def read_note(note):
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        answer = m.read_answer(m.CLASS_QUESTION, 1, io.StringIO("f\n"), lambda r, w, x, t: ([], [], []), **note)
+    return answer, printed.getvalue()
+
+
+check("read_answer: the class question's own note", (None, m.CLASS_QUESTION + "\nNo answer: the class is not recorded.\n"),
+      read_note(dict(unanswered=m.NO_CLASS_NOTE)))
+check("read_answer: the film's note is still the default", (None, m.CLASS_QUESTION + "\nNo answer: assuming a film will play.\n"),
+      read_note({}))
+
+
+def both(film, option, answers):
+    """Asks the way main() does: the film question, then the class question, one allowance for both."""
+    clock["now"] = 0.0
+    given, asked = [], []
+
+    def reader(question, timeout, **more):
+        given.append(timeout)
+        asked.append(question)
+        spent, text = answers[len(given) - 1]
+        clock["now"] += spent
+        return text
+
+    ask = m.limited_asker(60, lambda: clock["now"], reader)
+    chosen = m.wants_speed(film, False, None, True, ask)
+    return chosen, m.wants_class(option, True, ask), given, asked
+
+
+chosen, picked, given, asked = both(False, None, [(45, "n"), (10, "f")])
+check("the two questions share one allowance: 60, then 15", (m.SPEED_SITE, ("first", "answer"), [60, 15]), (chosen, picked, given))
+check("the film is asked first, then the class", [Q, m.CLASS_QUESTION], asked)
+chosen, picked, given, asked = both(False, None, [(60, "n"), (5, "f")])
+check("when the film's answer used it all, the class gets 0 seconds", [60, 0], given)
+chosen, picked, given, asked = both(True, None, [(30, "s")])
+check("with --film only the class is asked, with the whole allowance", (None, ("standard", "answer"), [60]), (chosen, picked, given))
+chosen, picked, given, asked = both(True, "first", [])
+check("with --film and --class nothing is asked", (None, ("first", "option"), []), (chosen, picked, given))
+chosen, picked, given, asked = both(False, None, [(20, "x"), (20, "x"), (20, "x"), (5, "f")])
+check("three unclear answers and the class share the one allowance", [60, 40, 20, 0], given)
+
+
+def run_main(extra, overrides=None):
+    """Runs main() against the stand-in feed and the given stand-in tools, with an empty HOME. Returns the log's
+    records and its raw text. The real Wi-Fi profiler is never called."""
+    home = tempfile.mkdtemp(dir=stubs)
+    overrides = dict({"wifi_link": lambda: None}, **(overrides or {}))
+    saved_module = {key: getattr(m, key) for key in overrides}
+    saved = (sys.argv, os.environ.get("HOME"), {n: signal.getsignal(getattr(signal, n)) for n in ("SIGINT", "SIGTERM", "SIGHUP")})
+    sys.argv = ["train-feed-logger.py", "--no-awake", "--probe", "off", "--rounds", "1", "--timeout", "3",
+                "--base", "http://127.0.0.1:%s/api/jsonp/" % FEED_PORT] + extra
+    os.environ["HOME"] = home
+    for key, value in overrides.items():
+        setattr(m, key, value)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            m.main()
+    finally:
+        for key, value in saved_module.items():
+            setattr(m, key, value)
+        sys.argv = saved[0]
+        os.environ["HOME"] = saved[1] if saved[1] is not None else ""
+        for n, handler in saved[2].items():
+            signal.signal(getattr(signal, n), handler)
+    folder = home + "/train-feed-logger/logs"
+    with open(folder + "/" + os.listdir(folder)[0]) as log:
+        raw = log.read()
+    shutil.rmtree(home)
+    return [json.loads(x) for x in raw.splitlines()], raw
+
+
+records, raw = run_main([], GOOD_TOOLS)
+check("a whole run: version 3 in the start line", 3, records[0]["version"])
+check("a whole run: the start line has the device", DEVICE_PARSED, records[0]["device"])
+check("a whole run: the round has the laptop, the Wi-Fi fields too", LAPTOP, records[1]["laptop"])
+check("a whole run: and the feed", True, "position" in records[1]["feed"])
+check("a whole run: the battery's id is nowhere in the log", (False, False, False),
+      ("1234567" in raw, "InternalBattery" in raw, "Battery Power" in raw))
+check("a whole run: no terminal, so the class is not said", (None, None),
+      (records[0]["travel_class"], records[0]["travel_class_from"]))
+os.remove(TOOLS + "/osascript-called")
+records, raw = run_main(["--no-wifi"], GOOD_TOOLS)
+check("a run with --no-wifi: the laptop has the other fields and seven nulls", dict(LAPTOP, **NO_WIFI), records[1]["laptop"])
+check("a run with --no-wifi: osascript was not called", False, called())
+records, raw = run_main(["--no-laptop"], GOOD_TOOLS)
+check("a run with --no-laptop: no device in the start line, no laptop in the round", (False, False),
+      ("device" in records[0], "laptop" in records[1]))
+check("a run with --no-laptop: osascript was not called", False, called())
+records, raw = run_main([], missing_all)
+check("a run with no tools: the device is null, the round has no laptop and still its feed", (None, False, True),
+      (records[0]["device"], "laptop" in records[1], "position" in records[1]["feed"]))
+for option in ("standard", "first"):
+    records, raw = run_main(["--class", option], GOOD_TOOLS)
+    check("a run with --class %s: both keys in the start line" % option, (option, "option"),
+          (records[0]["travel_class"], records[0]["travel_class_from"]))
 PY
 )
 assert_eq "the pure functions ran without an error" 0 "$(count_lines "$RESULTS" "Traceback")"
@@ -1101,7 +1532,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 145 pure checks reported" 145 "$PURE"
+assert_eq "all 331 pure checks reported" 331 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"
