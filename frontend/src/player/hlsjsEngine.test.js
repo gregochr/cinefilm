@@ -1024,13 +1024,9 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
       return { ...started, setClock: (ms) => (clockMs = ms) };
     }
-    // A fragment that has been loading since `start`, `loaded` bytes in; the test moves `loaded`.
-    const loadingFrag = (start = 0, loaded = 0) => ({
-      stats: {
-        loaded,
-        aborted: false,
-        loading: { start, first: loaded > 0 ? start + 1 : 0, end: 0 },
-      },
+    // A fragment that began loading at `start`, `loaded` bytes in, its first byte at `first` (0: none yet).
+    const loadingFrag = (start = 0, loaded = 0, first = loaded > 0 ? start + 1 : 0) => ({
+      stats: { loaded, aborted: false, loading: { start, first, end: 0 } },
     });
 
     it('lets stale fast samples hold the floor only while 180 s are in hand', () => {
@@ -1043,47 +1039,38 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
       expect(hls.config.minAutoBitrate).toBe(0);
     });
 
-    it('releases within one timer tick when the fragment in flight trickles', () => {
+    it('releases within one timer tick when the fragment in flight trickles after its first byte', () => {
       const { hls, setClock } = armed();
-      const frag = loadingFrag(0, 0);
+      const frag = loadingFrag(0, 20_000, 1_000); // first byte at 1 s
       hls.fragLoading(frag);
-      vi.advanceTimersByTime(HOLD_CHECK_MS - 1);
-      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
-      vi.advanceTimersByTime(HOLD_CHECK_MS); // the tick at 4 s: nothing has been said by the clock yet
-      frag.stats.loaded = 40_000; // 80 kbit/s over 4 s: 300 s in hand last about 333 s
-      frag.stats.loading.first = 1;
-      setClock(IN_FLIGHT_MIN_AGE_MS);
-      vi.advanceTimersByTime(1);
+      setClock(1_000 + IN_FLIGHT_MIN_AGE_MS); // 20,000 bytes in 4 s: 40 kbit/s, 300 s last about 316 s
+      vi.advanceTimersByTime(HOLD_CHECK_MS);
       expect(hls.config.minAutoBitrate).toBe(0);
     });
 
     it('keeps the floor while the fragment in flight is fast', () => {
       const { hls, setClock } = armed();
-      const frag = loadingFrag(0, 2_000_000); // 4,000 kbit/s over 4 s
-      hls.fragLoading(frag);
-      setClock(IN_FLIGHT_MIN_AGE_MS);
+      hls.fragLoading(loadingFrag(0, 2_000_000, 1_000)); // 4,000 kbit/s over 4 s
+      setClock(1_000 + IN_FLIGHT_MIN_AGE_MS);
       vi.advanceTimersByTime(HOLD_CHECK_MS * 3);
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
     });
 
-    it('does not release on a fragment with no first byte at 2 s, and does from 4 s', () => {
+    it('does not release on a fragment with no first byte at 10 s (noProgressLoader covers silence)', () => {
       const { hls, setClock } = armed();
       hls.fragLoading(loadingFrag(0, 0));
-      setClock(HOLD_CHECK_MS);
+      setClock(10_000);
       vi.advanceTimersByTime(HOLD_CHECK_MS);
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
-      setClock(IN_FLIGHT_MIN_AGE_MS + 1);
-      vi.advanceTimersByTime(HOLD_CHECK_MS);
-      expect(hls.config.minAutoBitrate).toBe(0);
     });
 
-    it('counts the fragment in flight from exactly 4000 ms and not at 3999', () => {
+    it('counts the transfer from 4000 ms after the first byte, not at 3900 ms', () => {
       const { hls, setClock } = armed();
-      hls.fragLoading(loadingFrag(0, 0));
-      setClock(IN_FLIGHT_MIN_AGE_MS - 1);
+      hls.fragLoading(loadingFrag(0, 20_000, 5_000)); // first byte at 5 s, a trickle
+      setClock(5_000 + IN_FLIGHT_MIN_AGE_MS - 100);
       vi.advanceTimersByTime(HOLD_CHECK_MS);
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
-      setClock(IN_FLIGHT_MIN_AGE_MS);
+      setClock(5_000 + IN_FLIGHT_MIN_AGE_MS);
       vi.advanceTimersByTime(HOLD_CHECK_MS);
       expect(hls.config.minAutoBitrate).toBe(0);
     });

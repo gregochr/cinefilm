@@ -3,13 +3,13 @@
 Written 2026-11-09, revised the same day after a two-part adversarial review and owner decisions. Product phase 3,
 now the owner's top priority: "The transcoding is really important to me… Network resilience is something I want us
 to double down on." v0.1.0 direct-plays the original file only; on train wifi in Chrome a 15.6 Mbps original
-(*American Beauty*) buffered constantly. Tailscale was direct (96 ms), so the link was the limit.
+(_American Beauty_) buffered constantly. Tailscale was direct (96 ms), so the link was the limit.
 
 ## What we measured (dockermacmini, 2026-11-09)
 
 - **The library is H.264** (60-file sample: all `h264`, heights 300–1080, most SD), so Ivy Bridge Quick Sync does
   hardware **decode and encode** for every film.
-- `h264_vaapi` (i965, `/dev/dri/renderD128`, group `render` 993), *American Beauty* 1920×820 15 Mbps over the SMB
+- `h264_vaapi` (i965, `/dev/dri/renderD128`, group `render` 993), _American Beauty_ 1920×820 15 Mbps over the SMB
   mount, 60 s of film, including container start: single 720p 6.1 s (~10× real time); single 480p 3.4 s (~17×);
   **one ffmpeg making the whole transcoded ladder** (820p 5 Mbps, 720p, 480p, 360p, AAC each) with the `hls` muxer:
   **16.9 s (~3.5×)**, 4.004 s segments, 72 MB per minute across all rungs.
@@ -24,7 +24,7 @@ to double down on." v0.1.0 direct-plays the original file only; on train wifi in
 3. **Survive drops**: Wi-Fi gaps, Tailscale reconnects and tunnels resume at the same position without a reload.
 4. **Same experience in Safari and Chrome** (Mac, iPhone): the handover's player, menu, indicator, toasts.
 5. **The same resilience at home** (owner): Wi-Fi glitches and contention happen at home too. Home starts at the top
-   and steps *down* when the link falters; a poor link starts low and steps *up*. One adaptive policy.
+   and steps _down_ when the link falters; a poor link starts low and steps _up_. One adaptive policy.
 
 ## The design in one paragraph
 
@@ -42,7 +42,7 @@ read of the file. Direct play of the file remains only as a fallback.
   (one file at a time, low priority) and on demand when a film is played before its index exists.
 - **Cuts**: the first cut is 0; each next cut is the first keyframe at or after **the previous cut + 4 s**, so the
   list is strictly increasing (no zero-length segments however far apart keyframes are) and segments are 4–~12 s;
-  segment *n* is `[cut[n], cut[n+1])`.
+  segment _n_ is `[cut[n], cut[n+1])`.
   The cut list is the timeline for **every rung**: the copy rung cuts there naturally, and the transcoded rungs force
   keyframes at exactly those times (`-force_key_frames <t1,t2,…>`, ~1,800 entries for two hours; VAAPI gives closed
   GOPs). A file whose largest gap between cuts exceeds **12 s** gets **no copy rung** (its top rung is transcoded at
@@ -53,14 +53,14 @@ read of the file. Direct play of the file remains only as a fallback.
 
 ## Rungs
 
-| Rung | Video | When |
-|---|---|---|
-| `original` | **copy** of the source video | when the file has a keyframe index with gaps ≤ 12 s |
-| top (no copy rung) | `h264_vaapi` at the **source height** (capped 1080), named by height: above 720 ⇒ `1080p` 5 Mbps, above 480 ⇒ `720p` 2.5 Mbps, above 360 ⇒ `480p` 1 Mbps, above 240 ⇒ `360p` 0.6 Mbps, else `240p` 0.4 Mbps | only when the file has no copy rung; the rungs below follow the same rule as with a copy rung |
-| `720p` | 2.5 Mbps | source above 720 lines |
-| `480p` | 1 Mbps | source above 480 lines |
-| `360p` | 0.6 Mbps | source above 360 lines |
-| `240p` | 0.25 Mbps | source above 240 lines: the floor of every ladder, for a train's bad spells (owner, 2026-11-12; `train-link-plan.md`). Until then 240p was 0.4 Mbps and only for sources of 360 lines or fewer |
+| Rung               | Video                                                                                                                                                                                                       | When                                                                                                                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `original`         | **copy** of the source video                                                                                                                                                                                | when the file has a keyframe index with gaps ≤ 12 s                                                                                                                                            |
+| top (no copy rung) | `h264_vaapi` at the **source height** (capped 1080), named by height: above 720 ⇒ `1080p` 5 Mbps, above 480 ⇒ `720p` 2.5 Mbps, above 360 ⇒ `480p` 1 Mbps, above 240 ⇒ `360p` 0.6 Mbps, else `240p` 0.4 Mbps | only when the file has no copy rung; the rungs below follow the same rule as with a copy rung                                                                                                  |
+| `720p`             | 2.5 Mbps                                                                                                                                                                                                    | source above 720 lines                                                                                                                                                                         |
+| `480p`             | 1 Mbps                                                                                                                                                                                                      | source above 480 lines                                                                                                                                                                         |
+| `360p`             | 0.6 Mbps                                                                                                                                                                                                    | source above 360 lines                                                                                                                                                                         |
+| `240p`             | 0.25 Mbps                                                                                                                                                                                                   | source above 240 lines: the floor of every ladder, for a train's bad spells (owner, 2026-11-12; `train-link-plan.md`). Until then 240p was 0.4 Mbps and only for sources of 360 lines or fewer |
 
 - **Every rung is strictly shorter than the one above it** (a transcoded rung exists only below the source height;
   a source of 240 lines or fewer has its top rung only). So heights
@@ -125,7 +125,7 @@ read of the file. Direct play of the file remains only as a fallback.
 ## API
 
 - `POST /api/editions/{id}/sessions` `{ audioStreamId?, startMs?, quality }` → `{ sessionId, masterUrl, renditions:
-  [{ id, height, bitrate, copy }] }`; `audioStreamId` must be one of the edition's streams; `startMs` within the
+[{ id, height, bitrate, copy }] }`; `audioStreamId` must be one of the edition's streams; `startMs` within the
   duration.
 - `GET /api/sessions/{id}/master.m3u8`: per session, the **intended start rung listed first** (Safari starts on the
   first variant) and **only the pinned rung** when a quality is chosen.
@@ -162,7 +162,7 @@ read of the file. Direct play of the file remains only as a fallback.
   measures nothing, and a split film with no recent speed, start on the lowest rung (`poor-link-plan.md`). Then let
   ABR run: hls.js steps
   down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`). The cap
-  follows the level hls.js starts to *fetch* (`LEVEL_SWITCHING`), not the level that reaches the screen
+  follows the level hls.js starts to _fetch_ (`LEVEL_SWITCHING`), not the level that reaches the screen
   (`LEVEL_SWITCHED`), which comes later by as much as is buffered (`train-link-plan.md`). The cap rises only while
   hls.js is fetching at the cap, so it is never more than one level above what is fetched; the healthy minute starts
   again when hls.js reaches the cap from below; and a segment that times out or gets no HTTP answer brings the cap
@@ -171,11 +171,11 @@ read of the file. Direct play of the file remains only as a fallback.
   (`floor-hold-by-time-plan.md`): Auto does not go below 360p once 240 s are in hand and the bank would last 900 s
   at the link's recent speed (the lower middle of the last 9 segment rates, timed from the request start), and
   lets go below 180 s in hand, or when it would last under 600 s at the lowest of the last 3 segment rates and the
-  rate so far of the segment in flight once it has loaded 4 s (read every 2 s). `floorHold.js` raises hls.js's `minAutoBitrate`, provided
+  rate of the segment in flight after 4 s of transfer from its first byte (read every 2 s). `floorHold.js` raises hls.js's `minAutoBitrate`, provided
   hls.js is already fetching at 360p or above; a segment that times out or gets no answer, and a change of
   network, clear the rates and release it. iPhone's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
-  identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only *strictly below*
+  identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only _strictly below_
   the source height, so `original` and e.g. `480p` never share a height; a test asserts uniqueness for every
   ladder). Toasts
   on every change: "Switching to 720p for smoother playback", "Back to Original" / "Back to 1080p".
@@ -269,12 +269,13 @@ read of the file. Direct play of the file remains only as a fallback.
 
 ## Spike results (2026-11-09, real VAAPI on dockermacmini, the deployed image's ffmpeg)
 
-Films: *American Beauty* (regular 1 s keyframes) and *127 Hours* (HandBrake: irregular keyframes, gaps up to 10 s,
+Films: _American Beauty_ (regular 1 s keyframes) and _127 Hours_ (HandBrake: irregular keyframes, gaps up to 10 s,
 non-IDR I-frames). Software encoder was not the spike target; the software path is the same shape with `libx264`.
 
 **What failed**
+
 - The `hls` muxer (`-var_stream_map`) picks its own cut points on an absolute `hls_time` grid, so the copy and
-  transcoded rungs diverged on *127 Hours*. Replaced by per-rung `segment` muxers fed the same cut times.
+  transcoded rungs diverged on _127 Hours_. Replaced by per-rung `segment` muxers fed the same cut times.
 - `-force_key_frames` with the raw keyframe pts landed one frame late: the forced times are the cuts minus half a frame.
 - Absolute `-segment_times` on a restart produced one giant segment (the muxer measures from the run's first packet):
   the times passed are relative to the run's start.
@@ -285,6 +286,7 @@ non-IDR I-frames). Software encoder was not the spike target; the software path 
 
 **Adopted recipe (verified: every rung's segment n starts at the identical PTS on both films; restart segments match a
 from-zero run exactly; every segment of every rung decodes standalone with zero errors)**
+
 - Keyframes are the video packet pts the demuxer reports for K packets, edit list applied
   (`ffprobe -v error -select_streams v:0 -show_entries packet=pts_time,flags -of csv=p=0`, filtered to K); not frame pts.
   The MP4 reader yields the same values. The cut list is unchanged.
@@ -293,7 +295,7 @@ from-zero run exactly; every segment of every rung decodes standalone with zero 
 - Copy rung: `-map 0:v:0 -map 0:a:<idx> -c:v copy -bsf:v h264_mp4toannexb,dump_extra=freq=keyframe`.
 - Transcoded rung: `-map [vN] -map 0:a:<idx> -c:v h264_vaapi -b:v <rate> -g 9999 -force_key_frames <ABS>`.
 - Every rung: `-c:a aac -b:a <ab> -ac 2 -f segment -segment_format mpegts -segment_times <REL> -segment_start_number <n>
-  -reset_timestamps 0 -output_ts_offset 10 -muxdelay 0 -muxpreload 0 <dir>/<rungId>/seg-%d.ts`.
+-reset_timestamps 0 -output_ts_offset 10 -muxdelay 0 -muxpreload 0 <dir>/<rungId>/seg-%d.ts`.
 - With h = 0.5 / fps (0.02 if unknown): ABS = every cut after the start segment minus h on the film timeline; REL = the
   same minus the run's start time S; 6 decimals. Segment PTS = film time + 10 s (playlists use EXTINF only).
 - Restart at segment n > 0: `-noaccurate_seek -ss <(floor(cutMs)+1)/1000, 3 decimals>` (1 ms past the keyframe),

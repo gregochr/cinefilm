@@ -39,11 +39,11 @@ times out and `troubled` drops the hold. So the hold must always let go with **m
   time to first byte counts; `fragmentKbps` times from `loading.first` and overstates a high-latency link). The
   list is cleared when `troubled` is set and when the network generation changes, as `useStream.js` treats its
   samples.
-- **In flight:** while a fragment loads, its rate so far (`loaded × 8 / (now − loading.start)`, 0 before the first
-  byte) counts for release once the fragment has been loading at least 4 s (`IN_FLIGHT_MIN_AGE_MS`; the train's time
-  to first byte is often 0.5 to 3 s, so a younger fragment would read 0 on a healthy link), re-checked every 2 s on a
-  timer, not only on hls.js events. Before 4 s only the last-3 minimum and the 180 s line apply. A link that goes
-  quiet then releases the hold within a few seconds instead of keeping the last good samples.
+- **In flight:** while a fragment loads, its rate since its first byte (`loaded × 8 / (now − loading.first)`) counts
+  for release once the transfer has run at least 4 s (`IN_FLIGHT_MIN_AGE_MS`), re-checked every 2 s on a timer, not
+  only on hls.js events. The wait for the first byte never counts (a cold first byte can take seconds on the train);
+  a silent fragment is ended as trouble by the first-byte limit and `noProgressLoader` (12 s), which releases the
+  hold. The in-flight check only catches a trickle. Before 4 s only the last-3 minimum and the 180 s line apply.
 - **Arm** when `aheadS ≥ 240` **and** `lastsS(lowerMiddle of the 9) ≥ 900`.
 - **Release** when any of: `aheadS < 180` (120 s for one stuck fragment, plus a minute); `lastsS(min of the last 3
   samples and the in-flight rate) < 600`; fragment trouble (as now). 180 s, not today's 240 s, because 240 s is
