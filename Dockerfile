@@ -6,7 +6,8 @@
 FROM node:24-slim AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+# --ignore-scripts: no dependency's install script runs while the image is built (none is needed on Linux).
+RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts
 COPY frontend/ ./
 RUN npm run build
 
