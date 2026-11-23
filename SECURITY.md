@@ -90,6 +90,10 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    body but the playback records' own. Everything the viewer prints passes `printable`.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
    never with `dangerouslySetInnerHTML`. Image URLs come from the `imageUrl` helper only.
+   A request path that carries an id is built only in `frontend/src/api`, and every id put into one goes through
+   `pathSegment`, which encodes it as a single segment and refuses `.` and `..`, so an id from a link or a response
+   cannot send a request to another endpoint. Two things are used as the server gives them and are not ids: a
+   playback session's `masterUrl` and a stored artwork path (`/api/art/…`).
    **The operator lookup** is the browser's one request to a host other than CineFilm and TMDB's images: when the
    player opens away from home it asks `https://ipinfo.io/json` which network operator the device is on. It is
    made from a hidden `sandbox="allow-scripts"` frame built from `srcdoc`, with `credentials: 'omit'` and

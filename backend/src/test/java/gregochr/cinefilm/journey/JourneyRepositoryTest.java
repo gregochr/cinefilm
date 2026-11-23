@@ -3,12 +3,14 @@ package gregochr.cinefilm.journey;
 import static gregochr.cinefilm.journey.JourneyTestData.device;
 import static gregochr.cinefilm.journey.JourneyTestData.fullJourney;
 import static gregochr.cinefilm.journey.JourneyTestData.journey;
+import static gregochr.cinefilm.journey.JourneyTestData.trainRun;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import gregochr.cinefilm.ApiTestBase;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,17 +25,21 @@ class JourneyRepositoryTest extends ApiTestBase {
     private DeviceRepository devices;
 
     @Autowired
+    private TrainRunRepository trainRuns;
+
+    @Autowired
     private EntityManager entityManager;
 
     @Test
     void aJourneyWithADeviceReadsBackWithEveryColumn() {
         Long deviceId = devices.saveAndFlush(device("Testbook1,1")).getId();
-        Long id = journeys.saveAndFlush(fullJourney(deviceId)).getId();
+        Long runId = trainRuns.saveAndFlush(trainRun("X12345", LocalDate.of(2030, 1, 15))).getId();
+        Long id = journeys.saveAndFlush(fullJourney(deviceId, runId)).getId();
         entityManager.clear();
 
         Journey loaded = journeys.findById(id).orElseThrow();
 
-        Journey expected = fullJourney(deviceId);
+        Journey expected = fullJourney(deviceId, runId);
         expected.setId(id);
         assertThat(expected).hasNoNullFieldsOrProperties();
         assertThat(loaded).usingRecursiveComparison().isEqualTo(expected);
@@ -47,6 +53,7 @@ class JourneyRepositoryTest extends ApiTestBase {
         Journey loaded = journeys.findById(id).orElseThrow();
 
         assertThat(loaded.getDeviceId()).isNull();
+        assertThat(loaded.getTrainRunId()).isNull();
         assertThat(loaded.getOsVersion()).isNull();
         assertThat(loaded.getTravelClass()).isNull();
         assertThat(loaded.getTrainUnit()).isNull();

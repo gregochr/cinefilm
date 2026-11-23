@@ -1,6 +1,7 @@
 // The Christmas films admin API. No JSX. A refusal is an ApiError whose body carries the server's own words
 // (`serverText`), e.g. the 409 for a write while a scan holds the library lock.
 import { get, put } from './client.js';
+import { pathSegment } from './pathSegment.js';
 
 const BASE = '/api/admin/christmas';
 
@@ -12,7 +13,7 @@ export const getChristmas = (options) => get(BASE, options);
  * Answers with the same body as `getChristmas`.
  */
 export const putChristmasChoice = (tmdbId, choice) =>
-  put(`${BASE}/${encodeURIComponent(tmdbId)}`, { choice });
+  put(`${BASE}/${pathSegment(tmdbId)}`, { choice });
 
 /**
  * Where a library film stands for Christmas week, for the film ids asked about: `[{ filmId, tmdbId|null, state }]`,

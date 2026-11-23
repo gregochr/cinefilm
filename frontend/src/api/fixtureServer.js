@@ -894,7 +894,7 @@ function startPlexImport() {
 
 export async function handle(method, path, body) {
   await delay(80);
-  const url = new URL(path, 'http://fixtures.local');
+  const url = new URL(path, 'https://fixtures.local');
   const route = url.pathname;
   let match;
   if (route === '/api/session') return method === 'GET' ? { authenticated: true } : { ok: true };
