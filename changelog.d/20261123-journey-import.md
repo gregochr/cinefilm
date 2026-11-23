@@ -1,0 +1,3 @@
+### Added — import a train feed logger file
+
+`POST /api/admin/journeys` stores one logger file as journeys: it refuses any name, kind or range outside the contract (400, nothing stored), makes one journey for each stretch on one train unit, keeps the device, samples, modems and modem states, and links each journey to the playback records watched during it away from home (409 `Already imported` for a file already imported, 409 `Try again` when two requests clash). `SECURITY.md` rule 7 now says that positions are stored only when the owner imports a file in Admin. Admin's page for the import comes in a later change; no frontend yet.

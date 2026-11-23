@@ -47,6 +47,15 @@ public interface PlaybackHealthRepository
     List<Long> oldestIds(Pageable page);
 
     /**
+     * The ids of the records whose time ({@code startedAt} to {@code updatedAt}) overlaps {@code from} to
+     * {@code to}, the ends included, and whose environment is not {@code home} (none counts as not home), lowest id
+     * first, at most the page's size: the records a journey is linked to.
+     */
+    @Query("select h.id from PlaybackHealth h where h.startedAt <= :to and h.updatedAt >= :from "
+        + "and (h.environment is null or h.environment <> 'home') order by h.id asc")
+    List<Long> idsOverlapping(Instant from, Instant to, Pageable page);
+
+    /**
      * The records updated at or after {@code since}, newest update first (the higher id first on a tie), at most
      * the page's size.
      */
