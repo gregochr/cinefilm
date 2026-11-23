@@ -276,9 +276,15 @@ Each one owns its own contract rows in `foundation-plan.md`, its HTTP contract t
      none of the tables. About 1,150 lines.
    - **the import itself:** `POST`, the segments, the device, the linking, two requests clashing; MockMvc, API and
      integration tests that read back through the repositories. `SECURITY.md` rule 7. About 1,300 lines.
-5. **The train's run** (backend, decision 9): the migration (two tables and the journey's column), the two calls
-   that give a journey its train and take it away, the clock times made into instants, the rules and tests (the
-   same run given twice, a run shared by two journeys, midnight, summer time). About 950 lines. After 3b.
+5. **The train's run** (backend, decision 9), in three, sized from its main code (the tests here are about three
+   times the code they test):
+   - **its tables:** the migration (two tables and the journey's column), the entities, the repositories with the
+     locked finder, the one sweep statement and the bulk delete of calls. About 800 lines. It needs only the
+     journey tables.
+   - **its file:** the request as records, read as strictly as the import's, its rules, and the clock times made
+     into instants (midnight, summer time). No endpoint. About 1,000 lines.
+   - **its two calls:** giving a journey its train and taking it away (the same run given twice, a run shared by
+     two journeys, another day refused), with the contract's rows. About 1,000 lines. After the import.
 6. **Reading and deleting** (backend): the three other calls. The list carries each journey's headcode and
    running date where it has a train; one journey's answer carries the run and its calls; deleting a journey
    calls the one sweep of decision 9, and a test holds that a run shared by two journeys outlives the first
