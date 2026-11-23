@@ -41,17 +41,35 @@ const NEWER = stored({
   train: null,
 });
 const isRead = (method, url) => method === 'GET' && url === '/api/admin/journeys';
+const IDLE = {
+  openId: null,
+  busy: false,
+  failure: null,
+  onOpen: () => {},
+  onKeep: () => {},
+  onConfirm: () => {},
+};
 
 describe('JourneyList', () => {
   it('shows a labelled static skeleton before the first answer', () => {
-    render(<JourneyList journeys={null} loading={false} error={null} onRetry={() => {}} />);
+    render(
+      <JourneyList
+        journeys={null}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        deleting={IDLE}
+      />,
+    );
 
     expect(screen.getByRole('status', { name: 'Loading journeys' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Stored journeys' })).toBeInTheDocument();
   });
 
   it('says one sentence when nothing is stored', () => {
-    render(<JourneyList journeys={[]} loading={false} error={null} onRetry={() => {}} />);
+    render(
+      <JourneyList journeys={[]} loading={false} error={null} onRetry={() => {}} deleting={IDLE} />,
+    );
 
     expect(screen.getByText('No journeys yet. Import a log above.')).toBeInTheDocument();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
@@ -59,7 +77,13 @@ describe('JourneyList', () => {
 
   it('lists the rows in the given order with every line of each', () => {
     render(
-      <JourneyList journeys={[NEWER, stored()]} loading={false} error={null} onRetry={() => {}} />,
+      <JourneyList
+        journeys={[NEWER, stored()]}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        deleting={IDLE}
+      />,
     );
 
     const rows = within(screen.getByRole('list', { name: 'Stored journeys' })).getAllByRole(
@@ -85,6 +109,7 @@ describe('JourneyList', () => {
         loading={false}
         error={new Error('x')}
         onRetry={onRetry}
+        deleting={IDLE}
       />,
     );
 
@@ -95,10 +120,95 @@ describe('JourneyList', () => {
   });
 });
 
+describe('JourneyList deleting', () => {
+  const rowOf = (journeys, deleting) => {
+    render(
+      <JourneyList
+        journeys={journeys}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        deleting={{ ...IDLE, ...deleting }}
+      />,
+    );
+    return within(screen.getByRole('list', { name: 'Stored journeys' })).getAllByRole('listitem');
+  };
+
+  it('gives each row its own Delete… named by the row', () => {
+    const rows = rowOf([NEWER, stored()]);
+
+    expect(
+      within(rows[0]).getByRole('button', { name: 'Delete the journey with no samples' }),
+    ).toHaveTextContent('Delete…');
+    expect(
+      within(rows[1]).getByRole('button', {
+        name: 'Delete the journey logged 4 Mar 2030, 22:00 to 5 Mar 2030, 00:47',
+      }),
+    ).toHaveTextContent('Delete…');
+  });
+
+  it('tells the page which journey was pressed', async () => {
+    const onOpen = vi.fn();
+    const rows = rowOf([NEWER, stored()], { onOpen });
+
+    await userEvent.click(within(rows[1]).getByRole('button', { name: /^Delete the journey/ }));
+
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(12);
+  });
+
+  it('opens the confirmation in the row whose id is open and in no other', () => {
+    const rows = rowOf([NEWER, stored()], { openId: 12 });
+
+    expect(within(rows[1]).getByRole('group', { name: 'Delete this journey?' })).toHaveTextContent(
+      'Delete this journey and its 363 rounds? The log on the laptop is not touched.',
+    );
+    expect(within(rows[0]).queryByRole('group')).not.toBeInTheDocument();
+  });
+
+  it('tells the page which journey is to go, and that it is kept', async () => {
+    const onConfirm = vi.fn();
+    const onKeep = vi.fn();
+    const rows = rowOf([NEWER, stored()], { openId: 12, onConfirm, onKeep });
+
+    await userEvent.click(within(rows[1]).getByRole('button', { name: 'Delete journey' }));
+    await userEvent.click(within(rows[1]).getByRole('button', { name: 'Keep' }));
+
+    expect(onConfirm).toHaveBeenCalledExactlyOnceWith(12);
+    expect(onKeep).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a refusal in the row it was for only', () => {
+    const rows = rowOf([NEWER, stored()], {
+      openId: 12,
+      failure: { id: 20, kind: 'alert', text: 'Couldn’t delete the journey. Try again.' },
+    });
+
+    expect(within(rows[1]).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(rows[0]).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows a refusal in the open group of its own row', () => {
+    const rows = rowOf([NEWER, stored()], {
+      openId: 12,
+      failure: { id: 12, kind: 'alert', text: 'Couldn’t delete the journey. Try again.' },
+    });
+
+    expect(within(rows[1]).getByRole('alert')).toHaveTextContent(
+      'Couldn’t delete the journey. Try again.',
+    );
+  });
+});
+
 describe('JourneyList retrying', () => {
   const FAILED = new Error('x');
   const view = (journeys, loading, error) => (
-    <JourneyList journeys={journeys} loading={loading} error={error} onRetry={() => {}} />
+    <JourneyList
+      journeys={journeys}
+      loading={loading}
+      error={error}
+      onRetry={() => {}}
+      deleting={IDLE}
+    />
   );
   /** Rows shown, a read again failed, "Check again" pressed and its read now under way. */
   const retrying = async () => {
