@@ -79,6 +79,7 @@ const WRITES = [
   ['adminApi.importJourney', 'POST', '/api/admin/journeys', HELD],
   ['adminApi.deleteJourney', 'DELETE', '/api/admin/journeys/:id', HELD],
   ['adminApi.giveJourneyTrain', 'PUT', '/api/admin/journeys/:id/train', HELD],
+  ['adminApi.removeJourneyTrain', 'DELETE', '/api/admin/journeys/:id/train', HELD],
   ['adminApi.stopTranscodingSession', 'DELETE', '/api/admin/transcoding/sessions/:id', HELD],
   ['adminApi.attachSubtitle', 'POST', '/api/admin/subtitles/:id/attach', HELD],
   ['adminApi.detachSubtitle', 'POST', '/api/admin/subtitles/:id/detach', HELD],

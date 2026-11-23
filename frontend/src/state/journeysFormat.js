@@ -1,5 +1,11 @@
 import { serverText } from '../api/client.js';
-import { journeyDelete, journeyImport as copy, journeyList, journeyTrain } from './journeysCopy.js';
+import {
+  journeyDelete,
+  journeyImport as copy,
+  journeyList,
+  journeyTrain,
+  journeyTrainRemove,
+} from './journeysCopy.js';
 
 const DAY_AND_TIME = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/London',
@@ -216,6 +222,29 @@ export function trainFailure(error) {
     return { kind: 'alert', text: otherEnds ? journeyTrain.otherEnds : journeyTrain.conflict };
   }
   return { kind: 'alert', text: journeyTrain.failed };
+}
+
+/** What a screen reader says for a row's "Remove train…": which journey, by the row's title. */
+export function trainRemoveSpoken(journey) {
+  return journey.from === null
+    ? journeyTrainRemove.spokenNoSamples
+    : journeyTrainRemove.spoken(journeyTitle(journey));
+}
+
+/** The removal confirmation's sentence: it names the train's headcode. */
+export function trainRemoveSentence(journey) {
+  return journeyTrainRemove.sentence(journey.train.headcode);
+}
+
+/**
+ * How a failed train removal reads: `kind` is `signin` (a 401: the sign-in card handles it, no text), `gone` (a 404: the
+ * journey was already deleted, told in a toast, no text) or `alert`, with the `text` for the confirmation.
+ */
+export function trainRemoveFailure(error) {
+  if (error?.status === 401) return { kind: 'signin', text: null };
+  if (error?.status === 404) return { kind: 'gone', text: null };
+  if (error?.status === 409) return { kind: 'alert', text: journeyTrainRemove.conflict };
+  return { kind: 'alert', text: journeyTrainRemove.failed };
 }
 
 /** The toast for the 200: "Train 9Z99 added: 8 timing points", or "replaced" for a journey that had a train. */

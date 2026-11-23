@@ -14,6 +14,9 @@ import {
   sentRows as rowsFor,
   trainFailure,
   trainProblemText,
+  trainRemoveFailure,
+  trainRemoveSentence,
+  trainRemoveSpoken,
   trainReadyLine,
   trainRows,
   trainSpoken,
@@ -572,5 +575,53 @@ describe('rowAfterDelete', () => {
 
   it('is none when the journey was not in the list it was read from', () => {
     expect(rowAfterDelete(list(31, 33), 32, list(31, 33))).toBeNull();
+  });
+});
+
+describe('trainRemoveSpoken', () => {
+  it('names the journey by the row’s title', () => {
+    expect(trainRemoveSpoken(stored(sameDay))).toBe(
+      'Remove train from the journey logged 4 Mar 2030, 22:00 to 23:15',
+    );
+  });
+
+  it('says a journey with no samples has none', () => {
+    expect(trainRemoveSpoken(stored(noSamples))).toBe(
+      'Remove train from the journey with no samples',
+    );
+  });
+});
+
+describe('trainRemoveSentence', () => {
+  it('names the train’s headcode and says the journey stays', () => {
+    expect(trainRemoveSentence(stored())).toBe(
+      'Remove train 9Z99 from this journey? The journey and its rounds stay.',
+    );
+  });
+});
+
+describe('trainRemoveFailure', () => {
+  it('leaves a 401 to the sign-in card, with no text', () => {
+    expect(trainRemoveFailure(new ApiError(401, 'no'))).toEqual({ kind: 'signin', text: null });
+  });
+
+  it('tells a 404 as a journey already gone, with no text', () => {
+    expect(trainRemoveFailure(new ApiError(404, 'x', { error: 'No such journey' }))).toEqual({
+      kind: 'gone',
+      text: null,
+    });
+  });
+
+  it('says a 409 was another request running', () => {
+    expect(trainRemoveFailure(new ApiError(409, 'x', { error: 'Try again' }))).toEqual({
+      kind: 'alert',
+      text: 'Another request was running. Try again.',
+    });
+  });
+
+  it('says a 500 and a lost connection could not remove the train', () => {
+    const text = 'Couldn’t remove the train. Try again.';
+    expect(trainRemoveFailure(new ApiError(500, 'x'))).toEqual({ kind: 'alert', text });
+    expect(trainRemoveFailure(new TypeError('Failed to fetch'))).toEqual({ kind: 'alert', text });
   });
 });

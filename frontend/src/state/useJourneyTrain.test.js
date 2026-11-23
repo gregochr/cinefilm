@@ -145,4 +145,153 @@ describe('useJourneyTrain', () => {
     });
     expect(result.current.failure).toBeNull();
   });
+
+  describe('takeAway', () => {
+    const deletes = (fetchMock) =>
+      fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE');
+    const removing = (answer) => installFetch((method) => (method === 'DELETE' ? answer() : null));
+    const noContent = () => new Response(null, { status: 204 });
+
+    it('deletes the journey’s train by its id and resolves ok with nothing else', async () => {
+      const fetchMock = removing(noContent);
+      const { result } = renderHook(() => useJourneyTrain());
+
+      let outcome;
+      await act(async () => {
+        outcome = await result.current.takeAway(31);
+      });
+
+      expect(outcome).toEqual({ ok: true });
+      expect(deletes(fetchMock)).toHaveLength(1);
+      expect(deletes(fetchMock)[0][0]).toBe('/api/admin/journeys/31/train');
+      expect(result.current.busy).toBe(false);
+      expect(result.current.failure).toBeNull();
+    });
+
+    it('sends one request for two presses', async () => {
+      const { gate, release } = held();
+      const fetchMock = removing(() => gate);
+      const { result } = renderHook(() => useJourneyTrain());
+
+      let first;
+      let second;
+      await act(async () => {
+        first = result.current.takeAway(31);
+        second = await result.current.takeAway(32);
+      });
+      expect(second).toEqual({ ignored: true });
+      expect(result.current.busy).toBe(true);
+
+      await act(async () => {
+        release(noContent());
+        await first;
+      });
+      expect(deletes(fetchMock)).toHaveLength(1);
+      expect(result.current.busy).toBe(false);
+    });
+
+    it('ignores a give while a takeAway is in flight', async () => {
+      const { gate, release } = held();
+      const fetchMock = installFetch((method) => (method === 'DELETE' ? gate : respond(STORED)));
+      const { result } = renderHook(() => useJourneyTrain());
+
+      let first;
+      let second;
+      await act(async () => {
+        first = result.current.takeAway(31);
+        second = await result.current.give(31, FILE);
+      });
+      expect(second).toEqual({ ignored: true });
+
+      await act(async () => {
+        release(noContent());
+        await first;
+      });
+      expect(puts(fetchMock)).toHaveLength(0);
+      expect(deletes(fetchMock)).toHaveLength(1);
+    });
+
+    it('ignores a takeAway while a give is in flight', async () => {
+      const { gate, release } = held();
+      const fetchMock = installFetch((method) => (method === 'PUT' ? gate : noContent()));
+      const { result } = renderHook(() => useJourneyTrain());
+
+      let first;
+      let second;
+      await act(async () => {
+        first = result.current.give(31, FILE);
+        second = await result.current.takeAway(31);
+      });
+      expect(second).toEqual({ ignored: true });
+
+      await act(async () => {
+        release(respond(STORED));
+        await first;
+      });
+      expect(deletes(fetchMock)).toHaveLength(0);
+      expect(puts(fetchMock)).toHaveLength(1);
+    });
+
+    it.each([
+      [
+        409,
+        { error: 'Try again' },
+        { kind: 'alert', text: 'Another request was running. Try again.' },
+      ],
+      [500, null, { kind: 'alert', text: 'Couldn’t remove the train. Try again.' }],
+      [404, { error: 'No such journey' }, { kind: 'gone', text: null }],
+      [401, { error: 'Sign in' }, { kind: 'signin', text: null }],
+    ])('keeps a %s (%j) as a failure with its id', async (status, body, failure) => {
+      removing(() => respond(body, status));
+      const { result } = renderHook(() => useJourneyTrain());
+
+      let outcome;
+      await act(async () => {
+        outcome = await result.current.takeAway(31);
+      });
+
+      const kept = { id: 31, ...failure };
+      expect(outcome).toEqual({ ok: false, failure: kept });
+      expect(result.current.failure).toEqual(kept);
+      expect(result.current.busy).toBe(false);
+    });
+
+    it('keeps a lost connection as a failure', async () => {
+      removing(() => Promise.reject(new TypeError('offline')));
+      const { result } = renderHook(() => useJourneyTrain());
+
+      await act(async () => {
+        await result.current.takeAway(31);
+      });
+
+      expect(result.current.failure).toEqual({
+        id: 31,
+        kind: 'alert',
+        text: 'Couldn’t remove the train. Try again.',
+      });
+    });
+
+    it('forgets a failure on clearFailure, and a success starts clean', async () => {
+      let answer = respond(null, 500);
+      removing(() => answer);
+      const { result } = renderHook(() => useJourneyTrain());
+      await act(async () => {
+        await result.current.takeAway(31);
+      });
+      expect(result.current.failure).not.toBeNull();
+
+      act(() => result.current.clearFailure());
+      expect(result.current.failure).toBeNull();
+
+      await act(async () => {
+        await result.current.takeAway(31);
+      });
+      expect(result.current.failure).not.toBeNull();
+      answer = noContent();
+      await act(async () => {
+        await result.current.takeAway(31);
+      });
+      expect(result.current.failure).toBeNull();
+    });
+  });
 });

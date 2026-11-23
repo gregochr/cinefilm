@@ -47,6 +47,21 @@ export const journeyDelete = {
   failed: 'Couldn’t delete the journey. Try again.',
 };
 
+export const journeyTrainRemove = {
+  open: 'Remove train…',
+  spoken: (title) => `Remove train from the journey logged ${title}`,
+  spokenNoSamples: 'Remove train from the journey with no samples',
+  group: 'Remove this train?',
+  sentence: (headcode) =>
+    `Remove train ${headcode} from this journey? The journey and its rounds stay.`,
+  confirm: 'Remove train',
+  removing: 'Removing…',
+  keep: 'Keep',
+  toast: 'Train removed',
+  conflict: 'Another request was running. Try again.',
+  failed: 'Couldn’t remove the train. Try again.',
+};
+
 export const journeyTrain = {
   add: 'Add train file…',
   replace: 'Replace train file…',
