@@ -11,6 +11,9 @@ export class FakeHls {
     FRAG_LOADING: 'hlsFragLoading',
     FRAG_LOAD_EMERGENCY_ABORTED: 'hlsFragLoadEmergencyAborted',
     FRAG_LOADED: 'hlsFragLoaded',
+    FRAG_BUFFERED: 'hlsFragBuffered',
+    BUFFER_FLUSHING: 'hlsBufferFlushing',
+    BUFFER_FLUSHED: 'hlsBufferFlushed',
     ERROR: 'hlsError',
   };
   static ErrorTypes = {
@@ -56,6 +59,7 @@ export class FakeHls {
     this.startLoad = vi.fn();
     this.recoverMediaError = vi.fn();
     this.destroy = vi.fn();
+    this.trigger = vi.fn(); // what the engine asks hls.js to do (the buffer flush)
     FakeHls.instances.push(this);
   }
 
@@ -102,6 +106,16 @@ export class FakeHls {
       payload: new ArrayBuffer(0),
       networkDetails: null,
     });
+  }
+
+  /** A media fragment is in the buffer. */
+  fragBuffered(frag) {
+    this.emit(FakeHls.Events.FRAG_BUFFERED, { frag, part: null, stats: frag.stats, id: 'main' });
+  }
+
+  /** A flush of `start` to `end` has finished (hls.js's error path sends 0 and 0). */
+  bufferFlushed({ start = 0, end = 0, type = 'video' } = {}) {
+    this.emit(FakeHls.Events.BUFFER_FLUSHED, { type, start, end });
   }
 
   error(data) {

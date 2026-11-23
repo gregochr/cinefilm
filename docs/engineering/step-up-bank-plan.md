@@ -86,10 +86,28 @@ at or after playhead + 300 s to infinity. The 300 s in front of the playhead is 
 hold releasing, a seek, a restart or `startLoad`, a `waiting` stall, a new network generation, destroy. The raised
 floor stops hls.js's emergency down-switch (`abr-controller.ts:264-273`), so it is never left on at low depth.
 
-**First, a spike in the browser pane** (real hls.js, `player-harness-real-hlsjs` memory): a `BUFFER_FLUSHING` from
-playhead + 300 s makes hls.js fetch the gap again at the raised floor's rung, with no stall or seek. hls.js's own
-`nextLevel` is not usable (a manual level, and it keeps about one fragment, `scheduleTrackSwitch`). If the spike
-fails, or A's run shows little 240p/360p left with a full bank, B is dropped.
+**Done:** the raised floor comes off (`rebankFloor` back to 0, no cool-down) once the bank is back to 460 s or
+more after the flush. From then the step gate's cap, already at N + 1 or above, keeps new fetches at that rung or
+better, and hls.js's emergency down-switch works again. The next re-bank (say 360p to 480p) can come 120 s later:
+one rung at a time, as the owner asked.
+
+**Owner, 2026-11-23:** build B now, for the 26 Nov run, without waiting for A's results ("I always want the highest
+playback quality possible when the bank can be upgraded").
+
+**Spike in the browser pane, 2026-11-23** (hls.js 1.7.4, real Chromium, the mux 10-minute test stream, bank full
+to 480 s at 288p): raising `minAutoBitrate` and `autoLevelCapping` one level, then
+`BUFFER_FLUSHING {startOffset, endOffset: Infinity, type: null}`, flushed video and audio, and hls.js fetched again
+from the flush point at the raised rung. There were no `waiting` or `seeking` events, no errors, and the buffer came
+back as one range. What it showed about the details:
+
+- The flush must start at a fragment's own `start`. Flushing at 311.5 s brought the 310–320 s fragment back at the
+  old rung; flushing at 240 s (a fragment start) brought everything back at the new rung.
+- Nothing may be in flight. A fragment that was loading when the flush ran landed afterwards and stayed as a small
+  island at the old rung beyond the refilled range.
+- hls.js uses its bank target for the new rung. At 720p it stopped refilling at about 375 s ahead, so B stays at
+  480p or below.
+
+hls.js's own `nextLevel` is not usable (a manual level, and it keeps about one fragment, `scheduleTrackSwitch`).
 
 Tests: each condition at its boundary; mixed rungs past +300 s; a fragment in flight blocks it; the flush start on
 a fragment boundary; the floor set before the flush; every undo path; the cool-downs; never above 480p; no re-bank
