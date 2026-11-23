@@ -7,8 +7,11 @@
 // Auto may not go below 360p on a ladder with a 240p bottom rung: `minAutoBitrate` is raised to the 360p level,
 // but only once hls.js is fetching at 360p or above and not after fragment trouble (a floor, not a pull). The
 // hold reads the engine's own fragment rates, timed from `loading.start`, and the rate of the fragment in flight,
-// re-read every HOLD_CHECK_MS (floor-hold-by-time-plan.md).
+// re-read every HOLD_CHECK_MS (floor-hold-by-time-plan.md). Above 480p Auto climbs only on headroom
+// (champagne.js, step-up-bank-plan.md): the cap is the lower of the step gate and that ceiling, worked out in
+// one place (`applyCap`) whatever the ladder.
 import { bankedAhead } from './buffered.js';
+import { champagneBase, champagneCeiling } from './champagne.js';
 import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
@@ -123,7 +126,9 @@ export function startHlsJs({
   const gate = createStepGate({ now });
   const { Events, ErrorTypes, ErrorDetails } = Hls;
   let top = 0;
-  let applied = null;
+  let applied = null; // the cap on hls.js: the lower of the step gate's level and the champagne ceiling
+  let gateCap = null; // the step gate's own level
+  let ceiling = 0; // the champagne ceiling last worked out
   let initial = true;
   let lost = false;
   let reconnecting = false;
@@ -134,6 +139,7 @@ export function startHlsJs({
   let fetched = null; // the level hls.js is fetching (LEVEL_SWITCHING), null until the first
   let troubled = false; // a fragment timed out or got no answer, and none has loaded since
   let samples = []; // the newest fragment rates (kbit/s) for the hold, under `samplesNetwork`
+  let headroom = []; // the newest first-byte fragment rates (kbit/s), retried fragments left out
   let samplesNetwork = networkGeneration();
   let inFlight = null; // the fragment hls.js is loading, whose rate so far the release reads
   let holdTimer = null; // the one check of the in-flight rate, running while a fragment loads
@@ -142,6 +148,8 @@ export function startHlsJs({
   const currentSamples = () => {
     if (samplesNetwork !== networkGeneration()) {
       samples = [];
+      headroom = [];
+      ceiling = champagneBase(hls.levels); // nothing measured on this link has earned a rung above 480p
       samplesNetwork = networkGeneration();
       hold.reset(); // the link it was armed on is gone
     }
@@ -194,11 +202,37 @@ export function startHlsJs({
     hls.config.minAutoBitrate = floor;
   };
 
-  const cap = (level) => {
-    if (level === applied) return;
-    applied = level;
-    hls.autoLevelCapping = level;
+  // The one place the cap is worked out: the step gate's level, never above the champagne ceiling. A gate level
+  // above the ceiling is pulled down to it, so a ceiling that comes back climbs a rung at a time.
+  const applyCap = () => {
+    if (auto && gateCap !== null) {
+      currentSamples();
+      ceiling = champagneCeiling({
+        levels: hls.levels,
+        heldCeiling: ceiling,
+        aheadS: bankedAhead(video),
+        kbps: lowerMiddle(headroom),
+        troubled,
+        bank: {
+          budgetBytes: BUFFER_BUDGET_BYTES,
+          minS: MIN_BUFFER_AHEAD_S,
+          maxS: MAX_BUFFER_AHEAD_S,
+        },
+      });
+      if (gateCap > ceiling) gateCap = gate.switched(ceiling);
+      const level = Math.min(gateCap, ceiling);
+      if (level !== applied) {
+        applied = level;
+        hls.autoLevelCapping = level;
+      }
+    }
     reevaluateHold();
+  };
+
+  // The step gate moved to `level` (or is asked again): the cap follows.
+  const cap = (level) => {
+    gateCap = level;
+    applyCap();
   };
 
   const stopReconnecting = () => {
@@ -245,8 +279,8 @@ export function startHlsJs({
     reevaluateHold();
   };
   video.addEventListener('waiting', onWaiting);
-  video.addEventListener('timeupdate', reevaluateHold);
-  video.addEventListener('seeking', reevaluateHold);
+  video.addEventListener('timeupdate', applyCap);
+  video.addEventListener('seeking', applyCap);
 
   hls.on(Events.MANIFEST_PARSED, (_event, data) => {
     top = data.levels.length - 1;
@@ -254,7 +288,12 @@ export function startHlsJs({
     const qualifies =
       auto && index > 0 && rungForLevel(session.renditions, data.levels[0]) === '240p';
     holdLevel = qualifies ? index : null;
-    if (auto) cap(gate.start(data.firstLevel));
+    if (auto) {
+      // The playlist lists the session's start rung first, and a remembered fast speed could start at 720p or
+      // above with an empty bank: the start is clamped to the ceiling.
+      ceiling = champagneBase(data.levels);
+      cap(gate.start(Math.min(data.firstLevel, ceiling)));
+    }
   });
 
   hls.on(Events.LEVEL_SWITCHED, (_event, data) => {
@@ -277,12 +316,13 @@ export function startHlsJs({
     reevaluateHold();
   });
 
-  // A fragment starts to load: its rate so far is read every HOLD_CHECK_MS until it ends. An init segment is a
+  // A fragment starts to load (in Auto): the hold and the ceiling are re-read every HOLD_CHECK_MS until it ends, the
+  // hold with the rate of the fragment so far. An init segment is a
   // few bytes behind a round trip, so it says nothing about the link.
   hls.on(Events.FRAG_LOADING, (_event, data) => {
-    if (holdLevel === null || data.frag?.sn === 'initSegment') return;
+    if (!auto || data.frag?.sn === 'initSegment') return;
     inFlight = data.frag;
-    holdTimer ??= setInterval(reevaluateHold, HOLD_CHECK_MS);
+    holdTimer ??= setInterval(applyCap, HOLD_CHECK_MS);
   });
 
   // hls.js gave up on the fragment for a faster level: nothing is in flight any more.
@@ -297,10 +337,13 @@ export function startHlsJs({
     if (data.frag?.sn !== 'initSegment') {
       currentSamples();
       samples = addSample(samples, loadedKbps(data.frag?.stats));
+      // A fragment that needed a retry says nothing about the link's rate.
+      if (!(data.frag?.stats?.retry > 0)) headroom = addSample(headroom, kbps);
     }
-    // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch.
-    if (auto && (fetched === null || fetched >= applied)) cap(gate.tick(top));
-    reevaluateHold();
+    applyCap();
+    // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch, and
+    // the step gate never runs ahead of the ceiling.
+    if (auto && (fetched === null || fetched >= applied) && gateCap < ceiling) cap(gate.tick(top));
   });
 
   hls.on(Events.ERROR, (_event, data) => {
@@ -317,12 +360,13 @@ export function startHlsJs({
       (data.details === ErrorDetails.FRAG_LOAD_ERROR && !data.response?.code)
     ) {
       gate.trouble();
-      if (auto && fetched !== null) cap(gate.switched(fetched));
+      if (auto && fetched !== null) gateCap = gate.switched(fetched);
       troubled = true;
       samples = []; // what was measured before the trouble says nothing about the link now
+      headroom = [];
       hold.reset();
       stopHoldTimer();
-      reevaluateHold();
+      applyCap();
     }
     if (data.response?.code === 410) {
       // Admin stopped this playback on purpose: no new session, no retry (owner 2026-11-15).
@@ -356,8 +400,8 @@ export function startHlsJs({
       stopHoldTimer();
       window.removeEventListener('online', onOnline);
       video.removeEventListener('waiting', onWaiting);
-      video.removeEventListener('timeupdate', reevaluateHold);
-      video.removeEventListener('seeking', reevaluateHold);
+      video.removeEventListener('timeupdate', applyCap);
+      video.removeEventListener('seeking', applyCap);
       hls.destroy();
     },
   };

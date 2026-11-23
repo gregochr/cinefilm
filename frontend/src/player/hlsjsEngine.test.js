@@ -12,6 +12,7 @@ import {
   startHlsJs,
 } from './hlsjsEngine.js';
 import { HEALTHY_MS } from './stepGate.js';
+import { rememberSpeed, resetThroughputState } from './throughput.js';
 
 beforeEach(() => {
   FakeHls.reset();
@@ -19,18 +20,20 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+// A ladder the champagne ceiling (champagne.js) leaves alone: every height is 480 lines or less, so Auto may
+// reach the top by the step gate alone. The ids are labels here; champagneCeiling is tested on real ladders below.
 const renditions = [
-  { id: 'original', height: 820, bitrate: 15000000, copy: true },
-  { id: '720p', height: 720, bitrate: 2500000, copy: false },
-  { id: '480p', height: 480, bitrate: 1000000, copy: false },
-  { id: '360p', height: 360, bitrate: 600000, copy: false },
+  { id: 'original', height: 480, bitrate: 15000000, copy: true },
+  { id: '720p', height: 400, bitrate: 2500000, copy: false },
+  { id: '480p', height: 300, bitrate: 1000000, copy: false },
+  { id: '360p', height: 200, bitrate: 600000, copy: false },
 ];
 // hls.js orders levels lowest bitrate first.
 const levels = [
-  { height: 360, bitrate: 600000 },
-  { height: 480, bitrate: 1000000 },
-  { height: 720, bitrate: 2500000 },
-  { height: 820, bitrate: 15000000 },
+  { height: 200, bitrate: 600000 },
+  { height: 300, bitrate: 1000000 },
+  { height: 400, bitrate: 2500000 },
+  { height: 480, bitrate: 15000000 },
 ];
 const session = { masterUrl: '/api/sessions/abc/master.m3u8', renditions };
 const stats = { loaded: 125_000, loading: { start: 0, first: 0, end: 100 } }; // 10,000 kbit/s
@@ -1226,10 +1229,15 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    it('starts no timer on a ladder that is never held', () => {
+    it('runs the timer on a ladder that is never held too (the ceiling is re-read on it), and not when pinned', () => {
       const { hls } = holdStart();
       hls.manifest([l360, l480, l720], 2);
       hls.fragLoading(loadingFrag());
+      expect(vi.getTimerCount()).toBe(1);
+      const pinned = holdStart({ auto: false });
+      pinned.hls.manifest(ladder, 2);
+      vi.clearAllTimers();
+      pinned.hls.fragLoading(loadingFrag());
       expect(vi.getTimerCount()).toBe(0);
     });
   });
@@ -1335,6 +1343,307 @@ describe('the step gate follows what hls.js fetches', () => {
       hls.fetchLevel(1);
       trouble(hls, {});
       expect(hls.autoLevelCapping).toBe(-1);
+    });
+  });
+});
+
+describe('the champagne ceiling: Auto climbs above 480p only on headroom', () => {
+  // Real rates (Rung.java): a transcoded rung's average is its target + audio, its peak is x 1.2 + audio; a
+  // copy rung's peak is x 1.5 + audio. `bitrate` is the variant's BANDWIDTH (the peak), as hls.js has it.
+  const rung = (id, height, video, audio, copy = false) => {
+    const peak = Math.round(video * (copy ? 1.5 : 1.2)) + audio;
+    const level = { height, bitrate: peak, maxBitrate: peak, averageBitrate: video + audio };
+    return { id, height, bitrate: peak, copy, level };
+  };
+  const r240 = rung('240p', 240, 250_000, 64_000);
+  const r360 = rung('360p', 360, 600_000, 96_000);
+  const r480 = rung('480p', 480, 1_000_000, 128_000);
+  const r720 = rung('720p', 720, 2_500_000, 128_000);
+  const r1080 = rung('1080p', 1080, 5_000_000, 128_000);
+  const rOriginal = rung('original', 1080, 15_000_000, 128_000, true); // a 15 Mbit/s copy rung
+  const ladderOf = (rungs) => ({
+    renditions: rungs.map(({ id, height, bitrate, copy }) => ({ id, height, bitrate, copy })),
+    levels: rungs.map((r) => r.level),
+  });
+  const full = ladderOf([r240, r360, r480, r720, r1080]); // 480p is level 2
+  const noHold = ladderOf([r480, r720, r1080]); // no 360p: the floor hold never applies; 480p is level 0
+  const copyLadder = ladderOf([r240, r360, r480, r720, rOriginal]);
+
+  // One fragment whose rate from its first byte is `kbps`.
+  const frag = (kbps, over = {}) => ({
+    loaded: kbps * 125,
+    retry: 0,
+    loading: { start: 0, first: 0, end: 1000 },
+    ...over,
+  });
+
+  function champStart(ladder, over = {}) {
+    const video = document.createElement('video');
+    const state = { ahead: 480 };
+    Object.defineProperty(video, 'buffered', {
+      get: () => ({
+        length: state.ahead > 0 ? 1 : 0,
+        start: () => 0,
+        end: () => state.ahead,
+      }),
+    });
+    const started = start({
+      session: { masterUrl: session.masterUrl, renditions: ladder.renditions },
+      video,
+      ...over,
+    });
+    return { ...started, video, setAhead: (seconds) => (state.ahead = seconds) };
+  }
+
+  // Starts at level `first`, then `rounds` times: a healthy minute, a fragment of `kbps`, hls.js fetching the cap.
+  function climb(ladder, kbps, rounds, first = 2) {
+    const env = champStart(ladder);
+    env.hls.manifest(ladder.levels, first);
+    env.hls.fetchLevel(env.hls.autoLevelCapping);
+    for (let i = 0; i < rounds; i += 1) {
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(kbps));
+      env.hls.fetchLevel(env.hls.autoLevelCapping);
+    }
+    return env;
+  }
+
+  const trouble = (hls) =>
+    hls.error({ fatal: false, type: 'networkError', details: 'fragLoadTimeOut' });
+
+  describe('the start', () => {
+    it('is clamped to the 480p level when the playlist lists a higher rung first', () => {
+      const { hls } = champStart(full);
+      hls.manifest(full.levels, 4);
+      expect(hls.autoLevelCapping).toBe(2);
+    });
+
+    it('is clamped even when a fast speed is remembered: no fragment has proved it yet', () => {
+      rememberSpeed(55_000);
+      const { hls } = champStart(full);
+      hls.manifest(full.levels, 3);
+      expect(hls.autoLevelCapping).toBe(2);
+      resetThroughputState();
+    });
+
+    it('is left alone when it is at or under the 480p level', () => {
+      const { hls } = champStart(full);
+      hls.manifest(full.levels, 1);
+      expect(hls.autoLevelCapping).toBe(1);
+      const second = champStart(full);
+      second.hls.manifest(full.levels, 2);
+      expect(second.hls.autoLevelCapping).toBe(2);
+    });
+
+    it('is clamped to the 360p level of a ladder with no 480p rung', () => {
+      const ladder = ladderOf([r240, r360, r720, r1080]);
+      const { hls } = champStart(ladder);
+      hls.manifest(ladder.levels, 3);
+      expect(hls.autoLevelCapping).toBe(1);
+    });
+
+    it('does not touch a pinned quality', () => {
+      const { hls } = champStart(full, { auto: false });
+      hls.manifest(full.levels, 4);
+      hls.fetchLevel(4);
+      hls.fragLoaded(frag(100_000));
+      expect(hls.autoLevelCapping).toBe(-1);
+    });
+  });
+
+  describe('stepping up', () => {
+    it.each([
+      [7884, 3],
+      [7883, 2],
+    ])('to 720p at 3 x its average: %i kbit/s caps at level %i', (kbps, level) => {
+      expect(climb(full, kbps, 1).hls.autoLevelCapping).toBe(level);
+    });
+
+    it('does not go from 480p to 720p with a bank under 450 s, and does at 450 s', () => {
+      const env = champStart(full);
+      env.hls.manifest(full.levels, 2);
+      env.hls.fetchLevel(2);
+      env.setAhead(449);
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(20_000));
+      expect(env.hls.autoLevelCapping).toBe(2);
+      env.setAhead(450);
+      env.hls.fragLoaded(frag(20_000));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+
+    it('climbs one rung a minute even at a very fast speed', () => {
+      const { hls } = climb(full, 55_000, 1);
+      expect(hls.autoLevelCapping).toBe(3);
+      hls.fragLoaded(frag(55_000));
+      expect(hls.autoLevelCapping).toBe(3); // the minute has not passed again
+    });
+
+    it('reaches a 1080p transcode and a 15 Mbit/s copy rung at home speed, a rung a minute', () => {
+      expect(climb(full, 55_000, 2).hls.autoLevelCapping).toBe(4);
+      expect(climb(copyLadder, 55_000, 2).hls.autoLevelCapping).toBe(4);
+    });
+
+    it('reaches a 15 Mbit/s copy rung at 3 x its average (45,384 kbit/s), not a kbit/s under', () => {
+      expect(climb(copyLadder, 45_384, 2).hls.autoLevelCapping).toBe(4);
+      expect(climb(copyLadder, 45_383, 2).hls.autoLevelCapping).toBe(3);
+    });
+
+    it('does not run ahead of the ceiling: one rung when it lets the gate climb, not several', () => {
+      const env = champStart(full);
+      env.hls.manifest(full.levels, 2);
+      env.hls.fetchLevel(2);
+      env.advance(HEALTHY_MS * 5);
+      env.hls.fragLoaded(frag(1_000)); // slow: the ceiling stays at 480p
+      env.hls.fragLoaded(frag(55_000)); // the lower middle of two samples is still the slow one
+      expect(env.hls.autoLevelCapping).toBe(2);
+      for (let i = 0; i < 4; i += 1) env.hls.fragLoaded(frag(55_000));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+
+    it('takes no rate from an init segment', () => {
+      const { hls, advance } = champStart(full);
+      hls.manifest(full.levels, 2);
+      hls.fetchLevel(2);
+      advance(HEALTHY_MS);
+      hls.emit(FakeHls.Events.FRAG_LOADED, { frag: { sn: 'initSegment', stats: frag(55_000) } });
+      expect(hls.autoLevelCapping).toBe(2);
+    });
+
+    it('times a fragment from its first byte: an encoder’s wait does not count against the link', () => {
+      const { hls, advance } = champStart(full);
+      hls.manifest(full.levels, 2);
+      hls.fetchLevel(2);
+      advance(HEALTHY_MS);
+      // 1,000,000 bytes in the 1,000 ms after the first byte (8,000 kbit/s), 6,000 ms after the request began.
+      hls.fragLoaded({
+        loaded: 1_000_000,
+        retry: 0,
+        loading: { start: 0, first: 5000, end: 6000 },
+      });
+      expect(hls.autoLevelCapping).toBe(3);
+    });
+  });
+
+  describe('staying on a rung', () => {
+    // At 720p (level 3) with one good fragment, then nine at `kbps`.
+    function onTop(kbps) {
+      const env = climb(full, 7884, 1);
+      expect(env.hls.autoLevelCapping).toBe(3);
+      for (let i = 0; i < 9; i += 1) env.hls.fragLoaded(frag(kbps));
+      return env;
+    }
+
+    it.each([
+      [5256, 3],
+      [5255, 2],
+    ])(
+      'at 2 x the average: nine fragments at %i kbit/s leave the cap at level %i',
+      (kbps, level) => {
+        expect(onTop(kbps).hls.autoLevelCapping).toBe(level);
+      },
+    );
+
+    it('is not shaken by a few slow fragments among good ones: the lower middle of nine is read', () => {
+      const { hls } = onTop(7884);
+      for (let i = 0; i < 4; i += 1) hls.fragLoaded(frag(100));
+      expect(hls.autoLevelCapping).toBe(3);
+      hls.fragLoaded(frag(100));
+      expect(hls.autoLevelCapping).toBe(2);
+    });
+
+    it('falls to the highest rung that still passes, not straight to 480p', () => {
+      const env = climb(full, 20_000, 2);
+      expect(env.hls.autoLevelCapping).toBe(4);
+      for (let i = 0; i < 9; i += 1) env.hls.fragLoaded(frag(6000)); // under 2 x 1080p, over 2 x 720p
+      expect(env.hls.autoLevelCapping).toBe(3);
+      for (let i = 0; i < 9; i += 1) env.hls.fragLoaded(frag(5000)); // under 2 x 720p
+      expect(env.hls.autoLevelCapping).toBe(2);
+    });
+
+    it('lowers the gate with it, so a ceiling that comes back climbs a rung a minute', () => {
+      const env = climb(full, 20_000, 2);
+      for (let i = 0; i < 9; i += 1) env.hls.fragLoaded(frag(1_000));
+      expect(env.hls.autoLevelCapping).toBe(2);
+      env.hls.fetchLevel(2);
+      for (let i = 0; i < 9; i += 1) env.hls.fragLoaded(frag(55_000));
+      expect(env.hls.autoLevelCapping).toBe(2); // the healthy minute starts again
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(55_000));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+
+    it('leaves a retried fragment out: five retried slow ones change nothing', () => {
+      const env = onTop(7884);
+      for (let i = 0; i < 5; i += 1) env.hls.fragLoaded(frag(100, { retry: 1 }));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+
+    it('counts a fragment that needed no retry (hls.js’s stats carry retry 0)', () => {
+      const env = onTop(7884);
+      for (let i = 0; i < 5; i += 1) env.hls.fragLoaded(frag(100));
+      expect(env.hls.autoLevelCapping).toBe(2);
+    });
+  });
+
+  describe('trouble and the network', () => {
+    it('takes a rung held back to the 480p level at once, and climbs again only after a healthy minute', () => {
+      const env = climb(full, 20_000, 1);
+      expect(env.hls.autoLevelCapping).toBe(3);
+      trouble(env.hls);
+      expect(env.hls.autoLevelCapping).toBe(2);
+      env.hls.fragLoaded(frag(20_000));
+      expect(env.hls.autoLevelCapping).toBe(2);
+      env.advance(HEALTHY_MS);
+      env.hls.fragLoaded(frag(20_000));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+
+    it.each([
+      ['a ladder with a 360p hold', full, 3, 2],
+      ['a ladder with no 360p level', noHold, 1, 0],
+    ])(
+      'falls to the 480p level on the hold timer when the network changes: %s',
+      (_name, ladder, top, base) => {
+        const env = climb(ladder, 20_000, top - base, base);
+        expect(env.hls.autoLevelCapping).toBe(top);
+        window.dispatchEvent(new Event('offline'));
+        env.hls.fragLoading({
+          stats: { loaded: 0, aborted: false, loading: { start: 0, end: 0 } },
+        });
+        vi.advanceTimersByTime(HOLD_CHECK_MS);
+        expect(env.hls.autoLevelCapping).toBe(base);
+      },
+    );
+
+    it('falls to the 480p level on the next played second after the network changes', () => {
+      const env = climb(full, 20_000, 1);
+      window.dispatchEvent(new Event('offline'));
+      env.video.dispatchEvent(new Event('timeupdate'));
+      expect(env.hls.autoLevelCapping).toBe(2);
+    });
+
+    it('stops reading the ceiling off the video after destroy', () => {
+      const env = climb(full, 20_000, 1);
+      env.engine.destroy();
+      window.dispatchEvent(new Event('offline'));
+      env.video.dispatchEvent(new Event('timeupdate'));
+      env.video.dispatchEvent(new Event('seeking'));
+      expect(env.hls.autoLevelCapping).toBe(3);
+    });
+  });
+
+  describe('other ladders', () => {
+    it('climbs from the 480p level of a ladder with no 360p, with no hold in play', () => {
+      const env = champStart(noHold);
+      env.hls.manifest(noHold.levels, 2);
+      expect(env.hls.autoLevelCapping).toBe(0);
+      expect(climb(noHold, 20_000, 2, 0).hls.autoLevelCapping).toBe(2);
+    });
+
+    it('never raises a ladder that stops at 480p', () => {
+      const ladder = ladderOf([r240, r360, r480]);
+      expect(climb(ladder, 55_000, 3, 0).hls.autoLevelCapping).toBe(2);
     });
   });
 });

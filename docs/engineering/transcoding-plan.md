@@ -173,7 +173,14 @@ read of the file. Direct play of the file remains only as a fallback.
   lets go below 180 s in hand, or when it would last under 600 s at the lowest of the last 3 segment rates and the
   rate of the segment in flight after 4 s of transfer from its first byte (read every 2 s). `floorHold.js` raises hls.js's `minAutoBitrate`, provided
   hls.js is already fetching at 360p or above; a segment that times out or gets no answer, and a change of
-  network, clear the rates and release it. iPhone's
+  network, clear the rates and release it. **720p is the champagne rung** (`champagne.js`, `step-up-bank-plan.md`):
+  480p is the highest rung whose full eight minutes fit the 100 MB budget, so Auto climbs above it only on
+  _headroom_, not depth. The cap is the lower of the step gate and a ceiling worked out in one place: a rung above
+  480p is stepped up to at 3 times its **average** bitrate (`AVERAGE-BANDWIDTH`, hls.js `averageBitrate`) or more,
+  with the bank at least 30 s short of hls.js's own target for the rung stepped from (450 s from 480p), and kept at
+  2 times or more, against the lower middle of the last 9 first-byte fragment rates (retried fragments left out);
+  fragment trouble or a network change drops the ceiling to the 480p level, and the start rung is clamped to it.
+  iPhone's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
   identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only _strictly below_
   the source height, so `original` and e.g. `480p` never share a height; a test asserts uniqueness for every
