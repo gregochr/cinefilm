@@ -201,7 +201,6 @@ export const playbackChart = {
     all: ' (headless runs included)', // planner, journey-data-plan
   },
   headlessRun: 'Headless run', // planner, journey-data-plan
-  headlessColumn: 'headless run', // planner, journey-data-plan
   tiles: {
     watched: 'sessions watched', // planner, 5a-2 (AR4: "films watched")
     withoutStall: 'played without a stall', // AR4

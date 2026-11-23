@@ -191,6 +191,16 @@ describe('fixture server', () => {
     expect(playbacks[1].report.environment).toBe('train');
   });
 
+  it('filters the playback health list by source, with a total', async () => {
+    const robots = await call('GET', '/api/admin/playback-health?source=robot&page=0&size=20');
+    expect(robots.total).toBe(1);
+    expect(robots.playbacks.map((p) => p.source)).toEqual(['robot']);
+    const people = await call('GET', '/api/admin/playback-health?source=person&page=0&size=20');
+    expect(people.total).toBe(5);
+    expect(people.playbacks).toHaveLength(5);
+    expect(people.playbacks.some((p) => p.source === 'robot')).toBe(false);
+  });
+
   it('serves the filtered, paged playback health list with a total', async () => {
     const all = await call('GET', '/api/admin/playback-health?page=0');
     expect(all.total).toBe(6);

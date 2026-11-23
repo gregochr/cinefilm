@@ -376,7 +376,10 @@ describe('PlaybackChartPanel', () => {
       'aria-pressed',
       'true',
     );
-    expect(column('Delta')).toHaveAttribute('aria-label', expect.stringMatching(/, headless run$/));
+    expect(column('Delta')).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/\. Headless run\.$/),
+    );
     expect(screen.queryByRole('button', { name: /^Alpha,/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('1headless runs');
     expect(await screen.findByText(/Headless run/)).toBeInTheDocument();

@@ -184,7 +184,7 @@ function qualityWords(rungMs) {
 /** What a screen reader hears for one column: "Heat, 10 Nov 19:43, Train. 2 stalls, 9 s. Original 70%, …". */
 export function columnLabel(session) {
   const label = `${session.filmTitle}, ${formatScanTime(session.startedAt)}, ${environmentLabel(session.environment)}. ${stallText(session)}. ${qualityWords(session.rungMs)}`;
-  return isHeadless(session) ? `${label}, ${copy.headlessColumn}` : `${label}.`;
+  return isHeadless(session) ? `${label}. ${copy.headlessRun}.` : `${label}.`;
 }
 
 /** The place in the summary's sentence: "… in 30 days at home". */

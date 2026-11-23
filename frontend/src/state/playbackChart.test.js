@@ -555,11 +555,11 @@ describe('source', () => {
     );
   });
 
-  it('names a robot device "Headless run" and ends its column label ", headless run"', () => {
+  it('names a robot device "Headless run" and ends its column label with a sentence "Headless run."', () => {
     const robotSession = session({ source: 'robot', userAgent: 'HeadlessChrome/150.0.0.0' });
     expect(sessionHeading(robotSession, null)[1]).toBe('Headless run');
     expect(columnLabel(robotSession)).toBe(
-      'Heat, 10 Nov 19:43, Home. No stalls. Original 100%, headless run',
+      'Heat, 10 Nov 19:43, Home. No stalls. Original 100%. Headless run.',
     );
     expect(sessionHeading(person, null)[1]).toBe('Mac');
   });
