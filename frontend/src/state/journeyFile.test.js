@@ -498,7 +498,7 @@ describe('the ranges', () => {
       technology: { kind: 'text', max: 40 },
       rssi: { kind: 'int', lo: -200, hi: 0 },
       operatorId: { kind: 'digits', max: 10 },
-      cellId: { kind: 'int', lo: 0, hi: 1099511627776 },
+      cellId: { kind: 'hex', max: 10 },
     });
   });
 
@@ -515,6 +515,15 @@ describe('the ranges', () => {
     expect(leftOut(read(roundLine(1), { round: 2, t: 1 }, roundLine(3)))).toEqual({ samples: 1 });
   });
 
+  it.each(['12G4', '0x1E240', '-1E240', '1E 240', '', 123456])(
+    'leaves out and counts the cell id %j',
+    (cellid) => {
+      const result = read(roundLine(1, feedOf([link({ umts_info: { cellid } })])));
+      expect(result.request.samples[0].modems[0]).not.toHaveProperty('cellId');
+      expect(leftOut(result)).toEqual({ cellId: 1 });
+    },
+  );
+
   it('holds the modem fields to their ranges', () => {
     const modem = (extra) =>
       read(roundLine(1, feedOf([link(extra)]))).request.samples[0].modems?.[0];
@@ -526,8 +535,11 @@ describe('the ranges', () => {
     expect(modem({ rssi: '1' })).not.toHaveProperty('rssi');
     expect(modem({ rssi: '-201' })).not.toHaveProperty('rssi');
     expect(modem({ umts_info: { cellid: '0' } }).cellId).toBe(0);
-    expect(modem({ umts_info: { cellid: '1099511627776' } }).cellId).toBe(1099511627776);
-    expect(modem({ umts_info: { cellid: '1099511627777' } })).not.toHaveProperty('cellId');
+    expect(modem({ umts_info: { cellid: '1e240' } }).cellId).toBe(123456);
+    expect(modem({ umts_info: { cellid: '1E240' } }).cellId).toBe(123456);
+    expect(modem({ umts_info: { cellid: '01234567' } }).cellId).toBe(19088743);
+    expect(modem({ umts_info: { cellid: 'FFFFFFFFFF' } }).cellId).toBe(1099511627775);
+    expect(modem({ umts_info: { cellid: '10000000000' } })).not.toHaveProperty('cellId');
     expect(modem({ operator_id: '1234567890' }).operatorId).toBe('1234567890');
     expect(modem({ operator_id: '12345678901' })).not.toHaveProperty('operatorId');
     expect(modem({ operator_id: '12a' })).not.toHaveProperty('operatorId');

@@ -261,7 +261,11 @@ A sample:
 
 A modem of a sample: `index` (required; whole, 0 to 100,000), `deviceType`, `deviceSubtype`, `deviceState`,
 `linkState` and `technology` (text, 1 to 40), `rssi` (whole, -200 to 0), `operatorId` (text of 1 to 10 digits),
-`cellId` (whole, 0 to 2^40).
+`cellId` (whole, 0 to 2^40). The feed writes a cell id as a text of hexadecimal digits (eight of them in the file
+of 2026-11-23); the page sends its value as the whole number it is, so `journey_modem_sample.cell_id` is that
+number and is shown in hexadecimal again wherever it is shown. (The page first read it as decimal, which left
+out every id with a letter in it and read the rest as the wrong number: found on 2026-11-23 by reading the real
+file with the released reader, before anything had been imported, and corrected in the page alone.)
 
 What the server does with it, in one transaction:
 
