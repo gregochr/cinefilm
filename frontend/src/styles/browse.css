@@ -2420,3 +2420,31 @@
 .journey-delete__confirm {
   grid-column: 1 / -1;
 }
+/* A row's two buttons side by side on its first line, whichever of the panels below them is open. */
+.journey-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.journey-row__train,
+.journey-row__delete {
+  grid-row: 1;
+}
+.journey-row__train {
+  grid-column: 2;
+}
+.journey-row__delete {
+  grid-column: 3;
+}
+/* A row's train file panel takes the row's whole width, under its text and buttons. */
+.journey-train__panel {
+  grid-column: 1 / -1;
+}
+@media (max-width: 600px) {
+  .journey-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .journey-row__train,
+  .journey-row__delete {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
