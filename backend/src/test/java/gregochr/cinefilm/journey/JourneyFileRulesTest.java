@@ -15,6 +15,7 @@ import gregochr.cinefilm.journey.JourneyFile.Modem;
 import gregochr.cinefilm.journey.JourneyFile.Sample;
 import java.lang.reflect.RecordComponent;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -110,6 +111,123 @@ class JourneyFileRulesTest {
 
     private static String filler(String name, int length) {
         return String.valueOf("operatorId".equals(name) ? '7' : 'a').repeat(length);
+    }
+
+    /**
+     * The contract, written out from the plan's section "The import's request" and not from the code: a bound
+     * changed in {@link JourneyFileRules}' tables, or here, shows in the table-equality test below.
+     */
+    private record WholeBound(String name, long low, long high, boolean required) {
+    }
+
+    private record DecimalBound(String name, double low, double high, boolean lowOpen) {
+    }
+
+    private record TextBound(String name, int max, boolean required) {
+    }
+
+    private static final List<WholeBound> CONTRACT_WHOLES = List.of(
+        new WholeBound("runStartedMs", 1_577_836_800_000L, 4_102_444_800_000L, true),
+        new WholeBound("loggerVersion", 2, 3, true),
+        new WholeBound("cores", 1, 1_024, true),
+        new WholeBound("threads", 1, 4_096, true),
+        new WholeBound("memoryBytes", 1, 1_125_899_906_842_624L, true),
+        new WholeBound("round", 1, 10_000_000, true),
+        new WholeBound("at", 1_577_836_800_000L, 4_102_444_800_000L, true),
+        new WholeBound("feedAt", 1_577_836_800L, 4_102_444_800L, false),
+        new WholeBound("fixMode", 0, 9, false),
+        new WholeBound("fixAgeS", 0, 1_000_000, false),
+        new WholeBound("satellites", 0, 200, false),
+        new WholeBound("online", 0, 9, false),
+        new WholeBound("usersOnline", 0, 100_000, false),
+        new WholeBound("usersTotal", 0, 100_000, false),
+        new WholeBound("downLimit", 0, 1_000_000_000_000L, false),
+        new WholeBound("upLimit", 0, 1_000_000_000_000L, false),
+        new WholeBound("dataDownUsed", 0, 1_000_000_000_000_000L, false),
+        new WholeBound("dataUpUsed", 0, 1_000_000_000_000_000L, false),
+        new WholeBound("capLevel", 0, 1_000, false),
+        new WholeBound("userClass", 0, 1_000, false),
+        new WholeBound("probeMs", 0, 600_000, false),
+        new WholeBound("probeCode", 100, 599, false),
+        new WholeBound("batteryPercent", 0, 100, false),
+        new WholeBound("lowPower", 0, 1, false),
+        new WholeBound("cpuLimit", 0, 100, false),
+        new WholeBound("wifiRssi", -120, -1, false),
+        new WholeBound("wifiNoise", -120, -1, false),
+        new WholeBound("wifiPhy", 1, 20, false),
+        new WholeBound("wifiBand", 1, 20, false),
+        new WholeBound("wifiWidth", 1, 20, false),
+        new WholeBound("wifiChannel", 1, 233, false),
+        new WholeBound("index", 0, 100_000, true),
+        new WholeBound("rssi", -200, 0, false),
+        new WholeBound("cellId", 0, 1_099_511_627_776L, false));
+
+    private static final List<DecimalBound> CONTRACT_DECIMALS = List.of(
+        new DecimalBound("latitude", -90, 90, false),
+        new DecimalBound("longitude", -180, 180, false),
+        new DecimalBound("altitudeM", -1_000, 10_000, false),
+        new DecimalBound("speedMps", 0, 200, false),
+        new DecimalBound("courseDeg", 0, 360, false),
+        new DecimalBound("loadAvg", 0, 100_000, false),
+        new DecimalBound("swapMb", 0, 10_000_000, false),
+        new DecimalBound("wifiRate", 0, 100_000, true));
+
+    private static final List<TextBound> CONTRACT_TEXTS = List.of(
+        new TextBound("sourceFile", 200, false),
+        new TextBound("osVersion", 40, false),
+        new TextBound("model", 100, true),
+        new TextBound("cpu", 100, true),
+        new TextBound("trainUnit", 100, false),
+        new TextBound("deviceType", 40, false),
+        new TextBound("deviceSubtype", 40, false),
+        new TextBound("deviceState", 40, false),
+        new TextBound("linkState", 40, false),
+        new TextBound("technology", 40, false),
+        new TextBound("operatorId", 10, false));
+
+    private static final Map<String, Set<String>> CONTRACT_WORDS = Map.of(
+        "travelClass", Set.of("standard", "first"), "powerSource", Set.of("ac", "battery"));
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theCodesTablesAreTheContractFieldByField() {
+        List<WholeBound> wholes = wholes().map(a -> new WholeBound((String) a.get()[2], (Long) a.get()[3],
+            (Long) a.get()[4], (Boolean) a.get()[5])).toList();
+        List<DecimalBound> decimals = JourneyFileRules.SAMPLE_DECIMALS.stream()
+            .map(d -> new DecimalBound(d.name(), d.low(), d.high(), d.lowOpen())).toList();
+        List<TextBound> texts = texts().map(a -> new TextBound((String) a.get()[2], (Integer) a.get()[3],
+            "device".equals(a.get()[0]))).toList();
+        Map<String, Set<String>> words = words().collect(Collectors.toMap(a -> (String) a.get()[1],
+            a -> (Set<String>) a.get()[2]));
+
+        assertThat(wholes).containsExactlyInAnyOrderElementsOf(CONTRACT_WHOLES);
+        assertThat(decimals).containsExactlyInAnyOrderElementsOf(CONTRACT_DECIMALS);
+        assertThat(texts).containsExactlyInAnyOrderElementsOf(CONTRACT_TEXTS);
+        assertThat(words).isEqualTo(CONTRACT_WORDS);
+        assertThat(CONTRACT_WHOLES).hasSize(34);
+        assertThat(CONTRACT_DECIMALS).hasSize(8);
+        assertThat(CONTRACT_TEXTS).hasSize(11);
+        assertThat(JourneyFileRules.MAX_SAMPLES).isEqualTo(2_000);
+        assertThat(JourneyFileRules.MAX_MODEMS).isEqualTo(16);
+    }
+
+    @Test
+    void aTextIsRequiredExactlyWhereTheContractSaysAndOnlyTheDeviceTextsAre() {
+        for (TextBound text : CONTRACT_TEXTS) {
+            Function<ObjectNode, ObjectNode> owner = switch (text.name()) {
+                case "sourceFile", "osVersion" -> FILE;
+                case "model", "cpu" -> DEVICE;
+                case "trainUnit" -> SAMPLE;
+                default -> MODEM;
+            };
+            ObjectNode nulled = example();
+            owner.apply(nulled).putNull(text.name());
+            if (text.required()) {
+                refused(validating(nulled));
+            } else {
+                assertValid(nulled);
+            }
+        }
     }
 
     @Test
