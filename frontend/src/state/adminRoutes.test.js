@@ -30,6 +30,8 @@ describe('bareOnPhone', () => {
     '/admin/library/files/unreadable',
     '/admin/library/credits',
     '/Admin/Library/Credits/',
+    '/admin/playback/journeys',
+    '/Admin/Playback/Journeys/',
   ])('is true on %s', (path) => expect(bareOnPhone(path)).toBe(true));
 
   it.each([
@@ -39,6 +41,8 @@ describe('bareOnPhone', () => {
     '/admin/library/x',
     '/admin/library/files/other',
     '/admin/library/credits/x',
+    '/admin/playback/journeys/x',
+    '/admin/playback/other',
     '/films/1',
   ])('is false on %s', (path) => expect(bareOnPhone(path)).toBe(false));
 });

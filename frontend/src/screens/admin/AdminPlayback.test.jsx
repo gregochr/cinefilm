@@ -12,15 +12,16 @@ const CARDS = [
   'Playback log',
   'Conversion',
   'Remembered networks',
+  'Train journeys',
 ];
 
 describe('Admin Playback section', () => {
-  it('is named Playback and holds the five cards in order, each once', async () => {
+  it('is named Playback and holds the six cards in order, each once', async () => {
     installFetch();
     renderApp('/admin/playback');
     expect(screen.getByRole('heading', { level: 1, name: 'Playback' })).toBeInTheDocument();
     for (const name of CARDS) await screen.findByRole('region', { name });
-    expect(screen.getAllByRole('region')).toHaveLength(5);
+    expect(screen.getAllByRole('region')).toHaveLength(6);
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(CARDS);
   });
 

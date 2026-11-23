@@ -7,7 +7,8 @@ import AdminLibrary from './screens/admin/AdminLibrary.jsx';
 import AdminChristmas from './screens/admin/AdminChristmas.jsx';
 import AdminLibraryFiles from './screens/admin/AdminLibraryFiles.jsx';
 import AdminEndCredits from './screens/admin/AdminEndCredits.jsx';
-import { CREDITS_PATH, FILE_LISTS } from './state/adminRoutes.js';
+import AdminJourneys from './screens/admin/AdminJourneys.jsx';
+import { CREDITS_PATH, FILE_LISTS, JOURNEYS_PATH } from './state/adminRoutes.js';
 import AdminPlayback from './screens/admin/AdminPlayback.jsx';
 import AdminSettings from './screens/admin/AdminSettings.jsx';
 import AdminSubtitles from './screens/admin/AdminSubtitles.jsx';
@@ -67,6 +68,7 @@ export default function App() {
             <Route path={CREDITS_PATH.replace('/admin/', '')} element={<AdminEndCredits />} />
             <Route path="christmas" element={<AdminChristmas />} />
             <Route path="playback" element={<AdminPlayback />} />
+            <Route path={JOURNEYS_PATH.replace('/admin/', '')} element={<AdminJourneys />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
           <Route path="*" element={<NotFound />} />
