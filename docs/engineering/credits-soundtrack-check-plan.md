@@ -164,7 +164,12 @@ results, which were never published beyond L5's bins.
 
 ### S-3 — lift the test hold
 
-- **The look first**, after S-2 is released and before S-3 is built: the owner fetches the candidates, and the
+- **An interim deny file first.** G0's file denies the test films' editions and files too (`edition` and `file`
+  entries), so they would be held by those and never listed with `split` true. Before the look, the planner writes an
+  interim deny file: the test films' `film` and `unit` entries (the split), and only G1's unclear editions as
+  `edition` and `file` entries. The owner puts it in place; the split still holds every test film (rules 1–3 and 6),
+  and the candidates endpoint now lists them with `split` true.
+- **The look**, after S-2 is released and before S-3 is built: the owner fetches the candidates, and the
   editions with `split` true and `soundtrack` `PASS` get G1's stills check (the sheet tool, G1's rules and
   G1's ends). The planner judges them:
   - an unclear one goes in the deny file as an `edition` and a `file` entry;
