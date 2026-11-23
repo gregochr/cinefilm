@@ -167,9 +167,13 @@ read of the file. Direct play of the file remains only as a fallback.
   hls.js is fetching at the cap, so it is never more than one level above what is fetched; the healthy minute starts
   again when hls.js reaches the cap from below; and a segment that times out or gets no HTTP answer brings the cap
   down to the level being fetched. On a ladder with a 240p floor and a 360p
-  level, the buffer is spent before the floor: once 420 s are buffered Auto does not go below 360p until fewer than
-  240 s are left (`floorHold.js` raises hls.js's `minAutoBitrate`), provided hls.js is already fetching at 360p or
-  above and no segment has failed since the last one loaded. iPhone's
+  level, the buffer is spent before the floor, and it is judged by how long the bank would last at 360p
+  (`floor-hold-by-time-plan.md`): Auto does not go below 360p once 240 s are in hand and the bank would last 900 s
+  at the link's recent speed (the lower middle of the last 9 segment rates, timed from the request start), and
+  lets go below 180 s in hand, or when it would last under 600 s at the lowest of the last 3 segment rates and the
+  rate so far of the segment in flight (read every 2 s). `floorHold.js` raises hls.js's `minAutoBitrate`, provided
+  hls.js is already fetching at 360p or above; a segment that times out or gets no answer, and a change of
+  network, clear the rates and release it. iPhone's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
   identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only *strictly below*
   the source height, so `original` and e.g. `480p` never share a height; a test asserts uniqueness for every

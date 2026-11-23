@@ -8,6 +8,8 @@ export class FakeHls {
     MANIFEST_PARSED: 'hlsManifestParsed',
     LEVEL_SWITCHING: 'hlsLevelSwitching',
     LEVEL_SWITCHED: 'hlsLevelSwitched',
+    FRAG_LOADING: 'hlsFragLoading',
+    FRAG_LOAD_EMERGENCY_ABORTED: 'hlsFragLoadEmergencyAborted',
     FRAG_LOADED: 'hlsFragLoaded',
     ERROR: 'hlsError',
   };
@@ -80,6 +82,16 @@ export class FakeHls {
   /** The playhead reaches `level`. */
   switchTo(level) {
     this.emit(FakeHls.Events.LEVEL_SWITCHED, { level });
+  }
+
+  /** hls.js starts to load a fragment; its `stats` are the live ones the loader updates. */
+  fragLoading(frag) {
+    this.emit(FakeHls.Events.FRAG_LOADING, { frag, targetBufferTime: 0 });
+  }
+
+  /** hls.js abandons the fragment in flight for another level. */
+  fragAborted(frag) {
+    this.emit(FakeHls.Events.FRAG_LOAD_EMERGENCY_ABORTED, { frag, stats: frag.stats });
   }
 
   /** hls.js 1.7 FRAG_LOADED payload: { frag, part, payload, networkDetails }; the stats live on `frag.stats`. */

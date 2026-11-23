@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeHls } from '../test/fakeHls.js';
 import {
   BUFFER_BUDGET_BYTES,
+  HOLD_CHECK_MS,
   MAX_BUFFER_AHEAD_S,
   MIN_BUFFER_AHEAD_S,
   RECONNECT_MS,
@@ -765,15 +766,17 @@ describe('network errors for the health record', () => {
 });
 
 describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
+  // The 360p variant's BANDWIDTH: Rung.peakBandwidth(), 600k * 1.2 + 96k audio.
+  const PEAK_360 = 816000;
   const holdRenditions = [
     { id: 'original', height: 820, bitrate: 15000000, copy: true },
     { id: '720p', height: 720, bitrate: 2500000, copy: false },
     { id: '480p', height: 480, bitrate: 1000000, copy: false },
-    { id: '360p', height: 360, bitrate: 600000, copy: false },
+    { id: '360p', height: 360, bitrate: PEAK_360, copy: false },
     { id: '240p', height: 240, bitrate: 350000, copy: false },
   ];
   const l240 = { height: 240, bitrate: 350000 };
-  const l360 = { height: 360, bitrate: 600000 };
+  const l360 = { height: 360, bitrate: PEAK_360 };
   const l480 = { height: 480, bitrate: 1000000 };
   const l720 = { height: 720, bitrate: 2500000 };
   const ladder = [l240, l360, l480, l720];
@@ -815,29 +818,31 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     video.dispatchEvent(new Event('timeupdate'));
     expect(hls.config.minAutoBitrate).toBe(0);
     hls.fetchLevel(1);
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
   });
 
   it('takes the floor off at once on a fragment timeout and sets it again after the next fragment', () => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
     hls.fetchLevel(3);
+    hls.fragLoaded(stats);
     setAhead(480);
     video.dispatchEvent(new Event('timeupdate'));
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
     hls.error(timeout);
     expect(hls.config.minAutoBitrate).toBe(0);
     video.dispatchEvent(new Event('timeupdate'));
     video.dispatchEvent(new Event('timeupdate'));
     expect(hls.config.minAutoBitrate).toBe(0);
     hls.fragLoaded(stats);
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
   });
 
   it('gives 0 and does not throw when the level at the hold index has gone', () => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
     hls.fetchLevel(3);
+    hls.fragLoaded(stats);
     hls.levels = [l240];
     setAhead(480);
     expect(() => video.dispatchEvent(new Event('timeupdate'))).not.toThrow();
@@ -848,9 +853,10 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     const { hls, video, setAhead, setRanges } = holdStart();
     hls.manifest(ladder, 3);
     hls.fetchLevel(3);
+    hls.fragLoaded(stats);
     setAhead(500);
     video.dispatchEvent(new Event('timeupdate'));
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
     setRanges([
       [0, 10],
       [10.3, 500],
@@ -858,32 +864,34 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     video.currentTime = 10;
     video.dispatchEvent(new Event('timeupdate'));
     video.dispatchEvent(new Event('waiting'));
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
   });
 
-  it('raises the minimum to the 360p level at 420 s ahead, on timeupdate', () => {
+  it('raises the minimum to the 360p level at 240 s ahead, on timeupdate', () => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
     hls.fetchLevel(3);
+    hls.fragLoaded(stats);
     expect(hls.config.minAutoBitrate).toBe(0);
-    setAhead(419);
+    setAhead(239);
     video.dispatchEvent(new Event('timeupdate'));
     expect(hls.config.minAutoBitrate).toBe(0);
-    setAhead(420);
-    video.dispatchEvent(new Event('timeupdate'));
-    expect(hls.config.minAutoBitrate).toBe(600000);
-  });
-
-  it('keeps it down to 240 s ahead and drops it at 239 s, from timeupdate alone', () => {
-    const { hls, video, setAhead } = holdStart();
-    hls.manifest(ladder, 3);
-    hls.fetchLevel(3);
-    setAhead(420);
-    video.dispatchEvent(new Event('timeupdate'));
     setAhead(240);
     video.dispatchEvent(new Event('timeupdate'));
-    expect(hls.config.minAutoBitrate).toBe(600000);
-    setAhead(239);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+  });
+
+  it('keeps it down to 180 s ahead and drops it at 179 s, from timeupdate alone', () => {
+    const { hls, video, setAhead } = holdStart();
+    hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
+    hls.fragLoaded(stats);
+    setAhead(420);
+    video.dispatchEvent(new Event('timeupdate'));
+    setAhead(180);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+    setAhead(179);
     video.dispatchEvent(new Event('timeupdate'));
     expect(hls.config.minAutoBitrate).toBe(0);
   });
@@ -892,9 +900,10 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
     hls.fetchLevel(3);
+    hls.fragLoaded(stats);
     setAhead(500);
     video.dispatchEvent(new Event(type));
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
     setAhead(100);
     video.dispatchEvent(new Event(type));
     expect(hls.config.minAutoBitrate).toBe(0);
@@ -906,7 +915,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     hls.fetchLevel(3);
     setAhead(500);
     hls.fragLoaded(stats);
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
     setAhead(100);
     hls.fragLoaded(stats);
     expect(hls.config.minAutoBitrate).toBe(0);
@@ -916,9 +925,10 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     const { hls, video, setAhead, advance } = holdStart();
     hls.manifest(ladder, 1);
     hls.fetchLevel(1);
+    hls.fragLoaded(stats);
     setAhead(480);
     video.dispatchEvent(new Event('timeupdate'));
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
     hls.fetchLevel(0);
     expect(hls.autoLevelCapping).toBe(0);
     expect(hls.config.minAutoBitrate).toBe(0);
@@ -927,13 +937,14 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     expect(hls.autoLevelCapping).toBe(1);
     expect(hls.config.minAutoBitrate).toBe(0); // still fetching 240p: a floor, not a pull
     hls.fetchLevel(1);
-    expect(hls.config.minAutoBitrate).toBe(600000);
+    expect(hls.config.minAutoBitrate).toBe(PEAK_360);
   });
 
   it('does not write the minimum when the value has not changed', () => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
     hls.fetchLevel(3);
+    hls.fragLoaded(stats);
     let writes = 0;
     let value = hls.config.minAutoBitrate;
     Object.defineProperty(hls.config, 'minAutoBitrate', {
@@ -987,6 +998,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     const { engine, hls, setAhead } = holdStart({ video });
     hls.manifest(ladder, 3);
     hls.fetchLevel(3);
+    hls.fragLoaded(stats);
     engine.destroy();
     setAhead(500);
     video.dispatchEvent(new Event('timeupdate'));
@@ -995,6 +1007,192 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     expect(removed.mock.calls.map(([type, fn]) => [type, fn])).toEqual(
       expect.arrayContaining(addedPairs),
     );
+  });
+
+  describe('by time: the bank at 360p, the engine’s own samples and the fragment in flight', () => {
+    // A hold armed at 300 s in hand on a fast link (one 10,000 kbit/s sample), with the clock the test moves.
+    function armed(over = {}) {
+      let clockMs = 0;
+      const started = holdStart({ clock: () => clockMs, ...over });
+      const { hls, video, setAhead } = started;
+      hls.manifest(ladder, 3);
+      hls.fetchLevel(3);
+      hls.fragLoaded(stats);
+      setAhead(300);
+      video.dispatchEvent(new Event('timeupdate'));
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+      return { ...started, setClock: (ms) => (clockMs = ms) };
+    }
+    // A fragment that has been loading since `start`, `loaded` bytes in; the test moves `loaded`.
+    const loadingFrag = (start = 0, loaded = 0) => ({
+      stats: {
+        loaded,
+        aborted: false,
+        loading: { start, first: loaded > 0 ? start + 1 : 0, end: 0 },
+      },
+    });
+
+    it('lets stale fast samples hold the floor only while 180 s are in hand', () => {
+      const { hls, video, setAhead } = armed();
+      setAhead(181);
+      video.dispatchEvent(new Event('timeupdate'));
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+      setAhead(179);
+      video.dispatchEvent(new Event('timeupdate'));
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('releases within one timer tick when the fragment in flight trickles', () => {
+      const { hls, setClock } = armed();
+      const frag = loadingFrag(0, 0);
+      hls.fragLoading(frag);
+      vi.advanceTimersByTime(HOLD_CHECK_MS - 1);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+      frag.stats.loaded = 20_000; // 80 kbit/s over 2 s: 300 s in hand last about 333 s
+      frag.stats.loading.first = 1;
+      setClock(HOLD_CHECK_MS);
+      vi.advanceTimersByTime(1);
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('keeps the floor while the fragment in flight is fast', () => {
+      const { hls, setClock } = armed();
+      const frag = loadingFrag(0, 1_000_000); // 4,000 kbit/s over 2 s
+      hls.fragLoading(frag);
+      setClock(HOLD_CHECK_MS);
+      vi.advanceTimersByTime(HOLD_CHECK_MS * 3);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+    });
+
+    it('counts a fragment with no first byte yet as 0 kbit/s', () => {
+      const { hls, setClock } = armed();
+      hls.fragLoading(loadingFrag(0, 0));
+      setClock(HOLD_CHECK_MS);
+      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('does not read the rate of a fragment that was aborted or has ended', () => {
+      const { hls, setClock } = armed();
+      const aborted = loadingFrag(0, 0);
+      aborted.stats.aborted = true;
+      hls.fragLoading(aborted);
+      setClock(HOLD_CHECK_MS);
+      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+      const ended = loadingFrag(0, 0);
+      ended.stats.loading.end = 500; // the failed attempt of a retry
+      hls.fragLoading(ended);
+      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+    });
+
+    it('releases on the lowest of the last three samples', () => {
+      const { hls } = armed();
+      // 12,500 bytes over 1,000 ms is 100 kbit/s: 300 s in hand last about 342 s at 360p.
+      hls.fragLoaded({ loaded: 12_500, loading: { start: 0, first: 1, end: 1000 } });
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('arms on the lower middle of nine samples, though the newest four are slow', () => {
+      const { hls, video, setAhead } = holdStart();
+      hls.manifest(ladder, 3);
+      hls.fetchLevel(3);
+      for (let i = 0; i < 5; i += 1) hls.fragLoaded(stats); // 10,000 kbit/s
+      // 400 kbit/s: 300 s in hand last about 588 s, so each slow sample alone would not arm it, yet it would
+      // not release it either at 400 s in hand (784 s).
+      for (let i = 0; i < 4; i += 1) {
+        hls.fragLoaded({ loaded: 50_000, loading: { start: 0, first: 1, end: 1000 } });
+      }
+      setAhead(400);
+      video.dispatchEvent(new Event('timeupdate'));
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+    });
+
+    it('times a sample from loading.start, so the wait for the first byte counts', () => {
+      const { hls, video, setAhead } = holdStart();
+      hls.manifest(ladder, 3);
+      hls.fetchLevel(3);
+      // 50,000 bytes over 1,000 ms from the start is 400 kbit/s; timed from the first byte (900 ms in) the same
+      // fragment would read 4,000. The engine must read 400.
+      hls.fragLoaded({ loaded: 50_000, loading: { start: 0, first: 900, end: 1000 } });
+      setAhead(300); // 300 s last about 588 s at 400 kbit/s: under 900, so not armed
+      video.dispatchEvent(new Event('timeupdate'));
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('drops the samples on fragment trouble: a fragment with no rate does not arm it again', () => {
+      const { hls, video } = armed();
+      hls.error(timeout);
+      expect(hls.config.minAutoBitrate).toBe(0);
+      hls.fragLoaded({ loaded: 0, loading: { start: 0, first: 0, end: 0 } }); // loaded, but nothing to measure
+      video.dispatchEvent(new Event('timeupdate'));
+      expect(hls.config.minAutoBitrate).toBe(0);
+      hls.fragLoaded(stats);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+    });
+
+    it('drops the samples when the network changes', () => {
+      const { hls, video } = armed();
+      window.dispatchEvent(new Event('offline'));
+      video.dispatchEvent(new Event('timeupdate'));
+      expect(hls.config.minAutoBitrate).toBe(0);
+      hls.fragLoaded({ loaded: 0, loading: { start: 0, first: 0, end: 0 } });
+      expect(hls.config.minAutoBitrate).toBe(0);
+      hls.fragLoaded(stats);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+    });
+
+    it('ignores an init segment: no sample, no timer', () => {
+      const { hls, video } = holdStart();
+      hls.manifest(ladder, 3);
+      hls.fetchLevel(3);
+      hls.fragLoading({ sn: 'initSegment', ...loadingFrag() });
+      expect(vi.getTimerCount()).toBe(0);
+      hls.emit(FakeHls.Events.FRAG_LOADED, { frag: { sn: 'initSegment', stats } });
+      video.dispatchEvent(new Event('timeupdate'));
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('runs one timer while a fragment loads and none between fragments', () => {
+      const { hls } = armed();
+      expect(vi.getTimerCount()).toBe(0);
+      hls.fragLoading(loadingFrag());
+      hls.fragLoading(loadingFrag()); // a retry of the same fragment
+      expect(vi.getTimerCount()).toBe(1);
+      hls.fragLoaded(stats);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('stops the timer when the fragment is abandoned, on trouble, on a restart and on destroy', () => {
+      const { hls, engine } = armed();
+      hls.fragLoading(loadingFrag());
+      hls.fragAborted(loadingFrag());
+      expect(vi.getTimerCount()).toBe(0);
+      hls.fragLoading(loadingFrag());
+      hls.error(timeout);
+      expect(vi.getTimerCount()).toBe(0);
+      hls.fragLoading(loadingFrag());
+      hls.error({
+        fatal: true,
+        type: 'networkError',
+        details: 'levelLoadError',
+        response: { code: 0 },
+      });
+      vi.advanceTimersByTime(RECONNECT_MS);
+      expect(vi.getTimerCount()).toBe(0);
+      hls.fragLoading(loadingFrag());
+      expect(vi.getTimerCount()).toBe(1);
+      engine.destroy();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('starts no timer on a ladder that is never held', () => {
+      const { hls } = holdStart();
+      hls.manifest([l360, l480, l720], 2);
+      hls.fragLoading(loadingFrag());
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });
 
