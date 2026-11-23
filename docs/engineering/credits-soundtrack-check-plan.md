@@ -134,28 +134,26 @@ results, which were never published beyond L5's bins.
 - **Stale.** A fingerprint change, or a window that no longer covers the current start, makes a tail unusable. A model
   or stream-rule change does not: those tails are re-read in the background and used until then, so such a change
   never blanks markers.
-- **Candidates.** `CreditsApply.candidate` returns a hold reason instead of null, and the endpoint (3c-1d) lists
-  held editions too:
-  - held by the soundtrack check when it fails or there is no usable tail;
-  - held by the split when the edition is denied by rule 1, 2, 3 or 6 (the test split: a `film` or `unit` entry, the
-    hash side, or a listed film's unit) and by no `edition` or `file` entry. A test with a manifest test film that has
-    both `film` and `unit` entries pins it.
+- **Candidates.** `CreditsApply.candidate` returns the holds instead of null, and the endpoint (3c-1d) lists held
+  editions too. Each hold is its own field, worked out whatever the others say, so none hides another:
+  - `split` (true or false): denied by rule 1, 2, 3 or 6 (the test split: a `film` or `unit` entry, the hash side, or
+    a listed film's unit);
+  - `listed` (true or false): denied by rule 4 or 5 (a `file` or `edition` entry);
+  - `soundtrack`: `PASS`, `FAIL` with the speech seconds, or `NO_TAIL`.
 
-  The hold is reported in two separate fields, so neither hides the other: `split` (true or false) and `soundtrack`
-  (`PASS`, `FAIL` with the speech seconds, or `NO_TAIL`). A held edition is listed only when every other rule holds
-  (version 2 `FOUND`, the kind allowed, the timeline, the guard, and no `edition` or `file` entry). A test pins a
-  split-denied edition that fails the check showing both.
-
-  Its invariant becomes: every candidate not flagged `owner`, with `split` false and `soundtrack` `PASS`, is exactly
-  what a pass sets `AUTO`.
-  `foundation-plan.md`'s row for the endpoint and `operations.md`'s "Fetching the candidates" section are updated in
-  the same PR.
-- **The sheet tool.** `AutoCheckCandidate` gains `split` and `soundtrack`. `AutoCheckOptions` gains a filter flag
-  (`--held-split-pass`: only `split` true with `soundtrack` `PASS`; without it, only editions with `split` false and
-  `soundtrack` `PASS`, today's set), and `AutoCheckJob` applies it before writing sheets and `list.csv`. `--full`
-  takes the same flag and finds its edition only within the filtered set. `list.csv` gains both columns, with tests.
-  The runbook's sheet section is updated in the same PR: the default set in place of "all candidates", `list.csv`'s
-  two new columns, and the flag the S-3 look uses (with `--full` too).
+  A held edition is listed only when every other rule holds (version 2 `FOUND`, the kind allowed, the timeline, the
+  guard). Tests pin a manifest test film with `film`, `unit`, `edition` and `file` entries showing `split` and
+  `listed` both true, and a split-denied edition that fails the check showing both holds. Its invariant becomes:
+  every candidate not flagged `owner`, with `split` and `listed` false and `soundtrack` `PASS`, is exactly what a
+  pass sets `AUTO`. `foundation-plan.md`'s row for the endpoint and `operations.md`'s "Fetching the candidates"
+  section are updated in the same PR.
+- **The sheet tool.** `AutoCheckCandidate` gains `split`, `listed` and `soundtrack`. `AutoCheckOptions` gains a
+  filter flag, `--held-pass`: only `soundtrack` `PASS` with `split` or `listed` true, less the editions named by
+  `--skip <file>` (one edition id per line). Without it, only editions with `split` and `listed` false and
+  `soundtrack` `PASS`: today's set. `AutoCheckJob` applies the filter before writing sheets and `list.csv`, and
+  `--full` takes the same flags and finds its edition only within the filtered set. `list.csv` gains the three
+  columns, with tests. The runbook's sheet section is updated in the same PR: the default set in place of "all
+  candidates", the new columns, and the flags the S-3 look uses (with `--full` too).
 - **Log.** The pass line adds `N held by the soundtrack check`.
 - **Tests** include Clear on a failing edition not setting `AUTO`, and the candidates endpoint and the pass agreeing.
 - **Release order.** S-1b is released first and its job runs until it says `0 to read`. Only then is S-2 released,
@@ -164,24 +162,16 @@ results, which were never published beyond L5's bins.
 
 ### S-3 — lift the test hold
 
-- **An interim deny file first.** G0's file denies the test films' editions and files too (`edition` and `file`
-  entries), so they would be held by those and never listed with `split` true. Before the look, the planner writes an
-  interim deny file:
-  - **every** `film` and `unit` entry of the file in force (any `SPLIT_CONFLICT` unit key included);
-  - G1's unclear editions as `edition` and `file` entries;
-  - the `edition` and `file` entries of any edition that rules 1, 2, 3 and 6 no longer deny (one merged or moved
-    since G0 into a film they don't catch). A read-only query the owner runs gives each listed edition's and file's
-    current film and unit key, and the planner checks it before writing the file. Each such edition also gets a
-    stills look of its own before S-3, since S-3's final file drops its entries.
-
-  The owner puts it in place. Every edition it releases is still held by the split, so the pass that reads it sets no
-  new `AUTO`, and the candidates endpoint now lists them with `split` true.
-- **The look**, after S-2 is released and before S-3 is built: the owner fetches the candidates, and the
-  editions with `split` true and `soundtrack` `PASS` get G1's stills check (the sheet tool, G1's rules and
-  G1's ends). The planner judges them:
+- **The look**, after S-2 is released and before S-3 is built, with G0's deny file still in force: the owner fetches
+  the candidates, and the editions held by the split or by a listing whose soundtrack check passes get G1's stills
+  check (the sheet tool with `--held-pass`, skipping G1's 13 unclear editions, which were judged already; G1's rules
+  and G1's ends). An edition merged or moved since G0 keeps its `edition` and `file` entries, so it is in this set
+  even when the split no longer catches it. The planner judges them:
   - an unclear one goes in the deny file as an `edition` and a `file` entry;
   - **an early card turns cards off, and an early crawl turns `AUTO` off**, as in 3c: the look is a gate, and an end
     needs a revised plan. Denying an early edition and lifting the hold anyway is not allowed.
+
+  G0's file stays in force until S-3 is released, so nothing the look covers gets `AUTO` before it.
 - **The change.** `CreditsApply.denied` loses rule 2. The planner writes a new deny file with only the unclear
   editions (G1's 13 and the look's), no `film` or `unit` entries, and the owner puts it in place when S-3 is
   released.
