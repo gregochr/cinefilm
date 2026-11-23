@@ -95,7 +95,7 @@ below.
    password. The page reads the logger's file and turns it into the columns above: numbers as numbers, the feed's
    "no value" as null, nothing else kept (the MAC, the addresses, the cell tower's area code and the rest never
    leave the laptop). That code is plain JavaScript under `frontend/src/state` (no JSX). The server takes one file
-   as one request and one transaction: at most 2,000 rounds and 2 MB, read with a bound; every field named, typed
+   as one request and one transaction: at most 2,000 rounds and 4,000,000 characters, read with a bound; every field named, typed
    and ranged; **anything it does not know refused with a 400, not ignored**; a file already imported (the same
    `run_started_ms`) refused with a 409 until its journeys are deleted. A longer file is refused and said to be.
 6. **The logger gains the laptop and the class (version 3 of its log).** `scripts/train-feed-logger.py` records
@@ -108,11 +108,34 @@ below.
    2026-11-23: a twentieth of a second, no scan, no prompt. Version 3 has to be in the owner's copy before
    Thursday 2026-11-26, so that the journeys on the present laptop are the baseline.
 7. **`SECURITY.md` rule 7 changes with the tables:** the browser still never asks for a location; the server stores
-   a journey's positions only when the owner imports a logger file; they are then in the database, in its dumps
+   a journey's positions, and which train it was, only when the owner hands them over in Admin; they are then in the database, in its dumps
    (rule 9) and in Admin's answers, and nowhere else; the device's addresses never leave the laptop and the server
    refuses a file that carries a field it does not know; the raw files are never committed.
 8. **Every fixture is made up.** The repository is public: no test, fixture or doc holds a real position, time of
-   travel, cell id, train unit or the owner's machine. Shapes are real; values are invented.
+   travel, cell id, train unit, headcode, timetable id or the owner's machine. Shapes are real; values are
+   invented.
+9. **Which train it was is the train's fact, not the logger's** (the owner, 2026-11-23: this week). The feed names
+   the unit, not the service. The service's identity and its planned and actual times at each timing point are in
+   the railway's open running data. They are read once for a journey, by hand, never on a schedule, and
+   handed to Admin as a small file of their own: the server fetches nothing.
+
+   | Table | Key | Columns |
+   |---|---|---|
+   | `train_run` | `id`; `timetable_uid`, `run_date` are unique | `headcode`, `trust_id`, `operator`, `source`, `imported_at` |
+   | `train_run_call` | `train_run_id`, `seq` | `location`, `tiploc`, `planned_arrival`, `planned_departure`, `planned_pass`, `actual_arrival`, `actual_departure`, `actual_pass` |
+
+   - `journey` gains a nullable `train_run_id`. Two journeys on one train point at one run; the run's times are
+     stored once.
+   - A run is the timetable's id for the service on one date. Where it began and ended is its first and last
+     call, and is not stored. A call is one timing point in order (`seq` from 0): a train arrives and departs, or
+     passes, so a call has the times of the one or of the other, each planned (the working timetable, to the half
+     minute) and actual. Every time is an instant: whoever makes the file turns the day's clock times into
+     instants, so the server needs no time zone and no rule for midnight.
+   - Which sample lies beside which timing point is computed from the two clocks when asked for, never stored.
+   - Giving a journey a train finds the run by its key or makes it, and replaces the run's own columns and calls
+     with the file's: the newest file is the best account of that train. A run that no journey points at any more
+     (the journey was given another, had it taken away, or was deleted) is deleted with its calls.
+   - It is the owner's travel as much as a position is: decision 7 covers it.
 
 ## The API (all under the admin session; `POST` and `DELETE` need the `X-CineFilm` header)
 
@@ -122,6 +145,89 @@ below.
 - `POST /api/admin/journeys` (one file; answers the journeys made and the records linked), `GET
   /api/admin/journeys`, `GET /api/admin/journeys/{id}` (the samples and modem samples as compact rows), `DELETE
   /api/admin/journeys/{id}`.
+- `PUT /api/admin/journeys/{id}/train` (one train file; decision 9) and `DELETE /api/admin/journeys/{id}/train`.
+
+## The train's file (`PUT /api/admin/journeys/{id}/train`)
+
+One JSON object of at most 200,000 characters, read as strictly as the import's request: a name that is not
+here, a value of the wrong kind or one outside its range is a 400, `Invalid train file`. Texts are printable ASCII.
+
+| Field | Kind and range |
+|---|---|
+| `uid` | required; text, 1 to 10 |
+| `date` | required; a date as `YYYY-MM-DD`, from 2020-01-01 to 2100-01-01 |
+| `headcode` | text, 1 to 10 |
+| `trustId` | text, 1 to 20 |
+| `operator` | text, 1 to 100 |
+| `source` | text, 1 to 200 (where the times were read) |
+| `calls` | required; 1 to 300 objects, in the order the train meets them |
+
+A call: `location` (required; text, 1 to 100), `tiploc` (text, 1 to 10), and six times, each whole seconds from
+2020-01-01 to 2100-01-01: `plannedArrival`, `plannedDeparture`, `plannedPass`, `actualArrival`,
+`actualDeparture`, `actualPass`. A call has at least one time, and never a pass together with an arrival or a
+departure of the same kind (planned with planned, actual with actual).
+
+The server answers 404 for a journey it does not know, and otherwise 200 with `{ "trainRunId", "calls" }` (the
+count). `DELETE /api/admin/journeys/{id}/train` takes the journey's train away (204; 404 for an unknown journey).
+
+## The import's request (`POST /api/admin/journeys`)
+
+One JSON object of at most 4,000,000 characters, made by the Admin page from one logger file. The names below are
+the whole vocabulary. A name that is not here, at any depth, is a 400; so is a value of the wrong kind (a number
+written as text, a decimal where a whole number belongs, a boolean for a number) or outside its range. `null` and
+a missing name mean the same for every field that is not marked required. Texts are printable ASCII.
+
+| Field | Kind and range |
+|---|---|
+| `runStartedMs` | required; whole; milliseconds from 2020-01-01 to 2100-01-01 |
+| `loggerVersion` | required; 2 or 3 |
+| `sourceFile` | text, 1 to 200 |
+| `osVersion` | text, 1 to 40 |
+| `travelClass` | `standard` or `first` |
+| `device` | an object with all five of `model` and `cpu` (text, 1 to 100), `cores` (1 to 1,024), `threads` (1 to 4,096), `memoryBytes` (1 to 2^50) |
+| `samples` | required; 1 to 2,000 objects, each `round` higher than the one before |
+
+A sample:
+
+| Field | Kind and range |
+|---|---|
+| `round` | required; whole, 1 to 10,000,000 |
+| `at` | required; whole; milliseconds, the range of `runStartedMs` |
+| `trainUnit` | text, 1 to 100 |
+| `feedAt` | whole; seconds from 2020-01-01 to 2100-01-01 |
+| `fixMode`, `fixAgeS` | whole; 0 to 9, and 0 to 1,000,000 |
+| `latitude`, `longitude`, `altitudeM`, `speedMps`, `courseDeg` | decimal; -90 to 90, -180 to 180, -1,000 to 10,000, 0 to 200, 0 to 360 |
+| `satellites`, `online`, `usersOnline`, `usersTotal` | whole; 0 to 200, 0 to 9, 0 to 100,000 for both counts |
+| `downLimit`, `upLimit`, `dataDownUsed`, `dataUpUsed` | whole; 0 to 10^12 for the limits, 0 to 10^15 for what was used |
+| `capLevel`, `userClass` | whole; 0 to 1,000 |
+| `probeMs`, `probeCode` | whole; 0 to 600,000, and 100 to 599 |
+| `powerSource` | `ac` or `battery` |
+| `batteryPercent`, `lowPower`, `cpuLimit` | whole; 0 to 100, 0 or 1, 0 to 100 |
+| `loadAvg`, `swapMb` | decimal; 0 to 100,000, and 0 to 10,000,000 |
+| `wifiRssi`, `wifiNoise` | whole; -120 to -1 |
+| `wifiRate` | decimal; above 0, at most 100,000 |
+| `wifiPhy`, `wifiBand`, `wifiWidth`, `wifiChannel` | whole; 1 to 20 for the first three, 1 to 233 for the channel |
+| `modems` | 0 to 16 objects, each `index` once in the sample |
+
+A modem of a sample: `index` (required; whole, 0 to 100,000), `deviceType`, `deviceSubtype`, `deviceState`,
+`linkState` and `technology` (text, 1 to 40), `rssi` (whole, -200 to 0), `operatorId` (text of 1 to 10 digits),
+`cellId` (whole, 0 to 2^40).
+
+What the server does with it, in one transaction:
+
+- A run already stored (`runStartedMs`) is a 409, `Already imported`. Every other refusal is a 400 with the one
+  message `Invalid journey file`, and nothing is stored.
+- It walks the samples in order and makes the journeys: segment 0 begins at the first sample; a sample whose
+  `trainUnit` is given and differs from its journey's begins the next segment; a journey whose unit is not yet
+  known takes the first one given.
+- A journey's modems are the indexes its samples name, each with the type and subtype of the first sample that
+  names it; a later sample that gives the same index another type or subtype refuses the file.
+- The device is found by its five columns or made. Each journey is linked as decision 4 says.
+- It answers 201 with `{ "journeys": [ { "id", "segment", "trainUnit", "samples", "from", "to", "linked" } ] }`:
+  the count of samples, the first and last `sampled_at`, and the count of playback records linked.
+
+The page writes the feed's `-1` as `null` in `rssi`, `technology`, `operatorId` and `cellId`, and leaves out
+everything that has no name here.
 
 ## Pull requests, each under 1,500 changed lines
 
@@ -139,15 +245,18 @@ Each one owns its own contract rows in `foundation-plan.md`, its HTTP contract t
    after the flag has merged, because its migration is numbered after the flag's.
 4. **3b, the import** (backend): `POST`, the bounds and refusals, the segments, the device, the linking; MockMvc and
    integration tests that read back through the repositories. `SECURITY.md` rule 7. About 1,200 lines.
-5. **Reading and deleting** (backend): the three other calls. About 600 lines.
-6. **Admin's Journeys page**: choose a file, see what will be sent, import, list, delete; the reading and trimming
+5. **The train's run** (backend, decision 9): the migration (two tables and the journey's column), the two calls
+   that give a journey its train and take it away, their rules and tests. About 800 lines. After 3b.
+6. **Reading and deleting** (backend): the three other calls; a journey's answer carries its train's run and
+   calls, and deleting a journey removes a run no journey points at any more. About 700 lines.
+7. **Admin's Journeys page**: choose a file, see what will be sent, import, add the train's file, list, delete; the reading and trimming
    of the file under `frontend/src/state`; a short manual, `docs/engineering/journeys.md`. About 1,100 lines.
-7. **Later, with two journeys in hand:** the journey laid out in time, each modem's signal and the passengers
+8. **Later, with two journeys in hand:** the journey laid out in time, each modem's signal and the passengers
    online with the film's stalled seconds beside them. Not designed here.
 
 The first two are independent of each other and of the rest, and both are wanted before Thursday's journey
 (2026-11-26). The owner's time for the build is 2026-11-23 in the office and the two evenings after it; three to
-six follow in that order as far as that time goes.
+seven follow in that order as far as that time goes.
 
 ## Checked against today's file
 
@@ -162,7 +271,9 @@ Read again when the film had ended (314 rounds, every one answered, one train un
 (`up` or `down`, `available` or `disconnected`), its technology is `lte` or `-1`, its operator a number or `-1`,
 and the feed's index for the four is 102 to 105; `online`, the user class and the cap level never changed; the
 internet check gave a code (204) or, five times, none. The largest round is under 4,000 bytes as the logger wrote
-it, so a three-hour file is about 900 KB before the browser trims it.
+it. The whole run, stopped by hand at the end of the journey, is 363 rounds over three hours with none missing and
+every one answered, 822 KB before the browser trims it, and it ends with a `stop` line after the last round (a run
+that dies has none: the page must take a file with or without it).
 
 ## Questions for the owner
 
