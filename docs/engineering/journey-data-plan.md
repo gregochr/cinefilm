@@ -323,14 +323,21 @@ Each one owns its own contract rows in `foundation-plan.md`, its HTTP contract t
    - **one journey read back:** `GET /api/admin/journeys/{id}`, the samples and modem samples as compact rows,
      the run and its calls. Nothing reads it until the journey is laid out in time (8), so it is built after
      the page, with that view's needs in hand.
-7. **Admin's Journeys page**: choose a file, see what will be sent, import, add the train's file, list, delete; the reading and trimming
-   of the file under `frontend/src/state`; a short manual, `docs/engineering/journeys.md`. About 1,100 lines.
+7. **Admin's Journeys page**, a sub-page of Playback (`/admin/playback/journeys`): choose a file, see what will be
+   sent, import, list, delete, add or replace the train's file, take a train away; the reading and trimming of the
+   file under `frontend/src/state`; a short manual, `docs/engineering/journeys.md`. Planned as about 1,100 lines
+   and built in ten parts, because one row action there costs about 650 lines of code and 1,400 of tests: the
+   log's reader; the way in and the import; the list; the delete; the train's file (its state, its panel, its
+   wiring); taking a train away (its state and confirmation, its wiring); the manual.
 8. **Later, with two journeys in hand:** the journey laid out in time, each modem's signal and the passengers
    online with the film's stalled seconds beside them. Not designed here.
 
 The first two are independent of each other and of the rest, and both are wanted before Thursday's journey
 (2026-11-26). The owner's time for the build is 2026-11-23 in the office and the two evenings after it; three to
 seven follow in that order as far as that time goes.
+
+**Built on 2026-11-23 and 24:** one to seven, except one journey read back (the second half of six), which waits
+for the view (eight). How to use what was built is in `journeys.md`.
 
 ## Checked against today's file
 

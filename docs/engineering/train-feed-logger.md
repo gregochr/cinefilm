@@ -124,6 +124,8 @@ Once, to put a copy where a double-click can start it:
 On the train: double-click that file (or run it in Terminal), answer the question, leave the window open, and close
 it when getting off. `--help` lists the options; `--rounds 2` makes a short trial.
 
+Afterwards the log is imported on Admin's Train journeys page: `journeys.md`.
+
 ## What nobody has verified
 
 - **A real train.** The script has only met the stand-in feed in `scripts/test/`, whose `position`, `connectivity`
