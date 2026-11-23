@@ -112,30 +112,51 @@ below.
    (rule 9) and in Admin's answers, and nowhere else; the device's addresses never leave the laptop and the server
    refuses a file that carries a field it does not know; the raw files are never committed.
 8. **Every fixture is made up.** The repository is public: no test, fixture or doc holds a real position, time of
-   travel, cell id, train unit, headcode, timetable id or the owner's machine. Shapes are real; values are
-   invented.
+   travel, cell id, train unit, headcode, timetable id, station or junction, link to a train's running page, or
+   the owner's machine. Shapes are real; values are invented.
 9. **Which train it was is the train's fact, not the logger's** (the owner, 2026-11-23: this week). The feed names
    the unit, not the service. The service's identity and its planned and actual times at each timing point are in
-   the railway's open running data. They are read once for a journey, by hand, never on a schedule, and
-   handed to Admin as a small file of their own: the server fetches nothing.
+   the railway's open running data. They are read once for a journey, by hand, never on a schedule, and handed to
+   Admin as a small file of their own: the server fetches nothing. An adversarial read of this decision found
+   eight faults; they are settled here.
 
    | Table | Key | Columns |
    |---|---|---|
-   | `train_run` | `id`; `timetable_uid`, `run_date` are unique | `headcode`, `trust_id`, `operator`, `source`, `imported_at` |
-   | `train_run_call` | `train_run_id`, `seq` | `location`, `tiploc`, `planned_arrival`, `planned_departure`, `planned_pass`, `actual_arrival`, `actual_departure`, `actual_pass` |
+   | `train_run` | `id`; `timetable_uid`, `run_date` are unique | `headcode`, `operator`, `source`, `imported_at` |
+   | `train_run_call` | `train_run_id`, `seq` | `location`, `planned_arrival`, `planned_departure`, `planned_pass`, `actual_arrival`, `actual_departure`, `actual_pass` |
 
-   - `journey` gains a nullable `train_run_id`. Two journeys on one train point at one run; the run's times are
-     stored once.
-   - A run is the timetable's id for the service on one date. Where it began and ended is its first and last
-     call, and is not stored. A call is one timing point in order (`seq` from 0): a train arrives and departs, or
-     passes, so a call has the times of the one or of the other, each planned (the working timetable, to the half
-     minute) and actual. Every time is an instant: whoever makes the file turns the day's clock times into
-     instants, so the server needs no time zone and no rule for midnight.
+   - `journey` gains a nullable `train_run_id`, a plain foreign key (no cascade, no set-null). Two journeys on one
+     train point at one run; the run's times are stored once. A run's calls go with the run (`ON DELETE CASCADE`).
+   - **A run is the timetable's id for the service on its running date:** the day of the origin's planned
+     departure by Britain's clock, whatever day the owner boarded. Where it began and ended is its first and last
+     call, and is not stored. No second identifier of the run is stored and no code beside a place's name: each
+     would be a column that determines others without being a key.
+   - **A call is one timing point in order** (`seq` from 0, the order of the file), with its name as the running
+     data shows it. A train arrives and departs, or passes, so a call has the planned times of the one or of the
+     other, and the same for the actual times; the two kinds may differ, because a train planned to pass can in
+     fact stop.
+   - **The file gives clock times; the server makes the instants.** Whoever makes the file copies the times as the
+     railway shows them, to the half minute, and the running date. The server walks the planned times in order
+     from that date by Britain's clock (`Europe/London`): a time may not be earlier than the one before it, except
+     by more than twelve hours, which is midnight passing. Each actual time is put on the day that brings it
+     nearest its call's planned time. So nobody can get the time zone, summer time or midnight wrong by hand.
+   - **A file is the train's whole run, origin to destination,** not the owner's stretch of it. Giving a journey a
+     train finds the run by its key or makes it. A run already stored is replaced by the file only when the file
+     begins and ends at the places the stored run does (otherwise it is refused: one stretch must not wipe the
+     whole); then the headcode and the calls are the file's, and the operator and the source are the file's where
+     it gives them. The calls are replaced by one delete statement followed by the inserts, never by the ORM
+     queueing both (it would insert before it deleted, and the key would refuse).
+   - **The train must have run while the journey was logged:** the span of the run's times, half an hour allowed
+     either side, has to overlap the journey's first to last sample. A file for another day is refused, and said
+     to be.
+   - **A run that no journey points at any more is deleted** (the journey was given another train, had its train
+     taken away, or was deleted): one statement that deletes the run only if no journey points at it, in one place
+     in the code, which the delete of a journey (the next pull request) calls too. Finding a run to give to a
+     journey locks it, and a clash on a key between two requests is a 409, never a 500.
    - Which sample lies beside which timing point is computed from the two clocks when asked for, never stored.
-   - Giving a journey a train finds the run by its key or makes it, and replaces the run's own columns and calls
-     with the file's: the newest file is the best account of that train. A run that no journey points at any more
-     (the journey was given another, had it taken away, or was deleted) is deleted with its calls.
-   - It is the owner's travel as much as a position is: decision 7 covers it.
+   - It is the owner's travel as much as a position is: decision 7 covers it. In tests, fixtures and docs every
+     headcode, timetable id, place, date and source is invented (a place such as "Alpha Junction", a source such
+     as `https://example.invalid/run`).
 
 ## The API (all under the admin session; `POST` and `DELETE` need the `X-CineFilm` header)
 
@@ -155,19 +176,25 @@ here, a value of the wrong kind or one outside its range is a 400, `Invalid trai
 | Field | Kind and range |
 |---|---|
 | `uid` | required; text, 1 to 10 |
-| `date` | required; a date as `YYYY-MM-DD`, from 2020-01-01 to 2100-01-01 |
-| `headcode` | text, 1 to 10 |
-| `trustId` | text, 1 to 20 |
+| `date` | required; the running date as `YYYY-MM-DD`, from 2020-01-01 to 2100-01-01 |
+| `headcode` | required; text, 1 to 10 |
 | `operator` | text, 1 to 100 |
 | `source` | text, 1 to 200 (where the times were read) |
-| `calls` | required; 1 to 300 objects, in the order the train meets them |
+| `calls` | required; 2 to 300 objects, origin first, destination last |
 
-A call: `location` (required; text, 1 to 100), `tiploc` (text, 1 to 10), and six times, each whole seconds from
-2020-01-01 to 2100-01-01: `plannedArrival`, `plannedDeparture`, `plannedPass`, `actualArrival`,
-`actualDeparture`, `actualPass`. A call has at least one time, and never a pass together with an arrival or a
-departure of the same kind (planned with planned, actual with actual).
+A call: `location` (required; text, 1 to 100) and six clock times, each `HH:MM` or `HH:MM:SS` (seconds 00 or
+30): `plannedArrival`, `plannedDeparture`, `plannedPass`, `actualArrival`, `actualDeparture`, `actualPass`.
 
-The server answers 404 for a journey it does not know, and otherwise 200 with `{ "trainRunId", "calls" }` (the
+- A call has at least one planned time; planned, it has a pass or an arrival or departure, never a pass with
+  either; the same holds for its actual times, which may all be missing (the train never got there, or nothing
+  was reported).
+- Within a call an arrival is not after its departure. Along the calls the planned times do not go back, except
+  across midnight as decision 9 says.
+
+What the server answers: 404 for a journey it does not know; 400 `Invalid train file` for the shape and the rules
+above; 400 `The train did not run during this journey` when the times do not overlap the journey's; 409 `This
+train is stored with other end points` for a file that would replace a stored run with another origin or
+destination; 409 `Try again` for two requests that clash; otherwise 200 with `{ "trainRunId", "calls" }` (the
 count). `DELETE /api/admin/journeys/{id}/train` takes the journey's train away (204; 404 for an unknown journey).
 
 ## The import's request (`POST /api/admin/journeys`)
@@ -243,12 +270,19 @@ Each one owns its own contract rows in `foundation-plan.md`, its HTTP contract t
    and an integration test (CI only) in which the cap's own delete removes a linked record and the next viewing
    still stores. About 1,000 lines. It can be built beside the flag (it shares no file with it) and is pushed
    after the flag has merged, because its migration is numbered after the flag's.
-4. **3b, the import** (backend): `POST`, the bounds and refusals, the segments, the device, the linking; MockMvc and
-   integration tests that read back through the repositories. `SECURITY.md` rule 7. About 1,200 lines.
+4. **3b, the import** (backend), in two, because built as one it came to 2,400 lines:
+   - **what a journey file must look like:** the request as records, its strict reading, its rules field by
+     field, and the worked example the Admin page's reader is later tested against. No endpoint yet. It needs
+     none of the tables. About 1,150 lines.
+   - **the import itself:** `POST`, the segments, the device, the linking, two requests clashing; MockMvc, API and
+     integration tests that read back through the repositories. `SECURITY.md` rule 7. About 1,300 lines.
 5. **The train's run** (backend, decision 9): the migration (two tables and the journey's column), the two calls
-   that give a journey its train and take it away, their rules and tests. About 800 lines. After 3b.
-6. **Reading and deleting** (backend): the three other calls; a journey's answer carries its train's run and
-   calls, and deleting a journey removes a run no journey points at any more. About 700 lines.
+   that give a journey its train and take it away, the clock times made into instants, the rules and tests (the
+   same run given twice, a run shared by two journeys, midnight, summer time). About 950 lines. After 3b.
+6. **Reading and deleting** (backend): the three other calls. The list carries each journey's headcode and
+   running date where it has a train; one journey's answer carries the run and its calls; deleting a journey
+   calls the one sweep of decision 9, and a test holds that a run shared by two journeys outlives the first
+   delete. About 700 lines.
 7. **Admin's Journeys page**: choose a file, see what will be sent, import, add the train's file, list, delete; the reading and trimming
    of the file under `frontend/src/state`; a short manual, `docs/engineering/journeys.md`. About 1,100 lines.
 8. **Later, with two journeys in hand:** the journey laid out in time, each modem's signal and the passengers
