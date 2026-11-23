@@ -5,6 +5,7 @@ import {
   collectionsApi,
   editionsApi,
   filmsApi,
+  healthApi,
   homeApi,
   mediaFilesApi,
   peopleApi,
@@ -426,5 +427,238 @@ describe('Forced subtitle resources', () => {
     expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/verify', method: 'POST' });
     await adminApi.unverifySubtitle(5);
     expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/verify', method: 'DELETE' });
+  });
+});
+
+describe('API resources: an id is one segment of the path', () => {
+  const HOSTILE = '7/../x?y#z';
+  const SAFE = '7%2F..%2Fx%3Fy%23z';
+
+  // Each case: the name, a call made with the id, the exact path for a segment.
+  const requestCases = [
+    ['filmsApi.get', (id) => filmsApi.get(id), (segment) => `/api/films/${segment}`],
+    [
+      'filmsApi.savePreferences',
+      (id) => filmsApi.savePreferences(id, {}),
+      (segment) => `/api/films/${segment}/preferences`,
+    ],
+    ['peopleApi.get', (id) => peopleApi.get(id), (segment) => `/api/people/${segment}`],
+    [
+      'collectionsApi.get',
+      (id) => collectionsApi.get(id),
+      (segment) => `/api/collections/${segment}`,
+    ],
+    [
+      'editionsApi.reportProgress',
+      (id) => editionsApi.reportProgress(id, 5),
+      (segment) => `/api/editions/${segment}/progress`,
+    ],
+    [
+      'editionsApi.setWatched',
+      (id) => editionsApi.setWatched(id, true),
+      (segment) => `/api/editions/${segment}/watched`,
+    ],
+    [
+      'editionsApi.setHiddenFromContinueWatching',
+      (id) => editionsApi.setHiddenFromContinueWatching(id, true),
+      (segment) => `/api/editions/${segment}/continue-watching`,
+    ],
+    [
+      'editionsApi.restoreState',
+      (id) => editionsApi.restoreState(id, {}),
+      (segment) => `/api/editions/${segment}/playback-state`,
+    ],
+    [
+      'sessionsApi.create',
+      (id) => sessionsApi.create(id, {}),
+      (segment) => `/api/editions/${segment}/sessions`,
+    ],
+    ['sessionsApi.remove', (id) => sessionsApi.remove(id), (segment) => `/api/sessions/${segment}`],
+    [
+      'healthApi.report',
+      (id) => healthApi.report(id, {}),
+      (segment) => `/api/playback-health/${segment}`,
+    ],
+    [
+      'adminApi.matchSearch',
+      (id) => adminApi.matchSearch(id, { query: 'q' }),
+      (segment) => `/api/admin/films/${segment}/match?query=q`,
+    ],
+    [
+      'adminApi.applyMatch',
+      (id) => adminApi.applyMatch(id, 3),
+      (segment) => `/api/admin/films/${segment}/match`,
+    ],
+    [
+      'adminApi.leaveUnmatched',
+      (id) => adminApi.leaveUnmatched(id),
+      (segment) => `/api/admin/films/${segment}/leave-unmatched`,
+    ],
+    [
+      'adminApi.putBack',
+      (id) => adminApi.putBack(id),
+      (segment) => `/api/admin/films/${segment}/put-back`,
+    ],
+    [
+      'adminApi.editions',
+      (id) => adminApi.editions(id),
+      (segment) => `/api/admin/films/${segment}/editions`,
+    ],
+    [
+      'adminApi.saveEditions',
+      (id) => adminApi.saveEditions(id, {}),
+      (segment) => `/api/admin/films/${segment}/editions`,
+    ],
+    [
+      'adminApi.setCredits',
+      (id) => adminApi.setCredits(id, 1000),
+      (segment) => `/api/admin/editions/${segment}/credits`,
+    ],
+    [
+      'adminApi.clearCredits',
+      (id) => adminApi.clearCredits(id),
+      (segment) => `/api/admin/editions/${segment}/credits`,
+    ],
+    [
+      'adminApi.stopTranscodingSession',
+      (id) => adminApi.stopTranscodingSession(id),
+      (segment) => `/api/admin/transcoding/sessions/${segment}`,
+    ],
+    [
+      'adminApi.playbackRecord',
+      (id) => adminApi.playbackRecord(id),
+      (segment) => `/api/admin/playback-health/${segment}`,
+    ],
+    [
+      'adminApi.subtitleCues',
+      (id) => adminApi.subtitleCues(id),
+      (segment) => `/api/admin/subtitles/${segment}/cues`,
+    ],
+    [
+      'adminApi.attachSubtitle',
+      (id) => adminApi.attachSubtitle(id, { editionId: 1, part: null }),
+      (segment) => `/api/admin/subtitles/${segment}/attach`,
+    ],
+    [
+      'adminApi.detachSubtitle',
+      (id) => adminApi.detachSubtitle(id),
+      (segment) => `/api/admin/subtitles/${segment}/detach`,
+    ],
+    [
+      'adminApi.setSubtitleOffset',
+      (id) => adminApi.setSubtitleOffset(id, 500),
+      (segment) => `/api/admin/subtitles/${segment}/offset`,
+    ],
+    [
+      'adminApi.verifySubtitle',
+      (id) => adminApi.verifySubtitle(id),
+      (segment) => `/api/admin/subtitles/${segment}/verify`,
+    ],
+    [
+      'adminApi.unverifySubtitle',
+      (id) => adminApi.unverifySubtitle(id),
+      (segment) => `/api/admin/subtitles/${segment}/verify`,
+    ],
+    [
+      'adminApi.removeSubtitle',
+      (id) => adminApi.removeSubtitle(id),
+      (segment) => `/api/admin/subtitles/${segment}`,
+    ],
+    [
+      'adminApi.setForcedNeed',
+      (id) => adminApi.setForcedNeed(id, 'NEEDED'),
+      (segment) => `/api/admin/films/${segment}/forced-need`,
+    ],
+    [
+      'adminApi.setFullNeed',
+      (id) => adminApi.setFullNeed(id, 'NEEDED'),
+      (segment) => `/api/admin/films/${segment}/full-need`,
+    ],
+    [
+      'adminApi.searchOpenSubtitles',
+      (id) => adminApi.searchOpenSubtitles(id, 'full'),
+      (segment) => `/api/admin/editions/${segment}/opensubtitles?kind=full`,
+    ],
+    [
+      'adminApi.downloadOpenSubtitles',
+      (id) => adminApi.downloadOpenSubtitles(id, { fileId: 9, kind: 'full' }),
+      (segment) => `/api/admin/editions/${segment}/opensubtitles/download`,
+    ],
+  ];
+
+  const urlCases = [
+    [
+      'editionsApi.streamUrl',
+      (id) => editionsApi.streamUrl(id),
+      (segment) => `/api/editions/${segment}/stream`,
+    ],
+    [
+      'editionsApi.subtitleUrl (edition)',
+      (id) => editionsApi.subtitleUrl(id, 2),
+      (segment) => `/api/editions/${segment}/subtitles/2.vtt`,
+    ],
+    [
+      'editionsApi.subtitleUrl (index)',
+      (id) => editionsApi.subtitleUrl(4, id),
+      (segment) => `/api/editions/4/subtitles/${segment}.vtt`,
+    ],
+    [
+      'editionsApi.forcedSubtitleUrl',
+      (id) => editionsApi.forcedSubtitleUrl(id),
+      (segment) => `/api/editions/${segment}/forced-subtitles.vtt`,
+    ],
+    [
+      'editionsApi.fullSubtitleUrl',
+      (id) => editionsApi.fullSubtitleUrl(id),
+      (segment) => `/api/editions/${segment}/full-subtitles.vtt`,
+    ],
+    [
+      'editionsApi.stillUrl',
+      (id) => editionsApi.stillUrl(id, 0),
+      (segment) => `/api/editions/${segment}/still?atMs=0`,
+    ],
+    [
+      'mediaFilesApi.subtitleUrl (file)',
+      (id) => mediaFilesApi.subtitleUrl(id, 2),
+      (segment) => `/api/media-files/${segment}/subtitles/2.vtt`,
+    ],
+    [
+      'mediaFilesApi.subtitleUrl (index)',
+      (id) => mediaFilesApi.subtitleUrl(4, id),
+      (segment) => `/api/media-files/4/subtitles/${segment}.vtt`,
+    ],
+  ];
+
+  it.each(requestCases)('%s sends the id as one segment', async (_name, call, path) => {
+    const last = stubFetch();
+    await call(HOSTILE);
+    expect(last().path).toBe(path(SAFE));
+  });
+
+  it.each(requestCases)('%s refuses a dot segment and sends nothing', (_name, call) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(() => call('..')).toThrow(RangeError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(urlCases)('%s builds the id as one segment', (_name, build, path) => {
+    expect(build(HOSTILE)).toBe(path(SAFE));
+  });
+
+  it.each(urlCases)('%s refuses a dot segment', (_name, build) => {
+    expect(() => build('..')).toThrow(RangeError);
+  });
+
+  it('encodes the version of the forced subtitle URL', () => {
+    expect(editionsApi.forcedSubtitleUrl(1, 'a&b')).toBe(
+      '/api/editions/1/forced-subtitles.vtt?v=a%26b',
+    );
+  });
+
+  it('encodes the version of the full subtitle URL', () => {
+    expect(editionsApi.fullSubtitleUrl(1, 'a&b')).toBe(
+      '/api/editions/1/full-subtitles.vtt?v=a%26b',
+    );
   });
 });
