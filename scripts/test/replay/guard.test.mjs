@@ -76,6 +76,7 @@ const WRITES = [
   ['adminApi.clearCredits', 'DELETE', '/api/admin/editions/:id/credits', HELD],
   ['adminApi.startPlexImport', 'POST', '/api/admin/plex/import', HELD],
   ['adminApi.startPlexCreditsImport', 'POST', '/api/admin/plex/credits/import', HELD],
+  ['adminApi.importJourney', 'POST', '/api/admin/journeys', HELD],
   ['adminApi.stopTranscodingSession', 'DELETE', '/api/admin/transcoding/sessions/:id', HELD],
   ['adminApi.attachSubtitle', 'POST', '/api/admin/subtitles/:id/attach', HELD],
   ['adminApi.detachSubtitle', 'POST', '/api/admin/subtitles/:id/detach', HELD],

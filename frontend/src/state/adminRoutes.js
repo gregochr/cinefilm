@@ -38,6 +38,9 @@ export const FILE_LISTS = [
 /** The End credits list, a sub-list of Library like the file lists. */
 export const CREDITS_PATH = '/admin/library/credits';
 
+/** The Train journeys page, a sub-page of Playback like End credits is one of Library. */
+export const JOURNEYS_PATH = '/admin/playback/journeys';
+
 /** The old address of the Library scan card, before Admin had sections. */
 export const OLD_SCAN_HASH = '#library-scan';
 
@@ -51,7 +54,7 @@ export function normalisePath(pathname) {
 }
 
 /**
- * True on the five Admin pages and the three file lists under Library (`FILE_LISTS`), where the phone replaces the
+ * True on the five Admin pages, the three file lists under Library (`FILE_LISTS`), End credits and Train journeys, where the phone replaces the
  * app header and tab bar with Admin's own "Home" link and section row. An unknown address under /admin is the
  * "Nothing here" page and keeps the app chrome.
  */
@@ -60,6 +63,7 @@ export function bareOnPhone(pathname) {
   return (
     ADMIN_SECTIONS.some((section) => section.to === path) ||
     FILE_LISTS.some((list) => list.path === path) ||
-    path === CREDITS_PATH
+    path === CREDITS_PATH ||
+    path === JOURNEYS_PATH
   );
 }

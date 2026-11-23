@@ -2382,3 +2382,37 @@
     padding: 14px 16px;
   }
 }
+/* Train journeys: the import card's file chooser (at least 44px, the ring comes from the global :focus-visible) and the
+   list of what will be sent, whose rows sit in the grid of `.admin__rows`. */
+.journey-import__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0;
+}
+.journey-import__file {
+  min-height: 44px;
+  max-width: 100%;
+  color: var(--cf-text);
+  font-size: var(--cf-size-ui);
+}
+.journey-import__file::file-selector-button {
+  min-height: 44px;
+  margin-right: 12px;
+  padding: 0 16px;
+  color: var(--cf-text);
+  background: var(--cf-surface-2);
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-card);
+  font: inherit;
+  cursor: pointer;
+}
+.journey-import__sent {
+  margin: 16px 0 8px;
+  font-family: var(--cf-font-ui);
+  font-weight: 500;
+  font-size: var(--cf-size-ui);
+}
+.journey-import__row {
+  display: contents;
+}
