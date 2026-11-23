@@ -171,7 +171,7 @@ read of the file. Direct play of the file remains only as a fallback.
   (`floor-hold-by-time-plan.md`): Auto does not go below 360p once 240 s are in hand and the bank would last 900 s
   at the link's recent speed (the lower middle of the last 9 segment rates, timed from the request start), and
   lets go below 180 s in hand, or when it would last under 600 s at the lowest of the last 3 segment rates and the
-  rate so far of the segment in flight (read every 2 s). `floorHold.js` raises hls.js's `minAutoBitrate`, provided
+  rate so far of the segment in flight once it has loaded 4 s (read every 2 s). `floorHold.js` raises hls.js's `minAutoBitrate`, provided
   hls.js is already fetching at 360p or above; a segment that times out or gets no answer, and a change of
   network, clear the rates and release it. iPhone's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which

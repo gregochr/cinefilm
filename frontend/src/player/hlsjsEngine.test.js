@@ -3,6 +3,7 @@ import { FakeHls } from '../test/fakeHls.js';
 import {
   BUFFER_BUDGET_BYTES,
   HOLD_CHECK_MS,
+  IN_FLIGHT_MIN_AGE_MS,
   MAX_BUFFER_AHEAD_S,
   MIN_BUFFER_AHEAD_S,
   RECONNECT_MS,
@@ -1048,26 +1049,41 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
       hls.fragLoading(frag);
       vi.advanceTimersByTime(HOLD_CHECK_MS - 1);
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
-      frag.stats.loaded = 20_000; // 80 kbit/s over 2 s: 300 s in hand last about 333 s
+      vi.advanceTimersByTime(HOLD_CHECK_MS); // the tick at 4 s: nothing has been said by the clock yet
+      frag.stats.loaded = 40_000; // 80 kbit/s over 4 s: 300 s in hand last about 333 s
       frag.stats.loading.first = 1;
-      setClock(HOLD_CHECK_MS);
+      setClock(IN_FLIGHT_MIN_AGE_MS);
       vi.advanceTimersByTime(1);
       expect(hls.config.minAutoBitrate).toBe(0);
     });
 
     it('keeps the floor while the fragment in flight is fast', () => {
       const { hls, setClock } = armed();
-      const frag = loadingFrag(0, 1_000_000); // 4,000 kbit/s over 2 s
+      const frag = loadingFrag(0, 2_000_000); // 4,000 kbit/s over 4 s
       hls.fragLoading(frag);
-      setClock(HOLD_CHECK_MS);
+      setClock(IN_FLIGHT_MIN_AGE_MS);
       vi.advanceTimersByTime(HOLD_CHECK_MS * 3);
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
     });
 
-    it('counts a fragment with no first byte yet as 0 kbit/s', () => {
+    it('does not release on a fragment with no first byte at 2 s, and does from 4 s', () => {
       const { hls, setClock } = armed();
       hls.fragLoading(loadingFrag(0, 0));
       setClock(HOLD_CHECK_MS);
+      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+      setClock(IN_FLIGHT_MIN_AGE_MS + 1);
+      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      expect(hls.config.minAutoBitrate).toBe(0);
+    });
+
+    it('counts the fragment in flight from exactly 4000 ms and not at 3999', () => {
+      const { hls, setClock } = armed();
+      hls.fragLoading(loadingFrag(0, 0));
+      setClock(IN_FLIGHT_MIN_AGE_MS - 1);
+      vi.advanceTimersByTime(HOLD_CHECK_MS);
+      expect(hls.config.minAutoBitrate).toBe(PEAK_360);
+      setClock(IN_FLIGHT_MIN_AGE_MS);
       vi.advanceTimersByTime(HOLD_CHECK_MS);
       expect(hls.config.minAutoBitrate).toBe(0);
     });
@@ -1077,7 +1093,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
       const aborted = loadingFrag(0, 0);
       aborted.stats.aborted = true;
       hls.fragLoading(aborted);
-      setClock(HOLD_CHECK_MS);
+      setClock(IN_FLIGHT_MIN_AGE_MS);
       vi.advanceTimersByTime(HOLD_CHECK_MS);
       expect(hls.config.minAutoBitrate).toBe(PEAK_360);
       const ended = loadingFrag(0, 0);

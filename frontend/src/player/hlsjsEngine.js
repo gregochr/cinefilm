@@ -18,6 +18,9 @@ import { addSample, fragmentKbps, lowerMiddle, networkGeneration } from './throu
 export const RECONNECT_MS = 5000;
 // How often the rate of the fragment in flight is read for the floor hold, in ms.
 export const HOLD_CHECK_MS = 2000;
+// A fragment in flight counts for the release only once it has loaded this long, in ms: the time to first byte
+// on a train is often 0.5 to 3 s, so a younger fragment reads 0 kbit/s on a healthy link.
+export const IN_FLIGHT_MIN_AGE_MS = 4000;
 // How many of the newest fragment rates the release reads.
 const RELEASE_SAMPLES = 3;
 
@@ -151,6 +154,7 @@ export function startHlsJs({
     const start = stats?.loading?.start;
     if (!stats || stats.aborted || stats.loading.end > 0 || !Number.isFinite(start)) return null;
     const ms = clock() - start;
+    if (ms < IN_FLIGHT_MIN_AGE_MS) return null;
     return stats.loaded > 0 && ms > 0 ? (stats.loaded * 8) / ms : 0;
   };
 
