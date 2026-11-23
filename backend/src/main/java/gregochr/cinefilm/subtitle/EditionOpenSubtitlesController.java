@@ -23,12 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class EditionOpenSubtitlesController {
 
     /** The text of the 429 when OpenSubtitles' (or CineFilm's) daily download allowance is used up. */
-    static final String QUOTA = "OpenSubtitles daily limit reached — try again tomorrow.";
+    static final String QUOTA_MESSAGE = "OpenSubtitles daily limit reached — try again tomorrow.";
     /** The text of the 502 when OpenSubtitles charged a download but the file could not be fetched. */
-    static final String CHARGED = "OpenSubtitles counted this download against today's limit but could not deliver "
-        + "the file. Try again.";
+    static final String CHARGED_MESSAGE =
+        "OpenSubtitles counted this download against today's limit but could not deliver " + "the file. Try again.";
     /** The text of the 503 when OpenSubtitles cannot answer. */
-    static final String UNAVAILABLE = "OpenSubtitles is not answering. Try again in a few minutes.";
+    static final String UNAVAILABLE_MESSAGE = "OpenSubtitles is not answering. Try again in a few minutes.";
 
     private final EditionOpenSubtitlesService service;
 
@@ -49,17 +49,17 @@ public class EditionOpenSubtitlesController {
 
     @ExceptionHandler(OpenSubtitlesQuotaException.class)
     ResponseEntity<Map<String, String>> quota(OpenSubtitlesQuotaException e) {
-        return error(HttpStatus.TOO_MANY_REQUESTS, QUOTA);
+        return error(HttpStatus.TOO_MANY_REQUESTS, QUOTA_MESSAGE);
     }
 
     @ExceptionHandler(OpenSubtitlesChargedException.class)
     ResponseEntity<Map<String, String>> charged(OpenSubtitlesChargedException e) {
-        return error(HttpStatus.BAD_GATEWAY, CHARGED);
+        return error(HttpStatus.BAD_GATEWAY, CHARGED_MESSAGE);
     }
 
     @ExceptionHandler(OpenSubtitlesUnavailableException.class)
     ResponseEntity<Map<String, String>> unavailable(OpenSubtitlesUnavailableException e) {
-        return error(HttpStatus.SERVICE_UNAVAILABLE, UNAVAILABLE);
+        return error(HttpStatus.SERVICE_UNAVAILABLE, UNAVAILABLE_MESSAGE);
     }
 
     private static ResponseEntity<Map<String, String>> error(HttpStatus status, String message) {

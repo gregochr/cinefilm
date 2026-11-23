@@ -48,7 +48,7 @@ public class SessionService {
     private static final Pattern RUNG = Pattern.compile("^(original|1080p|720p|480p|360p|240p)$");
     private static final Pattern PLAYBACK_ID =
         Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
-    private static final String STOPPED = "Playback was stopped from Admin";
+    private static final String STOPPED_MESSAGE = "Playback was stopped from Admin";
     private static final Pattern SEGMENT = Pattern.compile("^seg-(\\d{1,6})\\.ts$");
 
     private final SessionSources sources;
@@ -103,7 +103,7 @@ public class SessionService {
             throw new BadRequestException("Invalid playbackId");
         }
         if (playbackId != null && stopped.playbackStopped(playbackId)) {
-            throw new GoneException(STOPPED);
+            throw new GoneException(STOPPED_MESSAGE);
         }
         Source source = sources.find(editionId);
         String quality = request.quality();
@@ -176,7 +176,7 @@ public class SessionService {
         // A stop that arrived while the session was being made: end the new session so nothing plays on.
         if (playbackId != null && stopped.playbackStopped(playbackId)) {
             manager.end(created.id());
-            throw new GoneException(STOPPED);
+            throw new GoneException(STOPPED_MESSAGE);
         }
         return new SessionCreated(created.id(), "/api/sessions/" + created.id() + "/master.m3u8", start.id(),
             ladder.stream().map(r -> new RenditionDto(r.id(), r.height(), r.videoBitrate(), r.copy())).toList());
@@ -244,7 +244,7 @@ public class SessionService {
     private String liveId(String id) {
         String sessionId = sessionId(id);
         if (stopped.sessionStopped(sessionId)) {
-            throw new GoneException(STOPPED);
+            throw new GoneException(STOPPED_MESSAGE);
         }
         return sessionId;
     }

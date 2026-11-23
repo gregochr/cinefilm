@@ -570,7 +570,7 @@ public class CreditsDatasetJob {
         synchronized (lock) {
             version = ffmpegVersion;
         }
-        return new DatasetComplete(DatasetComplete.FORMAT, target.mediaFileId(), target.fingerprint(), duration,
+        return new DatasetComplete(DatasetComplete.FORMAT_VERSION, target.mediaFileId(), target.fingerprint(), duration,
             target.targetStartMs(),
             new DatasetComplete.Window(duration - CreditsFrameReader.windowMs(duration), duration),
             new DatasetComplete.Frame(written.frameWidth(), written.frameHeight()),

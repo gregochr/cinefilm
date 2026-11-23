@@ -24,7 +24,7 @@ record DatasetMeasureOptions(Path data, Path out, Path labels, Set<Long> ids, bo
 
     private static final List<String> REQUIRED = List.of("data", "out", "labels");
     private static final List<String> OPTIONAL = List.of("ids", "project");
-    private static final String STILLS = "stills";
+    private static final String STILLS_FLAG = "stills";
 
     /**
      * Parses {@code --flag value} pairs and the {@code --stills} switch.
@@ -40,10 +40,11 @@ record DatasetMeasureOptions(Path data, Path out, Path labels, Set<Long> ids, bo
         for (int i = 0; i < args.length; i++) {
             String name = args[i];
             String flag = name.startsWith("--") ? name.substring(2) : name;
-            if (flag.equals(name) || !REQUIRED.contains(flag) && !OPTIONAL.contains(flag) && !STILLS.equals(flag)) {
+            if (flag.equals(name)
+                || !REQUIRED.contains(flag) && !OPTIONAL.contains(flag) && !STILLS_FLAG.equals(flag)) {
                 throw new IllegalArgumentException("unknown argument " + name);
             }
-            if (STILLS.equals(flag)) {
+            if (STILLS_FLAG.equals(flag)) {
                 if (stills) {
                     throw new IllegalArgumentException("flag " + name + " given twice");
                 }

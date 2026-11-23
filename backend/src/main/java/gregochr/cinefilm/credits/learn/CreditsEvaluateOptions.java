@@ -17,10 +17,10 @@ import java.util.Set;
 record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean look, Path baseline,
                               Path embeddings) {
 
-    private static final String LOOK = "--look";
+    private static final String LOOK_FLAG = "--look";
     private static final String LOOK_VALUE = "L5";
     private static final List<String> SINGLE = List.of("features", "out", "baseline", "embeddings");
-    private static final String TRAIN = "train";
+    private static final String TRAIN_FLAG = "train";
 
     /** Parses {@code --flag value} pairs ({@code --train} may repeat) and {@code --look=L5}. */
     static CreditsEvaluateOptions parse(String[] args) {
@@ -29,11 +29,11 @@ record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean
         boolean look = false;
         for (int i = 0; i < args.length; i++) {
             String name = args[i];
-            if (name.equals(LOOK)) {
+            if (name.equals(LOOK_FLAG)) {
                 throw new IllegalArgumentException("flag --look needs a value: --look=" + LOOK_VALUE);
             }
-            if (name.startsWith(LOOK + "=")) {
-                if (!name.equals(LOOK + "=" + LOOK_VALUE)) {
+            if (name.startsWith(LOOK_FLAG + "=")) {
+                if (!name.equals(LOOK_FLAG + "=" + LOOK_VALUE)) {
                     throw new IllegalArgumentException("--look must be " + LOOK_VALUE + ": " + name);
                 }
                 if (look) {
@@ -43,14 +43,14 @@ record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean
                 continue;
             }
             String flag = name.startsWith("--") ? name.substring(2) : name;
-            if (flag.equals(name) || !SINGLE.contains(flag) && !TRAIN.equals(flag)) {
+            if (flag.equals(name) || !SINGLE.contains(flag) && !TRAIN_FLAG.equals(flag)) {
                 throw new IllegalArgumentException("unknown argument " + name);
             }
             if (i + 1 >= args.length) {
                 throw new IllegalArgumentException("flag " + name + " needs a value");
             }
             String value = args[++i];
-            if (TRAIN.equals(flag)) {
+            if (TRAIN_FLAG.equals(flag)) {
                 train.add(Path.of(value).toAbsolutePath().normalize());
             } else if (flags.put(flag, value) != null) {
                 throw new IllegalArgumentException("flag " + name + " given twice");
@@ -62,7 +62,7 @@ record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean
             }
         }
         if (train.isEmpty()) {
-            throw new IllegalArgumentException("missing required flag --" + TRAIN);
+            throw new IllegalArgumentException("missing required flag --" + TRAIN_FLAG);
         }
         if (flags.containsKey("baseline") && !look) {
             throw new IllegalArgumentException("--baseline needs --look=" + LOOK_VALUE);
