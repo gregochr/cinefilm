@@ -5,15 +5,34 @@
 // only reports what is playing. The cap rises only while hls.js is fetching at the cap, and a fragment that
 // times out or gets no answer pulls it down to the level being fetched. While the buffer is deep (floorHold.js)
 // Auto may not go below 360p on a ladder with a 240p bottom rung: `minAutoBitrate` is raised to the 360p level,
-// but only once hls.js is fetching at 360p or above and not after fragment trouble (a floor, not a pull).
+// but only once hls.js is fetching at 360p or above and not after fragment trouble (a floor, not a pull). The
+// hold reads the engine's own fragment rates, timed from `loading.start`, and the rate of the fragment in flight,
+// re-read every HOLD_CHECK_MS (floor-hold-by-time-plan.md).
 import { bankedAhead } from './buffered.js';
 import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
 import { createStepGate } from './stepGate.js';
-import { fragmentKbps } from './throughput.js';
+import { addSample, fragmentKbps, lowerMiddle, networkGeneration } from './throughput.js';
 
 export const RECONNECT_MS = 5000;
+// How often the rate of the fragment in flight is read for the floor hold, in ms.
+export const HOLD_CHECK_MS = 2000;
+// A fragment in flight counts for the release only once it has been receiving this long, in ms, counted from
+// its first byte: a cold first byte can take seconds, and a fragment that stays silent is ended as trouble.
+export const IN_FLIGHT_MIN_AGE_MS = 4000;
+// How many of the newest fragment rates the release reads.
+const RELEASE_SAMPLES = 3;
+
+// kbit/s of one loaded fragment, timed from `loading.start` so the wait for the first byte counts; null when
+// there is nothing to measure.
+function loadedKbps(stats) {
+  const start = stats?.loading?.start;
+  const ms = stats?.loading?.end - start;
+  return stats?.loaded > 0 && Number.isFinite(start) && ms > 0
+    ? Math.round((stats.loaded * 8) / ms)
+    : null;
+}
 
 const retries = (max) => ({
   maxNumRetry: max,
@@ -92,6 +111,7 @@ export function startHlsJs({
   startSeconds,
   handlers,
   now = () => Date.now(),
+  clock = () => performance.now(), // the clock hls.js stamps `loading.start` with
   reconnectMs = RECONNECT_MS,
 }) {
   const config = hlsConfig(startSeconds);
@@ -113,12 +133,54 @@ export function startHlsJs({
   let floorSet = 0;
   let fetched = null; // the level hls.js is fetching (LEVEL_SWITCHING), null until the first
   let troubled = false; // a fragment timed out or got no answer, and none has loaded since
+  let samples = []; // the newest fragment rates (kbit/s) for the hold, under `samplesNetwork`
+  let samplesNetwork = networkGeneration();
+  let inFlight = null; // the fragment hls.js is loading, whose rate so far the release reads
+  let holdTimer = null; // the one check of the in-flight rate, running while a fragment loads
+
+  // The samples, emptied first when the network has changed since they were taken.
+  const currentSamples = () => {
+    if (samplesNetwork !== networkGeneration()) {
+      samples = [];
+      samplesNetwork = networkGeneration();
+      hold.reset(); // the link it was armed on is gone
+    }
+    return samples;
+  };
+
+  // The rate of the fragment in flight since its first byte, null when none is loading, when no byte has come
+  // yet (noProgressLoader and hls.js's first-byte limit end a silent fragment as trouble) or when the transfer
+  // is younger than IN_FLIGHT_MIN_AGE_MS.
+  const inFlightKbps = () => {
+    const stats = inFlight?.stats;
+    const first = stats?.loading?.first;
+    if (!stats || stats.aborted || stats.loading.end > 0 || !(first > 0) || !(stats.loaded > 0)) {
+      return null;
+    }
+    const ms = clock() - first;
+    return ms >= IN_FLIGHT_MIN_AGE_MS ? (stats.loaded * 8) / ms : null;
+  };
+
+  const stopHoldTimer = () => {
+    clearInterval(holdTimer);
+    holdTimer = null;
+    inFlight = null;
+  };
 
   // Raises hls.js's minimum bitrate to the 360p level while the buffer is deep, the cap allows 360p, hls.js is
   // already fetching at 360p or above and no fragment is in trouble.
   const reevaluateHold = () => {
     if (holdLevel === null) return;
-    const armed = hold.update(bankedAhead(video));
+    const bitrate = hls.levels[holdLevel]?.bitrate ?? 0; // bit/s, the variant's peak
+    const rateKbps = bitrate / 1000;
+    const recent = currentSamples();
+    const flying = inFlightKbps();
+    const armed = hold.update({
+      aheadS: bankedAhead(video),
+      armKbps: lowerMiddle(recent),
+      releaseKbps: Math.min(...recent.slice(-RELEASE_SAMPLES), flying ?? Infinity),
+      rateKbps,
+    });
     const engaged =
       armed &&
       !troubled &&
@@ -126,7 +188,7 @@ export function startHlsJs({
       applied >= holdLevel &&
       fetched !== null &&
       fetched >= holdLevel;
-    const floor = engaged ? (hls.levels[holdLevel]?.bitrate ?? 0) : 0;
+    const floor = engaged ? bitrate : 0;
     if (floor === floorSet) return;
     floorSet = floor;
     hls.config.minAutoBitrate = floor;
@@ -152,6 +214,7 @@ export function startHlsJs({
   const restart = () => {
     clearTimeout(timer);
     timer = null;
+    stopHoldTimer(); // the fragment in flight is aborted by the reload
     if (hls.levels?.length) {
       hls.startLoad(video.readyState > 0 ? video.currentTime : config.startPosition);
     } else {
@@ -214,11 +277,27 @@ export function startHlsJs({
     reevaluateHold();
   });
 
+  // A fragment starts to load: its rate so far is read every HOLD_CHECK_MS until it ends. An init segment is a
+  // few bytes behind a round trip, so it says nothing about the link.
+  hls.on(Events.FRAG_LOADING, (_event, data) => {
+    if (holdLevel === null || data.frag?.sn === 'initSegment') return;
+    inFlight = data.frag;
+    holdTimer ??= setInterval(reevaluateHold, HOLD_CHECK_MS);
+  });
+
+  // hls.js gave up on the fragment for a faster level: nothing is in flight any more.
+  hls.on(Events.FRAG_LOAD_EMERGENCY_ABORTED, stopHoldTimer);
+
   hls.on(Events.FRAG_LOADED, (_event, data) => {
     stopReconnecting();
     troubled = false;
+    stopHoldTimer();
     const kbps = fragmentKbps(data.frag?.stats);
     if (kbps) handlers.onThroughput(kbps);
+    if (data.frag?.sn !== 'initSegment') {
+      currentSamples();
+      samples = addSample(samples, loadedKbps(data.frag?.stats));
+    }
     // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch.
     if (auto && (fetched === null || fetched >= applied)) cap(gate.tick(top));
     reevaluateHold();
@@ -240,6 +319,9 @@ export function startHlsJs({
       gate.trouble();
       if (auto && fetched !== null) cap(gate.switched(fetched));
       troubled = true;
+      samples = []; // what was measured before the trouble says nothing about the link now
+      hold.reset();
+      stopHoldTimer();
       reevaluateHold();
     }
     if (data.response?.code === 410) {
@@ -271,6 +353,7 @@ export function startHlsJs({
     destroy() {
       clearTimeout(timer);
       timer = null;
+      stopHoldTimer();
       window.removeEventListener('online', onOnline);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('timeupdate', reevaluateHold);
