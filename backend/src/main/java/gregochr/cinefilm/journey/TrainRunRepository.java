@@ -15,6 +15,11 @@ public interface TrainRunRepository extends JpaRepository<TrainRun, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<TrainRun> findByTimetableUidAndRunDate(String timetableUid, LocalDate runDate);
 
+    /** One run by its id, locked for writing until the transaction ends. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from TrainRun r where r.id = :id")
+    Optional<TrainRun> findLockedById(Long id);
+
     /**
      * Deletes a run only if no journey points at it, and says how many rows went (0 or 1). The persistence context is
      * flushed first and cleared afterwards.

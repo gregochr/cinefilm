@@ -12,7 +12,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -33,7 +32,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.node.ObjectNode;
@@ -173,18 +171,17 @@ class JourneyTrainServiceTest {
     }
 
     @Test
-    void aStoredRunIsReplacedByTheFileWithItsHeadcodeOperatorSourceAndTimeAndItsCallsDeletedFirst() {
+    void aStoredRunIsReplacedByTheFileWithItsHeadcodeOperatorSourceAndTimeAndItsCallsReplaced() {
         storedWith("Alpha Junction", "Theta Central");
         savesRun();
 
         Stored answer = service.give(5L, bodyWith(root -> root.put("headcode", "9Z98")));
 
         assertThat(answer).isEqualTo(new Stored("X12345", "2030-03-04", "9Z98", 8));
-        InOrder order = inOrder(runs, calls, journeys);
-        order.verify(runs).save(runSaved.capture());
-        order.verify(calls).deleteAllOfRun(77L);
-        order.verify(calls).saveAll(callsSaved.capture());
-        order.verify(journeys).save(journeySaved.capture());
+        verify(runs).save(runSaved.capture());
+        verify(calls).deleteAllOfRun(77L);
+        verify(calls).saveAll(callsSaved.capture());
+        verify(journeys).save(journeySaved.capture());
         TrainRun run = runSaved.getValue();
         assertThat(run.getId()).isEqualTo(77L);
         assertThat(run.getHeadcode()).isEqualTo("9Z98");
@@ -266,15 +263,15 @@ class JourneyTrainServiceTest {
     }
 
     @Test
-    void aJourneyMovedFromOneRunToAnotherSweepsTheFirstAfterSavingTheJourney() {
+    void aJourneyMovedFromOneRunToAnotherSweepsTheFirst() {
         journey.setTrainRunId(66L);
         noRun();
 
         service.give(5L, body());
 
-        InOrder order = inOrder(journeys, runs);
-        order.verify(journeys).save(journeySaved.capture());
-        order.verify(runs).deleteIfUnused(66L);
+        verify(journeys).save(journeySaved.capture());
+        verify(runs).findLockedById(66L);
+        verify(runs).deleteIfUnused(66L);
         assertThat(journeySaved.getValue().getTrainRunId()).isEqualTo(77L);
     }
 
@@ -298,9 +295,9 @@ class JourneyTrainServiceTest {
 
         service.takeAway(5L);
 
-        InOrder order = inOrder(journeys, runs);
-        order.verify(journeys).save(journeySaved.capture());
-        order.verify(runs).deleteIfUnused(66L);
+        verify(journeys).save(journeySaved.capture());
+        verify(runs).findLockedById(66L);
+        verify(runs).deleteIfUnused(66L);
         assertThat(journeySaved.getValue().getTrainRunId()).isNull();
     }
 
@@ -315,9 +312,10 @@ class JourneyTrainServiceTest {
     }
 
     @Test
-    void sweepDeletesTheRunOnlyThroughTheOneStatement() {
+    void sweepLocksTheRunAndDeletesItOnlyThroughTheOneStatement() {
         service.sweep(66L);
 
+        verify(runs).findLockedById(66L);
         verify(runs).deleteIfUnused(66L);
         verifyNoMoreInteractions(runs);
     }

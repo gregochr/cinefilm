@@ -18,7 +18,9 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Gives a journey its train and takes it away (plan: {@code journey-data-plan.md}, decision 9). Both begin by locking
  * the journey, so two requests about one journey run one after the other. A run (one service on one date) is stored
- * once however many journeys point at it, and {@link #sweep} is the one place a run is deleted.
+ * once however many journeys point at it, and {@link #sweep} is the one place a run is deleted (it locks the run
+ * first, so two requests letting go of one run at once run one after the other and the second deletes it). Locks are
+ * taken journey first, then run.
  *
  * <p>Both bulk statements ({@code deleteAllOfRun}, {@code deleteIfUnused}) flush first and clear the persistence
  * context afterwards, so an entity loaded before one is detached after it: every changed entity is written with its
@@ -96,9 +98,17 @@ public class JourneyTrainService {
         }
     }
 
-    /** Deletes the run unless a journey still points at it; its calls go with it. The one place a run is deleted. */
+    /**
+     * Deletes the run unless a journey still points at it; its calls go with it. The one place a run is deleted. The
+     * run is locked first: two requests letting go of one run at once (each holding the lock of its own journey)
+     * would otherwise each still see the other's journey on it, under READ COMMITTED, and leave it behind. Now the
+     * second waits for the first to commit, and its delete statement, which starts after that, sees the first one's
+     * change and deletes the run. A run already gone is not found, and the statement deletes nothing. The locks are
+     * always taken journey first, then run, as in {@link #give}.
+     */
     @Transactional
     public void sweep(Long runId) {
+        runs.findLockedById(runId);
         runs.deleteIfUnused(runId);
     }
 

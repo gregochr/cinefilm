@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import gregochr.cinefilm.journey.JourneyRepository;
 import gregochr.cinefilm.journey.JourneySample;
 import gregochr.cinefilm.journey.JourneySampleRepository;
+import gregochr.cinefilm.journey.JourneyTrainService;
 import gregochr.cinefilm.journey.TrainRun;
 import gregochr.cinefilm.journey.TrainRunCallRepository;
 import gregochr.cinefilm.journey.TrainRunRepository;
@@ -17,10 +18,17 @@ import java.io.InputStream;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -46,6 +54,10 @@ class JourneyTrainIntegrationTest extends IntegrationTestBase {
     private TrainRunCallRepository calls;
     @Autowired
     private TransactionTemplate transactions;
+    @Autowired
+    private JourneyTrainService trains;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void clean() {
@@ -121,14 +133,80 @@ class JourneyTrainIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void theTwoLockedFindersRunInATransaction() throws Exception {
+    void theThreeLockedFindersRunInATransaction() throws Exception {
         Long id = journeyWithSamples(1_000L);
         give(id).andExpect(status().isOk());
+        Long runId = runs.findAll().getFirst().getId();
 
         Boolean found = transactions.execute(status ->
             journeys.findLockedById(id).isPresent()
-                && runs.findByTimetableUidAndRunDate("X12345", LocalDate.of(2030, 3, 4)).isPresent());
+                && runs.findByTimetableUidAndRunDate("X12345", LocalDate.of(2030, 3, 4)).isPresent()
+                && runs.findLockedById(runId).isPresent());
 
         assertThat(found).isTrue();
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(30, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("A latch was not released in time");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Returns once PostgreSQL shows a backend waiting for a lock; fails if the request ends first or time runs out. */
+    private void awaitWaitingAtALock(Future<?> request) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (System.nanoTime() < deadline) {
+            try {
+                request.get(200, TimeUnit.MILLISECONDS);
+                throw new AssertionError("The second request finished without waiting for the run's lock");
+            } catch (TimeoutException e) {
+                Integer waiting = jdbc.queryForObject(
+                    "select count(*) from pg_stat_activity where wait_event_type = 'Lock'", Integer.class);
+                if (waiting != null && waiting == 1) {
+                    return;
+                }
+            }
+        }
+        throw new AssertionError("No request was seen waiting for a lock within thirty seconds");
+    }
+
+    @Test
+    void twoRequestsLettingGoOfOneRunAtOnceLeaveNoRunBehind() throws Exception {
+        Long first = journeyWithSamples(1_000L);
+        Long second = journeyWithSamples(2_000L);
+        give(first).andExpect(status().isOk());
+        give(second).andExpect(status().isOk());
+        CountDownLatch firstHasLetGo = new CountDownLatch(1);
+        CountDownLatch firstMayEnd = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> one = executor.submit(() -> transactions.execute(status -> {
+                trains.takeAway(first);
+                firstHasLetGo.countDown();
+                await(firstMayEnd);
+                return null;
+            }));
+            assertThat(firstHasLetGo.await(30, TimeUnit.SECONDS)).isTrue();
+            Future<?> other = executor.submit(() -> trains.takeAway(second));
+
+            awaitWaitingAtALock(other);
+
+            firstMayEnd.countDown();
+            one.get(30, TimeUnit.SECONDS);
+            other.get(30, TimeUnit.SECONDS);
+        } finally {
+            firstMayEnd.countDown();
+            executor.shutdownNow();
+        }
+
+        assertThat(runs.count()).isZero();
+        assertThat(calls.count()).isZero();
+        assertThat(journeys.findById(first).orElseThrow().getTrainRunId()).isNull();
+        assertThat(journeys.findById(second).orElseThrow().getTrainRunId()).isNull();
     }
 }
