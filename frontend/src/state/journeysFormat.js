@@ -1,5 +1,5 @@
 import { serverText } from '../api/client.js';
-import { journeyImport as copy, journeyList } from './journeysCopy.js';
+import { journeyDelete, journeyImport as copy, journeyList } from './journeysCopy.js';
 
 const DAY_AND_TIME = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/London',
@@ -38,13 +38,19 @@ function calendarDate(isoDate) {
   return `${day} ${MONTHS[month - 1]} ${year}`;
 }
 
+/** The row's title: when the journey was logged, or that it has no samples. */
+function journeyTitle(journey) {
+  const { from, to } = journey;
+  return from === null ? journeyList.noSamples : loggedRange(Date.parse(from), Date.parse(to));
+}
+
 /**
  * The lines of a stored journey's row; `all` is every journey in the list (a run's other segments are told by their
  * `runStartedMs`). `second` is the parts that have something to say, joined with " · "; `fourth` is null when neither
  * the file's name nor the laptop's model is known.
  */
 export function journeyLines(journey, all) {
-  const { from, to, device } = journey;
+  const { device } = journey;
   const hasParts = all.some((j) => j.id !== journey.id && j.runStartedMs === journey.runStartedMs);
   const second = [
     journey.trainUnit ?? journeyList.unitNotNamed,
@@ -57,7 +63,7 @@ export function journeyLines(journey, all) {
     .join(' · ');
   const fourth = [journey.sourceFile, device?.model].filter(Boolean).join(' · ');
   return {
-    title: from === null ? journeyList.noSamples : loggedRange(Date.parse(from), Date.parse(to)),
+    title: journeyTitle(journey),
     second,
     third: journey.train
       ? journeyList.train(journey.train.headcode, calendarDate(journey.train.date))
@@ -127,4 +133,41 @@ export function importToast(response) {
   const rounds = journeys.reduce((sum, j) => sum + j.samples, 0);
   const linked = journeys.reduce((sum, j) => sum + j.linked, 0);
   return copy.toast(journeys.length, rounds, linked);
+}
+
+/** What a screen reader says for a row's "Delete…": which journey it is, by the row's title. */
+export function deleteSpoken(journey) {
+  return journey.from === null
+    ? journeyDelete.spokenNoSamples
+    : journeyDelete.spoken(journeyTitle(journey));
+}
+
+/** The confirmation's sentence: it counts the rounds that go with the journey, unless it has none. */
+export function deleteSentence(journey) {
+  return journey.from === null
+    ? journeyDelete.sentenceNoSamples
+    : journeyDelete.sentence(journey.samples);
+}
+
+/**
+ * How a failed delete reads: `kind` is `signin` (a 401: the sign-in card handles it, no text), `gone` (a 404: the
+ * journey was already deleted, told in a toast, no text) or `alert`, with the `text` for the confirmation.
+ */
+export function deleteFailure(error) {
+  if (error?.status === 401) return { kind: 'signin', text: null };
+  if (error?.status === 404) return { kind: 'gone', text: null };
+  if (error?.status === 409) return { kind: 'alert', text: journeyDelete.conflict };
+  return { kind: 'alert', text: journeyDelete.failed };
+}
+
+/**
+ * The journey to focus once `id` is gone: the one that followed it in the list as it was (`before`), else the one
+ * before it, each only if it is still in the list as it is now (`now`). Null when neither is, or `id` was not in `before`.
+ */
+export function rowAfterDelete(before, id, now) {
+  const at = before.findIndex((journey) => journey.id === id);
+  if (at < 0) return null;
+  const present = new Set(now.map((journey) => journey.id));
+  const candidates = [before[at + 1]?.id, before[at - 1]?.id];
+  return candidates.find((candidate) => candidate !== undefined && present.has(candidate)) ?? null;
 }

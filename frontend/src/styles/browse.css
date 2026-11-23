@@ -2416,3 +2416,7 @@
 .journey-import__row {
   display: contents;
 }
+/* A row's delete confirmation takes the row's whole width, under its text and button. */
+.journey-delete__confirm {
+  grid-column: 1 / -1;
+}

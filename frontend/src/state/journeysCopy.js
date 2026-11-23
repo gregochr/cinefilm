@@ -30,6 +30,23 @@ export const journeyList = {
   noTrain: 'No train yet',
 };
 
+export const journeyDelete = {
+  open: 'Delete…',
+  spoken: (title) => `Delete the journey logged ${title}`,
+  spokenNoSamples: 'Delete the journey with no samples',
+  group: 'Delete this journey?',
+  sentence: (rounds) =>
+    `Delete this journey and its ${count(rounds, 'round', 'rounds')}? The log on the laptop is not touched.`,
+  sentenceNoSamples: 'Delete this journey? The log on the laptop is not touched.',
+  confirm: 'Delete journey',
+  deleting: 'Deleting…',
+  keep: 'Keep',
+  toast: 'Journey deleted',
+  goneToast: 'That journey was already deleted',
+  conflict: 'Another request was running. Try again.',
+  failed: 'Couldn’t delete the journey. Try again.',
+};
+
 export const journeyImport = {
   title: 'Import a journey',
   text: 'Choose a log the train feed logger wrote. It is read here, in this browser, and only what is listed below is sent.',

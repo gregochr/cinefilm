@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client.js';
 import {
+  deleteFailure,
+  deleteSentence,
+  deleteSpoken,
   importFailure,
   importToast,
   journeyLines,
   loggedRange,
   problemText,
   readyLine,
+  rowAfterDelete,
   sentRows as rowsFor,
 } from './journeysFormat.js';
 
@@ -314,5 +318,104 @@ describe('journeyLines', () => {
     expect(linesOf(stored({ device: null })).fourth).toBe('train-feed-example.jsonl');
     expect(linesOf(stored({ sourceFile: null })).fourth).toBe('ExampleBook1,1');
     expect(linesOf(stored({ sourceFile: null, device: null })).fourth).toBeNull();
+  });
+});
+
+const sameDay = { from: '2030-03-04T22:00:00Z', to: '2030-03-04T23:15:00Z' };
+const noSamples = { from: null, to: null, samples: 0, linked: 0 };
+
+describe('deleteSpoken', () => {
+  it('names the journey by the row’s title', () => {
+    expect(deleteSpoken(stored(sameDay))).toBe(
+      'Delete the journey logged 4 Mar 2030, 22:00 to 23:15',
+    );
+  });
+
+  it('names a journey that ends on another day with both days', () => {
+    expect(deleteSpoken(stored())).toBe(
+      'Delete the journey logged 4 Mar 2030, 22:00 to 5 Mar 2030, 00:47',
+    );
+  });
+
+  it('says a journey with no samples has none', () => {
+    expect(deleteSpoken(stored(noSamples))).toBe('Delete the journey with no samples');
+  });
+});
+
+describe('deleteSentence', () => {
+  it('counts many rounds', () => {
+    expect(deleteSentence(stored({ samples: 363 }))).toBe(
+      'Delete this journey and its 363 rounds? The log on the laptop is not touched.',
+    );
+  });
+
+  it('counts one round in the singular', () => {
+    expect(deleteSentence(stored({ samples: 1 }))).toBe(
+      'Delete this journey and its 1 round? The log on the laptop is not touched.',
+    );
+  });
+
+  it('leaves the rounds out for a journey with no samples', () => {
+    expect(deleteSentence(stored(noSamples))).toBe(
+      'Delete this journey? The log on the laptop is not touched.',
+    );
+  });
+});
+
+describe('deleteFailure', () => {
+  it('leaves a 401 to the sign-in card, with no text', () => {
+    expect(deleteFailure(new ApiError(401, 'no'))).toEqual({ kind: 'signin', text: null });
+  });
+
+  it('tells a 404 as a journey already gone, with no text', () => {
+    expect(deleteFailure(new ApiError(404, 'x', { error: 'No such journey' }))).toEqual({
+      kind: 'gone',
+      text: null,
+    });
+  });
+
+  it('says a 409 was another request running', () => {
+    expect(deleteFailure(new ApiError(409, 'x', { error: 'Try again' }))).toEqual({
+      kind: 'alert',
+      text: 'Another request was running. Try again.',
+    });
+  });
+
+  it('says a 500 and a lost connection could not delete', () => {
+    const text = 'Couldn’t delete the journey. Try again.';
+    expect(deleteFailure(new ApiError(500, 'x'))).toEqual({ kind: 'alert', text });
+    expect(deleteFailure(new TypeError('Failed to fetch'))).toEqual({ kind: 'alert', text });
+  });
+});
+
+describe('rowAfterDelete', () => {
+  const list = (...ids) => ids.map((id) => ({ id }));
+
+  it('is the row that followed it', () => {
+    expect(rowAfterDelete(list(31, 32, 33), 32, list(31, 33))).toBe(33);
+  });
+
+  it('is the row before it when it was the last', () => {
+    expect(rowAfterDelete(list(31, 32, 33), 33, list(31, 32))).toBe(32);
+  });
+
+  it('is the row that followed it when it was the first', () => {
+    expect(rowAfterDelete(list(31, 32, 33), 31, list(32, 33))).toBe(32);
+  });
+
+  it('is none when it was the only row', () => {
+    expect(rowAfterDelete(list(31), 31, [])).toBeNull();
+  });
+
+  it('is the row before it when the one that followed is gone too', () => {
+    expect(rowAfterDelete(list(31, 32, 33), 32, list(31))).toBe(31);
+  });
+
+  it('is none when neither neighbour is left', () => {
+    expect(rowAfterDelete(list(31, 32, 33), 32, list(40))).toBeNull();
+  });
+
+  it('is none when the journey was not in the list it was read from', () => {
+    expect(rowAfterDelete(list(31, 33), 32, list(31, 33))).toBeNull();
   });
 });

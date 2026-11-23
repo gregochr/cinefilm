@@ -3,10 +3,12 @@ import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import { journeyList as copy } from '../../state/journeysCopy.js';
 import { journeyLines } from '../../state/journeysFormat.js';
+import JourneyDelete from './JourneyDelete.jsx';
 
 /** One stored journey: when it was logged, then its unit, class, rounds and viewings, its train, its file and laptop. */
-function JourneyRow({ journey, all }) {
+function JourneyRow({ journey, all, deleting }) {
   const { title, second, third, fourth } = journeyLines(journey, all);
+  const { openId, busy, failure } = deleting;
   return (
     <li className="admin__todo-row">
       <div className="admin__todo-text">
@@ -15,15 +17,26 @@ function JourneyRow({ journey, all }) {
         <p className="admin__todo-line">{third}</p>
         {fourth ? <p className="admin__todo-line admin__mono">{fourth}</p> : null}
       </div>
+      <JourneyDelete
+        journey={journey}
+        open={openId === journey.id}
+        busy={busy}
+        problem={failure?.id === journey.id ? failure.text : null}
+        onOpen={() => deleting.onOpen(journey.id)}
+        onKeep={deleting.onKeep}
+        onConfirm={() => deleting.onConfirm(journey.id)}
+      />
     </li>
   );
 }
 
 /**
  * The stored journeys, in the server's order. `journeys` is null before the first answer (the skeleton). A read again
- * under way keeps the rows on show; one that failed shows the failure, with its retry, in place of them.
+ * under way keeps the rows on show; one that failed shows the failure, with its retry, in place of them. `deleting` is
+ * the page's delete: `{ openId, busy, failure, onOpen(id), onKeep(), onConfirm(id) }`, where `openId` is the journey
+ * whose confirmation is open and `failure` the last refusal with the `id` of its journey.
  */
-export default function JourneyList({ journeys, loading, error, onRetry }) {
+export default function JourneyList({ journeys, loading, error, onRetry, deleting }) {
   // A press of "Check again" is `pressed` until its read is seen under way (`running`). While it runs the banner stays,
   // busy, so the button keeps focus and the rows from before the failure are not shown as if current.
   const [phase, setPhase] = useState('idle');
@@ -70,7 +83,7 @@ export default function JourneyList({ journeys, loading, error, onRetry }) {
     body = (
       <ul className="admin__todo-rows" aria-label={copy.label}>
         {journeys.map((journey) => (
-          <JourneyRow key={journey.id} journey={journey} all={journeys} />
+          <JourneyRow key={journey.id} journey={journey} all={journeys} deleting={deleting} />
         ))}
       </ul>
     );
