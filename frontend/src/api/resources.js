@@ -140,6 +140,8 @@ export const adminApi = {
   deleteJourney: (id) => del(`/api/admin/journeys/${pathSegment(id)}`),
   /** Stores the train's file for one journey, merged: 200 `{ uid, date, headcode, calls }` (`calls` the count). */
   giveJourneyTrain: (id, file) => put(`/api/admin/journeys/${pathSegment(id)}/train`, file),
+  /** Takes the train away from one journey: 204 with no body, also when it had none; 404 when the journey is gone. */
+  removeJourneyTrain: (id) => del(`/api/admin/journeys/${pathSegment(id)}/train`),
   transcoding: (options) => get('/api/admin/transcoding', options),
   // `playbackId` is the row's viewing: the server also ends that viewing's newer session (one made after the list was read).
   stopTranscodingSession: (id, playbackId) =>
