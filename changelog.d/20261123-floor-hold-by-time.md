@@ -1,0 +1,3 @@
+### Changed — the 360p floor hold decides by how long the bank would last
+
+The player's hold that keeps Auto from dropping to 240p while the buffer is deep now judges the buffer by how long it would last at 360p on the link's recent speed, instead of by seconds alone. It arms at 240 s in hand when the bank would last 900 s, and lets go below 180 s in hand or when it would last under 600 s, counting the segment still downloading (checked every 2 s). On the 23 Nov train run the old rule let go at 227 s in hand and played 15 minutes of 240p with minutes in reserve. Stalls are still avoided first: 240p remains the last resort.
