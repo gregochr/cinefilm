@@ -29,6 +29,20 @@ describe('christmas api', () => {
     expect(init.body).toBe(JSON.stringify({ choice: 'EXCLUDE' }));
   });
 
+  it('sends a hostile id as one encoded path segment', async () => {
+    const fetchMock = reply(200, {});
+    vi.stubGlobal('fetch', fetchMock);
+    await putChristmasChoice('7/../x?y#z', 'EXCLUDE');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/christmas/7%2F..%2Fx%3Fy%23z');
+  });
+
+  it('refuses a dot segment id and sends nothing', () => {
+    const fetchMock = reply(200, {});
+    vi.stubGlobal('fetch', fetchMock);
+    expect(() => putChristmasChoice('..', 'EXCLUDE')).toThrow(RangeError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('sends a null choice to delete the override', async () => {
     const fetchMock = reply(200, {});
     vi.stubGlobal('fetch', fetchMock);
