@@ -16,6 +16,9 @@ import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -90,6 +93,28 @@ class JourneyImportApiTest extends ApiTestBase {
             .containsExactlyInAnyOrder(overlapping.getId(), noEnvironment.getId());
         assertThat(links.findByJourneyId(stored.get(1).getId())).extracting(JourneyPlayback::getPlaybackHealthId)
             .containsExactlyInAnyOrder(overlapping.getId(), noEnvironment.getId());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"-1,false", "0,true", "1,true"})
+    void aRecordIsLinkedWhenItEndsAtOrAfterTheWindowStartToTheMillisecond(long endsAtMs, boolean linked) {
+        long from = RUN;
+        PlaybackHealth record = playback("00000000-0000-4000-8000-000000000005", from - 3_600_000,
+            from + endsAtMs, "train");
+
+        assertThat(playbacks.idsOverlapping(Instant.ofEpochMilli(from), Instant.ofEpochMilli(from + 3_600_000),
+            PageRequest.of(0, 200)).contains(record.getId())).isEqualTo(linked);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1,false", "0,true", "-1,true"})
+    void aRecordIsLinkedWhenItStartsAtOrBeforeTheWindowEndToTheMillisecond(long startsAtMs, boolean linked) {
+        long to = RUN + 3_600_000;
+        PlaybackHealth record = playback("00000000-0000-4000-8000-000000000006", to + startsAtMs,
+            to + 3_600_000, "train");
+
+        assertThat(playbacks.idsOverlapping(Instant.ofEpochMilli(RUN), Instant.ofEpochMilli(to),
+            PageRequest.of(0, 200)).contains(record.getId())).isEqualTo(linked);
     }
 
     @Test
