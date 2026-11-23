@@ -166,9 +166,16 @@ results, which were never published beyond L5's bins.
 
 - **An interim deny file first.** G0's file denies the test films' editions and files too (`edition` and `file`
   entries), so they would be held by those and never listed with `split` true. Before the look, the planner writes an
-  interim deny file: the test films' `film` and `unit` entries (the split), and only G1's unclear editions as
-  `edition` and `file` entries. The owner puts it in place; the split still holds every test film (rules 1–3 and 6),
-  and the candidates endpoint now lists them with `split` true.
+  interim deny file:
+  - **every** `film` and `unit` entry of the file in force (any `SPLIT_CONFLICT` unit key included);
+  - G1's unclear editions as `edition` and `file` entries;
+  - the `edition` and `file` entries of any edition that rules 1, 2, 3 and 6 no longer deny (one merged or moved
+    since G0 into a film they don't catch). A read-only query the owner runs gives each listed edition's and file's
+    current film and unit key, and the planner checks it before writing the file. Each such edition also gets a
+    stills look of its own before S-3, since S-3's final file drops its entries.
+
+  The owner puts it in place. Every edition it releases is still held by the split, so the pass that reads it sets no
+  new `AUTO`, and the candidates endpoint now lists them with `split` true.
 - **The look**, after S-2 is released and before S-3 is built: the owner fetches the candidates, and the
   editions with `split` true and `soundtrack` `PASS` get G1's stills check (the sheet tool, G1's rules and
   G1's ends). The planner judges them:
