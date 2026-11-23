@@ -26,6 +26,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -187,7 +189,7 @@ class PlaybackHealthControllerTest {
     private static PlaybackRow row() {
         JsonMapper mapper = JsonMapper.builder().build();
         return new PlaybackRow(ID, 7L, "Blade Runner", 11L, Instant.parse("2024-03-31T23:00:00Z"),
-            Instant.parse("2024-03-31T23:10:00Z"), mapper.readTree("{\"seq\":4,\"quality\":\"auto\"}"));
+            Instant.parse("2024-03-31T23:10:00Z"), "person", mapper.readTree("{\"seq\":4,\"quality\":\"auto\"}"));
     }
 
     @Test
@@ -238,7 +240,7 @@ class PlaybackHealthControllerTest {
 
     @Test
     void theParametersReachTheServiceAndTheAnswerCarriesTheTotal() throws Exception {
-        when(health.query(Instant.parse("2024-03-01T00:00:00Z"), 180_000L, true, 2, 50))
+        when(health.query(Instant.parse("2024-03-01T00:00:00Z"), 180_000L, true, null, 2, 50))
             .thenReturn(new PlaybackPage(List.of(row()), 123));
 
         mvc.perform(signedIn(get("/api/admin/playback-health"))
@@ -251,7 +253,7 @@ class PlaybackHealthControllerTest {
 
     @Test
     void oneParameterAloneIsEnoughToSelectTheFilteredList() throws Exception {
-        when(health.query(null, null, null, 1, null)).thenReturn(new PlaybackPage(List.of(), 0));
+        when(health.query(null, null, null, null, 1, null)).thenReturn(new PlaybackPage(List.of(), 0));
 
         mvc.perform(signedIn(get("/api/admin/playback-health")).param("page", "1"))
             .andExpect(status().isOk())
@@ -278,7 +280,7 @@ class PlaybackHealthControllerTest {
 
     @Test
     void theFirstValueOfARepeatedParameterWins() throws Exception {
-        when(health.query(null, null, null, null, 1)).thenReturn(new PlaybackPage(List.of(), 0));
+        when(health.query(null, null, null, null, null, 1)).thenReturn(new PlaybackPage(List.of(), 0));
 
         mvc.perform(signedIn(get("/api/admin/playback-health")).param("size", "1", "50"))
             .andExpect(status().isOk())
@@ -287,7 +289,7 @@ class PlaybackHealthControllerTest {
 
     @Test
     void aPresentButEmptyParameterIsA400NotTheOldShape() throws Exception {
-        for (String name : List.of("since", "minWatchedMs", "problems", "page", "size")) {
+        for (String name : List.of("since", "minWatchedMs", "problems", "source", "page", "size")) {
             mvc.perform(signedIn(get("/api/admin/playback-health")).param(name, ""))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Invalid request"));
@@ -339,6 +341,28 @@ class PlaybackHealthControllerTest {
     }
 
     @Test
+    void aSourceParameterReachesTheServiceAndEitherWordIsAccepted() throws Exception {
+        when(health.query(null, null, null, "robot", null, null)).thenReturn(new PlaybackPage(List.of(row()), 1));
+        when(health.query(null, null, null, "person", null, null)).thenReturn(new PlaybackPage(List.of(), 0));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("source", "robot"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.playbacks[0].source").value("person"));
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("source", "person"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(0));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Robot", "both", "all", "headless"})
+    void aSourceThatIsNeitherPersonNorRobotIsA400(String value) throws Exception {
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("source", value))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
     void aBadNumberIsA400() throws Exception {
         mvc.perform(signedIn(get("/api/admin/playback-health")).param("size", "many"))
             .andExpect(status().isBadRequest())
@@ -347,7 +371,7 @@ class PlaybackHealthControllerTest {
 
     @Test
     void aRefusalFromTheServiceIsA400() throws Exception {
-        when(health.query(null, null, null, null, 101)).thenThrow(new BadRequestException("Invalid request"));
+        when(health.query(null, null, null, null, null, 101)).thenThrow(new BadRequestException("Invalid request"));
 
         mvc.perform(signedIn(get("/api/admin/playback-health")).param("size", "101"))
             .andExpect(status().isBadRequest())
@@ -358,7 +382,7 @@ class PlaybackHealthControllerTest {
     void theChartRouteAnswersTheSessionsAndIsNotTakenForAPlaybackId() throws Exception {
         ChartRow session = new ChartRow(ID, 7L, "Blade Runner", Instant.parse("2024-03-31T23:00:00Z"), 200_000, 2,
             9_400, 2_380L, "train", Map.of("480p", 58_000L), "Mozilla/5.0", true,
-            Instant.parse("2024-03-31T23:50:00Z"), List.of(
+            Instant.parse("2024-03-31T23:50:00Z"), "person", List.of(
                 new ChartPart(ID, Instant.parse("2024-03-31T23:00:00Z"), Instant.parse("2024-03-31T23:20:00Z"),
                     120_000, "train"),
                 new ChartPart(OTHER_ID, Instant.parse("2024-03-31T23:21:00Z"), Instant.parse("2024-03-31T23:50:00Z"),
@@ -391,7 +415,8 @@ class PlaybackHealthControllerTest {
     void aChartRowWithNoTouchHintLeavesTheFieldOut() throws Exception {
         ChartRow session = new ChartRow(ID, 7L, "Blade Runner", Instant.parse("2024-03-31T23:00:00Z"), 200_000, 0,
             0, 900L, "home", Map.of("original", 200_000L), "Mozilla/5.0", null,
-            Instant.parse("2024-03-31T23:50:00Z"), List.of(new ChartPart(ID, Instant.parse("2024-03-31T23:00:00Z"),
+            Instant.parse("2024-03-31T23:50:00Z"), "person", List.of(new ChartPart(ID,
+                Instant.parse("2024-03-31T23:00:00Z"),
                 Instant.parse("2024-03-31T23:50:00Z"), 200_000, "home")));
         when(health.chart(null)).thenReturn(new ChartList(List.of(session)));
 

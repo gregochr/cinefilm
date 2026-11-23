@@ -69,6 +69,21 @@ describe('usePlaybackLog', () => {
     expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([ALL_0, FILMS_0, PROBLEMS_0]);
   });
 
+  it('asks for the headless runs with source=robot', async () => {
+    const robots = '/api/admin/playback-health?source=robot&page=0&size=50';
+    const fetchMock = installFetch((m, url) => {
+      if (url === ALL_0) return respond(answer('all', 3, 3));
+      if (url === robots) return respond(answer('robots', 1, 1));
+      return null;
+    });
+    const { result } = renderHook(() => usePlaybackLog());
+    await waitFor(() => expect(result.current.rows).toHaveLength(3));
+
+    act(() => result.current.setFilter('robots'));
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([ALL_0, robots]);
+  });
+
   it('ignores the older filter’s late answer and aborts its request', async () => {
     const all = held();
     const films = held();

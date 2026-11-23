@@ -4,7 +4,7 @@
 // The server already keeps only film sessions (`FILM_SESSION_MIN_MS`, three minutes), so nothing here filters on
 // watched time again; every count is a count of sessions (a film watched twice counts twice).
 import { playbackChart as copy } from './adminCopy.js';
-import { environmentLabel, stallText } from './healthFormat.js';
+import { environmentLabel, isHeadless, stallText } from './healthFormat.js';
 import { RUNG_CODES } from '../player/health.js';
 import { formatRuntime } from '../player/time.js';
 import { formatScanClock, formatScanDay, formatScanTime } from './scanFormat.js';
@@ -49,6 +49,15 @@ export function filterByEnvironment(sessions, filter) {
   if (filter === 'all') return sessions;
   return sessions.filter((session) => environmentKey(session.environment) === filter);
 }
+
+/** The sessions of one source: "person" (watched), "robot" (headless) or "all"; a session with no `source` is a person's. */
+export function filterBySource(sessions, filter) {
+  if (filter === 'all') return sessions;
+  return sessions.filter((session) => (isHeadless(session) ? 'robot' : 'person') === filter);
+}
+
+/** The first tile's words for the source filter: they say what is counted. */
+export const watchedTileLabel = (source) => copy.watchedBySource[source];
 
 /** The time on rungs the ladder knows, by bucket: `{ ms: { original, p1080, p720, low }, total }`. */
 function bucketTimes(rungMs) {
@@ -174,7 +183,8 @@ function qualityWords(rungMs) {
 
 /** What a screen reader hears for one column: "Heat, 10 Nov 19:43, Train. 2 stalls, 9 s. Original 70%, …". */
 export function columnLabel(session) {
-  return `${session.filmTitle}, ${formatScanTime(session.startedAt)}, ${environmentLabel(session.environment)}. ${stallText(session)}. ${qualityWords(session.rungMs)}.`;
+  const label = `${session.filmTitle}, ${formatScanTime(session.startedAt)}, ${environmentLabel(session.environment)}. ${stallText(session)}. ${qualityWords(session.rungMs)}`;
+  return isHeadless(session) ? `${label}. ${copy.headlessRun}.` : `${label}.`;
 }
 
 /** The place in the summary's sentence: "… in 30 days at home". */
@@ -185,8 +195,9 @@ const WHERE_WORDS = {
 };
 
 /** The text equivalent of the whole chart. */
-export function chartSummary(sessions, { days, environment }) {
-  const where = environment === 'all' ? '' : ` ${WHERE_WORDS[environment]}`;
+export function chartSummary(sessions, { days, environment, source = 'person' }) {
+  const place = environment === 'all' ? '' : ` ${WHERE_WORDS[environment]}`;
+  const where = `${place}${copy.summaryNotes[source]}`;
   if (sessions.length === 0) return copy.summaryEmpty(days, where);
   const tiles = chartTiles(sessions);
   const parts = [
@@ -207,7 +218,7 @@ export function sessionHeading(session, operator) {
   const count = sessionParts(session).length;
   return [
     formatScanTime(session.startedAt),
-    describeDevice(session.userAgent, session.touch),
+    isHeadless(session) ? copy.headlessRun : describeDevice(session.userAgent, session.touch),
     operator ? `${place} (${operator})` : place,
     `${formatRuntime(num(session.watchedMs))} watched${count > 1 ? ` in ${count} parts` : ''}`,
   ];

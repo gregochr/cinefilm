@@ -22,19 +22,19 @@ class ViewingJoinerTest {
     /** A part on film 1 on the Mac, on the train, that ran from {@code start} to {@code end}, without positions. */
     private static Part part(String id, Instant start, Instant end) {
         return new Part(id, 1L, "The Rock", start, end, 100_000, 0, 0, 900L, false, "train", OPERATOR, MAC, null,
-            null, null, Map.of());
+            null, null, Map.of(), "person");
     }
 
     private static Part with(Part p, long filmId, String environment, String operator, String userAgent) {
         return new Part(p.playbackId(), filmId, p.filmTitle(), p.startedAt(), p.updatedAt(), p.watchedMs(),
             p.stallCount(), p.stallMs(), p.startupMs(), p.hasProblem(), environment, operator, userAgent, p.touch(),
-            p.startPositionMs(), p.endPositionMs(), p.rungMs());
+            p.startPositionMs(), p.endPositionMs(), p.rungMs(), p.source());
     }
 
     private static Part at(Part p, Long startPosition, Long endPosition) {
         return new Part(p.playbackId(), p.filmId(), p.filmTitle(), p.startedAt(), p.updatedAt(), p.watchedMs(),
             p.stallCount(), p.stallMs(), p.startupMs(), p.hasProblem(), p.environment(), p.operator(),
-            p.userAgent(), p.touch(), startPosition, endPosition, p.rungMs());
+            p.userAgent(), p.touch(), startPosition, endPosition, p.rungMs(), p.source());
     }
 
     private static List<List<String>> ids(List<Viewing> viewings) {
@@ -247,11 +247,11 @@ class ViewingJoinerTest {
     @Test
     void aShortPartBetweenTwoLongOnesStillJoinsThem() {
         Part a = new Part("a", 1L, "The Rock", T0, T0.plusSeconds(600), 1_800_000, 0, 0, 900L, false, "train",
-            OPERATOR, MAC, null, null, null, Map.of());
+            OPERATOR, MAC, null, null, null, Map.of(), "person");
         Part b = new Part("b", 1L, "The Rock", T0.plusSeconds(606), T0.plusSeconds(726), 60_000, 0, 0, 900L, false,
-            "train", OPERATOR, MAC, null, null, null, Map.of());
+            "train", OPERATOR, MAC, null, null, null, Map.of(), "person");
         Part c = new Part("c", 1L, "The Rock", T0.plusSeconds(732), T0.plusSeconds(2_000), 1_800_000, 0, 0, 900L,
-            false, "train", OPERATOR, MAC, null, null, null, Map.of());
+            false, "train", OPERATOR, MAC, null, null, null, Map.of(), "person");
 
         List<Viewing> viewings = ViewingJoiner.join(List.of(a, b, c));
 
@@ -296,10 +296,10 @@ class ViewingJoinerTest {
     void theTwelfthOfNovemberPairIsOneViewingOf138Minutes() {
         Part rockA = new Part("fb22ac5e-0000-4000-8000-000000000001", 1L, "The Rock",
             Instant.parse("2026-11-12T17:23:30.519Z"), Instant.parse("2026-11-12T17:56:47.761Z"), 32 * 60_000L, 4,
-            20_000, 6_300L, true, "train", OPERATOR, MAC, null, null, null, Map.of());
+            20_000, 6_300L, true, "train", OPERATOR, MAC, null, null, null, Map.of(), "person");
         Part rockB = new Part("323111c2-0000-4000-8000-000000000002", 1L, "The Rock",
             Instant.parse("2026-11-12T17:56:53.956Z"), Instant.parse("2026-11-12T20:33:53.080Z"), 106 * 60_000L, 155,
-            2_011_000, 6_300L, true, "train", OPERATOR, MAC, null, null, null, Map.of());
+            2_011_000, 6_300L, true, "train", OPERATOR, MAC, null, null, null, Map.of(), "person");
 
         List<Viewing> viewings = ViewingJoiner.join(List.of(rockA, rockB));
 
@@ -315,5 +315,18 @@ class ViewingJoinerTest {
         Part smooth = part("b", T0.plusSeconds(606), T0.plusSeconds(1_200));
 
         assertThat(ViewingJoiner.join(List.of(first(), smooth)).get(0).hasProblem()).isFalse();
+    }
+
+    @Test
+    void aRobotsPlaybackOfAFilmDoesNotJoinAPersonsViewingOfTheSameFilm() {
+        Part person = part("person", T0, T0.plusSeconds(600));
+        Part robot = new Part("robot", 1L, "The Rock", T0.plusSeconds(606), T0.plusSeconds(1_200), 100_000, 0, 0, 900L,
+            false, "train", OPERATOR, "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/150.0.0.0 Safari/537.36", null,
+            null, null, Map.of(), "robot");
+
+        List<Viewing> viewings = ViewingJoiner.join(List.of(person, robot));
+
+        assertThat(ids(viewings)).containsExactly(List.of("person"), List.of("robot"));
+        assertThat(viewings).extracting(v -> v.first().source()).containsExactly("person", "robot");
     }
 }

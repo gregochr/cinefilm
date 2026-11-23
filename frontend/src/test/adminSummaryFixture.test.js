@@ -81,7 +81,10 @@ describe('the Admin summary fixture', () => {
   it('counts the health fixture’s film sessions that started in the 30 days before the reference time', () => {
     const since = REFERENCE_NOW - 30 * DAY_MS;
     const filmSessions = playbackHealth.playbacks.filter(
-      (row) => Date.parse(row.startedAt) >= since && row.report.watchedMs >= FILM_SESSION_MIN_MS,
+      (row) =>
+        row.source !== 'robot' &&
+        Date.parse(row.startedAt) >= since &&
+        row.report.watchedMs >= FILM_SESSION_MIN_MS,
     );
     expect(summary.playback.films).toBe(filmSessions.length);
     // `smooth` is the film sessions the server marks as having no problem. The fixture rows carry no `hasProblem`

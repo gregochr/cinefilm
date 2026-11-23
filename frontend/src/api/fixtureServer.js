@@ -39,7 +39,7 @@ const MIN_MINUTES_LIMIT = 30;
 let continueWatchingMinMinutes = 5;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const HEALTH_PARAMS = ['since', 'minWatchedMs', 'problems', 'page', 'size'];
+const HEALTH_PARAMS = ['since', 'minWatchedMs', 'problems', 'source', 'page', 'size'];
 const DEFAULT_HEALTH_SIZE = 20;
 const CHART_ROWS = [
   {
@@ -55,6 +55,7 @@ const CHART_ROWS = [
     rungMs: { '1080p': 6_600_000 },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
     touch: false,
+    source: 'person',
   },
   {
     playbackId: 'c1000000-0000-4000-8000-000000000002',
@@ -69,6 +70,7 @@ const CHART_ROWS = [
     rungMs: { '720p': 60_000 },
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
     touch: true,
+    source: 'person',
   },
   {
     playbackId: 'c1000000-0000-4000-8000-000000000003',
@@ -83,6 +85,7 @@ const CHART_ROWS = [
     rungMs: { '480p': 1_800_000, '360p': 2_520_000 },
     userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)',
     touch: true,
+    source: 'person',
   },
   {
     playbackId: 'c1000000-0000-4000-8000-000000000004',
@@ -97,6 +100,23 @@ const CHART_ROWS = [
     rungMs: { '480p': 1_468_800, '360p': 2_851_200 },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
     touch: false,
+    source: 'person',
+  },
+  {
+    playbackId: 'c1000000-0000-4000-8000-000000000005',
+    filmId: 1,
+    filmTitle: 'Heat',
+    startedAt: '2026-11-11T02:10:00Z',
+    watchedMs: 1_800_000,
+    stallCount: 0,
+    stallMs: 0,
+    startupMs: 1500,
+    environment: 'home',
+    rungMs: { '720p': 1_800_000 },
+    userAgent:
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/150.0.0.0 Safari/537.36',
+    touch: false,
+    source: 'robot',
   },
 ];
 
@@ -120,6 +140,7 @@ const ROCK_PARTS = [
     rungMs: { '480p': 1_000_000, '360p': 920_000 },
     userAgent: MAC_CHROME,
     touch: false,
+    source: 'person',
   },
   {
     playbackId: '323111c2-0000-4000-8000-000000000002',
@@ -135,6 +156,7 @@ const ROCK_PARTS = [
     rungMs: { '480p': 4_000_000, '360p': 2_360_000 },
     userAgent: MAC_CHROME,
     touch: false,
+    source: 'person',
   },
 ];
 
@@ -206,6 +228,7 @@ function healthRecord(playbackId) {
       filmTitle: chart.filmTitle,
       editionId: 10 + chart.filmId,
       startedAt: chart.startedAt,
+      source: chart.source,
       updatedAt: part
         ? part.endedAt
         : new Date(Date.parse(chart.startedAt) + elapsedMs).toISOString(),
@@ -261,11 +284,13 @@ function healthPage(params) {
   const since = params.get('since');
   const minWatched = params.has('minWatchedMs') ? Number(params.get('minWatchedMs')) : null;
   const problems = params.has('problems') ? params.get('problems') === 'true' : null;
+  const source = params.get('source');
   const page = Number(params.get('page') ?? 0);
   const size = Number(params.get('size') ?? DEFAULT_HEALTH_SIZE);
   const matching = adminPlaybackHealth.playbacks
     .filter((p) => !since || Date.parse(p.startedAt) >= Date.parse(since))
     .filter((p) => minWatched === null || p.report.watchedMs >= minWatched)
+    .filter((p) => source === null || p.source === source)
     .filter((p) => problems === null || PROBLEM_PLAYBACKS.has(p.playbackId) === problems)
     .toSorted((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
   return { playbacks: matching.slice(page * size, page * size + size), total: matching.length };

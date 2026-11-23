@@ -296,7 +296,7 @@ class PlaybackHealthServiceTest {
 
         service.report(ID, text(body));
 
-        HealthFigures expected = new HealthFigures(200_000, 0, 9_400, null, false, "train");
+        HealthFigures expected = new HealthFigures(200_000, 0, 9_400, null, false, "train", "person");
         verify(repository).replaceIfNewer(ID, 9, JSON.writeValueAsString(HealthSamples.report(body)), NOW, expected);
     }
 
@@ -531,7 +531,7 @@ class PlaybackHealthServiceTest {
         answers(PageRequest.of(1, 2, NEWEST_FIRST),
             List.of(stored(3, ID, compactExample()), stored(2, OTHER_ID, compactExample())), 7);
 
-        PlaybackPage result = service.query(null, null, null, 1, 2);
+        PlaybackPage result = service.query(null, null, null, null, 1, 2);
 
         assertThat(result.total()).isEqualTo(7);
         assertThat(result.playbacks()).extracting(PlaybackRow::playbackId).containsExactly(ID, OTHER_ID);
@@ -542,7 +542,7 @@ class PlaybackHealthServiceTest {
     void queryDefaultsToTheFirstPageOfTwentyNewestStartedFirst() {
         answers(PageRequest.of(0, 20, NEWEST_FIRST), List.of(stored(1, ID, compactExample())), 1);
 
-        PlaybackPage result = service.query(NOW, 180_000L, true, null, null);
+        PlaybackPage result = service.query(NOW, 180_000L, true, null, null, null);
 
         assertThat(result.playbacks()).hasSize(1);
         assertThat(result.total()).isEqualTo(1);
@@ -553,7 +553,7 @@ class PlaybackHealthServiceTest {
         answers(PageRequest.of(0, 20, NEWEST_FIRST),
             List.of(stored(2, OTHER_ID, "not json"), stored(1, ID, compactExample())), 2);
 
-        PlaybackPage result = service.query(null, null, null, null, null);
+        PlaybackPage result = service.query(null, null, null, null, null, null);
 
         assertThat(result.playbacks()).extracting(PlaybackRow::playbackId).containsExactly(ID);
         assertThat(result.total()).isEqualTo(2);
@@ -563,19 +563,19 @@ class PlaybackHealthServiceTest {
     void queryAcceptsTheLargestPageSize() {
         answers(PageRequest.of(0, 100, NEWEST_FIRST), List.of(), 0);
 
-        assertThat(service.query(null, null, null, 0, 100).playbacks()).isEmpty();
+        assertThat(service.query(null, null, null, null, 0, 100).playbacks()).isEmpty();
     }
 
     @Test
     void queryAcceptsAMinimumWatchedTimeOfZero() {
         answers(PageRequest.of(0, 20, NEWEST_FIRST), List.of(), 0);
 
-        assertThat(service.query(null, 0L, null, null, null).total()).isZero();
+        assertThat(service.query(null, 0L, null, null, null, null).total()).isZero();
     }
 
     @Test
     void queryRefusesAPageBelowZero() {
-        assertThatThrownBy(() -> service.query(null, null, null, -1, null))
+        assertThatThrownBy(() -> service.query(null, null, null, null, -1, null))
             .isExactlyInstanceOf(BadRequestException.class)
             .hasMessage("Invalid request");
     }
@@ -583,7 +583,7 @@ class PlaybackHealthServiceTest {
     @ParameterizedTest
     @ValueSource(ints = {0, -1, 101})
     void queryRefusesASizeOutsideOneToAHundred(int size) {
-        assertThatThrownBy(() -> service.query(null, null, null, null, size))
+        assertThatThrownBy(() -> service.query(null, null, null, null, null, size))
             .isExactlyInstanceOf(BadRequestException.class)
             .hasMessage("Invalid request");
     }
@@ -592,12 +592,12 @@ class PlaybackHealthServiceTest {
     void queryAcceptsASizeOfOne() {
         answers(PageRequest.of(0, 1, NEWEST_FIRST), List.of(), 0);
 
-        assertThat(service.query(null, null, null, 0, 1).playbacks()).isEmpty();
+        assertThat(service.query(null, null, null, null, 0, 1).playbacks()).isEmpty();
     }
 
     @Test
     void queryRefusesAnOffsetBeyondWhatTheDatabaseTakes() {
-        assertThatThrownBy(() -> service.query(null, null, null, Integer.MAX_VALUE, 2))
+        assertThatThrownBy(() -> service.query(null, null, null, null, Integer.MAX_VALUE, 2))
             .isExactlyInstanceOf(BadRequestException.class)
             .hasMessage("Invalid request");
     }
@@ -606,20 +606,20 @@ class PlaybackHealthServiceTest {
     void queryAcceptsAnOffsetOfExactlyIntegerMaxValue() {
         answers(PageRequest.of(Integer.MAX_VALUE, 1, NEWEST_FIRST), List.of(), 0);
 
-        assertThat(service.query(null, null, null, Integer.MAX_VALUE, 1).total()).isZero();
+        assertThat(service.query(null, null, null, null, Integer.MAX_VALUE, 1).total()).isZero();
     }
 
     @Test
     void queryRefusesAnOffsetOneAboveIntegerMaxValue() {
         // 2^30 pages of 2 is 2^31, one more than Integer.MAX_VALUE.
-        assertThatThrownBy(() -> service.query(null, null, null, 1 << 30, 2))
+        assertThatThrownBy(() -> service.query(null, null, null, null, 1 << 30, 2))
             .isExactlyInstanceOf(BadRequestException.class)
             .hasMessage("Invalid request");
     }
 
     @Test
     void queryRefusesANegativeMinimumWatchedTime() {
-        assertThatThrownBy(() -> service.query(null, -1L, null, null, null))
+        assertThatThrownBy(() -> service.query(null, -1L, null, null, null, null))
             .isExactlyInstanceOf(BadRequestException.class)
             .hasMessage("Invalid request");
     }
@@ -702,7 +702,7 @@ class PlaybackHealthServiceTest {
         row.setStartedAt(startedAt);
         row.setUpdatedAt(updatedAt);
         row.setFigures(new HealthFigures(watchedMs, stalls, stalls * 1_000, startedAt.equals(NOW) ? 500L : 900L,
-            stalls > 0, "train"));
+            stalls > 0, "train", "person"));
         return row;
     }
 
@@ -809,5 +809,96 @@ class PlaybackHealthServiceTest {
     @Test
     void aFilmSessionIsThreeMinutes() {
         assertThat(PlaybackHealthService.FILM_SESSION_MIN_MS).isEqualTo(180_000L);
+    }
+
+    // source: person or robot
+
+    private static ObjectNode headless() {
+        ObjectNode report = example();
+        client(report).put("userAgent", "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/150.0.0.0 Safari/537.36");
+        return report;
+    }
+
+    @Test
+    void theFirstReportOfAHeadlessClientIsStoredAsARobot() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+
+        service.report(ID, text(headless()));
+
+        assertThat(saved().getSource()).isEqualTo("robot");
+    }
+
+    @Test
+    void theFirstReportOfAnOrdinaryBrowserIsStoredAsAPerson() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+
+        service.report(ID, compactExample());
+
+        assertThat(saved().getSource()).isEqualTo("person");
+    }
+
+    @Test
+    void aLaterReportPassesTheSourceOfThatReportToTheUpdate() {
+        when(repository.findByPlaybackId(ID)).thenReturn(Optional.of(stored(1, ID, "{}")));
+        ObjectNode body = headless();
+        body.put("seq", 9);
+
+        service.report(ID, text(body));
+
+        verify(repository).replaceIfNewer(ID, 9, JSON.writeValueAsString(HealthSamples.report(body)), NOW,
+            HealthFigures.of(HealthSamples.report(body)));
+        assertThat(HealthFigures.of(HealthSamples.report(body)).source()).isEqualTo("robot");
+    }
+
+    @Test
+    void recentOneAndQueryCarryTheStoredSourceOfARow() {
+        PlaybackHealth row = stored(1, ID, compactExample());
+        row.setSource("robot");
+        when(repository.findTop20ByOrderByUpdatedAtDescIdDesc()).thenReturn(List.of(row));
+        when(repository.findByPlaybackId(ID)).thenReturn(Optional.of(row));
+        answers(PageRequest.of(0, 20, NEWEST_FIRST), List.of(row), 1);
+
+        assertThat(service.recent().playbacks().get(0).source()).isEqualTo("robot");
+        assertThat(service.one(ID).source()).isEqualTo("robot");
+        assertThat(service.query(null, null, null, "robot", null, null).playbacks().get(0).source())
+            .isEqualTo("robot");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"person", "robot"})
+    void queryAcceptsEachSource(String source) {
+        answers(PageRequest.of(0, 20, NEWEST_FIRST), List.of(), 0);
+
+        assertThat(service.query(null, null, null, source, null, null).total()).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "Robot", "both", "all"})
+    void queryRefusesAnyOtherSource(String source) {
+        assertThatThrownBy(() -> service.query(null, null, null, source, null, null))
+            .isExactlyInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid request");
+    }
+
+    @Test
+    void chartRowTakesTheSourceOfItsFirstPart() {
+        PlaybackHealth first = longRow(1, ID, text(headless()));
+        first.setSource("robot");
+        chartRows(List.of(first));
+
+        assertThat(service.chart(null).sessions().get(0).source()).isEqualTo("robot");
+    }
+
+    @Test
+    void theCountsLeaveOutRobotsAndKeepPeople() {
+        PlaybackHealth robot = longRow(1, ID, text(headless()));
+        robot.setSource("robot");
+        PlaybackHealth person = longRow(2, OTHER_ID, compactExample());
+        person.setFilmId(FILM_ID + 1);
+        chartRows(List.of(robot, person));
+
+        assertThat(service.playbackCounts().films()).isEqualTo(1);
     }
 }

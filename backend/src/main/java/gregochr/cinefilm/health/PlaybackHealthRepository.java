@@ -29,16 +29,17 @@ public interface PlaybackHealthRepository
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update PlaybackHealth h set h.summary = :summary, h.seq = :seq, h.updatedAt = :updatedAt, "
         + "h.watchedMs = :watchedMs, h.stallCount = :stallCount, h.stallMs = :stallMs, h.startupMs = :startupMs, "
-        + "h.hasProblem = :hasProblem, h.environment = :environment "
+        + "h.hasProblem = :hasProblem, h.environment = :environment, h.source = :source "
         + "where h.playbackId = :playbackId and h.seq < :seq")
     int replaceIfNewerWith(String playbackId, int seq, String summary, Instant updatedAt, long watchedMs,
-                           long stallCount, long stallMs, Long startupMs, boolean hasProblem, String environment);
+                           long stallCount, long stallMs, Long startupMs, boolean hasProblem, String environment,
+                           String source);
 
     /** {@link #replaceIfNewerWith} taking the figures as {@link HealthFigures}. */
     default int replaceIfNewer(String playbackId, int seq, String summary, Instant updatedAt,
                                HealthFigures figures) {
         return replaceIfNewerWith(playbackId, seq, summary, updatedAt, figures.watchedMs(), figures.stallCount(),
-            figures.stallMs(), figures.startupMs(), figures.hasProblem(), figures.environment());
+            figures.stallMs(), figures.startupMs(), figures.hasProblem(), figures.environment(), figures.source());
     }
 
     /** The ids of the records that were updated longest ago, oldest first (the lower id first on a tie). */

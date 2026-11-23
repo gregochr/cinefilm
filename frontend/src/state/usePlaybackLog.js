@@ -13,7 +13,7 @@ const LOADING = {
 };
 
 /**
- * The Admin "Playback log": one page of playbacks at a time for the chosen filter ('all', 'films' or 'problems'),
+ * The Admin "Playback log": one page of playbacks at a time for the chosen filter ('all', 'films', 'problems' or 'robots'),
  * read from the server, which does the filtering (the browser never filters). `more()` appends the next page
  * until the pages read cover `total` (`pages` counts the pages read, so a row that moved between pages cannot skip
  * one, and a failed "show more" counts as none). More is decided from that page offset, never from the rows

@@ -66,14 +66,14 @@ describe('PlaybackLogPanel', () => {
         .map((h) => h.textContent),
     ).toEqual(['Started', 'Film', 'Watched', 'Where', 'Start', 'Stalls', 'Quality', 'Details']);
     const rows = dataRows();
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(6);
     expect(
       within(rows[1])
         .getAllByRole('cell')
         .map((c) => c.textContent),
     ).toEqual(['10 Nov 19:43', 'Heat', '1h 12m', 'Train · Mac', '2.4 s', '2', '360p', 'Details']);
     expect(within(rows[3]).getAllByRole('cell')[4]).toHaveTextContent('—');
-    expect(screen.getByText('Showing 5 of 5')).toBeInTheDocument();
+    expect(screen.getByText('Showing 6 of 6')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Show 50 more' })).not.toBeInTheDocument();
   });
 
@@ -135,8 +135,29 @@ describe('PlaybackLogPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'With problems' }));
     await waitFor(() => expect(within(dataRows()[0]).getByText('2')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'All' }));
-    await waitFor(() => expect(dataRows()).toHaveLength(5));
+    await waitFor(() => expect(dataRows()).toHaveLength(ROWS.length));
     expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([ALL_0, FILMS_0, PROBLEMS_0, ALL_0]);
+  });
+
+  it('has a Headless runs filter that asks for source=robot and words the row', async () => {
+    const robot = ROWS.find((row) => row.source === 'robot');
+    const robots = `${BASE}?source=robot&page=0&size=50`;
+    const fetchMock = installFetch((m, url) => {
+      if (url === ALL_0) return respond(ALL);
+      if (url === robots) return respond({ playbacks: [robot], total: 1 });
+      return null;
+    });
+    renderLog();
+    await screen.findByRole('table');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Headless runs' }));
+    await waitFor(() => expect(dataRows()).toHaveLength(1));
+    expect(screen.getByRole('button', { name: 'Headless runs' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(dataRows()[0]).getByText('Home · Headless run')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map((c) => c[0]).at(-1)).toBe(robots);
   });
 
   it('says what is missing for each filter when the server sends nothing', async () => {
@@ -147,6 +168,8 @@ describe('PlaybackLogPanel', () => {
     expect(await screen.findByText('No plays of 3 minutes or more.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'With problems' }));
     expect(await screen.findByText('No plays with problems.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Headless runs' }));
+    expect(await screen.findByText('No headless runs.')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
@@ -315,7 +338,7 @@ describe('PlaybackLogPanel', () => {
     it('opens one play without opening the others', async () => {
       await open(1);
       expect(screen.getAllByRole('button', { name: /^Hide details/ })).toHaveLength(1);
-      expect(screen.getAllByRole('button', { name: /^Details/ })).toHaveLength(4);
+      expect(screen.getAllByRole('button', { name: /^Details/ })).toHaveLength(5);
     });
 
     it('copies the raw report as JSON and says Copied', async () => {

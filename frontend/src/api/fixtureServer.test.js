@@ -185,23 +185,35 @@ describe('fixture server', () => {
       'Blade Runner',
       'The Wicker Man',
       'The Wicker Man',
+      'Heat',
     ]);
     expect(playbacks[0].report.environment).toBe('home');
     expect(playbacks[1].report.environment).toBe('train');
   });
 
+  it('filters the playback health list by source, with a total', async () => {
+    const robots = await call('GET', '/api/admin/playback-health?source=robot&page=0&size=20');
+    expect(robots.total).toBe(1);
+    expect(robots.playbacks.map((p) => p.source)).toEqual(['robot']);
+    const people = await call('GET', '/api/admin/playback-health?source=person&page=0&size=20');
+    expect(people.total).toBe(5);
+    expect(people.playbacks).toHaveLength(5);
+    expect(people.playbacks.some((p) => p.source === 'robot')).toBe(false);
+  });
+
   it('serves the filtered, paged playback health list with a total', async () => {
     const all = await call('GET', '/api/admin/playback-health?page=0');
-    expect(all.total).toBe(5);
+    expect(all.total).toBe(6);
     expect(all.playbacks.map((p) => p.filmTitle)).toEqual([
       'Heat',
       'Heat',
       'Blade Runner',
       'The Wicker Man',
       'The Wicker Man',
+      'Heat',
     ]);
     const longOnes = await call('GET', '/api/admin/playback-health?minWatchedMs=180000');
-    expect(longOnes.total).toBe(3);
+    expect(longOnes.total).toBe(4);
     const withProblems = await call('GET', '/api/admin/playback-health?problems=true');
     expect(withProblems.total).toBe(1);
     expect(withProblems.playbacks[0].filmTitle).toBe('Heat');
@@ -212,28 +224,29 @@ describe('fixture server', () => {
       'a91e5b07-4d3c-42f8-8e6a-7c1b9d0f5e22',
       'c07d8e19-5b2a-4f61-a3d4-1e8f6b9c2a50',
       '5b2e9a40-7c1d-4e83-8f26-0d4a1c7e9b35',
+      'e5a2c7d9-1b3f-4a68-9d04-6f8b2e1c7a93',
     ]);
     const paged = await call('GET', '/api/admin/playback-health?size=1&page=1');
     expect(paged.playbacks).toHaveLength(1);
     expect(paged.playbacks[0].playbackId).toBe('3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34');
-    expect(paged.total).toBe(5);
+    expect(paged.total).toBe(6);
     const since = await call('GET', '/api/admin/playback-health?since=2999-01-01T00:00:00Z');
     expect(since).toEqual({ playbacks: [], total: 0 });
   });
 
   it('serves the playback health chart without the session under three minutes', async () => {
     const { sessions } = await call('GET', '/api/admin/playback-health/chart');
-    expect(sessions).toHaveLength(4);
+    expect(sessions).toHaveLength(5);
     expect(sessions.every((s) => s.watchedMs >= 180_000)).toBe(true);
-    expect(sessions.map((s) => s.environment)).toEqual(['home', 'away', 'train', 'train']);
+    expect(sessions.map((s) => s.environment)).toEqual(['home', 'away', 'train', 'home', 'train']);
     expect(sessions[2]).toMatchObject({ stallCount: 2, rungMs: { '480p': 1_468_800 } });
     const recent = await call('GET', '/api/admin/playback-health/chart?since=2026-11-01T00:00:00Z');
-    expect(recent.sessions).toHaveLength(3);
+    expect(recent.sessions).toHaveLength(4);
   });
 
   it('carries the touch hint on the chart rows', async () => {
     const { sessions } = await call('GET', '/api/admin/playback-health/chart');
-    expect(sessions.map((s) => s.touch)).toEqual([false, true, false, false]);
+    expect(sessions.map((s) => s.touch)).toEqual([false, true, false, false, false]);
   });
 
   it('serves the 12 Nov pair as one two-part viewing, each part with its own record', async () => {

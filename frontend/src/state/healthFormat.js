@@ -19,6 +19,9 @@ const ENVIRONMENTS = { home: 'Home', train: 'Train', away: 'Away' };
 const num = (value) => (Number.isFinite(value) ? value : 0);
 const mbit = (kbps) => (num(kbps) / 1000).toFixed(1);
 
+/** True for a playback or chart row the server marked as the headless viewer's; a row with no `source` is a person's. */
+export const isHeadless = (item) => item?.source === 'robot';
+
 /** "Home", "Train" or "Away"; anything else, a missing value included, is "Unknown". */
 export function environmentLabel(environment) {
   return Object.hasOwn(ENVIRONMENTS, environment) ? ENVIRONMENTS[environment] : 'Unknown';

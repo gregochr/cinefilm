@@ -9,6 +9,7 @@ import {
   environmentKey,
   environmentLetter,
   filterByEnvironment,
+  filterBySource,
   median,
   minuteStrip,
   partGap,
@@ -21,6 +22,7 @@ import {
   stallDotSize,
   startupText,
   STRIP,
+  watchedTileLabel,
 } from './playbackChart.js';
 
 const session = (over = {}) => ({
@@ -517,5 +519,48 @@ describe('differentPlace', () => {
     expect(differentPlace({ environment: 'train' }, 'EE Limited', first)).toBe(
       'Train (EE Limited)',
     );
+  });
+});
+
+describe('source', () => {
+  const person = session({ playbackId: 'a', source: 'person' });
+  const robot = session({ playbackId: 'b', source: 'robot' });
+  const unmarked = session({ playbackId: 'c' });
+
+  it('keeps the people (a session with no source is one), the robots, or both', () => {
+    expect(filterBySource([person, robot, unmarked], 'person')).toEqual([person, unmarked]);
+    expect(filterBySource([person, robot, unmarked], 'robot')).toEqual([robot]);
+    expect(filterBySource([person, robot, unmarked], 'all')).toEqual([person, robot, unmarked]);
+  });
+
+  it('words the first tile for what is counted', () => {
+    expect(watchedTileLabel('person')).toBe('sessions watched');
+    expect(watchedTileLabel('robot')).toBe('headless runs');
+    expect(watchedTileLabel('all')).toBe('sessions, headless included');
+  });
+
+  it('ends the summary, before its colon, with the note for the source', () => {
+    const list = [session()];
+    expect(chartSummary(list, { days: 30, environment: 'home', source: 'person' })).toContain(
+      'in 30 days at home:',
+    );
+    expect(chartSummary(list, { days: 30, environment: 'home', source: 'robot' })).toContain(
+      'in 30 days at home (headless runs only):',
+    );
+    expect(chartSummary(list, { days: 30, environment: 'all', source: 'all' })).toContain(
+      'in 30 days (headless runs included):',
+    );
+    expect(chartSummary([], { days: 30, environment: 'all', source: 'robot' })).toBe(
+      'No film sessions in the last 30 days (headless runs only).',
+    );
+  });
+
+  it('names a robot device "Headless run" and ends its column label with a sentence "Headless run."', () => {
+    const robotSession = session({ source: 'robot', userAgent: 'HeadlessChrome/150.0.0.0' });
+    expect(sessionHeading(robotSession, null)[1]).toBe('Headless run');
+    expect(columnLabel(robotSession)).toBe(
+      'Heat, 10 Nov 19:43, Home. No stalls. Original 100%. Headless run.',
+    );
+    expect(sessionHeading(person, null)[1]).toBe('Mac');
   });
 });

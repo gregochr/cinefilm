@@ -353,4 +353,41 @@ describe('PlaybackChartPanel', () => {
     ).toBeInTheDocument();
     expect(column('Gamma')).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('has a Watched or headless control that starts on Watched and switches the sessions in the page', async () => {
+    const robot = chartRow(4, 'Delta', { source: 'robot', userAgent: 'HeadlessChrome/150.0.0.0' });
+    const api = server({ sessions: [...SESSIONS, robot] });
+    await ready();
+    const control = screen.getByRole('group', { name: 'Watched or headless' });
+    expect(
+      within(control)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Watched', 'Headless', 'Both']);
+    expect(within(control).getByRole('button', { name: 'Watched' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.queryByRole('button', { name: /^Delta,/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('3sessions watched');
+
+    await userEvent.click(within(control).getByRole('button', { name: 'Headless' }));
+    expect(within(control).getByRole('button', { name: 'Headless' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(column('Delta')).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/\. Headless run\.$/),
+    );
+    expect(screen.queryByRole('button', { name: /^Alpha,/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('1headless runs');
+    expect(await screen.findByText(/Headless run/)).toBeInTheDocument();
+
+    await userEvent.click(within(control).getByRole('button', { name: 'Both' }));
+    expect(column('Alpha')).toBeInTheDocument();
+    expect(column('Delta')).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('4sessions, headless included');
+    expect(api.charts()).toHaveLength(1);
+  });
 });

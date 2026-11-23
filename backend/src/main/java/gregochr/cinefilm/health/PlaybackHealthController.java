@@ -26,7 +26,8 @@ public class PlaybackHealthController {
 
     private static final int MIN_YEAR = 1970;
     private static final int MAX_YEAR = 9999;
-    private static final List<String> LIST_PARAMETERS = List.of("since", "minWatchedMs", "problems", "page", "size");
+    private static final List<String> LIST_PARAMETERS = List.of("since", "minWatchedMs", "problems", "source", "page",
+        "size");
 
     private final PlaybackHealthService health;
 
@@ -69,7 +70,8 @@ public class PlaybackHealthController {
         }
         return ResponseEntity.ok(health.query(parse(params, "since", PlaybackHealthController::since),
             parse(params, "minWatchedMs", Long::parseLong), parse(params, "problems", PlaybackHealthController::bool),
-            parse(params, "page", Integer::parseInt), parse(params, "size", Integer::parseInt)));
+            parse(params, "source", PlaybackHealthController::source), parse(params, "page", Integer::parseInt),
+            parse(params, "size", Integer::parseInt)));
     }
 
     /** The film sessions since a time (all when omitted), with only the chart's fields. */
@@ -102,6 +104,13 @@ public class PlaybackHealthController {
             throw new IllegalArgumentException("out of range");
         }
         return parsed;
+    }
+
+    private static String source(String value) {
+        if (HealthFigures.PERSON.equals(value) || HealthFigures.ROBOT.equals(value)) {
+            return value;
+        }
+        throw new IllegalArgumentException("not a source");
     }
 
     private static Boolean bool(String value) {

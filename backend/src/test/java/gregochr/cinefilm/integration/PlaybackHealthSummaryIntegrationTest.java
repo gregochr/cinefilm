@@ -45,7 +45,7 @@ class PlaybackHealthSummaryIntegrationTest extends IntegrationTestBase {
         row.setUpdatedAt(updatedAt);
         row.setSeq(1);
         row.setSummary("{}");
-        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home"));
+        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home", "person"));
         return health.saveAndFlush(row);
     }
 

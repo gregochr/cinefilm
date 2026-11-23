@@ -1,5 +1,6 @@
 package gregochr.cinefilm.health;
 
+import gregochr.cinefilm.health.HealthDtos.ClientInfo;
 import gregochr.cinefilm.health.HealthDtos.HealthReport;
 
 /**
@@ -19,9 +20,19 @@ import gregochr.cinefilm.health.HealthDtos.HealthReport;
  * @param startupMs   time to the first frame, in ms; null when it never came
  * @param hasProblem  whether anything went wrong, as above
  * @param environment home, train, away or unknown; null when the report has none
+ * @param source      {@link #PERSON} or {@link #ROBOT}: robot when the report's user agent says HeadlessChrome
  */
 public record HealthFigures(long watchedMs, long stallCount, long stallMs, Long startupMs, boolean hasProblem,
-                            String environment) {
+                            String environment, String source) {
+
+    /** A film somebody watched. */
+    public static final String PERSON = "person";
+
+    /** A playback of the headless viewer (the train viewer's Chrome), not a person. */
+    public static final String ROBOT = "robot";
+
+    /** The user-agent token that marks the headless viewer. */
+    static final String HEADLESS_TOKEN = "HeadlessChrome";
 
     /** Longest environment the column holds; a longer one (never a valid report's) is stored as null. */
     static final int MAX_ENVIRONMENT = 16;
@@ -32,7 +43,12 @@ public record HealthFigures(long watchedMs, long stallCount, long stallMs, Long 
         boolean problem = stalls > 0 || zero(report.reconnectCount()) > 0
             || Boolean.TRUE.equals(report.fellBack()) || zero(report.netErrors()) > 0 || zero(report.timeouts()) > 0;
         return new HealthFigures(zero(report.watchedMs()), stalls, zero(report.stallMs()), report.startupMs(),
-            problem, environmentOf(report.environment()));
+            problem, environmentOf(report.environment()), sourceOf(report.client()));
+    }
+
+    private static String sourceOf(ClientInfo client) {
+        return client != null && client.userAgent() != null && client.userAgent().contains(HEADLESS_TOKEN)
+            ? ROBOT : PERSON;
     }
 
     private static String environmentOf(String environment) {

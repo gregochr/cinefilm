@@ -6,6 +6,7 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.health.HealthSamples.JSON;
+import static gregochr.cinefilm.health.HealthSamples.client;
 import static gregochr.cinefilm.health.HealthSamples.example;
 import static gregochr.cinefilm.health.HealthSamples.text;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -534,7 +535,7 @@ class PlaybackHealthApiTest extends ApiTestBase {
     private PlaybackHealth figureRow(long number, Instant startedAt, long watchedMs, boolean problem) {
         PlaybackHealth row = row(idOf(number), startedAt.plusSeconds(60), text(report(finalCut, 1)));
         row.setStartedAt(startedAt);
-        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home"));
+        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home", "person"));
         return health.saveAndFlush(row);
     }
 
@@ -584,6 +585,50 @@ class PlaybackHealthApiTest extends ApiTestBase {
         mvc.perform(get("/api/admin/playback-health").param("problems", "false"))
             .andExpect(jsonPath("$.total").value(1))
             .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(2)));
+    }
+
+    private PlaybackHealth robotRow(long number, Instant startedAt) {
+        PlaybackHealth row = figureRow(number, startedAt, 200_000, false);
+        row.setSource("robot");
+        return health.saveAndFlush(row);
+    }
+
+    @Test
+    void sourceKeepsOnlyThePeopleOrOnlyTheRobotsAndNoSourceReturnsBoth() throws Exception {
+        figureRow(1, NOW.minusSeconds(300), 200_000, false);
+        robotRow(2, NOW.minusSeconds(200));
+
+        mvc.perform(get("/api/admin/playback-health").param("source", "person"))
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(1)))
+            .andExpect(jsonPath("$.playbacks[0].source").value("person"));
+        mvc.perform(get("/api/admin/playback-health").param("source", "robot"))
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(2)))
+            .andExpect(jsonPath("$.playbacks[0].source").value("robot"));
+        mvc.perform(get("/api/admin/playback-health").param("page", "0"))
+            .andExpect(jsonPath("$.total").value(2));
+    }
+
+    @Test
+    void aSourceOtherThanPersonOrRobotIsA400() throws Exception {
+        mvc.perform(get("/api/admin/playback-health").param("source", "both"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void aHeadlessReportIsStoredAsARobotAndAnOrdinaryOneAsAPerson() throws Exception {
+        send(ID, report(finalCut, 4));
+        assertThat(health.findByPlaybackId(ID).orElseThrow().getSource()).isEqualTo("person");
+
+        ObjectNode headless = report(finalCut, 5);
+        client(headless).put("userAgent", "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/150.0.0.0 Safari/537.36");
+        send(ID, headless);
+
+        assertThat(health.findByPlaybackId(ID).orElseThrow().getSource()).isEqualTo("robot");
+        mvc.perform(get("/api/admin/playback-health/" + ID))
+            .andExpect(jsonPath("$.source").value("robot"));
     }
 
     @Test
