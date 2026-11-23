@@ -147,7 +147,7 @@ export function startHlsJs({
   let flushed = false; // BUFFER_FLUSHED has come for the re-bank's own flush
   let flushFrom = null; // where that flush starts: hls.js's own flushes (back buffer) are not it
   let banked = []; // the fragments in the buffer, { start, end, level }, from FRAG_BUFFERED
-  let loading = false; // a media fragment has been asked for and is not yet buffered
+  let loadingFrag = null; // the newest media fragment asked for and not yet buffered (null: none in flight)
   let lastTroubleAt = null; // when fragment trouble or a stall was last seen (ms on `now`)
   let lastStepDownAt = null;
   let lastRebankAt = null;
@@ -277,7 +277,7 @@ export function startHlsJs({
       playhead: video.currentTime,
       aheadS,
       headroom,
-      inFlight: loading,
+      inFlight: loadingFrag !== null,
       troubled,
       now: now(),
       lastTroubleAt,
@@ -347,7 +347,7 @@ export function startHlsJs({
     clearTimeout(timer);
     timer = null;
     stopHoldTimer(); // the fragment in flight is aborted by the reload
-    loading = false;
+    loadingFrag = null;
     undoRebank();
     // What was earned before the break is earned again: the rates are forgotten and the cap falls at once.
     ceiling = champagneBase(hls.levels ?? []);
@@ -433,28 +433,39 @@ export function startHlsJs({
     reevaluateHold();
   });
 
+  // `frag` is no longer in flight. A newer fragment that has started since stays: it is told apart by object, or
+  // by sequence number and level.
+  const endLoading = (frag) => {
+    const same =
+      frag &&
+      loadingFrag &&
+      (frag === loadingFrag || (frag.sn === loadingFrag.sn && frag.level === loadingFrag.level));
+    if (same) loadingFrag = null;
+  };
+
   // A fragment starts to load (in Auto): the hold and the ceiling are re-read every HOLD_CHECK_MS until it ends, the
   // hold with the rate of the fragment so far. An init segment is a
   // few bytes behind a round trip, so it says nothing about the link.
   hls.on(Events.FRAG_LOADING, (_event, data) => {
     if (!auto || data.frag?.sn === 'initSegment') return;
-    loading = true;
+    loadingFrag = data.frag;
     inFlight = data.frag;
     holdTimer ??= setInterval(applyCap, HOLD_CHECK_MS);
   });
 
   // hls.js gave up on the fragment for a faster level: nothing is in flight any more.
-  hls.on(Events.FRAG_LOAD_EMERGENCY_ABORTED, () => {
-    loading = false;
+  hls.on(Events.FRAG_LOAD_EMERGENCY_ABORTED, (_event, data) => {
+    endLoading(data?.frag);
     stopHoldTimer();
   });
 
-  // A fragment is in the buffer: it joins the list the re-bank reads, and nothing is loading any more. `loading`
-  // is cleared here, not on FRAG_LOADED, because a fragment loaded but not yet appended would land after a flush
-  // as an island at the old rung. If an event is missed and `loading` sticks true, the only cost is that no
-  // re-bank starts (safe); the next fragment's FRAG_LOADING and FRAG_BUFFERED put it right.
+  // A fragment is in the buffer: it joins the list the re-bank reads. `loadingFrag` is cleared here, not on
+  // FRAG_LOADED, because a fragment loaded but not yet appended would land after a flush as an island at the old
+  // rung. hls.js's own FRAG_BUFFERED handler runs first and may start the next fragment (FRAG_LOADING) before this
+  // one runs, so only the fragment named is cleared (`endLoading`). If an event is missed and `loadingFrag` sticks,
+  // the only cost is that no re-bank starts (safe); the next fragment's FRAG_LOADING and FRAG_BUFFERED put it right.
   hls.on(Events.FRAG_BUFFERED, (_event, data) => {
-    loading = false;
+    endLoading(data.frag);
     const frag = data.frag;
     if (!frag || frag.sn === 'initSegment' || (frag.type && frag.type !== 'main')) return;
     const entry = { start: frag.start, end: frag.start + frag.duration, level: frag.level };
@@ -522,7 +533,7 @@ export function startHlsJs({
       stopHoldTimer();
       applyCap();
     }
-    if (String(data.details ?? '').startsWith('frag')) loading = false; // a failed fragment is not loading
+    if (String(data.details ?? '').startsWith('frag')) endLoading(data.frag); // a failed fragment is not loading
     if (data.response?.code === 410) {
       // Admin stopped this playback on purpose: no new session, no retry (owner 2026-11-15).
       if (!lost) {

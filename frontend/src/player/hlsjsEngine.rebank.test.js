@@ -295,9 +295,64 @@ describe('re-banking one rung up', () => {
         type: 'networkError',
         details: 'fragLoadError',
         response: { code: 503 },
+        frag: loading,
       });
       env.tick();
       expect(env.flushes).toHaveLength(1);
+    });
+
+    describe('a newer fragment starts before the buffered one is seen (hls.js’s own handler ran first)', () => {
+      const next = { sn: 51, start: 510, duration: 10, level: 0, type: 'main', stats: {} };
+      const started = () => {
+        const env = world(plain);
+        ready(env, 0);
+        env.hls.fragLoading(loading);
+        env.hls.fragLoading(next); // hls.js asked for the next one inside its FRAG_BUFFERED handler
+        return env;
+      };
+
+      it('keeps blocking when the first one is buffered, and lets the flush go when the next is', () => {
+        const env = started();
+        env.hls.fragBuffered(loading);
+        env.tick();
+        expect(env.flushes).toHaveLength(0);
+        env.hls.fragBuffered(next);
+        expect(env.flushes).toHaveLength(1);
+      });
+
+      it('keeps blocking when hls.js abandons the stale one', () => {
+        const env = started();
+        env.hls.fragAborted(loading);
+        env.tick();
+        expect(env.flushes).toHaveLength(0);
+      });
+
+      it('keeps blocking when the stale one fails', () => {
+        const env = started();
+        env.hls.error({
+          fatal: false,
+          type: 'networkError',
+          details: 'fragLoadError',
+          response: { code: 503 },
+          frag: loading,
+        });
+        env.tick();
+        expect(env.flushes).toHaveLength(0);
+      });
+
+      it('stops blocking when the newer one is abandoned, told apart by sn and level', () => {
+        const env = started();
+        env.hls.fragAborted({ ...next });
+        env.tick();
+        expect(env.flushes).toHaveLength(1);
+      });
+
+      it('does not mistake the same sn at another level for it', () => {
+        const env = started();
+        env.hls.fragAborted({ ...next, level: 1 });
+        env.tick();
+        expect(env.flushes).toHaveLength(0);
+      });
     });
 
     it('stops blocking at a restart', () => {
