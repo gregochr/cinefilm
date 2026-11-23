@@ -115,6 +115,8 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    stored" above still holds for the browser and the server.
 8. **Dependencies and CI.** No new dependency without a reason in the PR. OWASP/`npm audit` findings at High or above
    block. Workflows declare least-privilege `permissions:`, pin third-party actions, and never print secrets.
+   CI and the image install packages without running their install scripts (`npm ci --ignore-scripts`,
+   `pip install --only-binary :all:`).
 9. **Data.** The watch history is the owner's only irreplaceable data: migrations follow expand-then-contract, and
    deploys take a pre-release dump.
 
