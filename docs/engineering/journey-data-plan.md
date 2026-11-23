@@ -139,20 +139,29 @@ below.
      railway shows them, to the half minute, and the running date. The server walks the planned times in order
      from that date by Britain's clock (`Europe/London`): a time may not be earlier than the one before it, except
      by more than twelve hours, which is midnight passing. Each actual time is put on the day that brings it
-     nearest its call's planned time. So nobody can get the time zone, summer time or midnight wrong by hand.
+     nearest its call's planned time of the same kind (arrival with arrival, departure with departure, pass with
+     pass) or, where the call has none of that kind (a train planned to pass that in fact stopped), the call's
+     first planned time; exactly as near on two days, it is the later. So nobody can get the time zone, summer
+     time or midnight wrong by hand. On the two days a year the clocks change, a time in the hour that is skipped
+     is moved on by that hour and a time in the hour that comes twice is taken as the first of the two: a train
+     that ran through that second hour is an hour out or refused, which is accepted.
    - **A file is the train's whole run, origin to destination,** not the owner's stretch of it. Giving a journey a
      train finds the run by its key or makes it. A run already stored is replaced by the file only when the file
      begins and ends at the places the stored run does (otherwise it is refused: one stretch must not wipe the
-     whole); then the headcode and the calls are the file's, and the operator and the source are the file's where
-     it gives them. The calls are replaced by one delete statement followed by the inserts, never by the ORM
-     queueing both (it would insert before it deleted, and the key would refuse).
+     whole); then the headcode and the calls are the file's, the operator and the source are the file's where
+     it gives them, and `imported_at` is the time of this file. The calls are replaced by one delete statement
+     followed by the inserts, never by the ORM queueing both (it would insert before it deleted, and the key
+     would refuse).
    - **The train must have run while the journey was logged:** the span of the run's times, half an hour allowed
      either side, has to overlap the journey's first to last sample. A file for another day is refused, and said
      to be.
    - **A run that no journey points at any more is deleted** (the journey was given another train, had its train
      taken away, or was deleted): one statement that deletes the run only if no journey points at it, in one place
-     in the code, which the delete of a journey (the next pull request) calls too. Finding a run to give to a
-     journey locks it, and a clash on a key between two requests is a 409, never a 500.
+     in the code, which the delete of a journey (the next pull request) calls too. Giving a train and taking one
+     away both lock the journey first, so two requests about one journey run one after the other and the second
+     sees what the first left; finding a run to give to a journey locks the run. A clash between two requests (on
+     the run's unique key, on the journey's foreign key when a run is swept as another journey is given it, or
+     two that wait on each other and the database ends one) is a 409, never a 500.
    - Which sample lies beside which timing point is computed from the two clocks when asked for, never stored.
    - It is the owner's travel as much as a position is: decision 7 covers it. In tests, fixtures and docs every
      headcode, timetable id, place, date and source is invented (a place such as "Alpha Junction", a source such
@@ -191,11 +200,13 @@ A call: `location` (required; text, 1 to 100) and six clock times, each `HH:MM` 
 - Within a call an arrival is not after its departure. Along the calls the planned times do not go back, except
   across midnight as decision 9 says.
 
-What the server answers: 404 for a journey it does not know; 400 `Invalid train file` for the shape and the rules
-above; 400 `The train did not run during this journey` when the times do not overlap the journey's; 409 `This
-train is stored with other end points` for a file that would replace a stored run with another origin or
-destination; 409 `Try again` for two requests that clash; otherwise 200 with `{ "trainRunId", "calls" }` (the
-count). `DELETE /api/admin/journeys/{id}/train` takes the journey's train away (204; 404 for an unknown journey).
+What the server answers: 404 `No such journey` for a journey it does not know; 400 `Invalid train file` for the
+shape and the rules above; 400 `The train did not run during this journey` when the times do not overlap the
+journey's (a journey with no sample included); 409 `This train is stored with other end points` for a file that
+would replace a stored run with another origin or destination; 409 `Try again` for two requests that clash;
+otherwise 200 with `{ "uid", "date", "headcode", "calls" }` (the first three as the file gave them, `calls` the
+count), which the page shows as what was stored. `DELETE /api/admin/journeys/{id}/train` takes the journey's
+train away (204, also when it had none; 404 for an unknown journey).
 
 ## The import's request (`POST /api/admin/journeys`)
 
@@ -276,13 +287,15 @@ Each one owns its own contract rows in `foundation-plan.md`, its HTTP contract t
      none of the tables. About 1,150 lines.
    - **the import itself:** `POST`, the segments, the device, the linking, two requests clashing; MockMvc, API and
      integration tests that read back through the repositories. `SECURITY.md` rule 7. About 1,300 lines.
-5. **The train's run** (backend, decision 9), in three, sized from its main code (the tests here are about three
+5. **The train's run** (backend, decision 9), in four, sized from its main code (the tests here are about three
    times the code they test):
    - **its tables:** the migration (two tables and the journey's column), the entities, the repositories with the
      locked finder, the one sweep statement and the bulk delete of calls. About 800 lines. It needs only the
      journey tables.
-   - **its file:** the request as records, read as strictly as the import's, its rules, and the clock times made
-     into instants (midnight, summer time). No endpoint. About 1,000 lines.
+   - **its file:** the request as records, read as strictly as the import's, its rules, the worked example and
+     its contract in the API document. No endpoint. About 1,000 lines.
+   - **its clock:** the file's clock times made into instants (the walk of the planned times, midnight, summer
+     time, an actual time on the day nearest its planned one). About 500 lines.
    - **its two calls:** giving a journey its train and taking it away (the same run given twice, a run shared by
      two journeys, another day refused), with the contract's rows. About 1,000 lines. After the import.
 6. **Reading and deleting** (backend): the three other calls. The list carries each journey's headcode and
