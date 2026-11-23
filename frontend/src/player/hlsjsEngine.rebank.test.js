@@ -30,6 +30,8 @@ const stats = (kbps) => ({
   loading: { start: 0, first: 0, end: 1000 },
 });
 const FAST = 20_000;
+// The flush the re-bank asks for in these worlds (the first fragment 300 s ahead to the end), as it finishes.
+const OWN_FLUSH = { start: 300, end: Infinity };
 
 // A <video> whose playhead and buffered range the test sets.
 function makeVideo() {
@@ -354,7 +356,7 @@ describe('when the re-bank is done', () => {
     ready(env, 0);
     env.tick();
     env.setAhead(300); // the flushed bank
-    env.hls.bufferFlushed();
+    env.hls.bufferFlushed(OWN_FLUSH);
     env.setAhead(459);
     env.tick();
     expect(env.hls.config.minAutoBitrate).toBe(1_000_000);
@@ -387,6 +389,28 @@ describe('when the re-bank is done', () => {
     env.tick();
     expect(env.hls.config.minAutoBitrate).toBe(1_000_000);
   });
+
+  it.each([
+    ['hls.js’s own back-buffer flush', { start: 0, end: 20 }],
+    ['a flush that ends elsewhere', { start: 300, end: 400 }],
+    ['a flush from another start', { start: 310, end: Infinity }],
+    ['a flush that failed (0 to 0)', { start: 0, end: 0 }],
+  ])(
+    'is not done by %s, which finishes first while the old bank still reads full',
+    (_name, flush) => {
+      const env = world(plain);
+      ready(env, 0);
+      env.tick();
+      env.hls.bufferFlushed(flush);
+      env.setAhead(480);
+      env.tick();
+      expect(env.hls.config.minAutoBitrate).toBe(1_000_000);
+      env.hls.bufferFlushed(OWN_FLUSH);
+      env.setAhead(460);
+      env.tick();
+      expect(env.hls.config.minAutoBitrate).toBe(0);
+    },
+  );
 });
 
 describe('undoing the re-bank', () => {
@@ -495,7 +519,7 @@ describe('the floor hold and the re-bank share one floor', () => {
   it('leaves the hold’s floor when the re-bank is done', () => {
     const env = holdAndRebank();
     env.tick();
-    env.hls.bufferFlushed();
+    env.hls.bufferFlushed(OWN_FLUSH);
     env.tick(); // the bank is back to 480 s
     expect(env.hls.config.minAutoBitrate).toBe(PEAK_360);
   });

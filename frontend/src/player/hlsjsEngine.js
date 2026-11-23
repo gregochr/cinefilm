@@ -144,7 +144,8 @@ export function startHlsJs({
   let floorSet = 0; // what `minAutoBitrate` was last set to
   let holdFloor = 0; // the floor hold's share of it (bit/s)
   let rebankFloor = 0; // the re-bank's share: the new rung's bitrate while a re-bank is under way
-  let flushed = false; // BUFFER_FLUSHED has come since the re-bank's flush was asked for
+  let flushed = false; // BUFFER_FLUSHED has come for the re-bank's own flush
+  let flushFrom = null; // where that flush starts: hls.js's own flushes (back buffer) are not it
   let banked = []; // the fragments in the buffer, { start, end, level }, from FRAG_BUFFERED
   let loading = false; // a media fragment has been asked for and is not yet buffered
   let lastTroubleAt = null; // when fragment trouble or a stall was last seen (ms on `now`)
@@ -287,6 +288,7 @@ export function startHlsJs({
     if (!decision) return;
     rebankFloor = hls.levels[decision.level].bitrate;
     flushed = false;
+    flushFrom = decision.from;
     writeFloor();
     hls.trigger(Events.BUFFER_FLUSHING, {
       startOffset: decision.from,
@@ -460,9 +462,12 @@ export function startHlsJs({
     rebankStep();
   });
 
-  hls.on(Events.BUFFER_FLUSHED, () => {
+  // hls.js sends { type, start, end } of the flush that finished; its error path sends 0 and 0.
+  hls.on(Events.BUFFER_FLUSHED, (_event, data) => {
     pruneBanked();
-    if (rebankFloor > 0) flushed = true;
+    if (rebankFloor > 0 && data?.end === Infinity && Math.abs(data.start - flushFrom) < 0.5) {
+      flushed = true;
+    }
   });
 
   hls.on(Events.FRAG_LOADED, (_event, data) => {

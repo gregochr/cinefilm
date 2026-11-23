@@ -113,9 +113,9 @@ export class FakeHls {
     this.emit(FakeHls.Events.FRAG_BUFFERED, { frag, part: null, stats: frag.stats, id: 'main' });
   }
 
-  /** The buffer has been flushed. */
-  bufferFlushed(type = 'video') {
-    this.emit(FakeHls.Events.BUFFER_FLUSHED, { type });
+  /** A flush of `start` to `end` has finished (hls.js's error path sends 0 and 0). */
+  bufferFlushed({ start = 0, end = 0, type = 'video' } = {}) {
+    this.emit(FakeHls.Events.BUFFER_FLUSHED, { type, start, end });
   }
 
   error(data) {
