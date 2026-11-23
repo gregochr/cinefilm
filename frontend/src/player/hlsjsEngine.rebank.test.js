@@ -395,6 +395,8 @@ describe('when the re-bank is done', () => {
     ['a flush that ends elsewhere', { start: 300, end: 400 }],
     ['a flush from another start', { start: 310, end: Infinity }],
     ['a flush that failed (0 to 0)', { start: 0, end: 0 }],
+    ['a flush starting 0.5 s after ours', { start: 300.5, end: Infinity }],
+    ['a flush starting 0.5 s before ours', { start: 299.5, end: Infinity }],
   ])(
     'is not done by %s, which finishes first while the old bank still reads full',
     (_name, flush) => {
@@ -411,6 +413,18 @@ describe('when the re-bank is done', () => {
       expect(env.hls.config.minAutoBitrate).toBe(0);
     },
   );
+});
+
+describe('the flush the re-bank asked for, as it finishes', () => {
+  it.each([[300.49], [299.51]])('is ours when it starts at %f, within 0.5 s of from', (start) => {
+    const env = world(plain);
+    ready(env, 0);
+    env.tick();
+    env.hls.bufferFlushed({ start, end: Infinity });
+    env.setAhead(460);
+    env.tick();
+    expect(env.hls.config.minAutoBitrate).toBe(0);
+  });
 });
 
 describe('undoing the re-bank', () => {
