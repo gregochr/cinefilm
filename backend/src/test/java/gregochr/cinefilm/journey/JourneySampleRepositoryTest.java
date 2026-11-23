@@ -14,6 +14,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import gregochr.cinefilm.ApiTestBase;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -189,6 +190,30 @@ class JourneySampleRepositoryTest extends ApiTestBase {
     }
 
     @Test
+    void theSpanIsTheEarliestAndTheLatestSampleTimeOfTheJourneyAlone() {
+        Long journeyId = newJourney();
+        Long otherId = journeys.saveAndFlush(journey(2_000_000L, 1, null)).getId();
+        samples.saveAndFlush(sample(journeyId, 2));
+        samples.saveAndFlush(sample(journeyId, 1));
+        samples.saveAndFlush(sample(journeyId, 3));
+        samples.saveAndFlush(sample(otherId, 9));
+        entityManager.clear();
+
+        SampleSpan span = samples.spanOf(journeyId);
+
+        assertThat(span.earliest()).isEqualTo(Instant.parse("2024-03-31T23:30:30Z"));
+        assertThat(span.latest()).isEqualTo(Instant.parse("2024-03-31T23:31:30Z"));
+    }
+
+    @Test
+    void theSpanOfAJourneyWithNoSampleIsBothNull() {
+        SampleSpan span = samples.spanOf(newJourney());
+
+        assertThat(span.earliest()).isNull();
+        assertThat(span.latest()).isNull();
+    }
+
+    @Test
     void aModemSampleWithoutItsSampleOrWithoutItsModemIsRefused() {
         Long journeyId = newJourney();
         samples.saveAndFlush(sample(journeyId, 1));
@@ -217,5 +242,20 @@ class JourneySampleRepositoryTest extends ApiTestBase {
         assertThat(modems.count()).isZero();
         assertThat(modemSamples.count()).isZero();
         assertThat(devices.findById(deviceId)).isPresent();
+    }
+
+    @Test
+    void theStatsOfEveryJourneyCountAndSpanItsSamplesAndLeaveOutAJourneyWithNone() {
+        Long three = journeys.saveAndFlush(journey(2_000_000L, 1, null)).getId();
+        Long one = journeys.saveAndFlush(journey(3_000_000L, 1, null)).getId();
+        journeys.saveAndFlush(journey(4_000_000L, 1, null));
+        samples.saveAllAndFlush(List.of(sample(three, 1), sample(three, 2), sample(three, 3), sample(one, 1)));
+        entityManager.clear();
+
+        List<SampleStats> stats = samples.statsOfEveryJourney();
+
+        assertThat(stats).containsExactlyInAnyOrder(
+            new SampleStats(three, 3, Instant.parse("2024-03-31T23:30:30Z"), Instant.parse("2024-03-31T23:31:30Z")),
+            new SampleStats(one, 1, Instant.parse("2024-03-31T23:30:30Z"), Instant.parse("2024-03-31T23:30:30Z")));
     }
 }

@@ -1,8 +1,11 @@
 package gregochr.cinefilm.journey;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -11,8 +14,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
+import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.journey.JourneyImportService.Imported;
 import gregochr.cinefilm.journey.JourneyImportService.Result;
+import gregochr.cinefilm.journey.JourneyService.DeviceView;
+import gregochr.cinefilm.journey.JourneyService.Entry;
+import gregochr.cinefilm.journey.JourneyService.Listing;
+import gregochr.cinefilm.journey.JourneyService.TrainView;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -21,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -38,6 +47,9 @@ class JourneyControllerTest {
 
     @MockitoBean
     private JourneyImportService imports;
+
+    @MockitoBean
+    private JourneyService journeys;
 
     private static MockHttpServletRequestBuilder signedIn(String body) {
         return post(URL).with(user("owner")).header("X-CineFilm", "1").contentType(JSON).content(body);
@@ -141,5 +153,98 @@ class JourneyControllerTest {
         mvc.perform(post(URL).with(user("owner")).contentType(JSON).content(BODY))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+    }
+
+    private static MockHttpServletRequestBuilder deleteOne() {
+        return delete(URL + "/5").with(user("owner")).header("X-CineFilm", "1");
+    }
+
+    @Test
+    void theListAnswers200WithTheWholeOfAnEntryAndTheNullsWritten() throws Exception {
+        when(journeys.list()).thenReturn(new Listing(List.of(
+            new Entry(11L, 1_790_000_000_000L, 2, "Unit-001", "standard", "TestOS 1.2", 3, "test-log.jsonl",
+                Instant.parse("2026-09-22T08:00:00Z"),
+                new DeviceView("Testbook1,1", "Test Chip One", 8, 8, 17_179_869_184L), 4,
+                Instant.parse("2026-09-21T14:13:50Z"), Instant.parse("2026-09-21T14:15:20Z"), 2,
+                new TrainView("X12345", "2030-03-04", "9Z99")),
+            new Entry(12L, 1_780_000_000_000L, 0, null, null, null, 3, null, Instant.parse("2026-09-22T08:00:00Z"),
+                null, 0, null, null, 0, null))));
+
+        mvc.perform(get(URL).with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith(JSON))
+            .andExpect(content().json("""
+                {"journeys":[
+                  {"id":11,"runStartedMs":1790000000000,"segment":2,"trainUnit":"Unit-001","travelClass":"standard",
+                   "osVersion":"TestOS 1.2","loggerVersion":3,"sourceFile":"test-log.jsonl",
+                   "importedAt":"2026-09-22T08:00:00Z",
+                   "device":{"model":"Testbook1,1","cpu":"Test Chip One","cores":8,"threads":8,
+                             "memoryBytes":17179869184},
+                   "samples":4,"from":"2026-09-21T14:13:50Z","to":"2026-09-21T14:15:20Z","linked":2,
+                   "train":{"uid":"X12345","date":"2030-03-04","headcode":"9Z99"}},
+                  {"id":12,"runStartedMs":1780000000000,"segment":0,"trainUnit":null,"travelClass":null,
+                   "osVersion":null,"loggerVersion":3,"sourceFile":null,"importedAt":"2026-09-22T08:00:00Z",
+                   "device":null,"samples":0,"from":null,"to":null,"linked":0,"train":null}]}
+                """, true));
+    }
+
+    @Test
+    void theListSignedOutIsA401() throws Exception {
+        mvc.perform(get(URL))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
+
+    @Test
+    void aDeleteAnswers204WithNoBodyAndAsksTheServiceForThatJourney() throws Exception {
+        mvc.perform(deleteOne())
+            .andExpect(status().isNoContent())
+            .andExpect(content().string(""));
+
+        verify(journeys).delete(5L);
+    }
+
+    @Test
+    void aDeleteSignedOutIsA401() throws Exception {
+        mvc.perform(delete(URL + "/5").header("X-CineFilm", "1"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
+
+    @Test
+    void aDeleteWithoutTheCsrfHeaderIsA403() throws Exception {
+        mvc.perform(delete(URL + "/5").with(user("owner")))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+    }
+
+    @Test
+    void aDeleteOfAnUnknownJourneyIsA404AsJson() throws Exception {
+        doThrow(new NotFoundException("No such journey")).when(journeys).delete(5L);
+
+        mvc.perform(deleteOne())
+            .andExpect(status().isNotFound())
+            .andExpect(content().contentTypeCompatibleWith(JSON))
+            .andExpect(jsonPath("$.error").value("No such journey"));
+    }
+
+    @Test
+    void aDeleteThatClashesOnAKeyIsA409TryAgainAsJson() throws Exception {
+        doThrow(new DataIntegrityViolationException("foreign key")).when(journeys).delete(5L);
+
+        mvc.perform(deleteOne())
+            .andExpect(status().isConflict())
+            .andExpect(content().contentTypeCompatibleWith(JSON))
+            .andExpect(jsonPath("$.error").value("Try again"));
+    }
+
+    @Test
+    void aDeleteThatTheDatabaseEndsOnALockIsA409TryAgainAsJson() throws Exception {
+        doThrow(new PessimisticLockingFailureException("deadlock")).when(journeys).delete(5L);
+
+        mvc.perform(deleteOne())
+            .andExpect(status().isConflict())
+            .andExpect(content().contentTypeCompatibleWith(JSON))
+            .andExpect(jsonPath("$.error").value("Try again"));
     }
 }
