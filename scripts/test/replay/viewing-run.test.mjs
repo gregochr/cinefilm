@@ -10,6 +10,7 @@ import fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
+import { attachSegments } from '../../replay/segments.mjs';
 import { PAGE_TEXT, crashHandler, createCancel, takeLock, viewerPaths } from '../../replay/viewer.mjs';
 import {
   END_WAIT_MS, ENDS, KEEP_MS, LOOK_MS, PRESS_RETRY, SITE_RETRY_MS, SITE_WAIT_MS, STATUS_EXPRESSION, leave, runName,
@@ -725,7 +726,7 @@ describe('what is written', () => {
     assert.equal(out.name, '20261117-140509');
     assert.equal(modeOf(join(w.home, 'runs')), 0o700);
     assert.equal(modeOf(out.dir), 0o700);
-    for (const file of ['samples.json', 'health.json', 'held.json', 'summary.txt']) {
+    for (const file of ['samples.json', 'health.json', 'held.json', 'segments.json', 'summary.txt']) {
       assert.equal(modeOf(join(out.dir, file)), 0o600);
     }
     assert.equal(runName(new Date(2026, 0, 5, 3, 4, 9).getTime()), '20260105-030409');
@@ -757,7 +758,7 @@ describe('what is written', () => {
     assert.deepEqual(out.held.run, {
       film: 42, title: 'Heat', runtimeMs: 10200000, site: SITE, beganAt: BEGAN, runMs: 15000, ended: 'film-ended',
     });
-    for (const file of ['samples.json', 'health.json', 'held.json', 'summary.txt']) {
+    for (const file of ['samples.json', 'health.json', 'held.json', 'segments.json', 'summary.txt']) {
       const text = readFileSync(join(out.dir, file), 'utf8');
       for (const secret of ['sekret', 'Cookie', 'Authorization']) {
         assert.equal(text.includes(secret), false, `${file} ${secret}`);
@@ -803,7 +804,7 @@ describe('what is written', () => {
     const report = { ...REPORT, heldDropped: 2, failed: 1, rejected: 3 };
     const { dir, lines } = writeResults({ runsDir, began: BEGAN, run, report, facts: { film: 1 } });
     assert.equal(dir, join(runsDir, '20261117-140509'));
-    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'summary.txt']);
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'segments.json', 'summary.txt']);
     assert.equal(readFileSync(join(dir, 'summary.txt'), 'utf8'), `${lines.join('\n')}\n`);
     const held = JSON.parse(readFileSync(join(dir, 'held.json'), 'utf8'));
     assert.deepEqual(Object.keys(held).sort(), [
@@ -818,9 +819,115 @@ describe('what is written', () => {
     const { dir, lines } = writeResults({
       runsDir, began: BEGAN, run: { ...RUN, ended: 'x' }, report: REPORT, facts: { film: 1 }, final: false,
     });
-    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json']);
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'segments.json']);
     assert.equal(JSON.parse(readFileSync(join(dir, 'held.json'), 'utf8')).run.ended, null);
     assert.deepEqual(lines, []);
+  });
+});
+
+describe('segments.json', () => {
+  const segmentUrl = (file) => `${SITE}/api/sessions/${UUID}/720p/${file}`;
+  // Chrome sending the events of one finished download, as the page makes them.
+  const download = (listeners, id, file, bytes) => {
+    listeners.get('Network.requestWillBeSent')({
+      requestId: id, timestamp: 10, wallTime: 1700000000, request: { method: 'GET', url: segmentUrl(file) },
+    });
+    listeners.get('Network.responseReceived')({
+      requestId: id, response: { status: 200, timing: { requestTime: 10, receiveHeadersEnd: 100 } },
+    });
+    listeners.get('Network.loadingFinished')({ requestId: id, timestamp: 11, encodedDataLength: bytes });
+  };
+  const read = (w) => JSON.parse(readFileSync(join(results(w).dir, 'segments.json'), 'utf8'));
+
+  test('at the normal end it holds the downloads, one still in flight listed as unfinished, and the summary says so', async () => {
+    const w = world({ onWait: (n, { listeners }) => {
+      if (n !== 1) return;
+      download(listeners, 'a', 'seg_1.ts', 125000);
+      listeners.get('Network.requestWillBeSent')({
+        requestId: 'b', timestamp: 12, wallTime: 1700000002, request: { method: 'GET', url: segmentUrl('seg_2.ts') },
+      });
+    } });
+    await w.run();
+    const out = read(w);
+    assert.equal(out.capped, false);
+    assert.deepEqual(out.segments.map((entry) => [entry.file, entry.bytes, entry.totalMs, entry.unfinished]), [
+      ['seg_1.ts', 125000, 1000, false], ['seg_2.ts', null, null, true],
+    ]);
+    assert.equal(modeOf(join(results(w).dir, 'segments.json')), 0o600);
+    assert.equal(JSON.stringify(out).includes(UUID), false, 'no session id');
+    const summary = readFileSync(join(results(w).dir, 'summary.txt'), 'utf8');
+    assert.match(summary, /Segments: 2 recorded, 0 failed, 0 cancelled, 1 unfinished, median 1000 kbit\/s, 10th percentile 1000 kbit\/s/);
+    assert.ok(w.said.some((line) => line.startsWith('Segments: 2 recorded')), 'it is printed too');
+  });
+
+  test('the Network domain is on before any address is opened', async () => {
+    const w = world();
+    await w.run();
+    const at = (entry) => w.log.indexOf(entry);
+    assert.ok(at('send Network.enable') > at('send Fetch.enable'));
+    assert.ok(at('send Network.enable') < at(`send Page.navigate ${SITE}/api/session`));
+  });
+
+  test('a write made while the run goes already holds it', async () => {
+    const ctx = {
+      run: { ...RUN, ended: null }, opt: { film: 1, site: SITE }, opened: 0, guard: null,
+      segments: { report: () => ({ cap: 5, capped: false, dropped: 0, playlists: 0, unseen: 0, segments: [{ file: 'seg_1.ts' }] }) },
+      deps: { clock: { mono: () => 0 }, afs: realAsyncFs },
+    };
+    const runsDir = join(tmp, `mid-${counter += 1}`);
+    await resultsWriter(ctx, { began: BEGAN, runsDir }).keep();
+    const file = join(runsDir, runName(BEGAN), 'segments.json');
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).segments, [{ file: 'seg_1.ts' }]);
+  });
+
+  test('on the signal path (a second signal) it is written with what had been recorded', async () => {
+    const handlers = new Map();
+    const w = world({
+      onWait: (n, { listeners }) => {
+        if (n === 1) download(listeners, 'a', 'seg_1.ts', 500);
+      },
+      onLook: (n) => {
+        if (n !== 2) return;
+        handlers.get('SIGINT')();
+        handlers.get('SIGINT')();
+      },
+    });
+    watchRunSignals(w.cancel, w.held, w.deps.say, { exit: () => undefined, listen: (name, fn) => handlers.set(name, fn) });
+    await w.run();
+    assert.equal(results(w).held.run.ended, 'signal');
+    assert.deepEqual(read(w).segments.map((entry) => entry.file), ['seg_1.ts']);
+  });
+
+  test('on the crash path it is written too', async () => {
+    const w = world({
+      onWait: (n, { listeners }) => {
+        if (n === 1) download(listeners, 'a', 'seg_1.ts', 500);
+        if (n === 3) crashHandler(w.held, { say: () => undefined, exit: () => undefined })(new Error('boom'));
+      },
+    });
+    await w.run();
+    assert.deepEqual(read(w).segments.map((entry) => entry.file), ['seg_1.ts']);
+  });
+
+  test('a run with no segment writes an empty list, not a missing file', async () => {
+    const w = world();
+    await w.run();
+    assert.deepEqual(read(w).segments, []);
+  });
+
+  test('the cap is recorded: a full list says so in the file and in the summary', async () => {
+    const w = world({
+      deps: { segments: (page, opts) => attachSegments(page, { ...opts, cap: 1 }) },
+      onWait: (n, { listeners }) => {
+        if (n !== 1) return;
+        download(listeners, 'a', 'seg_1.ts', 500);
+        download(listeners, 'b', 'seg_2.ts', 500);
+      },
+    });
+    await w.run();
+    const out = read(w);
+    assert.deepEqual([out.capped, out.dropped, out.segments.length], [true, 1, 1]);
+    assert.match(readFileSync(join(results(w).dir, 'summary.txt'), 'utf8'), /list full/);
   });
 });
 
@@ -837,7 +944,7 @@ describe('a file written whole, and forced to the disk', () => {
     } };
     assert.throws(() => write({ ...RUN, samples: [{ t: 1 }, { t: 2 }] }, io), /power cut/);
     assert.equal(readFileSync(join(dir, 'samples.json'), 'utf8'), first, 'the last good file stands');
-    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json']);
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'segments.json']);
   });
 
   test('each file is written to its temporary name and renamed onto the real one, one after the other', () => {
@@ -857,7 +964,7 @@ describe('a file written whole, and forced to the disk', () => {
     });
     assert.deepEqual(log, [
       'write samples.json.tmp', 'rename samples.json', 'write health.json.tmp', 'rename health.json',
-      'write held.json.tmp', 'rename held.json',
+      'write held.json.tmp', 'rename held.json', 'write segments.json.tmp', 'rename segments.json',
     ]);
   });
 
@@ -935,7 +1042,7 @@ describe('what is written as the run goes', () => {
     // a write at the 1st, 13th and 25th sample (the clock moves 5 s a sample); one at the end, the 36th
     assert.deepEqual(counts, [0, ...new Array(12).fill(1), ...new Array(12).fill(13), ...new Array(11).fill(25)]);
     for (const disk of seen.slice(1)) {
-      assert.deepEqual(disk.files, ['health.json', 'held.json', 'samples.json'], 'no summary and no temporary file');
+      assert.deepEqual(disk.files, ['health.json', 'held.json', 'samples.json', 'segments.json'], 'no summary and no temporary file');
       assert.equal(disk.ended, null, 'while it goes, the run has not ended');
     }
     const last = results(w);
@@ -1057,7 +1164,7 @@ describe('the writes made while the run goes', () => {
       runsDir: join(tmp, 'async-order'), began: BEGAN, run: RUN, report: REPORT, facts: {}, afs: asyncFs(log),
     });
     const each = (name) => [`open ${name}.async.tmp w 600`, 'write', 'sync', 'close', `rename ${name}`];
-    assert.deepEqual(log, [...each('samples.json'), ...each('health.json'), ...each('held.json')]);
+    assert.deepEqual(log, [...each('samples.json'), ...each('health.json'), ...each('held.json'), ...each('segments.json')]);
   });
 
   test('a write that fails leaves no temporary file behind, and the error goes on', async () => {
@@ -1138,7 +1245,7 @@ describe('the writes made while the run goes', () => {
     const dir = join(runsDir, readdirSync(runsDir)[0]);
     assert.equal(JSON.parse(readFileSync(join(dir, 'samples.json'), 'utf8')).length, 2, 'the handler\'s file stands');
     assert.equal(JSON.parse(readFileSync(join(dir, 'held.json'), 'utf8')).run.ended, 'failed');
-    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'summary.txt']);
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'segments.json', 'summary.txt']);
   });
 
   test('the last write clears the mid-run temporary files before it writes, and again after', () => {
@@ -1152,8 +1259,8 @@ describe('the writes made while the run goes', () => {
     const { writer, ctx } = writerWith(undefined, io);
     ctx.run.samples = [{ t: 1 }];
     writer.final('failed');
-    const removals = ['samples', 'health', 'held'].map((file) => `remove ${file}.json.async.tmp`);
-    const writes = ['samples.json', 'health.json', 'held.json', 'summary.txt'].flatMap((file) => [
+    const removals = ['samples', 'health', 'held', 'segments'].map((file) => `remove ${file}.json.async.tmp`);
+    const writes = ['samples.json', 'health.json', 'held.json', 'segments.json', 'summary.txt'].flatMap((file) => [
       `write ${file}.tmp`, `rename ${file}`,
     ]);
     assert.deepEqual(log, [...removals, ...writes, ...removals]);
@@ -1173,8 +1280,8 @@ describe('the writes made while the run goes', () => {
     const { writer, ctx } = writerWith(undefined, io);
     ctx.run.samples = [{ t: 1 }];
     assert.equal(typeof writer.final('failed').dir, 'string');
-    assert.equal(attempts.length, 6, 'all three, before and after');
-    assert.equal(written.length, 8, 'the last write was made');
+    assert.equal(attempts.length, 8, 'all four, before and after');
+    assert.equal(written.length, 10, 'the last write was made');
   });
 
   test('a mid-run write held just before its rename never lands over the last write, and leaves nothing', async () => {
@@ -1203,7 +1310,7 @@ describe('the writes made while the run goes', () => {
     const dir = join(runsDir, readdirSync(runsDir)[0]);
     assert.equal(JSON.parse(readFileSync(join(dir, 'samples.json'), 'utf8')).length, 2, 'the last write stands');
     assert.equal(JSON.parse(readFileSync(join(dir, 'held.json'), 'utf8')).run.ended, 'failed');
-    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'summary.txt']);
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'segments.json', 'summary.txt']);
   });
 
   test('while a slow write is out, a request the page paused is still answered by the guard', async () => {
