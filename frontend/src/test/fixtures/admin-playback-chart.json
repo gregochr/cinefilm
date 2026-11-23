@@ -13,6 +13,7 @@
       "rungMs": { "1080p": 6600000 },
       "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
       "touch": false,
+      "source": "person",
       "endedAt": "2026-11-01T21:50:30Z",
       "parts": [
         {
@@ -37,6 +38,7 @@
       "rungMs": { "480p": 1800000, "360p": 2520000 },
       "userAgent": "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)",
       "touch": true,
+      "source": "person",
       "endedAt": "2026-11-03T13:22:30Z",
       "parts": [
         {
@@ -61,6 +63,7 @@
       "rungMs": { "original": 3960000, "720p": 1320000 },
       "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
       "touch": true,
+      "source": "person",
       "endedAt": "2026-11-07T19:58:30Z",
       "parts": [
         {
@@ -84,6 +87,7 @@
       "environment": "train",
       "rungMs": { "480p": 1468800, "360p": 2851200 },
       "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      "source": "person",
       "endedAt": "2026-11-10T20:55:35Z",
       "parts": [
         {
@@ -92,6 +96,30 @@
           "endedAt": "2026-11-10T20:55:35Z",
           "watchedMs": 4320000,
           "environment": "train"
+        }
+      ]
+    },
+    {
+      "playbackId": "c1000000-0000-4000-8000-000000000005",
+      "filmId": 1,
+      "filmTitle": "Heat",
+      "startedAt": "2026-11-11T02:10:00Z",
+      "watchedMs": 1800000,
+      "stallCount": 0,
+      "stallMs": 0,
+      "startupMs": 1500,
+      "environment": "home",
+      "rungMs": { "720p": 1800000 },
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/150.0.0.0 Safari/537.36",
+      "source": "robot",
+      "endedAt": "2026-11-11T02:40:30Z",
+      "parts": [
+        {
+          "playbackId": "c1000000-0000-4000-8000-000000000005",
+          "startedAt": "2026-11-11T02:10:00Z",
+          "endedAt": "2026-11-11T02:40:30Z",
+          "watchedMs": 1800000,
+          "environment": "home"
         }
       ]
     }

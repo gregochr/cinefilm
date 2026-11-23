@@ -50,7 +50,27 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
         assertThat(tables).contains("film", "film_genre", "film_collection", "collection_part", "edition",
             "media_file", "audio_stream", "subtitle_stream", "person", "credit", "playback_state",
             "film_preference", "scan_run", "plex_import_run", "media_keyframes", "server_setting",
-            "subtitle_sidecar", "film_keyword", "christmas_override");
+            "subtitle_sidecar", "film_keyword", "christmas_override", "device", "journey", "journey_sample",
+            "journey_modem", "journey_modem_sample", "journey_playback", "train_run", "train_run_call");
+    }
+
+    @Test
+    void theJourneyTrainRunColumnIsAnExpandOnlyNullableBigint() {
+        List<String> columns = jdbc.queryForList(
+            "SELECT column_name || ':' || data_type || ':' || is_nullable FROM information_schema.columns "
+                + "WHERE table_name = 'journey' AND column_name = 'train_run_id'", String.class);
+        assertThat(columns).containsExactly("train_run_id:bigint:YES");
+    }
+
+    @Test
+    void theJourneyTimestampsAreWithTimeZone() {
+        List<String> columns = jdbc.queryForList(
+            "SELECT table_name || '.' || column_name || ':' || data_type FROM information_schema.columns "
+                + "WHERE (table_name = 'journey_sample' AND column_name = 'sampled_at') "
+                + "OR (table_name = 'journey' AND column_name = 'imported_at') ORDER BY table_name",
+            String.class);
+        assertThat(columns).containsExactly("journey.imported_at:timestamp with time zone",
+            "journey_sample.sampled_at:timestamp with time zone");
     }
 
     @Test

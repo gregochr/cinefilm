@@ -39,12 +39,13 @@ final class ViewingJoiner {
 
     /**
      * One stored playback, as the joiner reads it. An unreadable stored report is a part with no operator, no user
-     * agent and no positions.
+     * agent and no positions. The parts of one viewing share a source: the joiner never joins across user agents, and
+     * the source is worked out from the user agent.
      */
     record Part(String playbackId, long filmId, String filmTitle, Instant startedAt, Instant updatedAt,
                 long watchedMs, long stallCount, long stallMs, Long startupMs, boolean hasProblem,
                 String environment, String operator, String userAgent, Boolean touch, Long startPositionMs,
-                Long endPositionMs, Map<String, Long> rungMs) {
+                Long endPositionMs, Map<String, Long> rungMs, String source) {
     }
 
     /** One viewing: its parts, oldest first, never empty. */

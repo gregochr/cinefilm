@@ -156,22 +156,25 @@ public class PlaybackHealthService {
      * One page of viewings, newest {@code startedAt} first (the higher id first on a tie), each without the
      * per-minute track, and the number of all that match. Every filter is optional: {@code since} keeps the viewings
      * that started at or after it, {@code minWatchedMs} those that played at least that long, {@code problems}
-     * those whose {@code hasProblem} equals it. {@code page} counts from 0 (default 0) and {@code size} is 1 to
+     * those whose {@code hasProblem} equals it, {@code source} those of that source ({@code person} or
+     * {@code robot}). {@code page} counts from 0 (default 0) and {@code size} is 1 to
      * {@link #MAX_PAGE_SIZE} (default {@link #DEFAULT_PAGE_SIZE}), and {@code page * size} may not pass
      * {@link Integer#MAX_VALUE} (the offset asked of the database); anything else is a 400. A stored report that
      * cannot be read is left out of the page but still counted in the total.
      */
     @Transactional(readOnly = true)
-    public PlaybackPage query(Instant since, Long minWatchedMs, Boolean problems, Integer page, Integer size) {
+    public PlaybackPage query(Instant since, Long minWatchedMs, Boolean problems, String source,
+                              Integer page, Integer size) {
         int pageNumber = page == null ? 0 : page;
         int pageSize = size == null ? DEFAULT_PAGE_SIZE : size;
         if (pageNumber < 0 || pageSize < 1 || pageSize > MAX_PAGE_SIZE
             || (long) pageNumber * pageSize > Integer.MAX_VALUE
-            || (minWatchedMs != null && minWatchedMs < 0)) {
+            || (minWatchedMs != null && minWatchedMs < 0)
+            || (source != null && !HealthFigures.PERSON.equals(source) && !HealthFigures.ROBOT.equals(source))) {
             throw new BadRequestException("Invalid request");
         }
         Sort newestFirst = Sort.by(Sort.Direction.DESC, "startedAt").and(Sort.by(Sort.Direction.DESC, "id"));
-        Page<PlaybackHealth> found = repository.findAll(matching(since, minWatchedMs, problems),
+        Page<PlaybackHealth> found = repository.findAll(matching(since, minWatchedMs, problems, source),
             PageRequest.of(pageNumber, pageSize, newestFirst));
         List<PlaybackRow> rows = new ArrayList<>();
         for (PlaybackHealth stored : found.getContent()) {
@@ -212,7 +215,7 @@ public class PlaybackHealthService {
         long films = 0;
         long smooth = 0;
         for (Viewing viewing : viewings(clock.instant().minus(SUMMARY_WINDOW))) {
-            if (viewing.watchedMs() >= FILM_SESSION_MIN_MS) {
+            if (viewing.watchedMs() >= FILM_SESSION_MIN_MS && HealthFigures.PERSON.equals(viewing.first().source())) {
                 films++;
                 if (!viewing.hasProblem()) {
                     smooth++;
@@ -226,7 +229,7 @@ public class PlaybackHealthService {
     private List<Viewing> viewings(Instant since) {
         Sort oldestFirst = Sort.by(Sort.Direction.ASC, "startedAt").and(Sort.by(Sort.Direction.ASC, "id"));
         List<Part> parts = new ArrayList<>();
-        for (PlaybackHealth stored : repository.findAll(matching(since, null, null), oldestFirst)) {
+        for (PlaybackHealth stored : repository.findAll(matching(since, null, null, null), oldestFirst)) {
             HealthReport report = typed(stored);
             ClientInfo client = report == null ? null : report.client();
             parts.add(new Part(stored.getPlaybackId(), stored.getFilmId(), stored.getFilmTitle(),
@@ -234,7 +237,8 @@ public class PlaybackHealthService {
                 stored.getStallMs(), stored.getStartupMs(), stored.isHasProblem(), stored.getEnvironment(),
                 report == null ? null : report.operator(), client == null ? null : client.userAgent(),
                 client == null ? null : client.touch(), report == null ? null : report.startPositionMs(),
-                report == null ? null : report.endPositionMs(), report == null ? null : report.rungMs()));
+                report == null ? null : report.endPositionMs(), report == null ? null : report.rungMs(),
+                stored.getSource()));
         }
         return ViewingJoiner.join(parts);
     }
@@ -259,7 +263,8 @@ public class PlaybackHealthService {
         }
         return new ChartRow(first.playbackId(), first.filmId(), first.filmTitle(), first.startedAt(),
             viewing.watchedMs(), stallCount, stallMs, first.startupMs(), first.environment(), rungMs,
-            first.userAgent(), first.touch(), viewing.last().updatedAt(), List.copyOf(chartParts));
+            first.userAgent(), first.touch(), viewing.last().updatedAt(), first.source(),
+            List.copyOf(chartParts));
     }
 
     /**
@@ -303,7 +308,8 @@ public class PlaybackHealthService {
         return report.quality();
     }
 
-    private static Specification<PlaybackHealth> matching(Instant since, Long minWatchedMs, Boolean problems) {
+    private static Specification<PlaybackHealth> matching(Instant since, Long minWatchedMs, Boolean problems,
+                                                              String source) {
         return (root, query, builder) -> {
             List<Predicate> all = new ArrayList<>();
             if (since != null) {
@@ -314,6 +320,9 @@ public class PlaybackHealthService {
             }
             if (problems != null) {
                 all.add(builder.equal(root.<Boolean>get("hasProblem"), problems));
+            }
+            if (source != null) {
+                all.add(builder.equal(root.<String>get("source"), source));
             }
             return builder.and(all.toArray(Predicate[]::new));
         };
@@ -413,7 +422,7 @@ public class PlaybackHealthService {
 
     private static PlaybackRow row(PlaybackHealth stored, JsonNode report) {
         return new PlaybackRow(stored.getPlaybackId(), stored.getFilmId(), stored.getFilmTitle(),
-            stored.getEditionId(), stored.getStartedAt(), stored.getUpdatedAt(), report);
+            stored.getEditionId(), stored.getStartedAt(), stored.getUpdatedAt(), stored.getSource(), report);
     }
 
     private static BadRequestException invalid() {

@@ -49,7 +49,7 @@ final class MeasureFixtures {
     /** What {@code complete.json} says for a film. */
     static DatasetComplete complete(long mediaFileId, String ffmpeg, String gitCommit, String writtenAt,
                                     List<Long> coarse, List<Long> dense) {
-        return new DatasetComplete(DatasetComplete.FORMAT, mediaFileId, "1000:1", 600_000L, TARGET_MS,
+        return new DatasetComplete(DatasetComplete.FORMAT_VERSION, mediaFileId, "1000:1", 600_000L, TARGET_MS,
             new DatasetComplete.Window(360_000L, 600_000L), new DatasetComplete.Frame(8, 4),
             new DatasetComplete.Area(0, 0, 8, 4), List.of(1L), coarse, dense, ffmpeg, "25.0.1", gitCommit, SETTINGS,
             writtenAt);

@@ -409,6 +409,7 @@ describe('adminCopy: the Playback log, Conversion and Remembered networks cards'
       'All',
       'Films only (3 min+)',
       'With problems',
+      'Headless runs',
     ]);
     expect(playbackLog.columns).toEqual([
       'Started',

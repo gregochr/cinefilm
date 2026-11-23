@@ -90,6 +90,10 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    body but the playback records' own. Everything the viewer prints passes `printable`.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
    never with `dangerouslySetInnerHTML`. Image URLs come from the `imageUrl` helper only.
+   A request path that carries an id is built only in `frontend/src/api`, and every id put into one goes through
+   `pathSegment`, which encodes it as a single segment and refuses `.` and `..`, so an id from a link or a response
+   cannot send a request to another endpoint. Two things are used as the server gives them and are not ids: a
+   playback session's `masterUrl` and a stored artwork path (`/api/art/…`).
    **The operator lookup** is the browser's one request to a host other than CineFilm and TMDB's images: when the
    player opens away from home it asks `https://ipinfo.io/json` which network operator the device is on. It is
    made from a hidden `sandbox="allow-scripts"` frame built from `srcdoc`, with `credentials: 'omit'` and
@@ -99,19 +103,29 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    message only from that frame's own window and only when the message's origin is the string `null`, which is
    what a sandboxed frame reports: a frame that had lost its sandbox would report the app's own origin and be
    ignored, so the lookup fails closed. It keeps only `org`, as text of 1 to 100 characters, and stores an answer
-   against it in `localStorage` only. No location is requested or stored. Any other outside request from
+   against it in `localStorage` only. The browser never asks for a location. Any other outside request from
    the browser needs a note in the PR.
+   **Journey data.** The server stores a journey's positions, and which train it was, only when the owner imports a
+   train feed logger file in Admin (`POST /api/admin/journeys`). They are then in the database, in its dumps (rule 9)
+   and in Admin's answers, and nowhere else. The device's addresses never leave the laptop, and the server refuses
+   (400) a file that carries a name it does not know, a value of the wrong kind or one out of range, so nothing it
+   was not told to keep is stored. The raw logger files are never committed.
    **The train feed logger** (`scripts/train-feed-logger.py`) is not the app: the owner runs it by hand on the
    laptop on a train, and it is in no image. It only reads: the train's own Wi-Fi system, one public address to
    time the internet and, when no film is playing, CineFilm's own page code to time a download. It asks the
    train's system over `https` and, as that system is reported to use it, plain `http`, and it reads an `https`
    answer whose certificate is refused, marking it untrusted. What the feed says is logged and shown on the
    terminal as printable ASCII, limited in size and depth, and decides nothing beyond whether an address or one of
-   its parts counts as answering. Its log holds where the train went, so it is written under
-   `~/train-feed-logger/logs`, never inside a checkout, and is never committed. "No location is requested or
-   stored" above still holds for the browser and the server.
+   its parts counts as answering. It also reads the laptop's own power, heat, load and memory figures from `pmset` and
+   `sysctl`, and the signal, noise, rate and channel of its own Wi-Fi link from `osascript` running one fixed script;
+   all by absolute path with no shell, logging only the parsed figures: no serial number, hardware id or address,
+   never the network's name or the access point's address, and never a scan. Its log holds where the train went, so it is written under
+   `~/train-feed-logger/logs`, never inside a checkout, and is never committed. The browser still asks for no
+   location, and the server stores one only as the Journey data paragraph above says.
 8. **Dependencies and CI.** No new dependency without a reason in the PR. OWASP/`npm audit` findings at High or above
    block. Workflows declare least-privilege `permissions:`, pin third-party actions, and never print secrets.
+   CI and the image install packages without running their install scripts (`npm ci --ignore-scripts`,
+   `pip install --only-binary :all:`).
 9. **Data.** The watch history is the owner's only irreplaceable data: migrations follow expand-then-contract, and
    deploys take a pre-release dump.
 

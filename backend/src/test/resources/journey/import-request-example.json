@@ -1,0 +1,154 @@
+{
+  "runStartedMs": 1790000000000,
+  "loggerVersion": 3,
+  "sourceFile": "test-feed-2026-09-21-1000.jsonl",
+  "osVersion": "TestOS 1.2",
+  "travelClass": "standard",
+  "device": {
+    "model": "Testbook1,1",
+    "cpu": "Test Chip One",
+    "cores": 8,
+    "threads": 8,
+    "memoryBytes": 17179869184
+  },
+  "samples": [
+    {
+      "round": 1,
+      "at": 1790000030000,
+      "trainUnit": "Unit-001",
+      "feedAt": 1790000029,
+      "fixMode": 3,
+      "fixAgeS": 4,
+      "latitude": 12.5,
+      "longitude": 34.5,
+      "altitudeM": 56.5,
+      "speedMps": 21.5,
+      "courseDeg": 187.5,
+      "satellites": 9,
+      "online": 1,
+      "usersOnline": 11,
+      "usersTotal": 12,
+      "downLimit": 625000,
+      "upLimit": 125000,
+      "capLevel": 15,
+      "userClass": 16,
+      "dataDownUsed": 1700,
+      "dataUpUsed": 1800,
+      "probeMs": 19,
+      "probeCode": 204,
+      "powerSource": "battery",
+      "batteryPercent": 82,
+      "lowPower": 0,
+      "cpuLimit": 100,
+      "loadAvg": 2.5,
+      "swapMb": 26.5,
+      "wifiRssi": -57,
+      "wifiNoise": -91,
+      "wifiRate": 286.5,
+      "wifiPhy": 8,
+      "wifiBand": 2,
+      "wifiWidth": 3,
+      "wifiChannel": 36,
+      "modems": [
+        {
+          "index": 100,
+          "deviceType": "TestModemType",
+          "deviceSubtype": "TestSubtype",
+          "deviceState": "up",
+          "linkState": "available",
+          "technology": "lte",
+          "rssi": -70,
+          "operatorId": "00123",
+          "cellId": 123456
+        },
+        {
+          "index": 101,
+          "deviceType": "TestModemType",
+          "deviceSubtype": "TestSubtype",
+          "deviceState": "down",
+          "linkState": "disconnected",
+          "rssi": null,
+          "technology": null,
+          "operatorId": null,
+          "cellId": null
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "at": 1790000060000,
+      "trainUnit": "Unit-001",
+      "latitude": 12.6,
+      "longitude": 34.6,
+      "speedMps": 22.5,
+      "modems": [
+        {
+          "index": 100,
+          "deviceType": "TestModemType",
+          "deviceSubtype": "TestSubtype",
+          "deviceState": "up",
+          "linkState": "available",
+          "technology": "lte",
+          "rssi": -72,
+          "operatorId": "00123",
+          "cellId": 123457
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "at": 1790000090000
+    },
+    {
+      "round": 4,
+      "at": 1790000120000,
+      "latitude": 12.7,
+      "longitude": 34.7,
+      "speedMps": 23.5,
+      "modems": [
+        {
+          "index": 101,
+          "deviceType": "TestModemType",
+          "deviceSubtype": "TestSubtype",
+          "deviceState": "up",
+          "linkState": "available",
+          "technology": "lte",
+          "rssi": -75,
+          "operatorId": "00456",
+          "cellId": 123458
+        }
+      ]
+    },
+    {
+      "round": 5,
+      "at": 1790000150000,
+      "trainUnit": "Unit-002",
+      "latitude": 12.8,
+      "longitude": 34.8,
+      "speedMps": 24.5,
+      "usersOnline": 20,
+      "modems": [
+        {
+          "index": 100,
+          "deviceType": "TestModemType",
+          "deviceSubtype": "TestSubtype",
+          "deviceState": "up",
+          "linkState": "available",
+          "technology": "lte",
+          "rssi": -80,
+          "operatorId": "00123",
+          "cellId": 123459
+        }
+      ]
+    },
+    {
+      "round": 6,
+      "at": 1790000180000,
+      "trainUnit": "Unit-002",
+      "latitude": 12.9,
+      "longitude": 34.9,
+      "speedMps": 25.5,
+      "usersOnline": 21
+    }
+  ]
+}

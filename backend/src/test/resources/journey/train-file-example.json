@@ -1,0 +1,52 @@
+{
+  "uid": "X12345",
+  "date": "2030-03-04",
+  "headcode": "9Z99",
+  "operator": "Example Rail",
+  "source": "https://example.invalid/run",
+  "calls": [
+    {
+      "location": "Alpha Junction",
+      "plannedDeparture": "22:00",
+      "actualDeparture": "22:01:30"
+    },
+    {
+      "location": "Beta Parkway",
+      "plannedArrival": "22:30",
+      "plannedDeparture": "22:32",
+      "actualArrival": "22:31:30",
+      "actualDeparture": "22:34"
+    },
+    {
+      "location": "Gamma Loop",
+      "plannedPass": "22:50:30",
+      "actualPass": "22:53"
+    },
+    {
+      "location": "Delta Cross",
+      "plannedPass": "23:10",
+      "actualArrival": "23:12",
+      "actualDeparture": "23:13:30"
+    },
+    {
+      "location": "Epsilon Green",
+      "plannedArrival": "23:40",
+      "plannedDeparture": "23:41"
+    },
+    {
+      "location": "Zeta Sidings",
+      "plannedPass": "23:59:30",
+      "actualPass": "00:02"
+    },
+    {
+      "location": "Eta Works",
+      "plannedPass": "00:20",
+      "actualPass": "00:22:30"
+    },
+    {
+      "location": "Theta Central",
+      "plannedArrival": "00:45",
+      "actualArrival": "00:47:30"
+    }
+  ]
+}

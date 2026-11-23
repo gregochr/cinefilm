@@ -148,7 +148,7 @@ export function defaultRoute(method, url, init = {}) {
   }
   if (path === '/api/admin/playback-health') {
     // Any filter or paging parameter switches on the paged answer `{ playbacks, total }`, as the server does.
-    const paged = ['since', 'minWatchedMs', 'problems', 'page', 'size'].some((name) =>
+    const paged = ['since', 'minWatchedMs', 'problems', 'source', 'page', 'size'].some((name) =>
       u.searchParams.has(name),
     );
     return json(

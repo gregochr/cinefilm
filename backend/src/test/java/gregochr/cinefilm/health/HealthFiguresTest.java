@@ -1,5 +1,6 @@
 package gregochr.cinefilm.health;
 
+import static gregochr.cinefilm.health.HealthSamples.client;
 import static gregochr.cinefilm.health.HealthSamples.example;
 import static gregochr.cinefilm.health.HealthSamples.report;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,7 +28,7 @@ class HealthFiguresTest {
     void theExampleReportGivesItsFigures() {
         HealthFigures figures = HealthFigures.of(report(example()));
 
-        assertThat(figures).isEqualTo(new HealthFigures(171_000, 2, 9_400, 2_380L, true, "train"));
+        assertThat(figures).isEqualTo(new HealthFigures(171_000, 2, 9_400, 2_380L, true, "train", "person"));
     }
 
     @Test
@@ -72,7 +73,7 @@ class HealthFiguresTest {
     void missingFiguresCountAsZeroAndNoProblem() {
         HealthFigures figures = HealthFigures.of(HealthSamples.JSON.readValue("{}", HealthReport.class));
 
-        assertThat(figures).isEqualTo(new HealthFigures(0, 0, 0, null, false, null));
+        assertThat(figures).isEqualTo(new HealthFigures(0, 0, 0, null, false, null, "person"));
     }
 
     @Test
@@ -89,5 +90,49 @@ class HealthFiguresTest {
         node.put("environment", "x".repeat(HealthFigures.MAX_ENVIRONMENT));
 
         assertThat(HealthFigures.of(report(node)).environment()).hasSize(HealthFigures.MAX_ENVIRONMENT);
+    }
+
+    // source
+
+    private static ObjectNode withUserAgent(String userAgent) {
+        ObjectNode node = example();
+        client(node).put("userAgent", userAgent);
+        return node;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/157.0.0.0 Safari/537.36", "HeadlessChrome"})
+    void aUserAgentThatSaysHeadlessChromeIsARobot(String userAgent) {
+        assertThat(HealthFigures.of(report(withUserAgent(userAgent))).source()).isEqualTo("robot");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/130", "headlesschrome", "Headless Chrome", ""})
+    void anyOtherUserAgentIsAPerson(String userAgent) {
+        assertThat(HealthFigures.of(report(withUserAgent(userAgent))).source()).isEqualTo("person");
+    }
+
+    @Test
+    void aReportWithNoUserAgentIsAPerson() {
+        ObjectNode node = example();
+        client(node).putNull("userAgent");
+
+        assertThat(HealthFigures.of(report(node)).source()).isEqualTo("person");
+    }
+
+    @Test
+    void aReportWithNoClientIsAPerson() {
+        ObjectNode node = example();
+        node.remove("client");
+
+        assertThat(HealthFigures.of(report(node)).source()).isEqualTo("person");
+    }
+
+    @Test
+    void theTwoWordsAreStoredInTheColumn() {
+        assertThat(HealthFigures.PERSON).isEqualTo("person");
+        assertThat(HealthFigures.ROBOT).isEqualTo("robot");
     }
 }

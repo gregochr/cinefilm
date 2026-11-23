@@ -21,7 +21,7 @@ record AutoCheckOptions(Path candidates, Path out, Path media, Full full) {
     static final int TILES = 9;
 
     private static final List<String> FLAGS = List.of("candidates", "out", "media");
-    private static final String FULL = "full";
+    private static final String FULL_FLAG = "full";
 
     /**
      * One still asked for with {@code --full}.
@@ -46,10 +46,10 @@ record AutoCheckOptions(Path candidates, Path out, Path media, Full full) {
         for (int i = 0; i < args.length; i++) {
             String name = args[i];
             String flag = name.startsWith("--") ? name.substring(2) : name;
-            if (flag.equals(name) || !FLAGS.contains(flag) && !FULL.equals(flag)) {
+            if (flag.equals(name) || !FLAGS.contains(flag) && !FULL_FLAG.equals(flag)) {
                 throw new IllegalArgumentException("unknown argument " + name);
             }
-            if (FULL.equals(flag)) {
+            if (FULL_FLAG.equals(flag)) {
                 if (full != null) {
                     throw new IllegalArgumentException("flag " + name + " given twice");
                 }

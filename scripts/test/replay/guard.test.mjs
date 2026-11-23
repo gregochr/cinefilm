@@ -76,6 +76,7 @@ const WRITES = [
   ['adminApi.clearCredits', 'DELETE', '/api/admin/editions/:id/credits', HELD],
   ['adminApi.startPlexImport', 'POST', '/api/admin/plex/import', HELD],
   ['adminApi.startPlexCreditsImport', 'POST', '/api/admin/plex/credits/import', HELD],
+  ['adminApi.importJourney', 'POST', '/api/admin/journeys', HELD],
   ['adminApi.stopTranscodingSession', 'DELETE', '/api/admin/transcoding/sessions/:id', HELD],
   ['adminApi.attachSubtitle', 'POST', '/api/admin/subtitles/:id/attach', HELD],
   ['adminApi.detachSubtitle', 'POST', '/api/admin/subtitles/:id/detach', HELD],
@@ -113,9 +114,9 @@ describe('every write the app can make', () => {
     for (const call of source.matchAll(/\b(put|post|del)\(\s*(['`])/g)) {
       const start = call.index + call[0].length;
       // The text up to the closing quote (a path with a query written in it ends at its inner quote), the query cut
-      // off, a half-written `${` dropped and each `${name}` written `:name`.
+      // off, a half-written `${` dropped and each `${name}` or `${pathSegment(name)}` written `:name`.
       const text = source.slice(start, source.indexOf(call[2], start)).split('?')[0];
-      const path = text.replace(/\$\{\w*\s*$/, '').replaceAll(/\$\{(\w+)\}/g, ':$1');
+      const path = text.replace(/\$\{\w*\s*$/, '').replaceAll(/\$\{(?:pathSegment\()?(\w+)\)?\}/g, ':$1');
       found.push(`${{ put: 'PUT', post: 'POST', del: 'DELETE' }[call[1]]} ${path}`);
     }
     const named = WRITES.map(([, method, path]) => `${method} ${path}`);

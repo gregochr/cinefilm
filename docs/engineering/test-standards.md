@@ -443,10 +443,10 @@ add a file to an exclusion list to dodge writing a test.
 per-file floor to fit a file; write the test.
 
 **Changed-lines check (arrives in phase 4).** Locally, after `npm run test:coverage`: `pip install
-diff-cover==10.0.0` then, from the repo root, `sed 's#^SF:#SF:frontend/#' frontend/coverage/lcov.info >
-/tmp/lcov-root.info && diff-cover /tmp/lcov-root.info --compare-branch=origin/main --fail-under=90`. The `SF:`
-rewrite is required: lcov paths are relative to `frontend/`, and without it nothing matches and the check passes
-vacuously. Output goes to the ignored `frontend/coverage/`.
+--only-binary :all: diff-cover==10.0.0` then, from the repo root, `sed 's#^SF:#SF:frontend/#'
+frontend/coverage/lcov.info > /tmp/lcov-root.info && diff-cover /tmp/lcov-root.info --compare-branch=origin/main
+--fail-under=90`. The `SF:` rewrite is required: lcov paths are relative to `frontend/`, and without it nothing
+matches and the check passes vacuously. Output goes to the ignored `frontend/coverage/`.
 
 ## Mutation testing and mutation-checking a test without destroying work
 

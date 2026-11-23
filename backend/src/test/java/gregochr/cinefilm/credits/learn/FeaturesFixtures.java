@@ -50,7 +50,7 @@ final class FeaturesFixtures {
 
     /** What {@code complete.json} says for a film of this fixture. */
     static DatasetComplete complete(long id, String fingerprint, List<Long> coarse, List<Long> dense) {
-        return new DatasetComplete(DatasetComplete.FORMAT, id, fingerprint, DURATION_MS, TARGET_MS,
+        return new DatasetComplete(DatasetComplete.FORMAT_VERSION, id, fingerprint, DURATION_MS, TARGET_MS,
             new DatasetComplete.Window(WINDOW_START_MS, DURATION_MS), new DatasetComplete.Frame(32, 32),
             new DatasetComplete.Area(0, 0, 32, 32), List.of(1L), coarse, dense, "ffmpeg 7", "25.0.1", "abc", SETTINGS,
             "2026-11-10T12:10:00Z");

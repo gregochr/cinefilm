@@ -29,21 +29,31 @@ public interface PlaybackHealthRepository
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update PlaybackHealth h set h.summary = :summary, h.seq = :seq, h.updatedAt = :updatedAt, "
         + "h.watchedMs = :watchedMs, h.stallCount = :stallCount, h.stallMs = :stallMs, h.startupMs = :startupMs, "
-        + "h.hasProblem = :hasProblem, h.environment = :environment "
+        + "h.hasProblem = :hasProblem, h.environment = :environment, h.source = :source "
         + "where h.playbackId = :playbackId and h.seq < :seq")
     int replaceIfNewerWith(String playbackId, int seq, String summary, Instant updatedAt, long watchedMs,
-                           long stallCount, long stallMs, Long startupMs, boolean hasProblem, String environment);
+                           long stallCount, long stallMs, Long startupMs, boolean hasProblem, String environment,
+                           String source);
 
     /** {@link #replaceIfNewerWith} taking the figures as {@link HealthFigures}. */
     default int replaceIfNewer(String playbackId, int seq, String summary, Instant updatedAt,
                                HealthFigures figures) {
         return replaceIfNewerWith(playbackId, seq, summary, updatedAt, figures.watchedMs(), figures.stallCount(),
-            figures.stallMs(), figures.startupMs(), figures.hasProblem(), figures.environment());
+            figures.stallMs(), figures.startupMs(), figures.hasProblem(), figures.environment(), figures.source());
     }
 
     /** The ids of the records that were updated longest ago, oldest first (the lower id first on a tie). */
     @Query("select h.id from PlaybackHealth h order by h.updatedAt asc, h.id asc")
     List<Long> oldestIds(Pageable page);
+
+    /**
+     * The ids of the records whose time ({@code startedAt} to {@code updatedAt}) overlaps {@code from} to
+     * {@code to}, the ends included, and whose environment is not {@code home} (none counts as not home), lowest id
+     * first, at most the page's size: the records a journey is linked to.
+     */
+    @Query("select h.id from PlaybackHealth h where h.startedAt <= :to and h.updatedAt >= :from "
+        + "and (h.environment is null or h.environment <> 'home') order by h.id asc")
+    List<Long> idsOverlapping(Instant from, Instant to, Pageable page);
 
     /**
      * The records updated at or after {@code since}, newest update first (the higher id first on a tie), at most

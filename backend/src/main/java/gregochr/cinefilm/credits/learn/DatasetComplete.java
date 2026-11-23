@@ -20,7 +20,7 @@ import tools.jackson.databind.json.JsonMapper;
  * is what says the directory holds every frame, so a killed or stopped run never leaves a directory that looks
  * finished. It holds numbers and tool versions only: no title and no path.
  *
- * @param format the layout of this file ({@value #FORMAT})
+ * @param format the layout of this file ({@value #FORMAT_VERSION})
  * @param mediaFileId the media file
  * @param fingerprint the file's size and modification time when read
  * @param durationMs the file's length on its timeline
@@ -43,7 +43,7 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
                               String gitCommit, Settings settings, String writtenAt) {
 
     /** The layout version this code writes and accepts. */
-    public static final int FORMAT = 1;
+    public static final int FORMAT_VERSION = 1;
     /** The file's name inside a file's directory. */
     public static final String FILE_NAME = "complete.json";
 
@@ -105,7 +105,7 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
     public static Optional<String> fingerprint(Path dir) {
         try {
             JsonNode node = MAPPER.readTree(Files.readAllBytes(dir.resolve(FILE_NAME)));
-            return node.path("format").asInt(-1) == FORMAT ? Optional.of(node.path("fingerprint").asString(""))
+            return node.path("format").asInt(-1) == FORMAT_VERSION ? Optional.of(node.path("fingerprint").asString(""))
                 : Optional.empty();
         } catch (IOException | JacksonException e) {
             return Optional.empty();
@@ -137,7 +137,7 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
     public static Optional<DatasetComplete> parse(byte[] json) {
         try {
             DatasetComplete complete = MAPPER.readValue(json, DatasetComplete.class);
-            return complete != null && complete.format() == FORMAT && complete.window() != null
+            return complete != null && complete.format() == FORMAT_VERSION && complete.window() != null
                 && complete.frame() != null && complete.activeArea() != null && complete.settings() != null
                 && hasOffsets(complete.coarse()) && hasOffsets(complete.dense()) ? Optional.of(complete)
                 : Optional.empty();

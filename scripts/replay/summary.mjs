@@ -1,7 +1,8 @@
 // The train viewer's summary (docs/engineering/train-viewer-plan.md, decision 12): the lines of `summary.txt` and what
-// is printed when a run ends, as a pure function of the results the run keeps (`samples`, `health` and `held`, as
-// `viewing.mjs` writes them). It takes only fields that are there and of the right type, and every line passes
-// `printable`. There is no table of minutes: `health.json` holds the record and Admin shows the minutes.
+// is printed when a run ends, as a pure function of the results the run keeps (`samples`, `health`, `segments` and
+// `held`, as `viewing.mjs` writes them). It takes only fields that are there and of the right type, and every line
+// passes `printable`. There is no table of minutes: `health.json` holds the record and Admin shows the minutes.
+import { speedKbit } from './segments.mjs';
 import { printable } from './text.mjs';
 
 const LINE_LIMIT = 300;
@@ -106,6 +107,26 @@ function sampleLines(samples) {
   return lines;
 }
 
+// The p-th percentile (0 to 100) of the numbers, by nearest rank; the median is the middle (or the mean of the middle two).
+const percentile = (sorted, p) => sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)];
+const median = (sorted) => {
+  const mid = sorted.length / 2;
+  return sorted.length % 2 === 1 ? sorted[Math.floor(mid)] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+
+function segmentLines(segments) {
+  const all = objects(isObject(segments) ? segments.segments : null);
+  if (all.length === 0) return ['Segments: none recorded'];
+  const count = (key) => all.filter((entry) => entry[key] === true).length;
+  const speeds = all.map(speedKbit).filter((speed) => speed !== null).sort((a, b) => a - b);
+  const speed = speeds.length === 0 ? 'no speed' : `median ${Math.round(median(speeds))} kbit/s, `
+    + `10th percentile ${Math.round(percentile(speeds, 10))} kbit/s`;
+  return [joined([
+    `Segments: ${all.length} recorded`, `${count('failed')} failed`, `${count('canceled')} cancelled`,
+    `${count('unfinished')} unfinished`, speed,
+  ], ', ') + (segments.capped === true ? ' (list full: later ones not recorded)' : '')];
+}
+
 function heldLines(held) {
   const entries = objects(held.held);
   const lines = [entries.length === 0 ? 'Held back: nothing' : 'Held back:'];
@@ -150,6 +171,7 @@ export function summarise(results) {
     ...headerLines(isObject(held.run) ? held.run : {}),
     ...recordLines(isObject(source.health) ? source.health : {}),
     ...sampleLines(source.samples),
+    ...segmentLines(source.segments),
     ...pressLines(held.presses),
     ...heldLines(held),
     ...troubleLines(held),
