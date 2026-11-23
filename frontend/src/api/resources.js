@@ -138,6 +138,8 @@ export const adminApi = {
   importJourney: (request) => post('/api/admin/journeys', request),
   /** Deletes one stored journey with its rounds and links: 204 with no body; 404 when it is already gone. */
   deleteJourney: (id) => del(`/api/admin/journeys/${pathSegment(id)}`),
+  /** Stores the train's file for one journey, merged: 200 `{ uid, date, headcode, calls }` (`calls` the count). */
+  giveJourneyTrain: (id, file) => put(`/api/admin/journeys/${pathSegment(id)}/train`, file),
   transcoding: (options) => get('/api/admin/transcoding', options),
   // `playbackId` is the row's viewing: the server also ends that viewing's newer session (one made after the list was read).
   stopTranscodingSession: (id, playbackId) =>

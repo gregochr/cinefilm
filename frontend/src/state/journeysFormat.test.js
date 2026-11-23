@@ -12,6 +12,12 @@ import {
   readyLine,
   rowAfterDelete,
   sentRows as rowsFor,
+  trainFailure,
+  trainProblemText,
+  trainReadyLine,
+  trainRows,
+  trainSpoken,
+  trainToast,
 } from './journeysFormat.js';
 
 const summary = (over = {}) => ({
@@ -385,6 +391,155 @@ describe('deleteFailure', () => {
     const text = 'Couldn’t delete the journey. Try again.';
     expect(deleteFailure(new ApiError(500, 'x'))).toEqual({ kind: 'alert', text });
     expect(deleteFailure(new TypeError('Failed to fetch'))).toEqual({ kind: 'alert', text });
+  });
+});
+
+describe('trainSpoken', () => {
+  it('names the journey by the row’s title when it has no train yet', () => {
+    expect(trainSpoken(stored({ ...sameDay, train: null }))).toBe(
+      'Add train file to the journey logged 4 Mar 2030, 22:00 to 23:15',
+    );
+  });
+
+  it('names the journey by the row’s title when it has a train', () => {
+    expect(trainSpoken(stored(sameDay))).toBe(
+      'Replace train file of the journey logged 4 Mar 2030, 22:00 to 23:15',
+    );
+  });
+
+  it('says a journey with no samples has none, both ways', () => {
+    expect(trainSpoken(stored({ ...noSamples, train: null }))).toBe(
+      'Add train file to the journey with no samples',
+    );
+    expect(trainSpoken(stored(noSamples))).toBe(
+      'Replace train file of the journey with no samples',
+    );
+  });
+});
+
+describe('trainReadyLine', () => {
+  it('names the headcode', () => {
+    expect(trainReadyLine({ headcode: '9Z99' })).toBe('Ready to send: train 9Z99');
+  });
+});
+
+describe('trainRows', () => {
+  const trainSummary = (over = {}) => ({
+    uid: 'X12345',
+    date: '2030-03-04',
+    headcode: '9Z99',
+    calls: 8,
+    from: 'Alpha Junction',
+    to: 'Theta Central',
+    ...over,
+  });
+
+  it('lists the terms in order with their values, the date as the row writes it', () => {
+    expect(trainRows(trainSummary())).toEqual([
+      { term: 'Timetable id', value: 'X12345' },
+      { term: 'Running date', value: '4 Mar 2030' },
+      { term: 'Headcode', value: '9Z99' },
+      { term: 'Timing points', value: '8' },
+      { term: 'From', value: 'Alpha Junction' },
+      { term: 'To', value: 'Theta Central' },
+    ]);
+  });
+
+  it.each(['04/03/2030', '2030-13-04', '2030-03-32', '2030-3-4'])(
+    'gives a date written %s as the file has it',
+    (date) => {
+      expect(trainRows(trainSummary({ date }))[1]).toEqual({ term: 'Running date', value: date });
+    },
+  );
+
+  it('writes the count of timing points with its comma', () => {
+    expect(trainRows(trainSummary({ calls: 1200 }))[3].value).toBe('1,200');
+  });
+});
+
+describe('trainProblemText', () => {
+  it.each([
+    ['tooBig', 'That file is too big to be a train file.'],
+    ['notJson', 'That file isn’t JSON.'],
+    [
+      'notATrainFile',
+      'That file isn’t a train file. It needs a uid, a date, a headcode and at least two calls, each with a location.',
+    ],
+  ])('says %s in one sentence', (problem, sentence) => {
+    expect(trainProblemText(problem)).toBe(sentence);
+  });
+});
+
+describe('trainFailure', () => {
+  const alert = (text) => ({ kind: 'alert', text });
+
+  it('leaves a 401 to the sign-in card, with no text', () => {
+    expect(trainFailure(new ApiError(401, 'no'))).toEqual({ kind: 'signin', text: null });
+  });
+
+  it('tells a 404 as a journey already gone, with no text', () => {
+    expect(trainFailure(new ApiError(404, 'x', { error: 'No such journey' }))).toEqual({
+      kind: 'gone',
+      text: null,
+    });
+  });
+
+  it('says a 400 for a train that did not run during the journey', () => {
+    const error = new ApiError(400, 'x', { error: 'The train did not run during this journey' });
+    expect(trainFailure(error)).toEqual(
+      alert('That train did not run during this journey. Nothing was stored.'),
+    );
+  });
+
+  it('says any other 400 was refused', () => {
+    expect(trainFailure(new ApiError(400, 'x', { error: 'Invalid train file' }))).toEqual(
+      alert('The server refused this train file. Nothing was stored.'),
+    );
+    expect(trainFailure(new ApiError(400, 'x'))).toEqual(
+      alert('The server refused this train file. Nothing was stored.'),
+    );
+  });
+
+  it('says a 409 for a train stored with other end points', () => {
+    const error = new ApiError(409, 'x', { error: 'This train is stored with other end points' });
+    expect(trainFailure(error)).toEqual(
+      alert('This train is already stored with other end points. Nothing was changed.'),
+    );
+  });
+
+  it('says any other 409 was another request running', () => {
+    expect(trainFailure(new ApiError(409, 'x', { error: 'Try again' }))).toEqual(
+      alert('Another request was running. Try again.'),
+    );
+    expect(trainFailure(new ApiError(409, 'x'))).toEqual(
+      alert('Another request was running. Try again.'),
+    );
+  });
+
+  it('says a 500 and a lost connection could not store the train', () => {
+    const text = 'Couldn’t store the train. Try again.';
+    expect(trainFailure(new ApiError(500, 'x'))).toEqual(alert(text));
+    expect(trainFailure(new TypeError('Failed to fetch'))).toEqual(alert(text));
+  });
+});
+
+describe('trainToast', () => {
+  it('says a train was added, with its timing points', () => {
+    expect(trainToast({ headcode: '9Z99', calls: 8 }, false)).toBe(
+      'Train 9Z99 added: 8 timing points',
+    );
+  });
+
+  it('says a train was replaced', () => {
+    expect(trainToast({ headcode: '9Z99', calls: 8 }, true)).toBe(
+      'Train 9Z99 replaced: 8 timing points',
+    );
+  });
+
+  it('says 1 timing point for one', () => {
+    expect(trainToast({ headcode: '9Z99', calls: 1 }, false)).toBe(
+      'Train 9Z99 added: 1 timing point',
+    );
   });
 });
 

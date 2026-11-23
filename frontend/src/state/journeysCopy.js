@@ -47,6 +47,48 @@ export const journeyDelete = {
   failed: 'Couldn’t delete the journey. Try again.',
 };
 
+export const journeyTrain = {
+  add: 'Add train file…',
+  replace: 'Replace train file…',
+  spoken: {
+    add: (title) => `Add train file to the journey logged ${title}`,
+    addNoSamples: 'Add train file to the journey with no samples',
+    replace: (title) => `Replace train file of the journey logged ${title}`,
+    replaceNoSamples: 'Replace train file of the journey with no samples',
+  },
+  group: 'Train file for this journey',
+  text: 'Choose the file with this train’s run: its timetable id, running date, headcode and its times at each timing point. The whole file is sent.',
+  label: 'Train file',
+  sentHeading: 'What will be sent',
+  ready: (headcode) => `Ready to send: train ${headcode}`,
+  terms: {
+    uid: 'Timetable id',
+    date: 'Running date',
+    headcode: 'Headcode',
+    calls: 'Timing points',
+    from: 'From',
+    to: 'To',
+  },
+  sendAdd: 'Add train',
+  sendReplace: 'Replace train',
+  storing: 'Storing…',
+  cancel: 'Cancel',
+  toast: (headcode, calls, replaced) =>
+    `Train ${headcode} ${replaced ? 'replaced' : 'added'}: ${count(calls, 'timing point', 'timing points')}`,
+  unreadable: 'That file couldn’t be read.',
+  problems: {
+    tooBig: 'That file is too big to be a train file.',
+    notJson: 'That file isn’t JSON.',
+    notATrainFile:
+      'That file isn’t a train file. It needs a uid, a date, a headcode and at least two calls, each with a location.',
+  },
+  didNotRun: 'That train did not run during this journey. Nothing was stored.',
+  refused: 'The server refused this train file. Nothing was stored.',
+  otherEnds: 'This train is already stored with other end points. Nothing was changed.',
+  conflict: 'Another request was running. Try again.',
+  failed: 'Couldn’t store the train. Try again.',
+};
+
 export const journeyImport = {
   title: 'Import a journey',
   text: 'Choose a log the train feed logger wrote. It is read here, in this browser, and only what is listed below is sent.',
