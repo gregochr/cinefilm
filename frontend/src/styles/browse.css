@@ -2416,35 +2416,30 @@
 .journey-import__row {
   display: contents;
 }
-/* A row's delete confirmation takes the row's whole width, under its text and button. */
-.journey-delete__confirm {
-  grid-column: 1 / -1;
-}
-/* A row's two buttons side by side on its first line, whichever of the panels below them is open. */
-.journey-row {
-  grid-template-columns: minmax(0, 1fr) auto auto;
-}
-.journey-row__train,
-.journey-row__delete {
-  grid-row: 1;
-}
-.journey-row__train {
-  grid-column: 2;
-}
-.journey-row__delete {
-  grid-column: 3;
-}
-/* A row's train file panel takes the row's whole width, under its text and buttons. */
-.journey-train__panel {
-  grid-column: 1 / -1;
-}
-@media (max-width: 600px) {
+/* A stored journey's row above the phone width is a line that wraps, so that its buttons never squeeze its text. The
+   text has the first line to itself until there is room for it beside all the buttons (below); the buttons follow at the
+   right, each at its own width, and one that does not fit goes to the next line. An open panel or confirmation takes a
+   whole line after them. On a phone the row is the one column every Admin row is, its buttons stacked. */
+@media (min-width: 601px) {
   .journey-row {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
-  .journey-row__train,
-  .journey-row__delete {
-    grid-column: 1;
-    grid-row: auto;
+  .journey-row .admin__todo-text {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .journey-delete__confirm,
+  .journey-remove__confirm,
+  .journey-train__panel {
+    flex: 0 0 100%;
+    order: 1;
+  }
+}
+/* Room for 280px of text beside three buttons. */
+@media (min-width: 1180px) {
+  .journey-row .admin__todo-text {
+    flex-basis: 280px;
   }
 }

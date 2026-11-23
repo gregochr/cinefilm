@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAdminContext } from '../../state/adminContext.js';
-import { journeyDelete as deleteCopy, journeysPage } from '../../state/journeysCopy.js';
+import {
+  journeyDelete as deleteCopy,
+  journeyTrainRemove as removeCopy,
+  journeysPage,
+} from '../../state/journeysCopy.js';
 import { rowAfterDelete, trainToast } from '../../state/journeysFormat.js';
 import { useJourneyDelete } from '../../state/useJourneyDelete.js';
 import { useJourneyTrain } from '../../state/useJourneyTrain.js';
@@ -14,8 +18,8 @@ import { useFallbackFocus } from './useFallbackFocus.js';
 
 /**
  * Train journeys, opened from Playback's card: the import of a logger's file, and the journeys stored, each with its
- * "Delete…" and its "Add train file…" or "Replace train file…". One confirmation or one train panel is open at a time
- * on the whole page, and one write runs at a time. A delete that is done (or that finds the journey already gone) says
+ * "Delete…" and its "Add train file…" or "Replace train file…" (and, with a train, "Remove train…"). One confirmation or
+ * one train panel is open at a time on the whole page, and one write runs at a time. A delete that is done (or that finds the journey already gone) says
  * so in a toast and reads the list again; when the rows have arrived, focus goes to the journey that followed the one
  * deleted, else the one before it, else (no row left) Admin's fallback takes it to the page's title.
  */
@@ -24,7 +28,8 @@ export default function AdminJourneys() {
   const { showToast, armFocusFallback, takeFocusFallback } = useAdminContext();
   const writer = useJourneyDelete();
   const trainer = useJourneyTrain();
-  // The one thing open on the page: `{ kind: 'delete' | 'train', id }`, a row's confirmation or a row's train panel.
+  // The one thing open on the page: `{ kind: 'delete' | 'train' | 'remove', id }`, a row's delete
+  // confirmation, its train panel or its train removal's confirmation.
   const [opened, setOpened] = useState(null);
   // The delete or train write that has been answered (a journey gone) and whose list is being read again: the id and
   // the list as it was.
@@ -39,6 +44,11 @@ export default function AdminJourneys() {
     trainer.clearFailure();
     setOpened(next);
   };
+  // A removal's confirmation whose train is no longer in the list (taken away in another tab, seen at a read again) is
+  // closed and forgotten: it does not come back open when that journey is shown with a train again.
+  if (opened?.kind === 'remove' && !journeys?.some((j) => j.id === opened.id && j.train)) {
+    show(null);
+  }
   const openIn = (kind) => (opened?.kind === kind ? opened.id : null);
   // Only one write runs at a time on the page: a row's button does nothing while either runs.
   const busy = writer.busy || trainer.busy;
@@ -76,6 +86,15 @@ export default function AdminJourneys() {
     const outcome = await trainer.give(id, request);
     if (outcome.ignored) return;
     if (outcome.ok) answered(id, trainToast(outcome.response, replaced));
+    else if (outcome.failure.kind === 'gone') answered(id, deleteCopy.goneToast);
+  };
+
+  // The train taken away: a 204 says so; a 404 is a journey that is gone; any other refusal shows in the confirmation,
+  // which stays open.
+  const takeAway = async (id) => {
+    const outcome = await trainer.takeAway(id);
+    if (outcome.ignored) return;
+    if (outcome.ok) answered(id, removeCopy.toast);
     else if (outcome.failure.kind === 'gone') answered(id, deleteCopy.goneToast);
   };
 
@@ -129,6 +148,14 @@ export default function AdminJourneys() {
           onClose: () => show(null),
           onGive: give,
           onEdit: trainer.clearFailure,
+        }}
+        removing={{
+          openId: openIn('remove'),
+          busy,
+          failure: trainer.failure,
+          onOpen: (id) => show({ kind: 'remove', id }),
+          onKeep: () => show(null),
+          onConfirm: takeAway,
         }}
       />
     </>

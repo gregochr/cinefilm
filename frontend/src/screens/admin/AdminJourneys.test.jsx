@@ -1201,6 +1201,537 @@ describe('Admin: the Train journeys page', () => {
     });
   });
 
+  describe('taking a journey’s train away', () => {
+    const HAD = { uid: 'X12345', date: '2030-03-04', headcode: '9Z99' };
+    const at = (hour, train = HAD) => ({
+      id: hour,
+      runStartedMs: 1898891940000 + hour,
+      segment: 0,
+      trainUnit: `Unit-0${hour}`,
+      travelClass: 'standard',
+      osVersion: null,
+      loggerVersion: 3,
+      sourceFile: null,
+      importedAt: '2030-03-05T09:00:00Z',
+      device: null,
+      samples: hour,
+      from: `2030-03-04T${hour}:00:00Z`,
+      to: `2030-03-04T${hour}:30:00Z`,
+      linked: 0,
+      train,
+    });
+    const [A, B, C] = [at(10), at(11), at(12)];
+    const when = (hour) => `the journey logged 4 Mar 2030, ${hour}:00 to ${hour}:30`;
+    const removeName = (hour) => `Remove train from ${when(hour)}`;
+    const addName = (hour) => `Add train file to ${when(hour)}`;
+    const replaceName = (hour) => `Replace train file of ${when(hour)}`;
+    const deleteName = (hour) => `Delete ${when(hour)}`;
+    const press = (hour) => userEvent.click(screen.getByRole('button', { name: removeName(hour) }));
+    const confirm = () => userEvent.click(screen.getByRole('button', { name: 'Remove train' }));
+    const GROUP = 'Remove this train?';
+    const reads = (fetchMock) =>
+      fetchMock.mock.calls.filter(
+        ([url, init]) => url === '/api/admin/journeys' && init?.method === 'GET',
+      );
+    const trainDeletes = (fetchMock) =>
+      fetchMock.mock.calls.filter(
+        ([url, init]) => init?.method === 'DELETE' && url.endsWith('/train'),
+      );
+    const held = () => {
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      return { gate, release };
+    };
+    const LOG = [
+      JSON.stringify({ event: 'start', tool: 'train-feed-logger', version: 3, t: 1790000000000 }),
+      JSON.stringify({ t: 1790000030000, round: 1 }),
+    ].join('\n');
+    /**
+     * The server: it holds `journeys`; a DELETE of a train answers with `answer(id, server)` (default: a 204 that takes
+     * the journey's train away) and a read with `read(count, server)` (default: what it holds).
+     */
+    const serve = (journeys, { answer, read, imported = journeys, gate, put } = {}) => {
+      const server = { journeys, reads: 0 };
+      const fetchMock = installFetch((method, url) => {
+        if (method === 'POST' && url === '/api/admin/journeys') {
+          server.journeys = imported;
+          return respond({ journeys: [{ samples: 6, linked: 0 }] }, 201);
+        }
+        const target = /^\/api\/admin\/journeys\/(\d+)\/train$/.exec(url);
+        if (method === 'PUT' && target) return put();
+        if (method === 'DELETE' && target) {
+          const id = Number(target[1]);
+          if (answer) return answer(id, server);
+          server.journeys = server.journeys.map((j) => (j.id === id ? { ...j, train: null } : j));
+          return gate ?? respond(null, 204);
+        }
+        if (method === 'GET' && url === '/api/admin/journeys') {
+          server.reads += 1;
+          return read?.(server.reads, server) ?? respond({ journeys: server.journeys });
+        }
+        return null;
+      });
+      return { fetchMock, server };
+    };
+    const open = async () => {
+      renderApp('/admin/playback/journeys');
+      await screen.findByRole('list', { name: 'Stored journeys' });
+    };
+    const importLog = async () => {
+      await userEvent.upload(screen.getByLabelText('Logger file'), new File([LOG], 'a.jsonl'));
+      await userEvent.click(await screen.findByRole('button', { name: 'Import' }));
+      await screen.findByText('Imported 1 journey: 6 rounds, no viewings linked');
+    };
+    const gone = (id) => (_, server) => {
+      server.journeys = server.journeys.filter((j) => j.id !== id);
+      return respond({ error: 'No such journey' }, 404);
+    };
+    const without = (id) => (count, server) =>
+      count === 2 ? respond({ journeys: server.journeys.filter((j) => j.id !== id) }) : null;
+
+    it('sends the removal to the journey’s own id', async () => {
+      const { fetchMock } = serve([A, B, C]);
+      await open();
+
+      await press(11);
+      await confirm();
+
+      await screen.findByText('Train removed');
+      expect(trainDeletes(fetchMock)).toHaveLength(1);
+      expect(trainDeletes(fetchMock)[0][0]).toBe('/api/admin/journeys/11/train');
+    });
+
+    it('says so, closes the confirmation, reads the list again and shows the row with no train', async () => {
+      const { fetchMock } = serve([A, B, C]);
+      await open();
+
+      await press(11);
+      await confirm();
+
+      expect(await screen.findByText('Train removed')).toBeInTheDocument();
+      await screen.findByRole('button', { name: addName(11) });
+      expect(reads(fetchMock)).toHaveLength(2);
+      expect(screen.queryByRole('group', { name: GROUP })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: removeName(11) })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: removeName(10) })).toBeInTheDocument();
+      expect(screen.getByText('No train yet')).toBeInTheDocument();
+    });
+
+    it('puts focus on the row’s Add train file… when another row follows it', async () => {
+      serve([A, B]);
+      await open();
+
+      await press(10);
+      await confirm();
+
+      const add = await screen.findByRole('button', { name: addName(10) });
+      await waitFor(() => expect(add).toHaveFocus());
+    });
+
+    it('puts focus on the row’s Add train file… when it is the only row', async () => {
+      serve([A]);
+      await open();
+
+      await press(10);
+      await confirm();
+
+      const add = await screen.findByRole('button', { name: addName(10) });
+      await waitFor(() => expect(add).toHaveFocus());
+    });
+
+    it('puts focus on the next row’s Delete… when the row is gone from the list read again', async () => {
+      serve([A, B, C], { read: without(11) });
+      await open();
+
+      await press(11);
+      await confirm();
+
+      await screen.findByText('Train removed');
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: deleteName(12) })).toHaveFocus(),
+      );
+    });
+
+    it('puts focus on the previous row’s Delete… when the last row is gone from the list read again', async () => {
+      serve([A, B], { read: without(11) });
+      await open();
+
+      await press(11);
+      await confirm();
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: deleteName(10) })).toHaveFocus(),
+      );
+    });
+
+    it('puts focus on the page’s title when no row is left', async () => {
+      serve([A], { read: (count) => (count === 2 ? respond({ journeys: [] }) : null) });
+      await open();
+
+      await press(10);
+      await confirm();
+
+      expect(await screen.findByText('No journeys yet. Import a log above.')).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { level: 1, name: 'Train journeys' })).toHaveFocus(),
+      );
+    });
+
+    it('tells a 404 as already deleted, reads the list again and puts focus on the next row’s Delete…', async () => {
+      const { fetchMock } = serve([A, B, C], { answer: gone(11) });
+      await open();
+
+      await press(11);
+      await confirm();
+
+      expect(await screen.findByText('That journey was already deleted')).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: deleteName(12) })).toHaveFocus(),
+      );
+      expect(reads(fetchMock)).toHaveLength(2);
+      expect(screen.queryByRole('group', { name: GROUP })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: replaceName(11) })).not.toBeInTheDocument();
+    });
+
+    it('puts focus on the page’s title when the only journey was found gone', async () => {
+      serve([A], { answer: gone(10) });
+      await open();
+
+      await press(10);
+      await confirm();
+
+      expect(await screen.findByText('No journeys yet. Import a log above.')).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { level: 1, name: 'Train journeys' })).toHaveFocus(),
+      );
+    });
+
+    it.each([
+      [
+        'a 409',
+        () => respond({ error: 'Try again' }, 409),
+        'Another request was running. Try again.',
+      ],
+      ['a 500', () => respond({ error: 'x' }, 500), 'Couldn’t remove the train. Try again.'],
+      [
+        'a lost connection',
+        () => Promise.reject(new TypeError('offline')),
+        'Couldn’t remove the train. Try again.',
+      ],
+    ])(
+      'shows %s in the confirmation, which stays open with both buttons live',
+      async (_, answer, text) => {
+        const { fetchMock } = serve([A, B], { answer });
+        await open();
+
+        await press(10);
+        await confirm();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(text);
+        expect(screen.getByRole('group', { name: GROUP })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove train' })).not.toHaveAttribute(
+          'aria-disabled',
+        );
+        expect(screen.getByRole('button', { name: 'Keep' })).not.toHaveAttribute('aria-disabled');
+        expect(reads(fetchMock)).toHaveLength(1);
+        expect(screen.queryByText('Train removed')).not.toBeInTheDocument();
+      },
+    );
+
+    it('keeps the confirmation open with no sentence of its own on a 401', async () => {
+      serve([A, B], { answer: () => respond({ error: 'Sign in' }, 401) });
+      await open();
+
+      await press(10);
+      await confirm();
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Remove train' })).not.toHaveAttribute(
+          'aria-disabled',
+        ),
+      );
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('group', { name: GROUP })).toBeInTheDocument();
+    });
+
+    it('forgets a refusal when the confirmation is closed with Keep and opened again', async () => {
+      serve([A, B], { answer: () => respond({ error: 'x' }, 500) });
+      await open();
+      await press(10);
+      await confirm();
+      await screen.findByRole('alert');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Keep' }));
+      await press(10);
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('forgets a removal’s refusal when the train panel is opened on that row', async () => {
+      serve([A, B], { answer: () => respond({ error: 'x' }, 500) });
+      await open();
+      await press(10);
+      await confirm();
+      await screen.findByRole('alert');
+
+      await userEvent.click(screen.getByRole('button', { name: replaceName(10) }));
+
+      expect(
+        screen.getByRole('group', { name: 'Train file for this journey' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('forgets a train file’s refusal when Remove train… is opened on that row', async () => {
+      serve([A, B], { put: () => respond({ error: 'x' }, 500) });
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: replaceName(10) }));
+      const text = JSON.stringify(
+        readRepoJson('backend/src/test/resources/journey/train-file-example.json'),
+      );
+      await userEvent.upload(screen.getByLabelText('Train file'), new File([text], 'run.json'));
+      await userEvent.click(await screen.findByRole('button', { name: 'Replace train' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Couldn’t store the train. Try again.',
+      );
+
+      await press(10);
+
+      expect(screen.getByRole('group', { name: GROUP })).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('sends one request for two presses in the same moment', async () => {
+      const { gate, release } = held();
+      const { fetchMock } = serve([A, B], { answer: () => gate });
+      await open();
+      await press(10);
+
+      const button = screen.getByRole('button', { name: 'Remove train' });
+      act(() => {
+        button.click();
+        button.click();
+      });
+      await act(async () => release(respond(null, 204)));
+
+      expect(trainDeletes(fetchMock)).toHaveLength(1);
+    });
+
+    it('does nothing for Keep, Escape or another row’s buttons while the request runs', async () => {
+      const { gate, release } = held();
+      serve([A, B], { answer: () => gate });
+      await open();
+      await press(10);
+      await confirm();
+      expect(screen.getByRole('button', { name: 'Removing…' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: 'Keep' }));
+      await userEvent.keyboard('{Escape}');
+      await userEvent.click(screen.getByRole('button', { name: removeName(11) }));
+      await userEvent.click(screen.getByRole('button', { name: replaceName(11) }));
+      await userEvent.click(screen.getByRole('button', { name: deleteName(11) }));
+
+      expect(screen.getAllByRole('group')).toHaveLength(1);
+      expect(screen.getByRole('group', { name: GROUP })).toBeInTheDocument();
+      await act(async () => release(respond({ error: 'x' }, 500)));
+      await screen.findByRole('alert');
+    });
+
+    it('starts no delete while a removal runs', async () => {
+      const { gate, release } = held();
+      const { fetchMock } = serve([A, B], { answer: () => gate });
+      await open();
+      await press(10);
+      await confirm();
+
+      await userEvent.click(screen.getByRole('button', { name: deleteName(10) }));
+
+      expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1);
+      await act(async () => release(respond({ error: 'x' }, 500)));
+      await screen.findByRole('alert');
+    });
+
+    it('leaves focus where the owner moved it while the request ran', async () => {
+      const request = held();
+      serve([A, B], { gate: request.gate });
+      await open();
+      await press(10);
+      await confirm();
+      await userEvent.click(screen.getByLabelText('Logger file'));
+
+      await act(async () => request.release(respond(null, 204)));
+
+      await screen.findByText('Train removed');
+      await screen.findByRole('button', { name: addName(10) });
+      expect(screen.getByLabelText('Logger file')).toHaveFocus();
+    });
+
+    it('puts focus on the list card’s heading when the list read again fails', async () => {
+      serve([A, B], { read: (count) => (count === 2 ? respond({ error: 'x' }, 500) : null) });
+      await open();
+
+      await press(10);
+      await confirm();
+
+      expect(await screen.findByText('Couldn’t load the journeys.')).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { level: 2, name: 'Stored journeys' })).toHaveFocus(),
+      );
+    });
+
+    describe('one thing open at a time', () => {
+      const trainPanel = () => screen.queryByRole('group', { name: 'Train file for this journey' });
+      const deleteGroup = () => screen.queryByRole('group', { name: 'Delete this journey?' });
+      const removeGroup = () => screen.queryByRole('group', { name: GROUP });
+      const openTrain = (hour) =>
+        userEvent.click(screen.getByRole('button', { name: replaceName(hour) }));
+      const openDelete = (hour) =>
+        userEvent.click(screen.getByRole('button', { name: deleteName(hour) }));
+
+      it.each([10, 11])(
+        'closes the delete confirmation of row %i when a removal is opened on row 10',
+        async (hour) => {
+          serve([A, B]);
+          await open();
+          await openDelete(hour);
+
+          await press(10);
+
+          expect(deleteGroup()).not.toBeInTheDocument();
+          expect(removeGroup()).toBeInTheDocument();
+          expect(screen.getByRole('button', { name: 'Keep' })).toHaveFocus();
+        },
+      );
+
+      it.each([10, 11])(
+        'closes the train panel of row %i when a removal is opened on row 10',
+        async (hour) => {
+          serve([A, B]);
+          await open();
+          await openTrain(hour);
+
+          await press(10);
+
+          expect(trainPanel()).not.toBeInTheDocument();
+          expect(removeGroup()).toBeInTheDocument();
+        },
+      );
+
+      it.each([10, 11])(
+        'closes the removal of row 10 when the delete of row %i is opened',
+        async (hour) => {
+          serve([A, B]);
+          await open();
+          await press(10);
+
+          await openDelete(hour);
+
+          expect(removeGroup()).not.toBeInTheDocument();
+          expect(deleteGroup()).toBeInTheDocument();
+        },
+      );
+
+      it.each([10, 11])(
+        'closes the removal of row 10 when the train panel of row %i is opened',
+        async (hour) => {
+          serve([A, B]);
+          await open();
+          await press(10);
+
+          await openTrain(hour);
+
+          expect(removeGroup()).not.toBeInTheDocument();
+          expect(trainPanel()).toBeInTheDocument();
+          expect(screen.getByLabelText('Train file')).toHaveFocus();
+        },
+      );
+
+      it('closes the removal of one row when another row’s removal is opened', async () => {
+        serve([A, B]);
+        await open();
+        await press(10);
+
+        await press(11);
+
+        expect(screen.getAllByRole('group', { name: GROUP })).toHaveLength(1);
+        expect(
+          within(screen.getAllByRole('listitem')[1]).getByRole('group', { name: GROUP }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    describe('when an import is read', () => {
+      it('keeps a confirmation open when its train is still there', async () => {
+        serve([A, B], { imported: [C, A, B] });
+        await open();
+        await press(11);
+
+        await importLog();
+
+        await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
+        expect(
+          within(screen.getAllByRole('listitem')[2]).getByRole('group', { name: GROUP }),
+        ).toBeInTheDocument();
+      });
+
+      const trainGoneAtImport = async () => {
+        const read = held();
+        serve([A, B], { read: (count) => (count === 2 ? read.gate : null) });
+        await open();
+        await press(10);
+        await importLog();
+        return read;
+      };
+      const WITHOUT = [at(10, null), B];
+
+      it('closes a confirmation whose train has gone and focuses its Add train file… when focus had fallen to the page', async () => {
+        const read = await trainGoneAtImport();
+        await userEvent.click(document.body);
+        expect(document.body).toHaveFocus();
+
+        await act(async () => read.release(respond({ journeys: WITHOUT })));
+
+        const add = await screen.findByRole('button', { name: addName(10) });
+        expect(screen.queryByRole('group', { name: GROUP })).not.toBeInTheDocument();
+        expect(add).toHaveFocus();
+      });
+
+      it('leaves focus where the owner put it when a confirmation’s train has gone', async () => {
+        const read = await trainGoneAtImport();
+        expect(screen.getByLabelText('Logger file')).toHaveFocus();
+
+        await act(async () => read.release(respond({ journeys: WITHOUT })));
+
+        await screen.findByRole('button', { name: addName(10) });
+        expect(screen.getByLabelText('Logger file')).toHaveFocus();
+      });
+
+      it('does not open a closed confirmation again when the train comes back', async () => {
+        const first = held();
+        const second = held();
+        serve([A, B], {
+          read: (count) => ({ 2: first.gate, 3: second.gate })[count] ?? null,
+        });
+        await open();
+        await press(10);
+        await importLog();
+        await act(async () => first.release(respond({ journeys: WITHOUT })));
+        await screen.findByRole('button', { name: addName(10) });
+
+        await importLog();
+        await act(async () => second.release(respond({ journeys: [A, B] })));
+
+        await screen.findByRole('button', { name: removeName(10) });
+        expect(screen.queryByRole('group', { name: GROUP })).not.toBeInTheDocument();
+      });
+    });
+  });
+
   it('goes back to Playback from the link', async () => {
     installFetch();
     renderApp('/admin/playback/journeys');
