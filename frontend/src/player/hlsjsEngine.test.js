@@ -1527,6 +1527,8 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
       env.setAhead(450); // the bank fills as the retried fragment lands
       env.hls.fragLoaded(frag(20_000, { retry: 1 }));
       expect(env.hls.autoLevelCapping).toBe(2);
+      env.video.dispatchEvent(new Event('timeupdate')); // the block lasts until a clean fragment, not one moment
+      expect(env.hls.autoLevelCapping).toBe(2);
       env.hls.fragLoaded(frag(20_000));
       expect(env.hls.autoLevelCapping).toBe(3);
     });
@@ -1697,8 +1699,9 @@ describe('the champagne ceiling: Auto climbs above 480p only on headroom', () =>
       env.hls.error({ fatal: true, type: 'networkError', details: 'levelLoadError' });
       vi.advanceTimersByTime(RECONNECT_MS);
       expect(env.hls.startLoad).toHaveBeenCalledTimes(1);
-      // A retried fragment may not raise the ceiling, so what it keeps is only what was earned since the restart.
-      env.hls.fragLoaded(frag(20_000, { retry: 1 }));
+      expect(env.hls.autoLevelCapping).toBe(2); // at once, not at the next event
+      env.hls.fragLoaded(frag(20_000)); // one clean rate is not three
+      env.video.dispatchEvent(new Event('timeupdate'));
       expect(env.hls.autoLevelCapping).toBe(2);
     });
 

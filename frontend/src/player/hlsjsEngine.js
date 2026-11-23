@@ -143,7 +143,6 @@ export function startHlsJs({
   let samples = []; // the newest fragment rates (kbit/s) for the hold, under `samplesNetwork`
   let headroom = []; // the newest first-byte fragment rates (kbit/s), retried fragments left out
   let retriedRun = 0; // fragments in a row that needed a retry
-  let retriedNow = false; // the fragment being handled needed one: the ceiling may not rise on it
   let samplesNetwork = networkGeneration();
   let inFlight = null; // the fragment hls.js is loading, whose rate so far the release reads
   let holdTimer = null; // the one check of the in-flight rate, running while a fragment loads
@@ -225,8 +224,8 @@ export function startHlsJs({
           maxS: MAX_BUFFER_AHEAD_S,
         },
       });
-      // A fragment that needed a retry never lets the ceiling rise.
-      ceiling = retriedNow ? Math.min(raised, ceiling) : raised;
+      // While the last fragments needed a retry (until a clean one loads) the ceiling never rises.
+      ceiling = retriedRun > 0 ? Math.min(raised, ceiling) : raised;
       if (gateCap > ceiling) gateCap = gate.switched(ceiling);
       const level = Math.min(gateCap, ceiling);
       if (level !== applied) {
@@ -257,7 +256,11 @@ export function startHlsJs({
     clearTimeout(timer);
     timer = null;
     stopHoldTimer(); // the fragment in flight is aborted by the reload
-    ceiling = champagneBase(hls.levels ?? []); // what was earned before the break is earned again
+    // What was earned before the break is earned again: the rates are forgotten and the cap falls at once.
+    ceiling = champagneBase(hls.levels ?? []);
+    headroom = [];
+    retriedRun = 0;
+    applyCap();
     if (hls.levels?.length) {
       hls.startLoad(video.readyState > 0 ? video.currentTime : config.startPosition);
     } else {
@@ -351,7 +354,6 @@ export function startHlsJs({
         // rise on it, and a run of RETRIED_CLEARS of them forgets the rates, so a link that is degrading
         // fragment by fragment loses its rungs above 480p. Fewer would punish an encoder that is still
         // catching up (503s) on the first fragments of a new rung.
-        retriedNow = true;
         retriedRun += 1;
         if (retriedRun >= RETRIED_CLEARS) headroom = [];
       } else {
@@ -363,7 +365,6 @@ export function startHlsJs({
     // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch, and
     // the step gate never runs ahead of the ceiling.
     if (auto && (fetched === null || fetched >= applied) && gateCap < ceiling) cap(gate.tick(top));
-    retriedNow = false;
   });
 
   hls.on(Events.ERROR, (_event, data) => {
