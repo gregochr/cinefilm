@@ -22,6 +22,13 @@ specifies 3c of `credits-phase3-plan.md`, whose "3c" section lists what this spe
   follow-up, reveal nothing new about the test split.
 - **2026-11-22: "good enough for v1 but needs to be better."** After the gate, the development rows version 2 has
   early against Plex are looked at, and an approach to resolve them is brought to the owner ("Follow-up").
+- **2026-11-22: the gate passed and `AUTO` is on** (v0.10.1). G1: 96 candidates, 83 clear, 13 unclear (denied), none
+  early, so cards stay on. G2: the pass set 83 `AUTO` markers, every pair one G1 judged clear. The follow-up found one
+  development row more than 15 s early; its stills show designed end-title cards already on screen, with Plex marking
+  the later crawl. Owner: **the first card is the start, no change.**
+- **2026-11-22: the test split is retired.** Owner: "I want a media server that works...not an archive of training
+  data", and Plex is to be treated as gone. The hold is lifted behind a soundtrack check on every `AUTO` marker:
+  `credits-soundtrack-check-plan.md`, which supersedes this file's test-split deny rules once its S-3 is released.
 
 ## What changes for the owner
 
