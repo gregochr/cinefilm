@@ -47,12 +47,12 @@ const finish = (page, id, at = 1000.9, bytes = 90000) => page.fire('Network.load
 describe('which requests are recorded', () => {
   test('a segment on the site is in; its rung and file are kept, the session id and the address never', async () => {
     const { page, report } = await recording();
-    start(page, 'a', `${seg('720p', 'seg_00012.ts')}?token=sekret`);
+    start(page, 'a', `${seg('720p', 'seg-12.ts')}?token=sekret`);
     finish(page, 'a');
     const out = report();
     assert.equal(out.segments.length, 1);
     assert.equal(out.segments[0].rung, '720p');
-    assert.equal(out.segments[0].file, 'seg_00012.ts');
+    assert.equal(out.segments[0].file, 'seg-12.ts');
     const text = JSON.stringify(out);
     for (const secret of [SESSION, 'sekret', '127.0.0.1', '/api/']) assert.equal(text.includes(secret), false, secret);
   });
@@ -68,12 +68,12 @@ describe('which requests are recorded', () => {
 
   test('other origins, other paths and other methods are out', async () => {
     const { page, report } = await recording();
-    start(page, 'a', `http://example.com/api/sessions/${SESSION}/720p/seg_1.ts`);
-    start(page, 'b', `${SITE}/api/sessions/not-a-session/720p/seg_1.ts`);
-    start(page, 'c', `${SITE}/api/sessions/${SESSION}/720p/sub/seg_1.ts`);
+    start(page, 'a', `http://example.com/api/sessions/${SESSION}/720p/seg-1.ts`);
+    start(page, 'b', `${SITE}/api/sessions/not-a-session/720p/seg-1.ts`);
+    start(page, 'c', `${SITE}/api/sessions/${SESSION}/720p/sub/seg-1.ts`);
     start(page, 'd', `${SITE}/api/editions/12/progress`);
     start(page, 'e', `${SITE}/assets/app.js`);
-    start(page, 'f', seg('720p', 'seg_1.ts'), { request: { method: 'POST', url: seg('720p', 'seg_1.ts') } });
+    start(page, 'f', seg('720p', 'seg-1.ts'), { request: { method: 'POST', url: seg('720p', 'seg-1.ts') } });
     start(page, 'g', 'not an address');
     page.fire('Network.requestWillBeSent', { requestId: 'h', timestamp: 1, request: {} });
     page.fire('Network.requestWillBeSent', {});
@@ -83,44 +83,50 @@ describe('which requests are recorded', () => {
   });
 
   test('classify gives the rung and file, the playlist marker or null', () => {
-    assert.deepEqual(classify('GET', seg('360p', 'seg_3.m4s'), SITE), { rung: '360p', file: 'seg_3.m4s' });
+    assert.deepEqual(classify('GET', seg('360p', 'seg-3.m4s'), SITE), { rung: '360p', file: 'seg-3.m4s' });
     assert.deepEqual(classify('GET', seg('360p', 'a.m3u8'), SITE), { playlist: true });
-    assert.equal(classify('PUT', seg('360p', 'seg_3.m4s'), SITE), null);
-    assert.equal(classify('GET', seg('360p', 'seg_3.m4s'), 'http://127.0.0.1:5302'), null);
+    assert.equal(classify('PUT', seg('360p', 'seg-3.m4s'), SITE), null);
+    assert.equal(classify('GET', seg('360p', 'seg-3.m4s'), 'http://127.0.0.1:5302'), null);
   });
 
-  test('Chrome is asked for the Network domain', async () => {
+  test('Chrome is asked for the Network domain, with buffers too small to keep a response body', async () => {
     const { page } = await recording();
-    assert.deepEqual(page.log, [['send', 'Network.enable', undefined]]);
+    assert.deepEqual(page.log, [
+      ['send', 'Network.enable', { maxTotalBufferSize: 1, maxResourceBufferSize: 1 }],
+    ]);
   });
 });
 
 describe('what is kept of a download', () => {
   test('start, first byte, total time, bytes and status from a CDP-shaped sequence', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('720p', 'seg_1.ts'));
+    start(page, 'a', seg('720p', 'seg-1.ts'));
     headers(page, 'a');
     finish(page, 'a', 1000.9, 90000);
     assert.deepEqual(report().segments, [{
-      rung: '720p', file: 'seg_1.ts', status: 200, bytes: 90000, startMs: 1700000000500,
+      rung: '720p', file: 'seg-1.ts', status: 200, bytes: 90000, startMs: 1700000000500,
       ttfbMs: 130, totalMs: 900, failed: false, canceled: false, errorText: null, unfinished: false,
     }]);
   });
 
   test('the first byte uses receiveHeadersStart when Chrome gives it, and none when there is no timing', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('720p', 'seg_1.ts'));
+    start(page, 'a', seg('720p', 'seg-1.ts'));
     headers(page, 'a', 200, { requestTime: 1000, receiveHeadersStart: 50, receiveHeadersEnd: 80 });
-    start(page, 'b', seg('720p', 'seg_2.ts'));
+    start(page, 'b', seg('720p', 'seg-2.ts'));
     headers(page, 'b', 200, null);
-    start(page, 'c', seg('720p', 'seg_3.ts'));
+    start(page, 'c', seg('720p', 'seg-3.ts'));
     headers(page, 'c', 200, { requestTime: 'x', receiveHeadersEnd: 'y' });
-    assert.deepEqual(report().segments.map((entry) => entry.ttfbMs), [50, null, null]);
+    start(page, 'd', seg('720p', 'seg-4.ts'));
+    headers(page, 'd', 200, { requestTime: 1000, receiveHeadersStart: -1, receiveHeadersEnd: 80 });
+    start(page, 'e', seg('720p', 'seg-5.ts'));
+    headers(page, 'e', 200, { requestTime: 1000, receiveHeadersStart: -1, receiveHeadersEnd: -1 });
+    assert.deepEqual(report().segments.map((entry) => entry.ttfbMs), [50, null, null, 80, null]);
   });
 
   test('a failed download keeps Chrome\'s error text, no bytes, and is not a cancelled one', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('360p', 'seg_9.ts'));
+    start(page, 'a', seg('360p', 'seg-9.ts'));
     page.fire('Network.loadingFailed', {
       requestId: 'a', timestamp: 1002.5, errorText: 'net::ERR_INTERNET_DISCONNECTED', canceled: false,
     });
@@ -135,7 +141,7 @@ describe('what is kept of a download', () => {
 
   test('a cancelled download is cancelled and not failed', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('360p', 'seg_9.ts'));
+    start(page, 'a', seg('360p', 'seg-9.ts'));
     page.fire('Network.loadingFailed', {
       requestId: 'a', timestamp: 1000.3, errorText: 'net::ERR_ABORTED', canceled: true,
     });
@@ -145,7 +151,7 @@ describe('what is kept of a download', () => {
 
   test('error text is printable and short', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('360p', 'seg_9.ts'));
+    start(page, 'a', seg('360p', 'seg-9.ts'));
     const errorText = `bad\n\u001b[31m${'x'.repeat(300)}`;
     page.fire('Network.loadingFailed', { requestId: 'a', timestamp: 1001, errorText });
     const [entry] = report().segments;
@@ -154,7 +160,7 @@ describe('what is kept of a download', () => {
 
   test('a request still in flight is listed as unfinished, without a total', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('720p', 'seg_1.ts'));
+    start(page, 'a', seg('720p', 'seg-1.ts'));
     headers(page, 'a');
     const [entry] = report().segments;
     assert.deepEqual([entry.unfinished, entry.totalMs, entry.bytes, entry.status], [true, null, null, 200]);
@@ -167,12 +173,12 @@ describe('what is kept of a download', () => {
     page.fire('Network.loadingFailed', { requestId: 'ghost', timestamp: 1 });
     const out = report();
     assert.deepEqual(out.segments, []);
-    assert.equal(out.unseen, 3);
+    assert.equal('unseen' in out, false);
   });
 
   test('a finish before the answer, and a second finish, leave one sound entry', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('720p', 'seg_1.ts'));
+    start(page, 'a', seg('720p', 'seg-1.ts'));
     finish(page, 'a', 1001, 500);
     headers(page, 'a');
     finish(page, 'a', 1005, 999);
@@ -180,13 +186,22 @@ describe('what is kept of a download', () => {
     assert.equal(out.segments.length, 1);
     assert.equal(out.segments[0].bytes, 500);
     assert.equal(out.segments[0].totalMs, 1000);
-    assert.equal(out.unseen, 2);
+  });
+
+  test('the end of a playlist, a session request or a write is ignored: nothing is listed from it', async () => {
+    const { page, report } = await recording();
+    start(page, 'p', seg('720p', 'index.m3u8'));
+    start(page, 's', `${SITE}/api/session`);
+    finish(page, 'p');
+    finish(page, 's');
+    page.fire('Network.loadingFailed', { requestId: 's', timestamp: 1001 });
+    assert.deepEqual(report().segments, []);
   });
 
   test('a start sent twice for one request (a redirect) is one entry, timed from the first', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('720p', 'seg_1.ts'));
-    start(page, 'a', seg('720p', 'seg_1.ts'), { timestamp: 1500 });
+    start(page, 'a', seg('720p', 'seg-1.ts'));
+    start(page, 'a', seg('720p', 'seg-1.ts'), { timestamp: 1500 });
     finish(page, 'a');
     assert.equal(report().segments.length, 1);
     assert.equal(report().segments[0].totalMs, 900);
@@ -194,7 +209,7 @@ describe('what is kept of a download', () => {
 
   test('a start with no wall time or timestamp gives nulls, not a made-up time', async () => {
     const { page, report } = await recording();
-    page.fire('Network.requestWillBeSent', { requestId: 'a', request: { method: 'GET', url: seg('720p', 'seg_1.ts') } });
+    page.fire('Network.requestWillBeSent', { requestId: 'a', request: { method: 'GET', url: seg('720p', 'seg-1.ts') } });
     finish(page, 'a');
     const [entry] = report().segments;
     assert.deepEqual([entry.startMs, entry.totalMs], [null, null]);
@@ -202,15 +217,15 @@ describe('what is kept of a download', () => {
 
   test('a download the page navigated away from, never finished, stays unfinished beside a later one', async () => {
     const { page, report } = await recording();
-    start(page, 'old', seg('720p', 'seg_1.ts'));
-    start(page, 'new', seg('720p', 'seg_2.ts'));
+    start(page, 'old', seg('720p', 'seg-1.ts'));
+    start(page, 'new', seg('720p', 'seg-2.ts'));
     finish(page, 'new');
     assert.deepEqual(report().segments.map((entry) => entry.unfinished), [true, false]);
   });
 
   test('the report is a copy: changing it changes nothing kept', async () => {
     const { page, report } = await recording();
-    start(page, 'a', seg('720p', 'seg_1.ts'));
+    start(page, 'a', seg('720p', 'seg-1.ts'));
     report().segments[0].rung = 'changed';
     report().segments.pop();
     assert.equal(report().segments[0].rung, '720p');
@@ -221,7 +236,7 @@ describe('the cap', () => {
   test('the list stops at the cap, counts what it dropped and says so; a kept one still finishes', async () => {
     assert.equal(MAX_SEGMENTS, 20000);
     const { page, report } = await recording({ cap: 3 });
-    for (let i = 0; i < 5; i += 1) start(page, `r${i}`, seg('720p', `seg_${i}.ts`));
+    for (let i = 0; i < 5; i += 1) start(page, `r${i}`, seg('720p', `seg-${i}.ts`));
     finish(page, 'r2');
     finish(page, 'r4');
     const out = report();
@@ -229,15 +244,14 @@ describe('the cap', () => {
     assert.equal(out.capped, true);
     assert.equal(out.dropped, 2);
     assert.deepEqual(out.segments.map((entry) => [entry.file, entry.unfinished]), [
-      ['seg_0.ts', true], ['seg_1.ts', true], ['seg_2.ts', false],
+      ['seg-0.ts', true], ['seg-1.ts', true], ['seg-2.ts', false],
     ]);
-    assert.equal(out.unseen, 1, 'the finish of one that was dropped is an event for a request not kept');
   });
 
   test('under the cap nothing is capped', async () => {
     const { page, report } = await recording({ cap: 2 });
-    start(page, 'a', seg('720p', 'seg_1.ts'));
-    start(page, 'b', seg('720p', 'seg_2.ts'));
+    start(page, 'a', seg('720p', 'seg-1.ts'));
+    start(page, 'b', seg('720p', 'seg-2.ts'));
     const out = report();
     assert.deepEqual([out.capped, out.dropped], [false, 0]);
   });
@@ -263,7 +277,7 @@ describe('the guard\'s own requests', () => {
   test('only a GET is recorded: the writes the guard fulfils or fails are never entries', async () => {
     const { page, report } = await recording();
     for (const method of ['POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS']) {
-      start(page, method, seg('720p', 'seg_1.ts'), { request: { method, url: seg('720p', 'seg_1.ts') } });
+      start(page, method, seg('720p', 'seg-1.ts'), { request: { method, url: seg('720p', 'seg-1.ts') } });
       page.fire('Network.loadingFailed', { requestId: method, timestamp: 1001, errorText: 'net::ERR_FAILED' });
     }
     assert.deepEqual(report().segments, []);

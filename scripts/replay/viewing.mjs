@@ -526,7 +526,7 @@ export async function writeResultsAsync({
   return { dir, lines: [] };
 }
 
-const NO_SEGMENTS = { cap: 0, capped: false, dropped: 0, playlists: 0, unseen: 0, segments: [] };
+const NO_SEGMENTS = { cap: 0, capped: false, dropped: 0, playlists: 0, segments: [] };
 const NO_REPORT = { held: [], heldDropped: 0, records: [], notRead: 0, failed: 0, rejected: 0 };
 
 /**

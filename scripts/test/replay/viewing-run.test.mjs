@@ -842,16 +842,16 @@ describe('segments.json', () => {
   test('at the normal end it holds the downloads, one still in flight listed as unfinished, and the summary says so', async () => {
     const w = world({ onWait: (n, { listeners }) => {
       if (n !== 1) return;
-      download(listeners, 'a', 'seg_1.ts', 125000);
+      download(listeners, 'a', 'seg-1.ts', 125000);
       listeners.get('Network.requestWillBeSent')({
-        requestId: 'b', timestamp: 12, wallTime: 1700000002, request: { method: 'GET', url: segmentUrl('seg_2.ts') },
+        requestId: 'b', timestamp: 12, wallTime: 1700000002, request: { method: 'GET', url: segmentUrl('seg-2.ts') },
       });
     } });
     await w.run();
     const out = read(w);
     assert.equal(out.capped, false);
     assert.deepEqual(out.segments.map((entry) => [entry.file, entry.bytes, entry.totalMs, entry.unfinished]), [
-      ['seg_1.ts', 125000, 1000, false], ['seg_2.ts', null, null, true],
+      ['seg-1.ts', 125000, 1000, false], ['seg-2.ts', null, null, true],
     ]);
     assert.equal(modeOf(join(results(w).dir, 'segments.json')), 0o600);
     assert.equal(JSON.stringify(out).includes(UUID), false, 'no session id');
@@ -871,20 +871,20 @@ describe('segments.json', () => {
   test('a write made while the run goes already holds it', async () => {
     const ctx = {
       run: { ...RUN, ended: null }, opt: { film: 1, site: SITE }, opened: 0, guard: null,
-      segments: { report: () => ({ cap: 5, capped: false, dropped: 0, playlists: 0, unseen: 0, segments: [{ file: 'seg_1.ts' }] }) },
+      segments: { report: () => ({ cap: 5, capped: false, dropped: 0, playlists: 0, segments: [{ file: 'seg-1.ts' }] }) },
       deps: { clock: { mono: () => 0 }, afs: realAsyncFs },
     };
     const runsDir = join(tmp, `mid-${counter += 1}`);
     await resultsWriter(ctx, { began: BEGAN, runsDir }).keep();
     const file = join(runsDir, runName(BEGAN), 'segments.json');
-    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).segments, [{ file: 'seg_1.ts' }]);
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).segments, [{ file: 'seg-1.ts' }]);
   });
 
   test('on the signal path (a second signal) it is written with what had been recorded', async () => {
     const handlers = new Map();
     const w = world({
       onWait: (n, { listeners }) => {
-        if (n === 1) download(listeners, 'a', 'seg_1.ts', 500);
+        if (n === 1) download(listeners, 'a', 'seg-1.ts', 500);
       },
       onLook: (n) => {
         if (n !== 2) return;
@@ -895,18 +895,18 @@ describe('segments.json', () => {
     watchRunSignals(w.cancel, w.held, w.deps.say, { exit: () => undefined, listen: (name, fn) => handlers.set(name, fn) });
     await w.run();
     assert.equal(results(w).held.run.ended, 'signal');
-    assert.deepEqual(read(w).segments.map((entry) => entry.file), ['seg_1.ts']);
+    assert.deepEqual(read(w).segments.map((entry) => entry.file), ['seg-1.ts']);
   });
 
   test('on the crash path it is written too', async () => {
     const w = world({
       onWait: (n, { listeners }) => {
-        if (n === 1) download(listeners, 'a', 'seg_1.ts', 500);
+        if (n === 1) download(listeners, 'a', 'seg-1.ts', 500);
         if (n === 3) crashHandler(w.held, { say: () => undefined, exit: () => undefined })(new Error('boom'));
       },
     });
     await w.run();
-    assert.deepEqual(read(w).segments.map((entry) => entry.file), ['seg_1.ts']);
+    assert.deepEqual(read(w).segments.map((entry) => entry.file), ['seg-1.ts']);
   });
 
   test('a run with no segment writes an empty list, not a missing file', async () => {
@@ -920,8 +920,8 @@ describe('segments.json', () => {
       deps: { segments: (page, opts) => attachSegments(page, { ...opts, cap: 1 }) },
       onWait: (n, { listeners }) => {
         if (n !== 1) return;
-        download(listeners, 'a', 'seg_1.ts', 500);
-        download(listeners, 'b', 'seg_2.ts', 500);
+        download(listeners, 'a', 'seg-1.ts', 500);
+        download(listeners, 'b', 'seg-2.ts', 500);
       },
     });
     await w.run();

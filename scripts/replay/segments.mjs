@@ -40,8 +40,9 @@ const finite = (value) => (typeof value === 'number' && Number.isFinite(value) ?
 function firstByteMs(timing, startedAt) {
   if (timing === null || typeof timing !== 'object') return null;
   const requestTime = finite(timing.requestTime);
-  const headers = finite(timing.receiveHeadersStart) ?? finite(timing.receiveHeadersEnd);
-  if (requestTime === null || headers === null || headers < 0 || startedAt === null) return null;
+  // Chrome sends -1 for a time it has not got: the first of the two that is 0 or more.
+  const headers = [timing.receiveHeadersStart, timing.receiveHeadersEnd].map(finite).find((ms) => ms !== null && ms >= 0);
+  if (requestTime === null || headers === undefined || startedAt === null) return null;
   return Math.max(0, Math.round(requestTime * 1000 + headers - startedAt * 1000));
 }
 
@@ -61,15 +62,15 @@ export function speedKbit(entry) {
 /**
  * Puts the recorder on a page (the `send` and `on` of `cdp.mjs`): registers the listeners, then asks Chrome for the
  * `Network` domain and resolves once it has said yes; the caller opens no address before that. Events for a request
- * whose start was never seen are counted (`unseen`) and dropped. Resolves `{ report }`: `report()` is a deep copy of
- * `{ cap, capped, dropped, playlists, unseen, segments }`, the segments in the order they started, a request still in
+ * whose start was never seen (or not kept) are ignored. Resolves `{ report }`: `report()` is a deep copy of
+ * `{ cap, capped, dropped, playlists, segments }`, the segments in the order they started, a request still in
  * flight listed with `unfinished: true`. `cap` is for a test.
  */
 export async function attachSegments(page, { site, cap = MAX_SEGMENTS }) {
   const origin = new URL(site).origin;
   const listed = [];
   const open = new Map();
-  const counts = { dropped: 0, playlists: 0, unseen: 0 };
+  const counts = { dropped: 0, playlists: 0 };
 
   page.on('Network.requestWillBeSent', (params) => {
     const requestId = params?.requestId;
@@ -96,10 +97,7 @@ export async function attachSegments(page, { site, cap = MAX_SEGMENTS }) {
 
   page.on('Network.responseReceived', (params) => {
     const seen = open.get(params?.requestId);
-    if (seen === undefined) {
-      counts.unseen += 1;
-      return;
-    }
+    if (seen === undefined) return;
     const response = params.response ?? {};
     seen.entry.status = finite(response.status);
     seen.entry.ttfbMs = firstByteMs(response.timing, seen.startedAt);
@@ -107,10 +105,7 @@ export async function attachSegments(page, { site, cap = MAX_SEGMENTS }) {
 
   const end = (params, change) => {
     const seen = open.get(params?.requestId);
-    if (seen === undefined) {
-      counts.unseen += 1;
-      return;
-    }
+    if (seen === undefined) return;
     open.delete(params.requestId);
     seen.entry.unfinished = false;
     seen.entry.totalMs = elapsedMs(seen.startedAt, finite(params.timestamp));
@@ -127,10 +122,11 @@ export async function attachSegments(page, { site, cap = MAX_SEGMENTS }) {
     entry.errorText = typeof params.errorText === 'string' ? printable(params.errorText, MAX_ERROR_CHARS) : null;
   }));
 
-  await page.send('Network.enable');
+  // Buffer limits of 1 byte: with none, Chrome keeps every response body (a segment is about 1 MB) for the whole run.
+  await page.send('Network.enable', { maxTotalBufferSize: 1, maxResourceBufferSize: 1 });
   return {
     report: () => ({
-      cap, capped: counts.dropped > 0, dropped: counts.dropped, playlists: counts.playlists, unseen: counts.unseen,
+      cap, capped: counts.dropped > 0, dropped: counts.dropped, playlists: counts.playlists,
       segments: listed.map((entry) => ({ ...entry })),
     }),
   };

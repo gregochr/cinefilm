@@ -92,21 +92,23 @@ Every download of a media segment, so that each download's speed can be laid bes
 median in `health.json` hides a ten-second drop). It is made from Chrome's `Network` events for `GET` requests to the
 site's own origin whose path is `/api/sessions/<id>/<rung>/<file>` and whose file is not a playlist (`.m3u8`). The
 session id, the query and the address are never stored. Playlists are counted, not listed. The guard (`guard.mjs`)
-answers or fails only writes, never a `GET`, so a request it handled on purpose is never an entry and a failure here is
-the network's. Written with the other files, each time whole, and on every way a run ends, signal and crash included.
+answers only writes, so a request it handled on purpose is never an entry; it almost never fails a `GET` (only when its
+own handling of a request throws), so a failure here is the network's.
+Every request to the site is paused by the guard before it goes on, and Chrome's start time comes before that pause, so
+`ttfbMs` and `totalMs` include the guard's round trip and the speeds are slightly low.
+Written with the other files, each time whole, and on every way a run ends, signal and crash included.
 Chrome's own times are used (the same clock the page's requests are measured on), not the viewer's.
 
 ```
-{ "cap": 20000, "capped": false, "dropped": 0, "playlists": 41, "unseen": 0, "segments": [ { ... } ] }
+{ "cap": 20000, "capped": false, "dropped": 0, "playlists": 41, "segments": [ { ... } ] }
 ```
 
 | Field | Meaning |
 |---|---|
 | `cap`, `capped`, `dropped` | the list holds at most `cap` (20,000) segments; `capped` is true when later ones were left out, `dropped` is how many |
 | `playlists` | how many playlist requests were seen (not listed) |
-| `unseen` | Network events for a request whose start was never seen; they are dropped |
 | `rung` | the rung in the address, such as `720p` |
-| `file` | the file name, such as `seg_00012.ts` |
+| `file` | the file name, such as `seg-12.ts` |
 | `status` | the HTTP status, null when no answer came |
 | `bytes` | bytes on the wire (`encodedDataLength`), null for a download that failed, was cancelled or had not finished |
 | `startMs` | when the request began, milliseconds since 1970 (Chrome's `wallTime`); null when Chrome gave none |
