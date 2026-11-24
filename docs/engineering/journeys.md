@@ -44,11 +44,11 @@ The file is read in the browser. Nothing is sent until Import is pressed, and on
 | Left out | Values the log held that were out of range or of the wrong kind, by field, with a count. They are not sent |
 | Lines not read | Lines of the file that were not JSON, when there are any |
 
-"Left out" should say "Nothing". If it names a field with a large count, do not import: the page's idea of that
-field does not fit what the train sends, and that is a bug to fix first. It happened once: the feed writes a
-modem's cell id as hexadecimal text (`0001E240`), and the page first took it for a decimal number. The database
-keeps the id's value as a whole number (123456 for that one); `to_hex(cell_id)` in SQL gives the feed's digits
-back.
+"Left out" should say "Nothing". When it names anything, the page adds beneath the list: "The values left out were out
+of range or of the wrong kind. They are not sent." If it names a field with a large count, do not import: the page's
+idea of that field does not fit what the train sends, and that is a bug to fix first. It happened once: the feed writes
+a modem's cell id as hexadecimal text (`0001E240`), and the page first took it for a decimal number. The database keeps
+the id's value as a whole number (123456 for that one); `to_hex(cell_id)` in SQL gives the feed's digits back.
 
 **What never leaves the laptop:** the laptop's addresses, the feed's own addresses, the Wi-Fi network's name, and
 everything else the logger writes that the request has no name for (how long each of the feed's answers took, its
@@ -160,12 +160,17 @@ sign-in, and nowhere else (`SECURITY.md`, "Journey data"). A journey's positions
 travel. The logs themselves stay in `~/train-feed-logger/logs` on the laptop and are never committed: the
 repository is public, and every example in it, this page's included, is made up.
 
-## What nobody has verified
+## What has been seen working, and what has not
 
-- **A real log imported on the real server.** The page's reading of a real log was checked on the laptop (every
-  round read, nothing left out, once the cell id was read as hexadecimal), and the request it makes was accepted
-  and stored by the server's import code on the in-memory test database. It has not been imported on PostgreSQL,
-  and its viewings have not been linked to real playback records.
-- **A real train's file.** Only the made-up example has been through the server.
-- **The page against the real server in a browser.** It was looked at in a browser against a stand-in that
-  answers as the contract says; the real server's refusals and a log with two train units were not seen.
+**Seen on the real server on 2026-11-24 (v0.11.1), through the page:** a real log of logger version 2, with
+one train unit, was imported on PostgreSQL: every round stored, nothing left out, and the one viewing made
+during that journey linked. A train's file made by hand from the public running data was then added to that
+journey, and its row shows the train.
+
+**Not seen yet on the real server:**
+
+- **A log of logger version 3.** Only a version 2 log has been imported there.
+- **A log that becomes more than one journey** (two train units).
+- **Taking things away:** delete, replace train file and remove train.
+- **The server's refusals as the page words them:** a log already imported, a train that did not run during
+  the journey, a train stored with other end points.

@@ -11,6 +11,7 @@ afterEach(() => {
 });
 
 const PATH = '/admin/playback/journeys';
+const HINT = 'The values left out were out of range or of the wrong kind. They are not sent.';
 const EXAMPLE = readFileSync(
   resolve(import.meta.dirname, '../../test/fixtures/journey-log-example.jsonl'),
   'utf8',
@@ -135,11 +136,7 @@ describe('Admin: the Train journeys import card', () => {
       'Standard',
       'Nothing',
     ]);
-    expect(
-      screen.getByText(
-        'Left out: a value the log held that was out of range or of the wrong kind. It is not sent.',
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
     expect(importButton()).toHaveTextContent('Import');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(imports(fetchMock)).toEqual([]);
@@ -156,6 +153,23 @@ describe('Admin: the Train journeys import card', () => {
     const values = screen.getAllByRole('definition').map((d) => d.textContent);
     expect(values[terms.indexOf('File name')]).toBe('Not sent');
     expect(values[terms.indexOf('Left out')]).toBe('sourceFile (1)');
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+  });
+
+  it('shows the left-out sentence for a file with values left out, and not for the next one with none', async () => {
+    installFetch();
+    renderApp(PATH);
+    await choose(EXAMPLE, 'journée-log.jsonl');
+    expect(await screen.findByText(HINT)).toBeInTheDocument();
+
+    await choose(EXAMPLE, 'example-log.jsonl');
+
+    // The second file's list is on show before the sentence is looked for: between the two files the card is empty.
+    await screen.findByText('example-log.jsonl');
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    const terms = screen.getAllByRole('term').map((t) => t.textContent);
+    const values = screen.getAllByRole('definition').map((d) => d.textContent);
+    expect(values[terms.indexOf('Left out')]).toBe('Nothing');
   });
 
   it('keeps a good file in the input, so that its name stays on show', async () => {

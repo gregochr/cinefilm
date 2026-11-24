@@ -7,6 +7,7 @@ import {
   importFailure,
   importToast,
   journeyLines,
+  leftOutHint,
   loggedRange,
   problemText,
   readyLine,
@@ -155,6 +156,26 @@ describe('sentRows', () => {
       'Lines not read',
     );
     expect(valueOf(sentRows(summary({ unreadableLines: 3 })), 'Lines not read')).toBe('3');
+  });
+});
+
+describe('leftOutHint', () => {
+  const SENTENCE = 'The values left out were out of range or of the wrong kind. They are not sent.';
+
+  it('is null when nothing was left out', () => {
+    expect(leftOutHint(summary({ leftOut: [] }))).toBeNull();
+  });
+
+  it('is the sentence when one field was left out', () => {
+    expect(leftOutHint(summary({ leftOut: [{ field: 'wifiRate', count: 2 }] }))).toBe(SENTENCE);
+  });
+
+  it('is the same sentence when two fields were left out', () => {
+    const leftOut = [
+      { field: 'wifiRate', count: 2 },
+      { field: 'speedMps', count: 1 },
+    ];
+    expect(leftOutHint(summary({ leftOut }))).toBe(SENTENCE);
   });
 });
 
