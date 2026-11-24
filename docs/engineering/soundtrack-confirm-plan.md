@@ -74,13 +74,12 @@ each command. The kit gains a confirm mode in `evaluate.py`.
 ### Step 0, before any evaluation file is mapped
 
 1. The owner copies `~/cinefilm-labels/soundtrack/out/` and the server's `maps/` listing to the Mac.
-2. **Where the answers came from** (open question 2). Dances with Wolves' "sidecar 48 is 14 s late" and The Return
-   of the King's owner-verified offset each remain an answer only if the owner set it by watching in CineFilm, not
-   in Plex.
-3. **The Return of the King.** 3d fitted it 3 s from its owner offset. If that offset stands, the owner hears CineFilm
-   clips of three lines at the owner offset and at 3d's fit. Whichever the owner hears right becomes the answer. If
-   neither is heard right, or the offset came from Plex, The Return of the King is dropped as an answer. Either way,
-   the plan records why before step 4.
+2. **Where the answers came from (owner, 2026-11-24).** Dances with Wolves' "sidecar 48 is 14 s late" was heard
+   while watching in CineFilm, so it stands. The owner doesn't recall watching The Return of the King, so its
+   owner-verified offset has no known source.
+3. **The Return of the King is dropped as an answer.** Its offset can't be shown to come from CineFilm, and 3d's fit
+   was 3 s from it, so neither can be trusted without a listen. It stays out of every decoy and gate, as the
+   absolute answers' films do.
 4. **Dry run on the design set (half A only).** The kit computes the threshold from half A's decoys and reports,
    for the design set's own eligible forced files outside half B's films, how many would be `CONFIRMED` and how
    those pass gate 2's robustness changes. **Half B's decoys are not scored.** If coverage is below 50% or below 10
@@ -122,14 +121,9 @@ half A's decoys.** It is frozen at step 5, and that frozen threshold is used for
    3d's 70% because confirming a file's own timing can only cover files that already play right. The owner may raise
    it (question 1).
 4. **The absolute answers**, judged once on the frozen threshold, each at a stated offset in raw cue time:
-   - Dances with Wolves: sidecar 2 at 0 is `CONFIRMED`. Sidecar 48 at 0, 14 s from the speech, is **not** confirmed.
-     If its answer is dropped at step 0, the rule is only that at most one of the two is `CONFIRMED` at 0: their
-     lines are exactly 14 s apart (3d), so both can't be right.
+   - Dances with Wolves: sidecar 2 at 0 is `CONFIRMED`. Sidecar 48 at 0, 14 s from the speech, is **not** confirmed. Its answer stands (step 0).
    - The Two Towers: at its `EMBEDDED` fit, `CONFIRMED`. At that fit + 14 s, not confirmed.
-   - The Return of the King, if an answer stands from step 0: at the answer, `CONFIRMED`. At the other of the two
-     heard offsets, not confirmed.
-
-   The split Lord of the Rings editions are handled as in 3d's kit.
+   The Return of the King is not judged (step 0). The Two Towers' split edition is handled as in 3d's kit.
 5. **Cost:** within 3d's budget (168 CPU-hours to map every forced-file edition). The confirmation adds only seconds
    per file.
 6. **Ear-check (last, only if 1–5 pass):** a seeded 10 of the `CONFIRMED` evaluation files, every one heard right to
@@ -160,5 +154,5 @@ forced-file choice (to about ±1 s)? It would never set an offset. The PR split 
 ## Open questions for the owner
 
 1. **The coverage bar.** The plan sets 50% of eligible files. Say if it should be higher.
-2. **Where the two heard answers came from.** Were Dances with Wolves' "sidecar 48 is 14 s late" and The Return of
-   the King's offset set while watching in CineFilm, or in Plex?
+2. ~~Where the two heard answers came from.~~ Answered 2026-11-24 (step 0): Dances with Wolves was heard in
+   CineFilm. The Return of the King has no known source and is dropped.
