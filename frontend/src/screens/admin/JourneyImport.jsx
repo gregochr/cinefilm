@@ -3,7 +3,13 @@ import { Button } from '../../components/Button.jsx';
 import { useAdminContext } from '../../state/adminContext.js';
 import { readJourneyLog } from '../../state/journeyFile.js';
 import { journeyImport as copy } from '../../state/journeysCopy.js';
-import { importToast, problemText, readyLine, sentRows } from '../../state/journeysFormat.js';
+import {
+  importToast,
+  leftOutHint,
+  problemText,
+  readyLine,
+  sentRows,
+} from '../../state/journeysFormat.js';
 import { readFileText } from '../../state/readFileText.js';
 import { useJourneyImport } from '../../state/useJourneyImport.js';
 
@@ -68,6 +74,7 @@ export default function JourneyImport({ onImported }) {
   };
 
   const problem = choice?.problem ?? writer.failure?.text;
+  const hint = choice?.summary ? leftOutHint(choice.summary) : null;
   return (
     <section className="admin__card" aria-labelledby="admin-journey-import-title">
       <div className="admin__head">
@@ -108,7 +115,7 @@ export default function JourneyImport({ onImported }) {
               </div>
             ))}
           </dl>
-          <p className="admin__text">{copy.leftOutHint}</p>
+          {hint ? <p className="admin__text">{hint}</p> : null}
           <div className="admin__actions">
             {/* aria-disabled, not disabled: the button keeps focus while the import runs; `send` ignores presses. */}
             <Button variant="primary" aria-disabled={writer.busy || undefined} onClick={send}>

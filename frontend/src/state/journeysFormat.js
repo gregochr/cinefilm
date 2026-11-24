@@ -111,6 +111,11 @@ export function sentRows(summary, request) {
   return rows;
 }
 
+/** The sentence under the list when the log held values that are not sent; null when nothing was left out. */
+export function leftOutHint(summary) {
+  return summary.leftOut.length > 0 ? copy.leftOutHint : null;
+}
+
 /** The sentence for a `readJourneyLog` problem. */
 export function problemText(problem) {
   return copy.problems[problem];

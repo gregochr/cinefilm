@@ -109,8 +109,7 @@ export const journeyImport = {
   text: 'Choose a log the train feed logger wrote. It is read here, in this browser, and only what is listed below is sent.',
   label: 'Logger file',
   sentHeading: 'What will be sent',
-  leftOutHint:
-    'Left out: a value the log held that was out of range or of the wrong kind. It is not sent.',
+  leftOutHint: 'The values left out were out of range or of the wrong kind. They are not sent.',
   button: 'Import',
   importing: 'Importing…',
   ready: (rounds) => `Ready to import: ${count(rounds, 'round', 'rounds')}`,
