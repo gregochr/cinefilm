@@ -81,11 +81,15 @@ each command. The kit gains a confirm mode in `evaluate.py`.
    clips of three lines at the owner offset and at 3d's fit. Whichever the owner hears right becomes the answer. If
    neither is heard right, or the offset came from Plex, The Return of the King is dropped as an answer. Either way,
    the plan records why before step 4.
-4. **Dry run on the design set.** The threshold rule below is applied to the design set's decoys, and the kit
-   reports how many of the design set's own eligible forced files would be `CONFIRMED`. If it is below 50%, or below
-   10 files, 3e stops here and the last unseen set is not spent. This changes no rule. It only decides whether the
-   evaluation is worth running.
-5. The evaluation list is written into this plan (docs PR), and only then mapped.
+4. **Dry run on the design set (half A only).** The kit computes the threshold from half A's decoys and reports,
+   for the design set's own eligible forced files outside half B's films, how many would be `CONFIRMED` and how
+   those pass gate 2's robustness changes. **Half B's decoys are not scored.** If coverage is below 50% or below 10
+   files, or either robustness bar fails, 3e stops here and the last unseen set is not spent. The method may be
+   changed and the dry run repeated, since half A and these files are design data.
+5. **Freeze.** The method and the threshold are written into this plan (docs PR) and not changed again.
+6. **Half B, once.** Half B's decoys are scored once on the frozen method, and the plan records that they were. Any
+   `CONFIRMED` among them fails gate 1 and ends 3e before the last unseen set is spent.
+7. The evaluation list is written into this plan (docs PR), and only then mapped.
 
 ### Decoys (design set only)
 
@@ -97,15 +101,16 @@ Each decoy gets exactly one try, the same confirmation at its candidate, so it h
   cue span. Durations are kept, but no cue is anchored to its own speech, so no run is left intact by construction.
 - 3d's English-only draws are reported but don't count: B is low on them at almost any offset.
 
-**Threshold, held out by film.** The design set's films are split by a seeded draw into halves A and B. A decoy
+**Threshold, held out by film.** The design set's films are split into halves A and B by a seeded draw (seed 3,
+fixed now, before any 3e score). A decoy
 belongs to a half only if every film it involves (the forced file's film, and for a cross-film pair the map's film)
 is in that half; mixed pairs are dropped and counted. **The threshold is 1.25 × the largest confirmation score among
-half A's decoys.** It is computed once and frozen, and that frozen threshold is used for every gate and for the
-build. Half B needs at least 50 decoys from at least 10 films, or 3e is unproven.
+half A's decoys.** It is frozen at step 5, and that frozen threshold is used for every gate and for the build. Half B needs at least 50 decoys from at least 10 films, or 3e is unproven.
 
 ### Gates, in order (all declared before any score; any failure ends 3e)
 
-1. **Never confident and wrong:** zero `CONFIRMED` among half B's decoys, and zero heard wrong in the ear-check.
+1. **Never confident and wrong:** zero `CONFIRMED` among half B's decoys (step 6), and zero heard wrong in the
+   ear-check.
 2. **Robustness** on at least 10 `CONFIRMED` evaluation files:
    - dropping 20% of the cues, or jittering each cue by ±150 ms, keeps at least 90% `CONFIRMED`;
    - moving the second half of the cues by 5 s leaves at least 95% not confirmed.
@@ -117,6 +122,8 @@ build. Half B needs at least 50 decoys from at least 10 films, or 3e is unproven
    it (question 1).
 4. **The absolute answers**, judged once on the frozen threshold, each at a stated offset in raw cue time:
    - Dances with Wolves: sidecar 2 at 0 is `CONFIRMED`. Sidecar 48 at 0, 14 s from the speech, is **not** confirmed.
+     If its answer is dropped at step 0, the rule is only that at most one of the two is `CONFIRMED` at 0: their
+     lines are exactly 14 s apart (3d), so both can't be right.
    - The Two Towers: at its `EMBEDDED` fit, `CONFIRMED`. At that fit + 14 s, not confirmed.
    - The Return of the King, if an answer stands from step 0: at the answer, `CONFIRMED`. At the other of the two
      heard offsets, not confirmed.
@@ -145,7 +152,8 @@ forced-file choice (to about ±1 s)? It would never set an offset. The PR split 
 3. **The chain is left for later**, when enough files have full references to prove it on its own sample.
 4. **Thresholds held out by film, from the design set only**, so the decoy gate can fail and no evaluation file
    sets the bar.
-5. **A dry run on the design set before the last unseen set is spent.**
+5. **A dry run on the design set before the last unseen set is spent.** Half B is scored once, after the method
+   is frozen, so the decoy gate stays held out.
 6. **No Plex input or answer**, so the method still works after Plex is gone.
 
 ## Open questions for the owner
