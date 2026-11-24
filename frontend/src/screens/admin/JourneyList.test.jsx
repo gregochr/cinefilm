@@ -70,6 +70,7 @@ describe('JourneyList', () => {
         onRetry={() => {}}
         deleting={IDLE}
         training={TRAINING}
+        removing={IDLE}
       />,
     );
 
@@ -86,6 +87,7 @@ describe('JourneyList', () => {
         onRetry={() => {}}
         deleting={IDLE}
         training={TRAINING}
+        removing={IDLE}
       />,
     );
 
@@ -102,6 +104,7 @@ describe('JourneyList', () => {
         onRetry={() => {}}
         deleting={IDLE}
         training={TRAINING}
+        removing={IDLE}
       />,
     );
 
@@ -130,6 +133,7 @@ describe('JourneyList', () => {
         onRetry={onRetry}
         deleting={IDLE}
         training={TRAINING}
+        removing={IDLE}
       />,
     );
 
@@ -150,6 +154,7 @@ describe('JourneyList deleting', () => {
         onRetry={() => {}}
         deleting={{ ...IDLE, ...deleting }}
         training={TRAINING}
+        removing={IDLE}
       />,
     );
     return within(screen.getByRole('list', { name: 'Stored journeys' })).getAllByRole('listitem');
@@ -230,6 +235,7 @@ describe('JourneyList training', () => {
         onRetry={() => {}}
         deleting={IDLE}
         training={{ ...TRAINING, ...training }}
+        removing={IDLE}
       />,
     );
     return within(screen.getByRole('list', { name: 'Stored journeys' })).getAllByRole('listitem');
@@ -340,11 +346,106 @@ describe('JourneyList training', () => {
     );
   });
 
-  it('puts the train button and the delete button on the row side by side, train first', () => {
+  it('puts the train button, the remove button and the delete button on the row in that order', () => {
     const rows = rowOf([stored()]);
 
     const buttons = within(rows[0]).getAllByRole('button');
-    expect(buttons.map((b) => b.textContent)).toEqual(['Replace train file…', 'Delete…']);
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      'Replace train file…',
+      'Remove train…',
+      'Delete…',
+    ]);
+  });
+});
+
+describe('JourneyList removing a train', () => {
+  const rowOf = (journeys, removing) => {
+    render(
+      <JourneyList
+        journeys={journeys}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        deleting={IDLE}
+        training={TRAINING}
+        removing={{ ...IDLE, ...removing }}
+      />,
+    );
+    return within(screen.getByRole('list', { name: 'Stored journeys' })).getAllByRole('listitem');
+  };
+  const REMOVE_OLD = 'Remove train from the journey logged 4 Mar 2030, 22:00 to 5 Mar 2030, 00:47';
+
+  it('gives a row with a train a Remove train… named by the row, and a row without none', () => {
+    const rows = rowOf([NEWER, stored()]);
+
+    expect(within(rows[1]).getByRole('button', { name: REMOVE_OLD })).toHaveTextContent(
+      'Remove train…',
+    );
+    expect(
+      within(rows[0]).queryByRole('button', { name: /^Remove train/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('puts the row without a train’s buttons as Add train file… then Delete…', () => {
+    const rows = rowOf([NEWER]);
+
+    const buttons = within(rows[0]).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent)).toEqual(['Add train file…', 'Delete…']);
+  });
+
+  it('tells the page which journey was pressed', async () => {
+    const onOpen = vi.fn();
+    const rows = rowOf([NEWER, stored()], { onOpen });
+
+    await userEvent.click(within(rows[1]).getByRole('button', { name: REMOVE_OLD }));
+
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(12);
+  });
+
+  it('opens the confirmation in the row whose id is open and in no other', () => {
+    const rows = rowOf([stored({ id: 30 }), stored()], { openId: 12 });
+
+    expect(within(rows[1]).getByRole('group', { name: 'Remove this train?' })).toHaveTextContent(
+      'Remove train 9Z99 from this journey? The journey and its rounds stay.',
+    );
+    expect(within(rows[0]).queryByRole('group')).not.toBeInTheDocument();
+  });
+
+  it('tells the page which journey loses its train, and that it is kept', async () => {
+    const onConfirm = vi.fn();
+    const onKeep = vi.fn();
+    const rows = rowOf([NEWER, stored()], { openId: 12, onConfirm, onKeep });
+
+    await userEvent.click(within(rows[1]).getByRole('button', { name: 'Remove train' }));
+    await userEvent.click(within(rows[1]).getByRole('button', { name: 'Keep' }));
+
+    expect(onConfirm).toHaveBeenCalledExactlyOnceWith(12);
+    expect(onKeep).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a refusal in the open group of its own row only', () => {
+    const failure = { id: 20, kind: 'alert', text: 'Couldn’t remove the train. Try again.' };
+    const other = rowOf([NEWER, stored()], { openId: 12, failure });
+
+    expect(within(other[1]).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows a refusal in the open group of its own row', () => {
+    const failure = { id: 12, kind: 'alert', text: 'Couldn’t remove the train. Try again.' };
+    const rows = rowOf([NEWER, stored()], { openId: 12, failure });
+
+    expect(within(rows[1]).getByRole('alert')).toHaveTextContent(
+      'Couldn’t remove the train. Try again.',
+    );
+  });
+
+  it('does nothing in any row’s Remove train… while a request runs', async () => {
+    const onOpen = vi.fn();
+    const rows = rowOf([stored()], { busy: true, onOpen });
+
+    await userEvent.click(within(rows[0]).getByRole('button', { name: REMOVE_OLD }));
+
+    expect(onOpen).not.toHaveBeenCalled();
   });
 });
 
@@ -358,6 +459,7 @@ describe('JourneyList retrying', () => {
       onRetry={() => {}}
       deleting={IDLE}
       training={TRAINING}
+      removing={IDLE}
     />
   );
   /** Rows shown, a read again failed, "Check again" pressed and its read now under way. */
@@ -432,6 +534,7 @@ describe('JourneyList when a read again fails', () => {
         onRetry={() => {}}
         deleting={IDLE}
         training={TRAINING}
+        removing={IDLE}
       />
     </>
   );

@@ -5,9 +5,10 @@ import { journeyList as copy } from '../../state/journeysCopy.js';
 import { journeyLines } from '../../state/journeysFormat.js';
 import JourneyDelete from './JourneyDelete.jsx';
 import JourneyTrain from './JourneyTrain.jsx';
+import JourneyTrainRemove from './JourneyTrainRemove.jsx';
 
 /** One stored journey: when it was logged, then its unit, class, rounds and viewings, its train, its file and laptop. */
-function JourneyRow({ journey, all, deleting, training }) {
+function JourneyRow({ journey, all, deleting, training, removing }) {
   const { title, second, third, fourth } = journeyLines(journey, all);
   const { openId, busy, failure } = deleting;
   return (
@@ -18,7 +19,7 @@ function JourneyRow({ journey, all, deleting, training }) {
         <p className="admin__todo-line">{third}</p>
         {fourth ? <p className="admin__todo-line admin__mono">{fourth}</p> : null}
       </div>
-      {/* Before "Delete…": when "Delete…" opens its confirmation, focus goes to "Keep" after this one's panel has closed. */}
+      {/* Before "Remove train…" and "Delete…": when one opens its confirmation, focus goes to "Keep" after this panel has closed. */}
       <JourneyTrain
         journey={journey}
         open={training.openId === journey.id}
@@ -29,6 +30,17 @@ function JourneyRow({ journey, all, deleting, training }) {
         onGive={(request) => training.onGive(journey.id, request, journey.train !== null)}
         onEdit={training.onEdit}
       />
+      {journey.train ? (
+        <JourneyTrainRemove
+          journey={journey}
+          open={removing.openId === journey.id}
+          busy={removing.busy}
+          problem={removing.failure?.id === journey.id ? removing.failure.text : null}
+          onOpen={() => removing.onOpen(journey.id)}
+          onKeep={removing.onKeep}
+          onConfirm={() => removing.onConfirm(journey.id)}
+        />
+      ) : null}
       <JourneyDelete
         journey={journey}
         open={openId === journey.id}
@@ -48,9 +60,18 @@ function JourneyRow({ journey, all, deleting, training }) {
  * the page's delete: `{ openId, busy, failure, onOpen(id), onKeep(), onConfirm(id) }`, where `openId` is the journey
  * whose confirmation is open and `failure` the last refusal with the `id` of its journey. `training` is the page's train
  * file write: `{ openId, busy, failure, onOpen(id), onClose(), onGive(id, request, replaced), onEdit() }`, with the same
- * meanings for the journey whose panel is open.
+ * meanings for the journey whose panel is open. `removing` is the page's train removal, shaped as `deleting`, for the rows
+ * that have a train.
  */
-export default function JourneyList({ journeys, loading, error, onRetry, deleting, training }) {
+export default function JourneyList({
+  journeys,
+  loading,
+  error,
+  onRetry,
+  deleting,
+  training,
+  removing,
+}) {
   // A press of "Check again" is `pressed` until its read is seen under way (`running`). While it runs the banner stays,
   // busy, so the button keeps focus and the rows from before the failure are not shown as if current.
   const [phase, setPhase] = useState('idle');
@@ -114,6 +135,7 @@ export default function JourneyList({ journeys, loading, error, onRetry, deletin
             all={journeys}
             deleting={deleting}
             training={training}
+            removing={removing}
           />
         ))}
       </ul>

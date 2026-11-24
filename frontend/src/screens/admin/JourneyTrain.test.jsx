@@ -507,4 +507,50 @@ describe('JourneyTrain', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  describe('when the journey’s train is taken away', () => {
+    const TRAIN = { uid: 'X12345', date: '2030-03-04', headcode: '9Z99' };
+    const shown = (train) => (
+      <>
+        <button type="button">Beside</button>
+        <JourneyTrain
+          journey={journey({ train })}
+          open={false}
+          busy={false}
+          problem={null}
+          onOpen={() => {}}
+          onClose={() => {}}
+          onGive={() => {}}
+          onEdit={() => {}}
+        />
+      </>
+    );
+
+    it('puts focus on Add train file… when focus has fallen to the page', () => {
+      const { rerender } = render(shown(TRAIN));
+      expect(document.body).toHaveFocus();
+
+      rerender(shown(null));
+
+      expect(opener()).toHaveFocus();
+    });
+
+    it('leaves focus on another element where the owner put it', () => {
+      const { rerender } = render(shown(TRAIN));
+      screen.getByRole('button', { name: 'Beside' }).focus();
+
+      rerender(shown(null));
+
+      expect(screen.getByRole('button', { name: 'Beside' })).toHaveFocus();
+    });
+
+    it('moves no focus when the journey is given a train', () => {
+      const { rerender } = render(shown(null));
+      expect(document.body).toHaveFocus();
+
+      rerender(shown(TRAIN));
+
+      expect(document.body).toHaveFocus();
+    });
+  });
 });

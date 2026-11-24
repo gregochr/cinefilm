@@ -159,7 +159,17 @@ export default function JourneyTrain({
     wasOpen.current = open;
   }, [open]);
 
+  // The same rule for a train taken away (the row's "Remove train…" or its confirmation went with it): focus that has
+  // fallen to the page goes to this button, which now adds. Focus the owner has put somewhere real stays.
   const replacing = journey.train !== null;
+  const hadTrain = useRef(replacing);
+  useEffect(() => {
+    if (hadTrain.current && !replacing && document.activeElement === document.body) {
+      buttonRef.current.focus();
+    }
+    hadTrain.current = replacing;
+  }, [replacing]);
+
   return (
     <>
       <div className="admin__actions admin__todo-actions journey-row__train">
