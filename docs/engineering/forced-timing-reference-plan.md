@@ -226,6 +226,7 @@ Elvish forced file each).
 
 > **Superseded (2026-11-20)** by `soundtrack-timing-plan.md`: forced files are fitted to the film's own soundtrack
 > (speech activity and spoken language), which needs no full English file. The sketch below is kept for history.
+> That plan ended unproven on 2026-11-24 (its "Result" section): forced files are not fitted to the soundtrack.
 
 Built after 3c-1's lines. If forced and full files nearly always agree, 3d is the missing proof. If they often disagree,
 3d tells which file is right.

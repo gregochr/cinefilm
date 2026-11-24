@@ -2,6 +2,7 @@
 
 Status: plan, 2026-11-20 (revised after adversarial review, and for B's proof by ear after the header scan);
 revised 2026-11-22 after 3d-M's first run: B only, fixed language thresholds, `tiny` only.
+**Ended 2026-11-24: B is unproven for 3d** ("Result" below). Nothing under "Build" is built.
 Replaces the `alass` sketch under "3d" in `forced-timing-reference-plan.md`.
 
 ## Why
@@ -304,6 +305,37 @@ well, whether or not the scan counted them; the report lists them and which film
 
 If neither score passes, stop and report. The chosen
 thresholds and the bias are written into this plan before 3d-1a is briefed.
+
+## Result (2026-11-24): B is unproven, 3d ends
+
+The 60 sample files were mapped in three batches of 20 (2026-11-22 to 2026-11-24) and evaluated once (report
+`20261124T072259Z`, seed 1, score B, `tiny`, the fixed labels above). No sample file was unmappable.
+
+| Gate | Outcome | Numbers |
+|---|---|---|
+| Decoy screen | ok | 230 draws from 23 films |
+| Never confident and wrong | ok | 0 `ALIGNED` in 2,731 decoy fits (cross-film, shuffled, draws) |
+| Robustness | unproven | 0 frozen B-`ALIGNED` sample files (needs 10) |
+| Useful coverage | fail | 0% of 53 eligible forced files, with the threshold at 1.0, 1.25 and 1.5 × the largest decoy margin |
+| Absolute answers | fail | Dances with Wolves not both `ALIGNED`; the two Lord of the Rings files `CHECK` (see below) |
+| Bias | ok | 100 ms, from 18 of 23 bias films (cap 300 ms) |
+| Cost | ok | 774 CPU s per film-hour; 65.6 CPU-hours projected for the 148 media files with a forced file (budget 168); peak 856 MB |
+
+The margin threshold came out at 9.50: 1.25 × 7.60, the largest margin any decoy or wrong pick reached. No sample forced file
+came out `ALIGNED`, even with the threshold at 7.60 (the 1.0 × row), so robustness had nothing to test and the
+ear-check was not run. The text report does not say which of the `ALIGNED` conditions (margin, cues on speech,
+agreeing halves, offset limit, foreign first cue) each file missed; the JSON report on the server
+(`~/cinefilm-labels/soundtrack/out/`) holds the per-file fits.
+
+On two of the three absolute-answer films the offsets were right but not `ALIGNED`. Dances with Wolves' sidecars 2 and
+48 fitted at −50 ms and −14,050 ms: a difference of exactly 14 s, with sidecar 2 within 1 s of 0. They failed only
+on the rule that both must be `ALIGNED`. The Two Towers' `EMBEDDED` file fitted within 30 ms. The Return of the King's owner-verified
+file was 3,000 ms off. A right offset that does not reach `ALIGNED` is of no use to the product, which must never
+be confident and wrong.
+
+By the rule fixed before the run, B is unproven for 3d and 3d ends here. Forced-file timing stays as it is: the
+English-track check (`EMBEDDED`) and the existing timing reference. Any later attempt must be judged on a new seeded sample disjoint from these 60; repeating
+B unchanged is not worth it.
 
 ## Build (after the gate; each PR at most 1,500 changed lines)
 
