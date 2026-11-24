@@ -3,6 +3,8 @@
 Status: plan, 2026-11-24, written at the owner's request ("Yes, plan it") after 3d ended unproven
 (`soundtrack-timing-plan.md`, "Result"). Revised the same day after two rounds of adversarial review. Measure first
 (3e-M, planner, no PR); build only if every gate passes.
+**2026-11-24: the first dry run failed on `tiny`'s labels (2 of 26 confirmed); 3e continues only with a better
+language detector** ("The dry run, and a better detector" below). The evaluation set is unspent.
 
 ## Why
 
@@ -130,6 +132,75 @@ half A's decoys.** It is frozen at step 5, and that frozen threshold is used for
    about ±1 s, on 3d's clips (6 s before, 2 s after, the line's text). With 10 of 10 right, the error rate on
    confirmed files is below about 26% (one-sided 95%). This is the only bound on errors under about 2 s.
 
+## The dry run, and a better detector (3e-L, 2026-11-24)
+
+### Attempt 1: `tiny`'s labels, failed
+
+Step 4 ran once on the design set (kit `confirm.py`).
+- **Threshold:** 72 half-A decoys from 31 films, largest score 2.767, threshold 3.458.
+- **Coverage:** of the 26 eligible design files outside half B's films, **2 (7.7%) were `CONFIRMED`**. The others
+  failed, a file often on several conditions: the score 24, the peak 19, the halves 16, cues on speech 11, the
+  opening cue 7.
+- **Robustness:** dropping 20% of the cues kept 1 of the 2. Jitter and the second-half move passed.
+
+The evaluation does not go ahead. Half B was not scored, and the 80-file evaluation list is unspent.
+
+Nearly every file fails on the score itself, even against a bar this low. A check on design data (3d's frozen B
+fits of the 31 half-A files, report `20261124T072259Z`) points to a weak signal, not to files playing at a wrong
+offset:
+- their best offsets are spread over the whole ±120 s: 10 within 2 s of 0, 16 within 10 s;
+- their margins are 0 to 7.0, mostly 2 to 3.5, the range of decoys;
+- a file truly off would show one clear peak elsewhere, and almost none does.
+
+This is evidence, not proof: some files may also be off. 3e changes only the labeller, as step 4 allows ("the method
+may be changed and the dry run repeated"). No candidate's labels on Dances with Wolves or any Lord of the Rings
+edition are looked at before the freeze.
+
+### The candidates (fixed now; at most two more attempts)
+
+Each produces p(en) for the same speech stretches the maps hold (Silero VAD, 1 s or more), from the stretch's first
+30 s, as the kit does now. **Only p(en) changes.** Each stretch keeps its `tiny` no-speech probability from the
+existing map, so the no-speech filter (`max_no_speech` 0.6) is the same for both candidates. The SpeechBrain model
+gives no such value. The labels are `LABEL_DEFAULTS` as before. A stretch with p(en) of 0.7 or more is English, 0.15
+or less is foreign, and anything between is neutral. Nothing is tuned per model.
+
+- **L1: `faster-whisper` `base`**, the language probe only. It is already fetched on the server, pinned and
+  hash-checked. 3d estimated 2–3 times `tiny`'s map time.
+- **L2: SpeechBrain `lang-id-voxlingua107-ecapa`**, a dedicated spoken-language model.
+  - Licence Apache-2.0. Checkpoints about 85 MB. Pinned at commit `0253049ae131d6a4be1c4f0d8b0ff483a0f8c8e9`.
+  - Input 16 kHz mono. Its card reports a 6.7% error on the VoxLingua107 dev set.
+  - p(en) is its posterior for English. Lakota is not among its 107 languages, which matters only if it calls
+    Lakota English. No design data holds known foreign speech (the Dances with Wolves film is held out), so that
+    risk is carried by gate 4 (sidecar 2 must confirm) and the ear-check, not by the label check.
+  - It needs `torch`, `torchaudio` and `speechbrain` wheels, pinned and hash-checked in a lock of their own. The
+    owner fetches them once.
+
+### How each candidate is tried (design data only)
+
+1. **Maps for half A and the bias films only.** The owner re-labels the half-A films' maps and 3d's bias films'
+   maps (full-track English films with no forced file, already mapped) in nightly batches. This reads the films
+   again over SMB, since the maps hold no audio. Half B's and the evaluation set's films are not re-labelled until a
+   candidate is chosen. Cost and peak RSS are recorded per film.
+2. **Label check, on the bias films:** the share of the speech under their full English tracks that is labelled
+   foreign must be at most 5% (`tiny`: 0.7%). The share of speech labelled neutral under half A's forced cues at 0
+   is reported. A candidate over 5% is rejected without a dry run.
+3. **Dry run.** Step 4 is repeated on the candidate's labels, with the same rules. Everything else is pinned from
+   attempt 1's `tiny` run (`dryrun-output.txt`), not rebuilt from whichever films have candidate maps:
+   - the half-A and half-B film lists;
+   - the decoy specs (which forced file goes on which film's map, and the shuffle seeds);
+   - the 80-id evaluation list.
+
+   Only the timelines' labels come from the candidate's maps. The threshold is recomputed from half A.
+4. **Product fit.** The candidate must run offline in a container with no network, under 1.5 GB peak RSS. Its
+   projected cost for every forced-file edition (the design rate × the forced films' runtime) must be at most
+   168 CPU-hours.
+
+**Choice.** A candidate is eligible only if it passes the label check, the dry run and the product-fit check. An
+eligible candidate is chosen. If both are eligible, the higher design coverage wins, and the
+cheaper wins a tie. If neither passes, **3e ends**, unproven, with the evaluation set unspent. Attempts are counted
+(1 is `tiny`), and their numbers go into this section before step 5. After the choice, half B's films and the
+evaluation set are mapped with the chosen labeller only. Steps 5 to 7 then run as written.
+
 ## Build (only if 3e-M passes; each PR at most 1,500 changed lines)
 
 This reuses 3d's build shape: a speech map stored per edition, made only for editions with a forced file, with a
@@ -152,6 +223,10 @@ forced-file choice (to about ±1 s)? It would never set an offset. The PR split 
 6. **No Plex input or answer**, so the method still works after Plex is gone.
 
 ## Open questions for the owner
+
+0. **L2 in the product.** If the SpeechBrain model is chosen, CineFilm's speech job would need `torch` in an image,
+   which adds several hundred MB. That is asked again with the numbers before any build. It is not needed to
+   measure.
 
 1. **The coverage bar.** The plan sets 50% of eligible files. Say if it should be higher.
 2. ~~Where the two heard answers came from.~~ Answered 2026-11-24 (step 0): Dances with Wolves was heard in
