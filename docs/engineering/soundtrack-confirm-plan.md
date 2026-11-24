@@ -84,8 +84,9 @@ each command. The kit gains a confirm mode in `evaluate.py`.
 4. **Dry run on the design set (half A only).** The kit computes the threshold from half A's decoys and reports,
    for the design set's own eligible forced files outside half B's films, how many would be `CONFIRMED` and how
    those pass gate 2's robustness changes. **Half B's decoys are not scored.** If coverage is below 50% or below 10
-   files, or either robustness bar fails, 3e stops here and the last unseen set is not spent. The method may be
-   changed and the dry run repeated, since half A and these files are design data.
+   files, or either robustness bar fails, the evaluation does not go ahead: the method may be changed and the dry run
+   repeated (half A and these files are design data), and 3e ends, with the last unseen set unspent, if no change
+   passes. Every attempt is counted and recorded at the freeze.
 5. **Freeze.** The method and the threshold are written into this plan (docs PR) and not changed again.
 6. **Half B, once.** Half B's decoys are scored once on the frozen method, and the plan records that they were. Any
    `CONFIRMED` among them fails gate 1 and ends 3e before the last unseen set is spent.
