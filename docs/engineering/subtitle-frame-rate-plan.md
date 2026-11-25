@@ -110,9 +110,9 @@ writes nothing), `on`, or `restore` (the rollback, below).
   and the verification are checked again. A `BUSY` is retried, so an owner's edit made at the same moment is never
   overwritten.
 - **The checks.**
-  - **A rewritten file's own rows go stale by its cue hash.** The file is unchecked until its re-check gives a verdict.
-    During that time a download that had failed could play, unchecked. That is accepted and measured (Checks after
-    release).
+  - **A rewritten file's own check and alignment rows are carried over,** not dropped. They are re-keyed to the new
+    served version and identity, and `stale_since` is set. So a download that failed for wrong lines, not drift,
+    stays failed until its new verdict replaces the row.
   - **Rows that name a changed reference are not deleted.** Whenever a reference's `cues_text` changes, by a rewrite,
     a re-scale or a restore, every `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that
     names it, in every edition of the film, gets `stale_since` set (a new column on the three tables). Those keys name
@@ -140,24 +140,33 @@ writes nothing), `on`, or `restore` (the rollback, below).
   rows as above. It is tested in phase 2a (downloads) and 2b (references). An image rollback alone would leave the
   rewritten cues in place, so `restore` is run first; `operations.md` says so.
 
-**Unknown against retimed: no verdict.**
-- **The case.**
-  - A row's **natural k** for an edition is worked out from the rates alone: its rate (the owner's, else the stated
-    one) against the edition's film rate. The switch and `retime` play no part.
-  - A downloaded file or a reference is **on the edition's timeline** when its natural k is 1, or when `retimed_by`
-    equals it.
-  - **A raw row whose natural k is not 1** (off by the owner's choice, or a new arrival while the switch is off) is
-    compared with the other side's `original_cues_text` when both have the same rate. So both are raw on the same
-    rate, as today. Otherwise there is no verdict.
-  - Anything else is unknown for that comparison: no rate, a film whose editions disagree, or an edition whose rate
-    is unknown. Compared with a retimed side, it can't be judged.
-- **What happens.** That reference is skipped, the case is counted, and it never gives `CHECK`. The walk moves on to
-  the next candidate with a stated rate, stored ones first. If none is left, the edition has no verdict this run
-  (unchecked) and is counted.
-- **The scope.** The rule applies whenever either side is not on the timeline, whatever the switch says, because the
-  rewritten rows outlive it. Tests cover an owner-offset download that is off against a retimed reference (compared
-  raw against raw), and a reference stored while the switch is off (no verdict against a retimed download). The owner's files count as on the film's timeline, so they are compared as usual. Tests
-  pin both.
+**How two files are compared** (a download or an owner's file against a reference). One rule, applied whatever
+the switch says, because rewritten rows outlive it:
+- **A row's rate** is the owner's rate if set, else the stated one, else unknown. The owner's own files (`FILE`)
+  count as on the film's timeline.
+- **Neither side retimed** (`retimed_by` null on both): they are compared as stored, exactly as today. That covers
+  every pair on a 23.976 film with nothing retimed. It also covers an owner's file against a reference with no rate,
+  and an owner-offset download that is off against a raw reference.
+- **One or both retimed, and both rates known:**
+  - each retimed side is compared through its film-timeline cues;
+  - a raw side whose rate differs from the film's is compared through the other side's `original_cues_text`, when
+    both have the same rate;
+  - otherwise the two are compared on the film's timeline.
+- **One side retimed, the other's rate unknown:** no verdict. The reference is skipped, the case is counted, and
+  it never gives `CHECK`.
+- **A rate conflict:** a retimed side and a raw side whose stated rates differ, which give `CHECK` on the film's
+  timeline but agree when both are compared as originally stored. One stated rate is wrong, and the plan can't tell
+  which. That is no verdict, counted and shown in the Admin as "rate conflict". The Bridge of Spies risk is a
+  reference stated as 25 that is timed like 24, and this is where it lands. A correct download is never failed by it.
+- **After a skip,** the walk moves on to the next candidate with a known rate, stored ones first. If none is left,
+  the edition has no verdict this run and is counted.
+- **Tests:**
+  - an owner file against a reference with no rate, on a 23.976 film, still gets a verdict;
+  - an owner-offset download that is off, against a retimed reference, is compared raw against raw;
+  - a reference stored while the switch is off gives no verdict against a retimed download;
+  - a rate conflict gives no verdict, never `CHECK`;
+  - a split-rate film with a retimed download and a raw reference of the same stated rate is compared on the
+    originals.
 
 **What the owner set by hand is left alone.**
 - `retime` starts **undecided** (null). The job decides it once: **off** for a download with an OWNER offset or owner
@@ -213,8 +222,8 @@ Not in this plan:
      - rows backfilled, out of the expected 92;
      - downloads the job would set to off;
      - comparisons of unknown against retimed;
-     - references stated as 25 on 25 fps films that act as judges. These are the Bridge of Spies risk; the owner's
-       rate choice is how one is corrected.
+     - references stated as 25 on 25 fps films that act as judges. These are the Bridge of Spies risk, and they end
+       as rate conflicts, not failures. If more than 10, the owner is asked before 2a.
 
      **If fewer than 80 of the 92 are backfilled, the owner is asked before phase 2.** The choice is a one-off
      file-info lookup on OpenSubtitles, or leaving them listed.
@@ -224,7 +233,7 @@ Not in this plan:
      - the AUTO reset and restore;
      - the owner-timing rule;
      - the immediate fit, then the checks, with the `BUSY` retry.
-   - Unknown against retimed: no verdict, with each side judged on the edition's timeline as defined above.
+   - Comparisons by the rule in "How two files are compared".
    - Tests:
      - with the switch off, nothing is written;
      - a retimed file's served cues, fits and checks follow the rewrite;
@@ -243,8 +252,7 @@ Not in this plan:
      - a download copied from a retimed reference is scaled once;
      - a film whose editions disagree keeps its references raw;
      - another edition's check against a rewritten or restored reference is made again;
-     - a film that disagrees or is partly unknown, a retimed download and a raw stated reference give no verdict,
-       never `CHECK`;
+     - a retimed download and a reference of unknown rate give no verdict, never `CHECK`;
      - an owner edit made while the job holds a row is kept.
    - If either 2a or 2b is estimated over 1,200 lines, it is split again along these bullets.
 4. **The Admin, then on.**
@@ -252,7 +260,8 @@ Not in this plan:
    - The rate line and the switch go in the Admin's subtitle view.
    - The switch's default becomes on.
 
-Phase 4 may be built beside 2a and 2b (different files), but is merged after them.
+Phase 4 may be built beside 2a and 2b (different files), but is merged after them. If it is estimated over 1,200
+lines, it is split: the endpoint and contract first, then the Admin view and the switch's default.
 
 ## Checks after release
 
@@ -260,10 +269,10 @@ Phase 4 may be built beside 2a and 2b (different files), but is merged after the
 - When the job's first run has finished, a read-only query counts the following. The job's run checks stored
   references first, and may fetch within the checks' share.
   - the downloads that now play retimed, and those set to off;
-  - how long the first run took, which is the longest any edition was unchecked;
+  - how long the first run took, and how many rows are still stale at its end;
   - the editions left with no verdict;
   - the proven count of each kind, against the same count taken before release. Expect no drop beyond the skipped
-    unknown-against-retimed cases, which phase 1 counted.
+    no-verdict cases (unknown rate and rate conflicts), which phase 1 counted.
 
 ## Decisions taken in this plan
 
