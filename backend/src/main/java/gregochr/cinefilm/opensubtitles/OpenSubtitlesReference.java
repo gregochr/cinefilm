@@ -51,6 +51,9 @@ public class OpenSubtitlesReference {
     /** Where the last cue ends, in milliseconds; null for a file stored before it was kept, and for an unusable one. */
     private Long lastCueEndMs;
 
+    /** The frame rate OpenSubtitles states the file was timed for; null when it states none. */
+    private Double timedFps;
+
     /** Downloads that were charged but gave no usable file; {@link #MAX_FAILED_DOWNLOADS} makes it final. */
     @Column(nullable = false)
     private int failedDownloads;

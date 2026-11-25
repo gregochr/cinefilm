@@ -139,7 +139,11 @@ class ForcedDownloadEdgeTest extends ForcedDownloadTestBase {
             replacement.imdbId(), replacement.editionName(), null, replacement.candidates(), 3, "an older version");
         assertThat(service.add(stale, candidate, LATER)).isEqualTo(AddOutcome.DROPPED);
         assertThat(owner.getId()).isNotNull();
+        candidate.setTimedFps(25.0);
+        references.saveAndFlush(candidate);
         assertThat(service.add(replacement, candidate, LATER)).isEqualTo(AddOutcome.ADDED);
+        assertThat(sidecars.findAll()).filteredOn(SubtitleSidecar::isDownload)
+            .extracting(SubtitleSidecar::getTimedFps).containsExactly(25.0);
     }
 
     @Test

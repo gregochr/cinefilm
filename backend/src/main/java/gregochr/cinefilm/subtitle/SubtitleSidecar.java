@@ -135,6 +135,9 @@ public class SubtitleSidecar {
     /** When a download was made; null for a file. */
     private Instant downloadedAt;
 
+    /** The frame rate OpenSubtitles states the download was timed for; null when it states none, and for a file. */
+    private Double timedFps;
+
     /** True when the owner picked this download in the Admin picker. */
     public boolean isOwnerChosen() {
         return ownerChosenAt != null;

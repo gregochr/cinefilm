@@ -461,6 +461,7 @@ public class ForcedDownloadService {
         row.setOpenSubtitlesFileId(reference.getOsFileId());
         row.setRelease(reference.getRelease());
         row.setImdbId(reference.getImdbId());
+        row.setTimedFps(reference.getTimedFps());
         row.setDownloadedAt(now);
         row.setUpdatedAt(now);
         return row;

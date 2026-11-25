@@ -273,6 +273,29 @@ class ForcedDownloadServiceChosenUnitTest {
     }
 
     @Test
+    void aChosenFileKeepsTheRateItsReferenceStates() {
+        editionLoads();
+        used(SubtitleKind.FORCED, 0, 0);
+        OpenSubtitlesReference stated = reference(5011, 12);
+        stated.setTimedFps(23.976);
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, stated, NOW)).isEqualTo(ChosenOutcome.ADDED);
+
+        assertThat(savedRows()).extracting(SubtitleSidecar::getTimedFps).containsExactly(23.976);
+    }
+
+    @Test
+    void aChosenFileWhoseReferenceStatesNoRateHasNone() {
+        editionLoads();
+        used(SubtitleKind.FORCED, 0, 0);
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+            .isEqualTo(ChosenOutcome.ADDED);
+
+        assertThat(savedRows()).extracting(SubtitleSidecar::getTimedFps).containsOnlyNulls();
+    }
+
+    @Test
     void aChosenForcedFileIsSavedAsTheEditionsDownloadAndPinnedWithTheOwnersCheck() {
         editionLoads();
         used(SubtitleKind.FORCED, 0, 0);

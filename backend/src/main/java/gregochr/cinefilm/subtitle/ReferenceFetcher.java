@@ -168,6 +168,7 @@ final class ReferenceFetcher {
         reference.setImdbId(imdbId);
         reference.setOsFileId(candidate.fileId());
         reference.setRelease(candidate.release());
+        reference.setTimedFps(candidate.fps());
         reference.setFetchedAt(now);
         return reference;
     }
