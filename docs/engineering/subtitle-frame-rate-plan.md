@@ -177,7 +177,9 @@ the switch says, because rewritten rows outlive it:
 - **Tests:**
   - an owner file against a reference with no rate, on a 23.976 film, still gets a verdict;
   - an owner-offset download that is off, against a retimed reference, is compared raw against raw;
-  - a reference stored while the switch is off gives no verdict against a retimed download;
+  - a reference of unknown rate gives no verdict against a retimed download;
+  - a raw 23.976 reference against a retimed 23.976 download on a 25 fps film is compared on the originals and
+    agrees;
   - a rate conflict gives no verdict, never `CHECK`;
   - a split-rate film with a retimed download and a raw reference of the same stated rate is compared on the
     originals.
@@ -265,6 +267,9 @@ Not in this plan:
      - `restore` puts every retimed download back.
 3. **2b: references and arrivals, behind the switch.**
    - References are rewritten under the agreed-rate rule.
+   - The `cues_version` guard: it is raised on every change of a reference's `cues_text`, and a check or fit drops
+     its save when the version it read has moved. Test: a check that read a reference before its rewrite drops its
+     save.
    - Rows that name a changed reference get `stale_since`, in every edition of the film. They keep deciding until
      replaced, and are due.
    - `restore` covers references too.
