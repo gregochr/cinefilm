@@ -146,6 +146,36 @@ class ForcedDownloadEdgeTest extends ForcedDownloadTestBase {
             .extracting(SubtitleSidecar::getTimedFps).containsExactly(25.0);
     }
 
+    /** Adds the one candidate's reference as a download and returns the rate the download row stores. */
+    private Double addedRate(Double candidateFps, Double referenceFps) {
+        Film film = searchedFilm("Taken", 1,
+            new OpenSubtitlesResult(4011, 5011, "Release.5011", candidateFps, 10, true, false, null, null, 1));
+        OpenSubtitlesReference reference = reference(film, 5011);
+        reference.setTimedFps(referenceFps);
+        references.saveAndFlush(reference);
+        DueDownload due = service.due().get(0);
+
+        assertThat(service.add(due, reference, LATER)).isEqualTo(AddOutcome.ADDED);
+
+        return sidecars.findAll().stream().filter(SubtitleSidecar::isDownload)
+            .map(SubtitleSidecar::getTimedFps).toList().get(0);
+    }
+
+    @Test
+    void aPromotedReferenceWithNoRateTakesTheRateTheFilmsCandidateStates() {
+        assertThat(addedRate(25.0, null)).isEqualTo(25.0);
+    }
+
+    @Test
+    void aPromotedReferenceThatHasARateKeepsItWhateverTheCandidateStates() {
+        assertThat(addedRate(25.0, 23.976)).isEqualTo(23.976);
+    }
+
+    @Test
+    void aPromotedReferenceAndCandidateThatStateNoRateGiveADownloadWithNone() {
+        assertThat(addedRate(null, null)).isNull();
+    }
+
     @Test
     void aFileThatFailedAndLooksLikeFullSubtitlesIsLoggedOncePerRunAsNotShown() {
         Film film = film();

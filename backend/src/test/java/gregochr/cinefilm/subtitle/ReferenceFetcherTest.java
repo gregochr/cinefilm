@@ -2,7 +2,7 @@ package gregochr.cinefilm.subtitle;
 
 import static gregochr.cinefilm.TestData.CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -16,6 +16,7 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,8 @@ import org.springframework.transaction.CannotCreateTransactionException;
 @ExtendWith(MockitoExtension.class)
 class ReferenceFetcherTest {
 
+    private static final LocalDate DAY = LocalDate.of(2024, 3, 31);
+    private static final int LIMIT = 20;
     private static final String IMDB = "tt0936501";
     private static final String SRT = "1\n00:00:10,000 --> 00:00:12,000\nHello\n\n";
 
@@ -56,7 +59,7 @@ class ReferenceFetcherTest {
     }
 
     private void saves() {
-        when(references.saveAndFlush(org.mockito.ArgumentMatchers.any(OpenSubtitlesReference.class)))
+        when(references.saveAndFlush(argThat(saved -> saved.getOsFileId() == 5011L)))
             .thenAnswer(call -> call.getArgument(0));
     }
 
@@ -68,7 +71,7 @@ class ReferenceFetcherTest {
     private void downloads(byte[] file) {
         saves();
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L)).thenReturn(Optional.empty());
-        when(budget.take(org.mockito.ArgumentMatchers.any(), anyInt())).thenReturn(true);
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
         when(api.download(5011L)).thenReturn(new OpenSubtitlesDownload(SrtParser.parse(file), null, null));
     }
 
@@ -99,7 +102,7 @@ class ReferenceFetcherTest {
     void aStoredReferenceWithNoRateTakesTheRateTheCandidateStatesWithATargetedUpdateAndNoDownload() {
         OpenSubtitlesReference reference = finalStored(null);
 
-        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), 20);
+        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), LIMIT);
 
         assertThat(returned).isSameAs(reference);
         assertThat(returned.getTimedFps()).isEqualTo(25.0);
@@ -113,7 +116,7 @@ class ReferenceFetcherTest {
     void aStoredReferenceThatAlreadyHasARateKeepsItAndNothingIsWritten() {
         OpenSubtitlesReference reference = finalStored(23.976);
 
-        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), 20);
+        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), LIMIT);
 
         assertThat(returned).isSameAs(reference);
         assertThat(returned.getTimedFps()).isEqualTo(23.976);
@@ -126,7 +129,7 @@ class ReferenceFetcherTest {
     void aStoredReferenceWithNoRateStaysSoAndNothingIsWrittenWhenTheCandidateStatesNone() {
         OpenSubtitlesReference reference = finalStored(null);
 
-        assertThat(fetcher.fetch(1L, IMDB, stating(null), 20)).isSameAs(reference);
+        assertThat(fetcher.fetch(1L, IMDB, stating(null), LIMIT)).isSameAs(reference);
 
         assertThat(reference.getTimedFps()).isNull();
         verify(references).findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L);
@@ -140,7 +143,7 @@ class ReferenceFetcherTest {
         OpenSubtitlesReference reference = finalStored(null);
         doThrow(failure).when(references).fillTimedFps(7L, 25.0);
 
-        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), 20);
+        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), LIMIT);
 
         assertThat(returned).isSameAs(reference);
         assertThat(returned.getTimedFps()).isNull();
@@ -161,7 +164,7 @@ class ReferenceFetcherTest {
         OpenSubtitlesResult result = new OpenSubtitlesResult(1, 5011, "Taken.2008", 23.976, 300, true, false, null,
             null);
 
-        fetcher.fetch(1L, IMDB, result, 20);
+        fetcher.fetch(1L, IMDB, result, LIMIT);
 
         assertThat(stored().getTimedFps()).isEqualTo(23.976);
         assertThat(stored().getCueCount()).isEqualTo(1);
@@ -173,7 +176,7 @@ class ReferenceFetcherTest {
         OpenSubtitlesResult result = new OpenSubtitlesResult(1, 5011, "Taken.2008", null, 300, true, false, null,
             null);
 
-        fetcher.fetch(1L, IMDB, result, 20);
+        fetcher.fetch(1L, IMDB, result, LIMIT);
 
         assertThat(stored().getTimedFps()).isNull();
     }
@@ -184,7 +187,7 @@ class ReferenceFetcherTest {
         OpenSubtitlesResult result = new OpenSubtitlesResult(1, 5011, "Taken.2008", 25.0, 300, true, false, null,
             null);
 
-        fetcher.fetch(1L, IMDB, result, 20);
+        fetcher.fetch(1L, IMDB, result, LIMIT);
 
         OpenSubtitlesReference reference = stored();
         assertThat(reference.isUsable()).isFalse();
