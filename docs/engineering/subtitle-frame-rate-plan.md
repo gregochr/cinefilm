@@ -118,8 +118,9 @@ writes nothing), `on`, or `restore` (the rollback, below).
     for wrong lines, not drift, stays failed until its new verdict replaces the row.
   - **Its proving rows are not.** An `AGREES` check or an `ALIGNED` alignment was made on the old cues and proves
     nothing about the new ones. It goes non-current, and the file is unchecked until its re-check.
-  - **Every due test treats a row with `stale_since` set as due, whatever its trust:** the timing fit, the file and
-    download checks of `SidecarCheckService`, the timing references and the full-file probe.
+  - **Every due test treats a row with `stale_since` set as due, whatever its trust:** the timing fit, and the file
+    and download checks of `SidecarCheckService`. The timing references and the full-file probe keep no rows; their
+    in-memory "done" sets lose each rewritten or restored sidecar id, so those are measured again. Both only log.
   - **Rows that name a changed reference are not deleted.** Whenever a reference's `cues_text` changes, by a rewrite,
     a re-scale or a restore, every `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that
     names it, in every edition of the film, gets `stale_since` set (a new column on the three tables). Those keys name
@@ -162,7 +163,8 @@ writes nothing), `on`, or `restore` (the rollback, below).
 **How two files are compared** (a download or an owner's file against a reference). One rule, applied whatever
 the switch says, because rewritten rows outlive it:
 - **A row's rate** is the owner's rate if set, else the stated one, else unknown. The owner's own files (`FILE`) and
-  downloads that fit as is (`OFF_FITS`) take the film's rate as their known rate in every rule below.
+  downloads that fit as is (`OFF_FITS`) take the film's rate as their known rate in every rule below. So does the
+  film's embedded English track (`EMBEDDED`), which is on the film's timeline by nature.
 - **Neither side retimed** (`retimed_by` null on both): they are compared as stored, exactly as today. That covers
   every pair on a 23.976 film with nothing retimed. It also covers an owner's file against a reference with no rate,
   and an owner-offset download that is off against a raw reference.
@@ -185,6 +187,7 @@ the switch says, because rewritten rows outlive it:
   - a reference of unknown rate gives no verdict against a retimed download;
   - a raw 23.976 reference against a retimed 23.976 download on a 25 fps film is compared on the originals and
     agrees;
+  - a retimed download against the embedded English track gets a verdict;
   - a rate conflict gives no verdict, never `CHECK`;
   - a split-rate film with a retimed download and a raw reference of the same stated rate is compared on the
     originals.
@@ -298,6 +301,9 @@ Not in this plan:
    - `PUT /api/admin/subtitles/{id}/retime` takes "as stated", 23.976, 24, 25 or "don't retime".
    - The rate line and the switch go in the Admin's subtitle view.
    - The switch's default becomes on.
+   - **Released on its own.** 2a and 2b are tagged and deployed before phase 4 is tagged. Any rollback of phase 4's
+     release, including the automatic one when smoke fails, then lands on an image that understands retimed rows.
+     The `operations.md` note says so.
 
 Phase 4 may be built beside 2a and 2b (different files), but is merged after them. If it is estimated over 1,200
 lines, it is split: the endpoint and contract first, then the Admin view and the switch's default.
