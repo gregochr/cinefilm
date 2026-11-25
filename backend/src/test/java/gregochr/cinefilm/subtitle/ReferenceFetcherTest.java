@@ -193,4 +193,34 @@ class ReferenceFetcherTest {
         assertThat(reference.isUsable()).isFalse();
         assertThat(reference.getTimedFps()).isEqualTo(25.0);
     }
+
+    @Test
+    void aReferenceFetchedAgainKeepsTheRateItHasWhenTheCandidateStatesNone() {
+        OpenSubtitlesReference failed = finalStored(23.976);
+        failed.setCueCount(0);
+        failed.setFailedDownloads(1);
+        saves();
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011L)).thenReturn(new OpenSubtitlesDownload(
+            SrtParser.parse(SRT.getBytes(StandardCharsets.UTF_8)), null, null));
+
+        fetcher.fetch(1L, IMDB, stating(null), LIMIT);
+
+        assertThat(stored().getTimedFps()).isEqualTo(23.976);
+    }
+
+    @Test
+    void aReferenceFetchedAgainTakesTheRateTheCandidateNowStates() {
+        OpenSubtitlesReference failed = finalStored(23.976);
+        failed.setCueCount(0);
+        failed.setFailedDownloads(1);
+        saves();
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011L)).thenReturn(new OpenSubtitlesDownload(
+            SrtParser.parse(SRT.getBytes(StandardCharsets.UTF_8)), null, null));
+
+        fetcher.fetch(1L, IMDB, stating(25.0), LIMIT);
+
+        assertThat(stored().getTimedFps()).isEqualTo(25.0);
+    }
 }

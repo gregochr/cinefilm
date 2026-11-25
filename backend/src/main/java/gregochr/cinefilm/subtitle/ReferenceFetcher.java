@@ -197,7 +197,8 @@ final class ReferenceFetcher {
         reference.setImdbId(imdbId);
         reference.setOsFileId(candidate.fileId());
         reference.setRelease(candidate.release());
-        reference.setTimedFps(candidate.fps());
+        // A rate the row has is never replaced by none (as fillRate): a candidate that states none keeps it.
+        reference.setTimedFps(candidate.fps() != null ? candidate.fps() : reference.getTimedFps());
         reference.setFetchedAt(now);
         return reference;
     }

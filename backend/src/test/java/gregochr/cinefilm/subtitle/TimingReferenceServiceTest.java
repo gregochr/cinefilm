@@ -337,7 +337,7 @@ class TimingReferenceServiceTest {
     }
 
     private static ReferenceFacts facts(long fileId, String imdbId, int cues) {
-        return new ReferenceFacts(fileId, 1L, imdbId, fileId, null, cues, 90_000L);
+        return new ReferenceFacts(fileId, 1L, imdbId, fileId, null, cues, 90_000L, null);
     }
 
     @Test

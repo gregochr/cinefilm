@@ -893,19 +893,16 @@ class TimingReferenceFetchTest {
     }
 
     @Test
-    void aTransientlyFailedCandidateThatDoesStateARateInTheStoredRowIsFetchedAgainAsBefore() {
-        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
-        downloading(1, 5011, scatteredReference(), saved);
+    void aTransientlyFailedCandidateThatStatesNoRateIsNotFetchedAgainEvenWhenItsStoredRowHasOne() {
         OpenSubtitlesReference transientFailure = stored(5011, List.of());
         transientFailure.setFailedDownloads(1);
         transientFailure.setTimedFps(23.976);
         when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(retimedShifted()),
             List.of(noRate(5011)), Map.of(5011L, transientFailure))));
-        when(filmRates.forEdition(10L)).thenReturn(25.0);
 
         fetch.run(CHECK_LIMIT, true);
 
-        assertThat(saved).containsOnlyKeys(5011L);
+        verifyNoInteractions(api, budget);
     }
 
     @Test
@@ -923,9 +920,7 @@ class TimingReferenceFetchTest {
     }
 
     @Test
-    void aFileThatIsTheCandidatesOwnDownloadDoesNotDecideSoWithNoOtherDecidingFileTheCandidateIsFetched() {
-        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
-        downloading(1, 5011, scatteredReference(), saved);
+    void aFileThatIsTheCandidatesOwnDownloadDecidesNothingSoTheCandidateIsPassedOverWhenNoOtherFileIsLeft() {
         RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
             0.959, shifted(2_000).cuesText());
         File ownDownload = new File(8L, Origin.DOWNLOAD, 12, shifted(92_000).cuesText(), 5011L, side);
@@ -934,6 +929,28 @@ class TimingReferenceFetchTest {
 
         fetch.run(CHECK_LIMIT, true);
 
-        assertThat(saved).containsOnlyKeys(5011L);
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void whenEveryFileIsLongAndRetimedTheNoRateCandidateIsPassedOverToo() {
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, SrtParser.format(full(300)));
+        File longRetimed = new File(8L, Origin.DOWNLOAD, 300, SrtParser.format(full(300)), 5099L, side);
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(longRetimed),
+            List.of(noRate(5011)), Map.of())));
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void aTargetWithNoFilesPassesOverANoRateCandidateToo() {
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(), List.of(noRate(5011)), Map.of())));
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verifyNoInteractions(api, budget);
     }
 }

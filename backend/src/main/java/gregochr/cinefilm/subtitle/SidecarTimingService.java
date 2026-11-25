@@ -629,8 +629,13 @@ public class SidecarTimingService {
             return key;
         }
         String imdbId = os.get(s.edition().getId()).imdbId();
+        // A retimed sidecar is compared by the rates, so for it each file also says whether it has one: a file that
+        // gains a rate makes the fit due again. Any other sidecar's key is as it was.
+        boolean ratesMatter = s.sidecar().getRetimedBy() != null;
         return key + "|os" + DownloadedFit.RULES_VERSION + ":" + imdbId + ":" + downloaded.stream()
-            .map(ReferenceFacts::osFileId).sorted().map(String::valueOf).collect(Collectors.joining(","));
+            .sorted(Comparator.comparingLong(ReferenceFacts::osFileId))
+            .map(r -> r.osFileId() + (ratesMatter && r.timedFps() != null ? "r" : ""))
+            .collect(Collectors.joining(","));
     }
 
     /**

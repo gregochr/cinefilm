@@ -165,7 +165,7 @@ class TimingReferenceRuleTest {
     }
 
     private static ReferenceFacts facts(long fileId, int cues, Long lastCueEndMs) {
-        return new ReferenceFacts(fileId, 1L, "tt1", fileId, "Release " + fileId, cues, lastCueEndMs);
+        return new ReferenceFacts(fileId, 1L, "tt1", fileId, "Release " + fileId, cues, lastCueEndMs, null);
     }
 
     @Test

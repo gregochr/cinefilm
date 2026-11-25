@@ -159,7 +159,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     private void stored(OpenSubtitlesReference... stored) {
         when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(Arrays.stream(stored)
             .map(r -> new ReferenceFacts(r.getId(), r.getFilmId(), r.getImdbId(), r.getOsFileId(), r.getRelease(),
-                r.getCueCount(), r.getLastCueEndMs())).toList());
+                r.getCueCount(), r.getLastCueEndMs(), r.getTimedFps())).toList());
     }
 
     /** The job reads the cue text of the files it fits to, and only those. */
@@ -448,7 +448,7 @@ class SidecarTimingServiceDownloadedUnitTest {
 
     private static ReferenceFacts factsOf(OpenSubtitlesReference r) {
         return new ReferenceFacts(r.getId(), r.getFilmId(), r.getImdbId(), r.getOsFileId(), r.getRelease(),
-            r.getCueCount(), r.getLastCueEndMs());
+            r.getCueCount(), r.getLastCueEndMs(), r.getTimedFps());
     }
 
     private static OpenSubtitlesReference storedBeforeV30(long fileId) {
@@ -1084,5 +1084,60 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         assertThat(job.noReference()).isNull();
         assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
+    }
+
+    @Test
+    void aRetimedDownloadWithFilesOfNoRateSavesANoRateFitEvenWhenTheFilmRateIsAlsoUnknown() {
+        // The film's rate is not what the download waits for: it states its own, and the files state none.
+        retimed();
+        when(filmRates.forEdition(40L)).thenReturn(null);
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference unknown = reference(5012, 300, IMDB);
+        stored(unknown);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(unknown));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        assertThat(service.fitJobs(1L)).singleElement()
+            .satisfies(job -> assertThat(job.noReference()).isEqualTo(SidecarTimingService.NO_RATE_VERDICT));
+    }
+
+    @Test
+    void aSavedNoRateFitOfARetimedDownloadIsDueAgainOnceAFileGainsARate() {
+        retimed();
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference file = reference(5012, 300, IMDB);
+        stored(file);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(file));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+        FitJob saved = service.fitJobs(1L).get(0);
+        ForcedSubtitleAlignment row = row(saved.referenceKey());
+        row.setSidecarIdentity(saved.identity());
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row));
+
+        assertThat(service.fitJobs(1L)).isEmpty();
+
+        // The file's stated rate is filled in later: the key changes, so the fit is due again.
+        file.setTimedFps(25.0);
+        stored(file);
+
+        assertThat(service.fitJobs(1L)).hasSize(1);
+    }
+
+    @Test
+    void thePlainSidecarsKeyDoesNotHoldWhetherAFileHasARate() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference file = reference(5012, 300, IMDB);
+        stored(file);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(file));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+        String without = service.fitJobs(1L).get(0).referenceKey();
+
+        file.setTimedFps(25.0);
+        stored(file);
+
+        assertThat(service.fitJobs(1L).get(0).referenceKey()).isEqualTo(without);
     }
 }

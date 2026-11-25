@@ -25,14 +25,16 @@ public interface OpenSubtitlesReferenceRepository extends JpaRepository<OpenSubt
      * @param release its release name, or null
      * @param cueCount its line count (0 when unusable)
      * @param lastCueEndMs where its last cue ends, or null for a file stored before that was kept
+     * @param timedFps the rate OpenSubtitles states for it, or null
      */
     record ReferenceFacts(Long id, Long filmId, String imdbId, long osFileId, String release, int cueCount,
-                          Long lastCueEndMs) {
+                          Long lastCueEndMs, Double timedFps) {
     }
 
     /** The facts of every reference stored for some films, for the timing check on the playback path. */
     @Query("select new gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository$ReferenceFacts(r.id, "
-        + "r.filmId, r.imdbId, r.osFileId, r.release, r.cueCount, r.lastCueEndMs) from OpenSubtitlesReference r "
+        + "r.filmId, r.imdbId, r.osFileId, r.release, r.cueCount, r.lastCueEndMs, r.timedFps) "
+        + "from OpenSubtitlesReference r "
         + "where r.filmId in :filmIds")
     List<ReferenceFacts> findFactsByFilmIdIn(@Param("filmIds") Collection<Long> filmIds);
 
