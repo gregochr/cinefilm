@@ -52,4 +52,12 @@ public interface SubtitleSidecarRepository extends JpaRepository<SubtitleSidecar
         + "join m.edition e where e.film.id = :filmId and s.presence = gregochr.cinefilm.film.Presence.PRESENT "
         + "and s.kind = :kind and s.cueCount > 0 and m.presence = gregochr.cinefilm.film.Presence.PRESENT")
     long countPresentSubtitlesForFilm(@Param("filmId") Long filmId, @Param("kind") SubtitleKind kind);
+
+    /**
+     * The ids of the downloads the retime job visits: every download with a known stated rate, and every row that is
+     * retimed, in id order.
+     */
+    @Query("select s.id from SubtitleSidecar s where s.origin = gregochr.cinefilm.subtitle.SubtitleSidecar.Origin"
+        + ".OPENSUBTITLES and (s.timedFps is not null or s.retimedBy is not null) order by s.id")
+    List<Long> findRetimeCandidateIds();
 }
