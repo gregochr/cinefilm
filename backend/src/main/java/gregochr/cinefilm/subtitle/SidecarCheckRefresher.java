@@ -11,6 +11,7 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesSearchFinished;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException;
 import gregochr.cinefilm.subtitle.ReferenceWalk.Attempt;
 import gregochr.cinefilm.subtitle.SubtitleComparison.Result;
+import gregochr.cinefilm.subtitle.SubtitleComparison.Verdict;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -55,6 +57,7 @@ import org.springframework.stereotype.Service;
 public class SidecarCheckRefresher {
 
     private static final Logger LOG = LoggerFactory.getLogger(SidecarCheckRefresher.class);
+    private static final Predicate<Result> AGREES = r -> Verdict.AGREES.equals(r.verdict());
 
     /** A reset time further ahead than this is not believed (the reply is untrusted). */
     static final Duration MAX_BLOCK = ReferenceFetcher.MAX_BLOCK;
@@ -72,6 +75,7 @@ public class SidecarCheckRefresher {
     private final Clock clock;
     private final Executor executor;
     private final DailyDownloadLimit limits;
+    private final FilmRates filmRates;
     /** The ceiling for comparisons, set at the start of each run from the day's limit; one run at a time. */
     private volatile int checkLimit;
     private final ApplicationEventPublisher events;
@@ -85,7 +89,7 @@ public class SidecarCheckRefresher {
                                  FullFitService fullFit, TimingReferenceService timingReferences, Clock clock,
                                  @Qualifier("sidecarCheckExecutor") Executor executor,
                                  DailyDownloadLimit limits,
-                                 ApplicationEventPublisher events) {
+                                 ApplicationEventPublisher events, FilmRates filmRates) {
         this.api = api;
         this.budget = budget;
         this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
@@ -98,6 +102,7 @@ public class SidecarCheckRefresher {
         // subtitles are never starved (DownloadShares).
         this.limits = limits;
         this.events = events;
+        this.filmRates = filmRates;
     }
 
     /** Checks at start-up, and says so when the check is off. */
@@ -198,6 +203,8 @@ public class SidecarCheckRefresher {
         int saved = 0;
         int dropped = 0;
         int unusable = 0;
+        int unknownRate = 0;
+        int rateConflict = 0;
         int multiPart = 0;
         int failed = 0;
         boolean stopped = false;
@@ -220,9 +227,17 @@ public class SidecarCheckRefresher {
                         LOG.info("Edition {} not checked: {}", due.editionId(), MULTI_PART);
                         continue;
                     }
-                    Attempt kept = walk(due);
+                    Walked walked = walk(due);
+                    Attempt kept = walked.kept();
                     if (kept == null) {
-                        unusable++;
+                        // No attempt: counted by why. Skipped for an unknown rate, else for a conflict, else unusable.
+                        if (walked.unknownRate() > 0) {
+                            unknownRate++;
+                        } else if (walked.rateConflict() > 0) {
+                            rateConflict++;
+                        } else {
+                            unusable++;
+                        }
                     } else if (service.save(due, kept.reference(), kept.result(), clock.instant())) {
                         saved++;
                     } else {
@@ -244,13 +259,31 @@ public class SidecarCheckRefresher {
             }
             measureTimingReferences(!stopped);
             LOG.info("Subtitle file checks finished: {} saved, {} changed meanwhile, {} unusable references, "
-                + "{} failed", saved, dropped, unusable, failed);
+                + "{}{} failed", saved, dropped, unusable, noVerdict(unknownRate, rateConflict), failed);
             if (saved > 0) {
                 announce();
             }
         } catch (RuntimeException e) {
             LOG.error("Subtitle file checks failed", e);
         }
+    }
+
+    /** The two no-verdict counts for the finish line; empty while there are none, so the line is as it was. */
+    private static String noVerdict(int unknownRate, int rateConflict) {
+        if (unknownRate == 0 && rateConflict == 0) {
+            return "";
+        }
+        return unknownRate + " no verdict (unknown rate), " + rateConflict + " no verdict (rate conflict), ";
+    }
+
+    /**
+     * What a walk found.
+     *
+     * @param kept the attempt to save, or null when no candidate could be compared
+     * @param unknownRate how many candidates were passed over because a rate was not known
+     * @param rateConflict how many candidates were passed over as a rate conflict
+     */
+    private record Walked(Attempt kept, int unknownRate, int rateConflict) {
     }
 
     /**
@@ -299,12 +332,15 @@ public class SidecarCheckRefresher {
      * per edition and IMDb id (the ledger is persisted). An outage, a spent budget or a charged transient failure on
      * the way ends the walk with nothing saved; the references already stored are used again by the next walk.
      *
-     * @return the reference and result to save, or null when no candidate had a usable reference
+     * @return the reference and result to save (null when no candidate had a usable reference), and how many
+     *     candidates were passed over for want of a verdict
      */
-    private Attempt walk(DueCheck due) {
+    private Walked walk(DueCheck due) {
         Set<Long> tried = new HashSet<>(due.triedFileIds());
         List<Attempt> attempts = new ArrayList<>();
         int position = 0;
+        int unknownRate = 0;
+        int rateConflict = 0;
         for (OpenSubtitlesResult candidate : due.candidates()) {
             position++;
             boolean known = tried.contains(candidate.fileId());
@@ -314,6 +350,14 @@ public class SidecarCheckRefresher {
                 // Files already tried further down are still reused: that costs no download and keeps the cap.
                 continue;
             }
+            if (!known && statesNoRateForRetimed(due, candidate)) {
+                // The file would arrive with no rate, and a retimed download cannot be judged against it: no download
+                // and no ledger slot, or three such files would use up the edition's three comparisons.
+                unknownRate++;
+                LOG.info("Edition {}: candidate {} (file {}) skipped without a download, no verdict: UNKNOWN_RATE "
+                    + "(sidecar {})", due.editionId(), position, candidate.fileId(), due.downloadSidecarId());
+                continue;
+            }
             OpenSubtitlesReference reference = tried(due, candidate, known);
             tried.add(candidate.fileId());
             if (!reference.isUsable()) {
@@ -321,7 +365,24 @@ public class SidecarCheckRefresher {
                     position, candidate.fileId());
                 continue;
             }
-            Result result = SubtitleComparison.compare(due.cues(), SrtParser.cues(reference.getCuesText()));
+            RateComparison.Side served = due.rateSide();
+            RateComparison.Side referenceSide = RateComparison.Side.of(reference);
+            RateComparison.Judged<Result> judged = RateComparison.judge(served, referenceSide,
+                () -> filmRates.forEdition(due.editionId()), due.cues(), () -> due.originalCues(),
+                SrtParser.cues(reference.getCuesText()), RateComparison.originalOf(referenceSide),
+                SubtitleComparison::compare, AGREES.negate(), AGREES);
+            if (!judged.hasVerdict()) {
+                LOG.info("Edition {}: candidate {} (file {}) skipped, no verdict: {} (sidecar {}, reference {})",
+                    due.editionId(), position, candidate.fileId(), judged.reason(), due.downloadSidecarId(),
+                    reference.getId());
+                if (judged.reason() == RateComparison.Reason.UNKNOWN_RATE) {
+                    unknownRate++;
+                } else {
+                    rateConflict++;
+                }
+                continue;
+            }
+            Result result = judged.result();
             attempts.add(new Attempt(reference, result));
             if (!ReferenceWalk.moveOn(result)) {
                 break;
@@ -330,12 +391,22 @@ public class SidecarCheckRefresher {
                 candidate.fileId(), result.fullReference() ? "full subtitles" : "probably another cut");
         }
         if (attempts.isEmpty()) {
-            return null;
+            return new Walked(null, unknownRate, rateConflict);
         }
         Attempt kept = ReferenceWalk.choose(attempts);
         LOG.info("Edition {}: used OpenSubtitles file {} (compared {}), {}", due.editionId(),
             kept.reference().getOsFileId(), attempts.size(), kept.result().verdict());
-        return new Attempt(kept.reference(), kept.result().withReasons(ReferenceWalk.reasons(attempts, kept)));
+        return new Walked(new Attempt(kept.reference(),
+            kept.result().withReasons(ReferenceWalk.reasons(attempts, kept))), unknownRate, rateConflict);
+    }
+
+    /**
+     * True when the download being checked is retimed and OpenSubtitles states no rate for a candidate that is not
+     * stored yet: its reference would arrive with no rate, and rule 2 of the rate rule gives no verdict for the pair.
+     */
+    private boolean statesNoRateForRetimed(DueCheck due, OpenSubtitlesResult candidate) {
+        return due.rateSide().retimed() && candidate.fps() == null
+            && !fetcher.isStored(due.filmId(), due.imdbId(), candidate.fileId());
     }
 
     /** The candidate's reference, put on the ledger of the edition's candidates (a charged failure counts too). */

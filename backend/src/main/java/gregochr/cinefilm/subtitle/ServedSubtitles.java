@@ -36,14 +36,35 @@ final class ServedSubtitles {
         if (starts == null) {
             return null;
         }
+        List<SubtitleCue> cues = cues(pick, starts, false);
+        boolean verified = pick.slots().stream().allMatch(s -> s.sidecar().isVerifiedFor(partIds));
+        return new ServedSubtitle(version(partIds, pick, starts), verified, List.copyOf(cues));
+    }
+
+    /**
+     * The cues the pick would serve if its retimed files had never been retimed: each file's original cues (the stored
+     * ones when it has none) moved by its part's start and its offset exactly as {@link #of} does, so a retimed file's
+     * original is on the edition's timeline too.
+     *
+     * @param edition the edition (its files must be loaded)
+     * @param pick what {@link SidecarPrecedence} picked for it (at least one slot)
+     * @return the cues in time order, or null when a later part's start on the timeline is unknown
+     */
+    static List<SubtitleCue> originalCues(Edition edition, Pick pick) {
+        List<Long> starts = starts(edition, pick);
+        return starts == null ? null : List.copyOf(cues(pick, starts, true));
+    }
+
+    private static List<SubtitleCue> cues(Pick pick, List<Long> starts, boolean original) {
         List<SubtitleCue> cues = new ArrayList<>();
         for (int i = 0; i < pick.slots().size(); i++) {
             SubtitleSidecar sidecar = pick.slots().get(i).sidecar();
-            cues.addAll(VttWriter.shift(SrtParser.cues(sidecar.getCuesText()), starts.get(i) + sidecar.getOffsetMs()));
+            String text = original && sidecar.getOriginalCuesText() != null ? sidecar.getOriginalCuesText()
+                : sidecar.getCuesText();
+            cues.addAll(VttWriter.shift(SrtParser.cues(text), starts.get(i) + sidecar.getOffsetMs()));
         }
         cues.sort(Comparator.comparingLong(SubtitleCue::startMs).thenComparingLong(SubtitleCue::endMs));
-        boolean verified = pick.slots().stream().allMatch(s -> s.sidecar().isVerifiedFor(partIds));
-        return new ServedSubtitle(version(partIds, pick, starts), verified, List.copyOf(cues));
+        return cues;
     }
 
     /**

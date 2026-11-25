@@ -72,6 +72,9 @@ class SidecarCheckRefresherTest {
     private static final Result AGREES = new Result(2, 2, 1.0, 0, Verdict.AGREES, List.of(), 2, false);
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private OpenSubtitlesApi api;
 
     @Mock
@@ -102,7 +105,7 @@ class SidecarCheckRefresherTest {
     void setUp() {
         refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit,
             timingReference, CLOCK, queued::add, limits,
-            events);
+            events, filmRates);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -232,7 +235,7 @@ class SidecarCheckRefresherTest {
             timingReference, CLOCK,
             command -> {
                 throw new RejectedExecutionException("full");
-            }, limits, events);
+            }, limits, events, filmRates);
         when(api.downloadsEnabled()).thenReturn(true);
 
         assertThatThrownBy(refusing::startDue).isInstanceOf(RejectedExecutionException.class);
@@ -243,7 +246,7 @@ class SidecarCheckRefresherTest {
     private SidecarCheckRefresher synchronous() {
         return new SidecarCheckRefresher(api, budget, references, service, fullFit,
             timingReference, CLOCK, Runnable::run, limits,
-            events);
+            events, filmRates);
     }
 
     @Test
@@ -535,7 +538,7 @@ class SidecarCheckRefresherTest {
             queued.clear();
 
             SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit,
-                timingReference, CLOCK, queued::add, limits, events);
+                timingReference, CLOCK, queued::add, limits, events, filmRates);
             fresh.startDue();
             queued.get(0).run();
 
@@ -601,7 +604,7 @@ class SidecarCheckRefresherTest {
             org.mockito.Mockito.doThrow(new OpenSubtitlesQuotaException(reset)).when(api).download(5011);
             when(api.downloadsEnabled()).thenReturn(true);
             SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit,
-                timingReference, CLOCK, queued::add, limits, events);
+                timingReference, CLOCK, queued::add, limits, events, filmRates);
 
             fresh.startDue();
             queued.get(0).run();
@@ -707,9 +710,12 @@ class SidecarCheckRefresherTest {
     }
 
     /** A download's check that is due because its verdict is outdated; to the run it is a due check like any other. */
+    private static final RateComparison.Side UNRATED_DOWNLOAD =
+        new RateComparison.Side(RateComparison.Kind.DOWNLOAD, null, null, null, null);
+
     private static DueCheck staleDownloadDue() {
         return new DueCheck(1L, 10L, "tt1", "Original", List.of(candidate(5011, "Release 5011")), Set.of(5011L),
-            "v10", false, CUES, 7L);
+            "v10", false, CUES, 7L, UNRATED_DOWNLOAD);
     }
 
     @Test

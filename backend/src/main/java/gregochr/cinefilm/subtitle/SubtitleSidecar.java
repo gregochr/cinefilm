@@ -138,6 +138,21 @@ public class SubtitleSidecar {
     /** The frame rate OpenSubtitles states the download was timed for; null when it states none, and for a file. */
     private Double timedFps;
 
+    /** The factor the stored cues were multiplied by to put them on the film's timeline; null = never retimed. */
+    private Double retimedBy;
+
+    /** The film rate {@link #retimedBy} came from; null until retimed. */
+    private Double retimedForFps;
+
+    /** The cues before they were retimed; null until then. */
+    @Column(columnDefinition = "TEXT")
+    private String originalCuesText;
+
+    /** Whether the file is retimed: null = undecided. See {@link RetimeChoice}. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10)
+    private RetimeChoice retime;
+
     /** True when the owner picked this download in the Admin picker. */
     public boolean isOwnerChosen() {
         return ownerChosenAt != null;

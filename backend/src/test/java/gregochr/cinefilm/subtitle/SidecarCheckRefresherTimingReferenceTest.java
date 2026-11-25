@@ -56,6 +56,9 @@ class SidecarCheckRefresherTimingReferenceTest {
     private static final Result AGREES = new Result(2, 2, 1.0, 0, Verdict.AGREES, List.of(), 2, false);
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private OpenSubtitlesApi api;
 
     @Mock
@@ -85,7 +88,7 @@ class SidecarCheckRefresherTimingReferenceTest {
     @BeforeEach
     void setUp() {
         refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit, timingReference, CLOCK,
-            queued::add, new FakeDailyLimit(TOTAL_LIMIT), events);
+            queued::add, new FakeDailyLimit(TOTAL_LIMIT), events, filmRates);
         logged.start();
         refresherLog.addAppender(logged);
         fetchLog.addAppender(logged);
