@@ -232,8 +232,12 @@ class SidecarTimingServiceUnitTest {
 
         assertThat(service.save(fitted, aligned(900), LATER)).isEqualTo(SaveOutcome.DROPPED);
 
-        // The drop reads nothing from the alignments and writes nothing to them.
-        verifyNoMoreInteractions(alignments);
+        // The drop reads nothing from the alignments and writes nothing to them; the sidecar is read once and not saved.
+        verify(sidecars).findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED);
+        verifyNoMoreInteractions(alignments, sidecars);
+        assertThat(sidecar.getOffsetMs()).isZero();
+        assertThat(sidecar.getOffsetSource()).isNotEqualTo(SubtitleSidecar.OffsetSource.AUTO);
+        assertThat(sidecar.getUpdatedAt()).isEqualTo(NOW);
         sidecar.setCuesText(CUES);
         ForcedSubtitleAlignment stale = currentFit(Verdict.CHECK, NOW);
         when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
