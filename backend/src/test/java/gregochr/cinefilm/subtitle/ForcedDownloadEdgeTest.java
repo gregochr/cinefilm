@@ -143,6 +143,19 @@ class ForcedDownloadEdgeTest extends ForcedDownloadTestBase {
     }
 
     @Test
+    void aPromotedReferenceWithNoRateIsStoredWithTheRateTheFilmsCandidateStates() {
+        Film film = searchedFilm("Taken", 1,
+            new OpenSubtitlesResult(4011, 5011, "Release.5011", 25.0, 10, true, false, null, null, 1));
+        OpenSubtitlesReference reference = reference(film, 5011);
+        DueDownload due = service.due().get(0);
+
+        assertThat(service.add(due, reference, LATER)).isEqualTo(AddOutcome.ADDED);
+
+        assertThat(sidecars.findAll()).filteredOn(SubtitleSidecar::isDownload)
+            .extracting(SubtitleSidecar::getTimedFps).containsExactly(25.0);
+    }
+
+    @Test
     void aFileThatFailedAndLooksLikeFullSubtitlesIsLoggedOncePerRunAsNotShown() {
         Film film = film();
         SubtitleSidecar owner = sidecar("Taken.en.forced.srt", fileId(film, 1), false);

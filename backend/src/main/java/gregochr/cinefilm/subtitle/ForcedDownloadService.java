@@ -395,11 +395,11 @@ public class ForcedDownloadService {
         if (!(full ? fullNeed.isNeeded(due.filmId()) : need.isNeeded(due.filmId()))) {
             return AddOutcome.DROPPED;
         }
-        boolean candidate = OpenSubtitlesResult.listFromJson(candidatesJson).stream()
-            .anyMatch(c -> c.isSingleFile() && c.fileId() == reference.getOsFileId());
+        OpenSubtitlesResult candidate = OpenSubtitlesResult.listFromJson(candidatesJson).stream()
+            .filter(c -> c.isSingleFile() && c.fileId() == reference.getOsFileId()).findFirst().orElse(null);
         Edition edition = editions.findWithFilesByFilmIdIn(List.of(due.filmId())).stream()
             .filter(e -> e.getId().equals(due.editionId())).findFirst().orElse(null);
-        if (!candidate || edition == null) {
+        if (candidate == null || edition == null) {
             return AddOutcome.DROPPED;
         }
         List<ForcedDownloadBlock> editionBlocks = blocks.findByEditionIdInAndKind(List.of(edition.getId()), kind);
@@ -413,7 +413,7 @@ public class ForcedDownloadService {
         if (full ? !stillDueFull(edition, ofKind) : !stillDueForced(edition, due)) {
             return AddOutcome.DROPPED;
         }
-        sidecars.save(download(edition, reference, now, kind));
+        sidecars.save(download(edition, reference, now, kind, candidate.fps()));
         if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), due.imdbId(),
             reference.getOsFileId(), kind)) {
             ForcedCheckCandidate row = new ForcedCheckCandidate();
@@ -440,9 +440,13 @@ public class ForcedDownloadService {
             && !(due.kind() == Kind.REPLACEMENT && !Objects.equals(due.fileVersion(), resolution.fileVersion()));
     }
 
-    /** The download row: the reference's cues, stored against part 1 as a whole-edition file. */
+    /**
+     * The download row: the reference's cues, stored against part 1 as a whole-edition file. Its stated rate is the
+     * reference's when it has one, else the one the film's current search result for the file states (a reference
+     * stored before the rate was kept has none; null when neither does).
+     */
     private static SubtitleSidecar download(Edition edition, OpenSubtitlesReference reference, Instant now,
-                                            SubtitleKind kind) {
+                                            SubtitleKind kind, Double candidateFps) {
         SubtitleSidecar row = new SubtitleSidecar();
         row.setKind(kind);
         row.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
@@ -461,6 +465,7 @@ public class ForcedDownloadService {
         row.setOpenSubtitlesFileId(reference.getOsFileId());
         row.setRelease(reference.getRelease());
         row.setImdbId(reference.getImdbId());
+        row.setTimedFps(reference.getTimedFps() != null ? reference.getTimedFps() : candidateFps);
         row.setDownloadedAt(now);
         row.setUpdatedAt(now);
         return row;
@@ -530,16 +535,17 @@ public class ForcedDownloadService {
      * @param editionId the edition
      * @param kind forced or full
      * @param reference the stored reference of the picked file
+     * @param statedFps the rate the picked search result states, or null; used when the reference has none
      * @param now the time to stamp
      * @return what happened
      */
     public ChosenOutcome addChosen(Long filmId, Long editionId, SubtitleKind kind, OpenSubtitlesReference reference,
-                                   Instant now) {
+                                   Double statedFps, Instant now) {
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
             return ChosenOutcome.BUSY;
         }
         try {
-            return tx.execute(status -> addChosenLocked(filmId, editionId, kind, reference, now));
+            return tx.execute(status -> addChosenLocked(filmId, editionId, kind, reference, statedFps, now));
         } catch (DataIntegrityViolationException e) {
             // Another writer made the same download first.
             return ChosenOutcome.ALREADY_DOWNLOADED;
@@ -549,7 +555,7 @@ public class ForcedDownloadService {
     }
 
     private ChosenOutcome addChosenLocked(Long filmId, Long editionId, SubtitleKind kind,
-                                          OpenSubtitlesReference reference, Instant now) {
+                                          OpenSubtitlesReference reference, Double statedFps, Instant now) {
         Edition edition = loadEdition(filmId, editionId);
         if (edition == null) {
             return ChosenOutcome.CHANGED;
@@ -569,7 +575,7 @@ public class ForcedDownloadService {
                 sidecars.save(earlier);
             }
         }
-        SubtitleSidecar row = download(edition, reference, now, kind);
+        SubtitleSidecar row = download(edition, reference, now, kind, statedFps);
         row.setOwnerChosenAt(now);
         sidecars.save(row);
         if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), reference.getImdbId(),

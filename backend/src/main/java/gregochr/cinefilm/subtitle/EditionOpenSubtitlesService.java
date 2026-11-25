@@ -207,7 +207,7 @@ public class EditionOpenSubtitlesService {
             throw new OpenSubtitlesQuotaException(null);
         }
         Instant now = clock.instant();
-        ChosenOutcome outcome = downloads.addChosen(filmId, editionId, kind, reference, now);
+        ChosenOutcome outcome = downloads.addChosen(filmId, editionId, kind, reference, result.fps(), now);
         if (outcome == ChosenOutcome.UNUSABLE) {
             throw new UnprocessableException(unusable(reference, kind));
         }

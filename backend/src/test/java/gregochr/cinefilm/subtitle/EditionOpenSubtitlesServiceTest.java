@@ -56,6 +56,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 /** The picker's search and download with OpenSubtitles, the budget and the download service faked. */
 @ExtendWith(MockitoExtension.class)
@@ -141,6 +142,7 @@ class EditionOpenSubtitlesServiceTest {
         reference.setImdbId(IMDB);
         reference.setOsFileId(fileId);
         reference.setRelease("Release " + fileId);
+        reference.setTimedFps(23.976);
         reference.setCuesText(CUES);
         reference.setCueCount(cueCount);
         reference.setFetchedAt(NOW);
@@ -349,7 +351,8 @@ class EditionOpenSubtitlesServiceTest {
         searchedForced(plain(5011));
         readyToDownload(5011);
         OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenReturn(ChosenOutcome.NO_FILE);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW))
+            .thenReturn(ChosenOutcome.NO_FILE);
 
         assertThat(refusedWith(forced(5011))).isEqualTo("This edition has no original file to attach subtitles to.");
 
@@ -386,13 +389,31 @@ class EditionOpenSubtitlesServiceTest {
         searchedForced(plain(5011));
         readyToDownload(5011);
         OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenReturn(ChosenOutcome.ADDED);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW)).thenReturn(ChosenOutcome.ADDED);
         when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(2);
 
         DownloadDto dto = service.download(40L, forced(5011));
 
         assertThat(dto).isEqualTo(new DownloadDto(40L, "forced", 5011, "Taken.2008.BluRay", 2));
         verify(events).publishEvent(new SubtitleDownloadsFinished());
+    }
+
+    @Test
+    void aPickedFileGetsTheRateItsResultStatesWhenTheReferenceHasNoneAndTheFillFails() {
+        searchedForced(plain(5011));
+        readyToDownload(5011);
+        OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
+        reference.setId(7L);
+        reference.setTimedFps(null);
+        doThrow(new DataAccessResourceFailureException("database busy")).when(references).fillTimedFps(7L, 23.976);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW))
+            .thenReturn(ChosenOutcome.ADDED);
+        when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(2);
+
+        assertThat(service.download(40L, forced(5011)).fileId()).isEqualTo(5011L);
+
+        assertThat(reference.getTimedFps()).isNull();
+        verify(downloads).addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW);
     }
 
     @Test
@@ -406,7 +427,7 @@ class EditionOpenSubtitlesServiceTest {
         when(api.downloadsEnabled()).thenReturn(true);
         when(downloads.refusal(1L, 40L, SubtitleKind.FULL, IMDB, 6011)).thenReturn(Optional.empty());
         OpenSubtitlesReference reference = storedReferenceExists(6011, 400);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FULL, reference, NOW)).thenReturn(ChosenOutcome.ADDED);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FULL, reference, 23.976, NOW)).thenReturn(ChosenOutcome.ADDED);
 
         assertThat(service.download(40L, new DownloadRequest(6011L, "full")))
             .isEqualTo(new DownloadDto(40L, "full", 6011, "Taken.2008.BluRay", 2));
@@ -477,9 +498,10 @@ class EditionOpenSubtitlesServiceTest {
         searchedForced(plain(5011));
         readyToDownload(5011);
         OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW.plusSeconds(15 * 60).minusMillis(1)))
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976,
+            NOW.plusSeconds(15 * 60).minusMillis(1)))
             .thenReturn(ChosenOutcome.ADDED);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW.plusSeconds(15 * 60)))
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW.plusSeconds(15 * 60)))
             .thenReturn(ChosenOutcome.ADDED);
         when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(2);
 
@@ -621,8 +643,9 @@ class EditionOpenSubtitlesServiceTest {
         OpenSubtitlesReference full = stored(5012, 400);
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L)).thenReturn(Optional.of(unreadable));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5012L)).thenReturn(Optional.of(full));
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, unreadable, NOW)).thenReturn(ChosenOutcome.UNUSABLE);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, full, NOW)).thenReturn(ChosenOutcome.UNUSABLE);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, unreadable, 23.976, NOW))
+            .thenReturn(ChosenOutcome.UNUSABLE);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, full, 23.976, NOW)).thenReturn(ChosenOutcome.UNUSABLE);
 
         assertThatThrownBy(() -> service.download(40L, forced(5011))).isInstanceOf(UnprocessableException.class)
             .hasMessage("That subtitle file could not be read.");
@@ -642,7 +665,7 @@ class EditionOpenSubtitlesServiceTest {
         when(api.downloadsEnabled()).thenReturn(true);
         when(downloads.refusal(1L, 40L, SubtitleKind.FULL, IMDB, 6011L)).thenReturn(Optional.empty());
         OpenSubtitlesReference shortOne = storedReferenceExists(6011, 12);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FULL, shortOne, NOW)).thenReturn(ChosenOutcome.UNUSABLE);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FULL, shortOne, 23.976, NOW)).thenReturn(ChosenOutcome.UNUSABLE);
 
         assertThatThrownBy(() -> service.download(40L, new DownloadRequest(6011L, "full")))
             .isInstanceOf(UnprocessableException.class).hasMessage("That file is too short to be a full subtitle.");
@@ -658,7 +681,7 @@ class EditionOpenSubtitlesServiceTest {
         when(references.saveAndFlush(argThat(saved -> saved.getOsFileId() == 5011L)))
             .thenAnswer(call -> call.getArgument(0));
         when(downloads.addChosen(eq(1L), eq(40L), eq(SubtitleKind.FORCED),
-            argThat(failed -> failed.getOsFileId() == 5011L && !failed.isUsable()), eq(NOW)))
+            argThat(failed -> failed.getOsFileId() == 5011L && !failed.isUsable()), eq(23.976), eq(NOW)))
             .thenReturn(ChosenOutcome.UNUSABLE);
 
         assertThatThrownBy(() -> service.download(40L, forced(5011))).isInstanceOf(UnprocessableException.class)
@@ -680,7 +703,7 @@ class EditionOpenSubtitlesServiceTest {
         searchedForced(plain(5011));
         readyToDownload(5011);
         OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenReturn(ChosenOutcome.ADDED);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW)).thenReturn(ChosenOutcome.ADDED);
         when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(2);
         doThrow(new IllegalStateException("listener")).when(events)
             .publishEvent((Object) new SubtitleDownloadsFinished());
@@ -694,7 +717,7 @@ class EditionOpenSubtitlesServiceTest {
         searchedForced(plain(5011));
         readyToDownload(5011);
         OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenAnswer(call -> {
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW)).thenAnswer(call -> {
             lock.tryAcquire(LibraryLock.SCAN);
             return ChosenOutcome.BUSY;
         });
@@ -710,7 +733,7 @@ class EditionOpenSubtitlesServiceTest {
         readyToDownload(5011);
         OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
         AtomicReference<String> secondOutcome = new AtomicReference<>();
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenAnswer(call -> {
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW)).thenAnswer(call -> {
             // The first request is inside its add: a second one for the same edition and kind arrives now.
             try {
                 service.download(40L, forced(5011));
@@ -724,7 +747,7 @@ class EditionOpenSubtitlesServiceTest {
         assertThat(service.download(40L, forced(5011)).fileId()).isEqualTo(5011L);
 
         assertThat(secondOutcome.get()).isEqualTo("A download for this edition is already running");
-        verify(downloads).addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW);
+        verify(downloads).addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW);
         verify(events).publishEvent(new SubtitleDownloadsFinished());
     }
 
@@ -735,7 +758,7 @@ class EditionOpenSubtitlesServiceTest {
         OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
         when(downloads.refusal(1L, 40L, SubtitleKind.FORCED, IMDB, 5011L)).thenReturn(Optional.empty(),
             Optional.of(ChosenOutcome.ALREADY_DOWNLOADED));
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenReturn(ChosenOutcome.ADDED);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW)).thenReturn(ChosenOutcome.ADDED);
         when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(2);
 
         assertThat(service.download(40L, forced(5011)).fileId()).isEqualTo(5011L);
