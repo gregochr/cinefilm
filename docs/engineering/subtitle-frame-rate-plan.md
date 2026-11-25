@@ -180,7 +180,7 @@ the switch says, because rewritten rows outlive it:
   timeline but agree when both are compared as originally stored. One stated rate is wrong, and the plan can't tell
   which. That is no verdict, counted and shown in the Admin as "rate conflict". The Bridge of Spies risk is a
   reference stated as 25 that is timed like 24, and this is where it lands. Among comparisons, this pair is the only protection against a
-  wrong stated rate; outside them, only the `OFF_FITS` fit (below) catches one, for a download on a film with an
+  wrong stated rate; outside them, only the `OFF_FITS` fit (below) catches one automatically, for a download on a film with an
   English embedded track. In every other compared pair a wrong rate can still fail a file, or make one fail: raw
   against raw (compared as stored, as today), a pair whose two sides state the same rate, and two retimed sides at
   different stated rates. In that last pair a 23.976 file mislabelled 24.0 (or the reverse) can also newly drift by
@@ -218,7 +218,7 @@ timestamps, so there is nothing for the owner to read it from).
 - The stated rate decides. The Admin says what was done, for example "Timed for 23.976 fps; this film is 25 fps, so
   it is sped up 4%", or "rate unknown".
 - A wrong stated rate (Bridge of Spies: stated as 25, timed like 24) is caught in comparisons only in the pair
-  that "A rate conflict" (above) names, and otherwise only by the `OFF_FITS` fit (above); elsewhere it can still fail
+  that "A rate conflict" (above) names, and otherwise automatically only by the `OFF_FITS` fit (above); elsewhere it can still fail
   a file. 3e's soundtrack check may later settle such a file's
   rate with no owner input.
 - `owner_timed_fps` (added in phase 1) stays unused, kept for that automatic rate. V39's comment on it ("it wins
@@ -328,12 +328,13 @@ lines, it is split: the endpoint and contract first, then the Admin view and the
   - how long the first run took, and how many rows are still stale at its end;
   - the editions left with no verdict;
   - the proven count of each kind, against the same count taken before release. Expect no drop beyond the skipped
-    no-verdict cases (unknown rate and rate conflicts), which phase 1 counted.
+    no-verdict cases (unknown rate and rate conflicts), which phase 1 counted, and files
+    with a wrong stated rate in the pairs that "A rate conflict" (above) says can still fail.
 
 ## Decisions taken in this plan
 
-1. **The stated rate decides.** It held on 5 of the 6 files with signal. A wrong one is caught only as "A rate conflict" and
-   `OFF_FITS` describe. The owner sets no rate (2026-11-25).
+1. **The stated rate decides.** It held on 5 of the 6 files with signal. A wrong one is caught automatically only as "A rate
+   conflict" and `OFF_FITS` describe; the owner can still turn retime off for a file that played better before. The owner sets no rate (2026-11-25).
 2. **Only across the PAL speed-up.** 30 fps copies run at film speed, and odd rates are left alone.
 3. **23.976 and 24.0 are kept apart** (k = 23.976/25 against 24/25). They differ by 0.1%, about 7 s over two hours.
    The stated value is used as given.
