@@ -85,7 +85,9 @@ cues themselves are put on the film's timeline once, and every reader sees them 
   replaced by one at another rate, an edition was edited, or the owner changed the file's rate), the file is
   rewritten from its original, or restored when the new k is 1.
 - `ReferenceFetcher.store` resets `original_cues_text` and `retimed_by`, and sets `timed_fps`, on every write. So a
-  re-fetched reference is never marked as already retimed. The job skips references that can't be used.
+  re-fetched reference is never marked as already retimed. The job skips only references with no cues
+  (`!isUsable()`). Whether a reference fits an edition's runtime is judged afterwards, on its rewritten last cue end,
+  because a drifting reference ends about 4% past the runtime until it is retimed.
 - In the same write:
   - the file's stored last end (`lastEndMs` / `lastCueEndMs`) is recomputed;
   - an AUTO offset is reset to 0, because it was fitted on the drifting cues;
@@ -110,9 +112,13 @@ writes nothing), `on`, or `restore` (the rollback, below).
   and the verification are checked again. A `BUSY` is retried, so an owner's edit made at the same moment is never
   overwritten.
 - **The checks.**
-  - **A rewritten file's own check and alignment rows are carried over,** not dropped. They are re-keyed to the new
-    served version and identity, and `stale_since` is set. So a download that failed for wrong lines, not drift,
-    stays failed until its new verdict replaces the row.
+  - **A rewritten file's failing rows are carried over.** A `CHECK` or `FAILED` check, or an alignment that is not
+    `ALIGNED`, is re-keyed to the new served version and identity, with `stale_since` set. So a download that failed
+    for wrong lines, not drift, stays failed until its new verdict replaces the row.
+  - **Its proving rows are not.** An `AGREES` check or an `ALIGNED` alignment was made on the old cues and proves
+    nothing about the new ones. It goes non-current, and the file is unchecked until its re-check.
+  - **Every due test treats a row with `stale_since` set as due, whatever its trust:** the timing fit, the file and
+    download checks of `SidecarCheckService`, the timing references and the full-file probe.
   - **Rows that name a changed reference are not deleted.** Whenever a reference's `cues_text` changes, by a rewrite,
     a re-scale or a restore, every `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that
     names it, in every edition of the film, gets `stale_since` set (a new column on the three tables). Those keys name
@@ -169,8 +175,11 @@ the switch says, because rewritten rows outlive it:
     originals.
 
 **What the owner set by hand is left alone.**
-- `retime` starts **undecided** (null). The job decides it once: **off** for a download with an OWNER offset or owner
-  verification, which then plays as it does today, and **on** otherwise. A download that arrives while the switch is
+- `retime` starts **undecided** (null). The job decides it once:
+  - **off** for a download with an OWNER offset or owner verification, which then plays as it does today;
+  - **off** for one whose current fit is `EMBEDDED` and `ALIGNED` as stored. That fit proves the cues are already on
+    this copy's timeline, so its stated rate is wrong (the reverse of Bridge of Spies);
+  - **on** otherwise. A download that arrives while the switch is
   on starts on.
 - Once decided, the job never decides it again. A later verify or offset nudge on a retimed file leaves it retimed.
 - The Admin says when the file may drift because retime is off. The owner can turn it on. That retimes the file,
@@ -222,12 +231,14 @@ Not in this plan:
      - rows backfilled, out of the expected 92;
      - downloads the job would set to off;
      - comparisons of unknown against retimed;
+     - retime candidates with a current `EMBEDDED` `ALIGNED` fit, which will be set off;
      - references stated as 25 on 25 fps films that act as judges. These are the Bridge of Spies risk, and they end
        as rate conflicts, not failures. If more than 10, the owner is asked before 2a.
 
      **If fewer than 80 of the 92 are backfilled, the owner is asked before phase 2.** The choice is a one-off
      file-info lookup on OpenSubtitles, or leaving them listed.
 2. **2a: the job for downloads, behind the switch.**
+   - `stale_since` is honoured by every due test (above), with a test for each path.
    - `SubtitleRetimeJob`, for downloads only:
      - the rewrite, with k worked out again on every run;
      - the AUTO reset and restore;
