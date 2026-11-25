@@ -895,10 +895,18 @@ class TimingReferenceFetchTest {
     @Test
     void aTransientlyFailedCandidateWhoseStoredRowStatesARateIsFetchedAgainBecauseTheFetchKeepsIt() {
         Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
-        downloading(1, 5011, scatteredReference(), saved);
         OpenSubtitlesReference transientFailure = stored(5011, List.of());
         transientFailure.setFailedDownloads(1);
         transientFailure.setTimedFps(23.976);
+        // The fetcher finds the stored row, so the rate it has is the one the fetched row keeps.
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011L)).thenReturn(Optional.of(transientFailure));
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5011L)).thenReturn(downloaded(scatteredReference()));
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
+            OpenSubtitlesReference reference = call.getArgument(0);
+            saved.put(reference.getOsFileId(), reference);
+            return reference;
+        });
         when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(retimedShifted()),
             List.of(noRate(5011)), Map.of(5011L, transientFailure))));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
@@ -906,6 +914,10 @@ class TimingReferenceFetchTest {
         fetch.run(CHECK_LIMIT, true);
 
         assertThat(saved).containsOnlyKeys(5011L);
+        assertThat(saved.get(5011L).getTimedFps()).isEqualTo(23.976);
+        // With the rate kept the fetched row judges: the originals line up, 2 s out.
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5011")
+            .contains("ALIGNED at -2000 ms"));
     }
 
     @Test
