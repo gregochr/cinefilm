@@ -105,7 +105,8 @@ writes nothing), `on`, or `restore` (the rollback, below).
   - every row with `retimed_by` set.
 
   For each, it works k out again. When k differs from `retimed_by`, the row is rewritten from its original, or
-  restored when k is 1. It skips downloads with `retime = OFF` (restoring them if they were retimed), and applies the
+  restored when a known rate gives k = 1. When the film's rate is unknown for now (a replaced file not yet indexed,
+  say), a retimed row is left as it is. It skips downloads with `retime = OFF` (restoring them if they were retimed), and applies the
   owner-timing rule below.
 - **Under the lock.** Each rewrite, restore and owner-rule decision is made under the `LibraryLock`, the same lock
   the Admin's edits take. The row is read again under the lock, and `retime`, `owner_timed_fps`, the offset source
@@ -126,8 +127,9 @@ writes nothing), `on`, or `restore` (the rollback, below).
   - A stale row still decides what plays. What is due treats it as due. The new verdict replaces it in one write.
     - **No verdict for a passing reason** (the budget, an outage, the candidate cap): the old row stays, and stays
       due. So an owner's file that failed is never put back on screen by a deletion.
-    - **Only definite skips** (unknown rate, a rate conflict): a carried row made on old cues is dropped, so a
-      failure caused only by drift doesn't outlive the fix.
+    - **Only definite skips** (unknown rate, a rate conflict): a row carried over from a rewritten file, made on its
+      old cues, is dropped, so a failure caused only by drift doesn't outlive the fix. A row made stale only because
+      its reference changed is kept until a real verdict replaces it.
   - **A save never lands on cues that have changed.** `opensubtitles_reference` gets a `cues_version`, raised on
     every change of its `cues_text`. Every check and fit carries the version it read and drops its save if it has
     changed, as it already does for the served version. A run racing the job therefore can't save a verdict made on
@@ -155,7 +157,7 @@ writes nothing), `on`, or `restore` (the rollback, below).
 **How two files are compared** (a download or an owner's file against a reference). One rule, applied whatever
 the switch says, because rewritten rows outlive it:
 - **A row's rate** is the owner's rate if set, else the stated one, else unknown. The owner's own files (`FILE`) and
-  downloads that fit as is (`OFF_FITS`) count as on the film's timeline.
+  downloads that fit as is (`OFF_FITS`) take the film's rate as their known rate in every rule below.
 - **Neither side retimed** (`retimed_by` null on both): they are compared as stored, exactly as today. That covers
   every pair on a 23.976 film with nothing retimed. It also covers an owner's file against a reference with no rate,
   and an owner-offset download that is off against a raw reference.
@@ -241,8 +243,9 @@ Not in this plan:
      - downloads the job would set to off;
      - comparisons of unknown against retimed;
      - retime candidates with a current `EMBEDDED` `ALIGNED` fit, which will be set off;
-     - references stated as 25 on 25 fps films that act as judges. These are the Bridge of Spies risk, and they end
-       as rate conflicts, not failures. If more than 10, the owner is asked before 2a.
+     - references stated as 25 that act as judges, on 25 fps films and on 23.976 or 24 fps films (where 2b would
+       speed them up). These are the Bridge of Spies risk, and they end as rate conflicts, not failures. If more than
+       10 in all, the owner is asked before 2a.
 
      **If fewer than 80 of the 92 are backfilled, the owner is asked before phase 2.** The choice is a one-off
      file-info lookup on OpenSubtitles, or leaving them listed.
