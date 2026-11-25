@@ -1019,4 +1019,36 @@ class TimingReferenceFetchTest {
         // And once measured, never again while the process runs.
         assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
     }
+
+    @Test
+    void aRatelessFinalRowAfterAMatchingFirstCandidateIsFilledAndMeasuredThoughTheWalkNeverReachesIt() {
+        OpenSubtitlesReference first = stored(5011, scatteredReference());
+        first.setTimedFps(23.976);
+        OpenSubtitlesReference second = stored(5012, scatteredReference());
+        when(service.targets()).thenReturn(List.of(target(1, 2, null, List.of(retimedShifted()),
+            List.of(candidate(5011), candidate(5012)), Map.of(5011L, first, 5012L, second))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(2);
+        verifyNoInteractions(api, budget);
+        verify(references).fillTimedFps(5012L, 23.976);
+        assertThat(second.getTimedFps()).isEqualTo(23.976);
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5012")
+            .contains("ALIGNED at -2000 ms"));
+    }
+
+    @Test
+    void aRatelessFinalRowIsFilledEvenWhenFetchingHasStopped() {
+        OpenSubtitlesReference rateless = stored(5012, scatteredReference());
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
+            List.of(candidate(5012)), Map.of(5012L, rateless))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, false);
+
+        assertThat(written).isEqualTo(1);
+        verify(references).fillTimedFps(5012L, 23.976);
+    }
 }

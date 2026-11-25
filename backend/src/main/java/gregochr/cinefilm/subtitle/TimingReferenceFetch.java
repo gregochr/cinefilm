@@ -114,6 +114,7 @@ final class TimingReferenceFetch {
         for (Target target : service.targets()) {
             Shared shared = films.computeIfAbsent(List.of(target.filmId(), target.imdbId()),
                 key -> new Shared(target));
+            fillRates(target, shared);
             try {
                 if (!stopped) {
                     fetchFor(target, shared, checkLimit, fetchesLeft);
@@ -136,6 +137,21 @@ final class TimingReferenceFetch {
             }
         }
         return written;
+    }
+
+    /**
+     * Gives each stored final reference of the target's candidates the rate the candidate states, when the row has
+     * none (the fetcher's own fill: a targeted update, no download). It runs before the walk and the measurement, and
+     * whether or not fetching has stopped, so neither sees a row rejected as of unknown rate for want of a fill the
+     * run could have made. The rows are the objects both go on to read.
+     */
+    private void fillRates(Target target, Shared shared) {
+        for (OpenSubtitlesResult candidate : target.candidates()) {
+            OpenSubtitlesReference reference = shared.stored.get(candidate.fileId());
+            if (reference != null && reference.isFinal()) {
+                fetcher.fillRate(reference, candidate);
+            }
+        }
     }
 
     /**
@@ -174,11 +190,6 @@ final class TimingReferenceFetch {
                 counted();
                 shared.kept += added ? 1 : 0;
                 shared.stored.put(candidate.fileId(), reference);
-            }
-            if (!fetched && reference.getTimedFps() == null && candidate.fps() != null) {
-                // A final row stored before rates were kept gets the stated one first (the fetcher's own fill, with no
-                // download), or the rate rule would reject it as of unknown rate.
-                fetcher.fillRate(reference, candidate);
             }
             Judgement judgement = judge(target, reference);
             if (fetched) {
