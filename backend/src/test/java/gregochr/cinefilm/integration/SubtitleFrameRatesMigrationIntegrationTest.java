@@ -79,7 +79,7 @@ class SubtitleFrameRatesMigrationIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void theBackfillFillsTheRatesAndSetsRetimeOffForAnOwnerTimedDownload() throws Exception {
+    void theBackfillFillsTheRatesAndLeavesRetimeUndecidedEvenForAnOwnerTimedDownload() throws Exception {
         flyway("38").migrate();
         try (Connection connection = connection()) {
             filmWithDownloads(connection);
@@ -96,7 +96,7 @@ class SubtitleFrameRatesMigrationIntegrationTest extends IntegrationTestBase {
             assertThat(found.getString("retime")).isNull();
             assertThat(found.next()).isTrue();
             assertThat(found.getDouble("timed_fps")).isEqualTo(25.0);
-            assertThat(found.getString("retime")).isEqualTo("OFF");
+            assertThat(found.getString("retime")).as("owner-timed, still undecided").isNull();
             assertThat(found.next()).isTrue();
             assertThat(found.getObject("timed_fps")).as("no result for file 999").isNull();
             assertThat(found.getString("retime")).isNull();

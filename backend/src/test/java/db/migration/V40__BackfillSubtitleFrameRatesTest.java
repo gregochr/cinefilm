@@ -189,7 +189,7 @@ class V40__BackfillSubtitleFrameRatesTest {
     }
 
     @Test
-    void retimeIsOffOnlyForDownloadsTheOwnerTimedByHand() throws Exception {
+    void retimeIsLeftUndecidedOnEveryRowIncludingTheOnesTheOwnerTimedByHand() throws Exception {
         film(null, null, null);
         sidecar(1, "OPENSUBTITLES", 101L, "OWNER", false, null);
         sidecar(2, "OPENSUBTITLES", 102L, null, true, null);
@@ -199,8 +199,8 @@ class V40__BackfillSubtitleFrameRatesTest {
 
         migrate();
 
-        assertThat(retime(1)).isEqualTo("OFF");
-        assertThat(retime(2)).isEqualTo("OFF");
+        assertThat(retime(1)).isNull();
+        assertThat(retime(2)).isNull();
         assertThat(retime(3)).isNull();
         assertThat(retime(4)).isNull();
         assertThat(retime(5)).isNull();

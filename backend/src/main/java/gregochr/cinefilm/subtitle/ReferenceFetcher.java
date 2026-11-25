@@ -97,6 +97,11 @@ final class ReferenceFetcher {
         OpenSubtitlesReference stored = references
             .findByFilmIdAndImdbIdAndOsFileId(filmId, imdbId, candidate.fileId()).orElse(null);
         if (stored != null && stored.isFinal()) {
+            // A reference stored before the rate was kept gets the stated one now (never replacing one it has).
+            if (stored.getTimedFps() == null && candidate.fps() != null) {
+                stored.setTimedFps(candidate.fps());
+                references.saveAndFlush(stored);
+            }
             return stored;
         }
         Instant now = clock.instant();

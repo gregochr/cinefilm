@@ -7,7 +7,7 @@
 -- retimed_by: the factor k the stored cues were multiplied by (null = never retimed); retimed_for_fps: the film rate k
 --   came from. original_cues_text: the cues before they were retimed (null until then).
 -- owner_timed_fps: the rate the owner says the file was timed for; it wins over timed_fps.
--- subtitle_sidecar.retime: null = undecided; AUTO = retime it, OFF = the owner's hand-set timing is left alone,
+-- subtitle_sidecar.retime: null = undecided (the retime job decides it once, when it runs; V40 leaves it null); AUTO = retime it, OFF = the owner's hand-set timing is left alone,
 --   OFF_FITS = its original cues already fit the film.
 -- opensubtitles_reference.cues_version: raised on every change of cues_text, so a check that read older cues can drop
 --   its save.

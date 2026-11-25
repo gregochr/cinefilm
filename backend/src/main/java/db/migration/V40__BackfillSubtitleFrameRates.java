@@ -4,7 +4,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -20,8 +19,8 @@ import tools.jackson.databind.json.JsonMapper;
  * results: each row's OpenSubtitles file id is looked up in {@code film.os_candidates}, {@code film.os_full_candidates}
  * and {@code film.os_best}, whose results carry {@code fileId} and {@code fps}. A row it cannot match (the picker's
  * results were kept in memory only), or whose result states no rate, stays null. It is Java so the same code reads the
- * JSON on PostgreSQL and on H2. It also sets {@code retime = 'OFF'} on downloads the owner timed by hand (an OWNER
- * offset, or an owner verification), so the retime will leave them as they play; every other {@code retime} stays null.
+ * JSON on PostgreSQL and on H2. It does not touch {@code retime}: the retime job decides it once, when it
+ * runs.
  *
  * <p>A migration must do the same thing forever, so it does not use the application's own classes: the JSON keys it
  * reads are frozen here as they were when this migration was written.
@@ -38,8 +37,6 @@ public class V40__BackfillSubtitleFrameRates extends BaseJavaMigration {
     private static final String FILM = "SELECT os_candidates, os_full_candidates, os_best FROM film WHERE id = ?";
     private static final String UPDATE_SIDECAR = "UPDATE subtitle_sidecar SET timed_fps = ? WHERE id = ?";
     private static final String UPDATE_REFERENCE = "UPDATE opensubtitles_reference SET timed_fps = ? WHERE id = ?";
-    private static final String RETIME_OFF = "UPDATE subtitle_sidecar SET retime = 'OFF' "
-        + "WHERE origin = 'OPENSUBTITLES' AND (offset_source = 'OWNER' OR owner_verified_at IS NOT NULL)";
 
     /** A stored row and the file it was made from. */
     private record Row(long id, long filmId, long fileId) {
@@ -51,9 +48,6 @@ public class V40__BackfillSubtitleFrameRates extends BaseJavaMigration {
         Map<Long, Map<Long, Double>> ratesByFilm = new HashMap<>();
         fill(connection, SIDECARS, UPDATE_SIDECAR, ratesByFilm);
         fill(connection, REFERENCES, UPDATE_REFERENCE, ratesByFilm);
-        try (Statement statement = connection.createStatement()) {
-            statement.executeUpdate(RETIME_OFF);
-        }
     }
 
     private static void fill(Connection connection, String select, String update,
