@@ -60,7 +60,8 @@ public class FullFitService {
      * @param others the film's other single-file full candidates, in the order for this edition's cut (the download's
      *     own file is never among them)
      * @param stored the film's stored references for this IMDb id by file id
-     * @param side what the download is for the rate rule ({@link RateComparison}); an owner's file when null
+     * @param side what the download is for the rate rule ({@link RateComparison}); null for a download of no
+     *     known rate
      */
     record Job(Long filmId, Long editionId, String imdbId, Long sidecarId, long downloadFileId,
                List<SubtitleCue> download, long runtimeMs, Long creditsStartMs, List<OpenSubtitlesResult> others,
@@ -76,7 +77,7 @@ public class FullFitService {
 
         /** What the download is for the rate rule: an owner's file unless a side was given. */
         RateComparison.Side rateSide() {
-            return side == null ? RateComparison.Side.file() : side;
+            return side == null ? RateComparison.Side.download() : side;
         }
     }
 

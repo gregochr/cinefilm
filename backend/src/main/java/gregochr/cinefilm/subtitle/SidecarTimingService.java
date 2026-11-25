@@ -54,6 +54,8 @@ public class SidecarTimingService {
     private static final Logger LOG = LoggerFactory.getLogger(SidecarTimingService.class);
     /** Why a sidecar has no file to fit to when the rate rule gave no verdict against any of them. */
     static final String NO_RATE_VERDICT = "The frame rates of the files are not known well enough to compare them";
+    /** Why a sidecar has no file to fit to when the rate rule left a file out as a rate conflict. */
+    static final String RATE_CONFLICT_VERDICT = "The files disagree about the frame rate (rate conflict)";
 
     /** A fitted offset closer than this to the current one is left alone. */
     static final int APPLY_THRESHOLD_MS = 100;
@@ -273,11 +275,12 @@ public class SidecarTimingService {
      * (and noted at INFO); one the rule compares through the sidecar's original cues carries those cue starts to
      * be fitted instead of the sidecar's stored ones. The same texts and starts as before while nothing is retimed.
      */
-    private List<DownloadedFit.Reference> downloadedFits(Served s, List<ReferenceFacts> downloaded,
-                                                         Map<Long, OpenSubtitlesReference> texts) {
+    private DownloadedFits downloadedFits(Served s, List<ReferenceFacts> downloaded,
+                                           Map<Long, OpenSubtitlesReference> texts) {
         SubtitleSidecar sidecar = s.sidecar();
         RateComparison.Side served = RateComparison.Side.of(sidecar);
         List<DownloadedFit.Reference> fitTo = new ArrayList<>();
+        boolean conflict = false;
         for (ReferenceFacts f : downloaded) {
             OpenSubtitlesReference reference = texts.get(f.osFileId());
             RateComparison.Side referenceSide = RateComparison.Side.of(reference);
@@ -294,12 +297,22 @@ public class SidecarTimingService {
             if (!judged.hasVerdict()) {
                 LOG.info("Timing of subtitle {} against OpenSubtitles file {}: no verdict, {} (reference {})",
                     sidecar.getId(), f.osFileId(), judged.reason(), reference.getId());
+                conflict |= judged.reason() == RateComparison.Reason.RATE_CONFLICT;
                 continue;
             }
             fitTo.add(new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(), starts(judged.second()),
                 starts(judged.first())));
         }
-        return fitTo;
+        return new DownloadedFits(fitTo, conflict);
+    }
+
+    /**
+     * The files a sidecar is fitted to.
+     *
+     * @param references the files with a verdict, in order
+     * @param conflict true when a file was left out as a rate conflict
+     */
+    private record DownloadedFits(List<DownloadedFit.Reference> references, boolean conflict) {
     }
 
     private static List<Long> starts(List<SubtitleCue> cues) {
@@ -323,11 +336,12 @@ public class SidecarTimingService {
             Map<Long, OpenSubtitlesReference> texts = new HashMap<>();
             references.findAllById(downloaded.stream().map(ReferenceFacts::id).toList())
                 .forEach(r -> texts.put(r.getOsFileId(), r));
-            List<DownloadedFit.Reference> fitTo = downloadedFits(s, downloaded, texts);
+            DownloadedFits fits = downloadedFits(s, downloaded, texts);
+            List<DownloadedFit.Reference> fitTo = fits.references();
             if (fitTo.isEmpty()) {
                 // Every file was left out by the rate rule: the fit is made, with no file to fit to and the reason why.
                 return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
-                    List.copyOf(starts), List.of(), NO_RATE_VERDICT);
+                    List.copyOf(starts), List.of(), fits.conflict() ? RATE_CONFLICT_VERDICT : NO_RATE_VERDICT);
             }
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
                 List.copyOf(starts), List.of(), null, fitTo);

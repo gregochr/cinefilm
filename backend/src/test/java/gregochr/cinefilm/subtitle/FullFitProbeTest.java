@@ -164,8 +164,12 @@ class FullFitProbeTest {
 
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
 
-        assertThat(infoLines()).singleElement().satisfies(line ->
-            assertThat(line).contains("download to reference ALIGNED at 0 ms, 100% of 300 lines matched"));
+        // Both directions and the download's last cue are those of the original cues (0:50:01), not the film's.
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): download file 5011 "
+            + "(300 cues, last cue 0:50:01) against reference file 5012 (300 cues, last cue 0:50:01); "
+            + "download to reference ALIGNED at 0 ms, 100% of 300 lines matched; "
+            + "reference to download ALIGNED at 0 ms, 100% of 300 lines matched; "
+            + "runtime 3:02:05; credits start unknown");
     }
 
     @Test
@@ -397,5 +401,12 @@ class FullFitProbeTest {
 
         assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
             + "RATE_CONFLICT (sidecar 7, reference 5012)");
+    }
+
+    @Test
+    void aJobGivenNoSideIsADownloadOfNoKnownRateNeverTheOwnersFile() {
+        Job job = new Job(1L, 40L, "tt1", 7L, 5011L, List.of(), 0, null, List.of(), Map.of());
+
+        assertThat(job.rateSide()).isEqualTo(RateComparison.Side.download());
     }
 }

@@ -922,7 +922,12 @@ class SidecarTimingServiceDownloadedUnitTest {
         OpenSubtitlesReference retimed = reference(5012, 300, IMDB);
         retimed.setTimedFps(23.976);
         retimed.setRetimedBy(0.959);
-        retimed.setOriginalCuesText(retimed.getCuesText());
+        // The original cues are 7 s later than the stored (retimed) ones: the fit must be made against them.
+        List<SubtitleCue> original = new ArrayList<>();
+        for (int i = 1; i <= 300; i++) {
+            original.add(new SubtitleCue(i * 10_000L + 7_000, i * 10_000L + 8_000, "line " + i));
+        }
+        retimed.setOriginalCuesText(SrtParser.format(original));
         stored(retimed);
         when(references.findAllById(List.of(5012L))).thenReturn(List.of(retimed));
         when(filmRates.forFile(10L)).thenReturn(23.976);
@@ -931,7 +936,44 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         FitJob job = service.fitJobs(1L).get(0);
 
-        assertThat(job.osReferences()).singleElement()
-            .satisfies(fit -> assertThat(fit.starts()).hasSize(300).startsWith(10_000L, 20_000L));
+        assertThat(job.osReferences()).singleElement().satisfies(fit -> {
+            assertThat(fit.starts()).isEqualTo(original.stream().map(SubtitleCue::startMs).toList());
+            assertThat(fit.starts()).isNotEqualTo(SrtParser.cues(retimed.getCuesText()).stream()
+                .map(SubtitleCue::startMs).toList());
+            assertThat(fit.servedStarts()).isEqualTo(STARTS);
+        });
+    }
+
+    @Test
+    void aFileLeftOutAsARateConflictGivesTheConflictReasonAndNotTheUnknownRateOne() {
+        retimed();
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        // Irregular lines, so a fit is not put down to chance: the sidecar's stored cues are 90 s before its originals.
+        List<SubtitleCue> stored = new ArrayList<>();
+        List<SubtitleCue> original = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            long start = 10_000L + (long) i * i * 3_000;
+            stored.add(new SubtitleCue(start, start + 1_500, "line"));
+            original.add(new SubtitleCue(start + 90_000, start + 91_500, "line"));
+        }
+        sidecar.setCuesText(SrtParser.format(stored));
+        sidecar.setOriginalCuesText(SrtParser.format(original));
+        // Stated 25: on the film's timeline it is 90 s off the sidecar; as originally stored it is on the originals.
+        List<SubtitleCue> theirs = new ArrayList<>(original);
+        for (int i = 1; i <= 20; i++) {
+            theirs.add(new SubtitleCue(10_000_000L + i * 600_000L, 10_000_000L + i * 600_000L + 1_000, "later"));
+        }
+        OpenSubtitlesReference conflicting = reference(5012, 300, IMDB);
+        conflicting.setTimedFps(25.0);
+        conflicting.setCuesText(SrtParser.format(theirs));
+        stored(conflicting);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(conflicting));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        FitJob job = service.fitJobs(1L).get(0);
+
+        assertThat(job.osReferences()).isEmpty();
+        assertThat(job.noReference()).isEqualTo(SidecarTimingService.RATE_CONFLICT_VERDICT);
     }
 }

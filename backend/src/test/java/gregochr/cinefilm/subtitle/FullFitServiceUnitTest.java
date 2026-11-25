@@ -94,8 +94,12 @@ class FullFitServiceUnitTest {
     }
 
     private void editionLoaded() {
+        editionLoaded(fullDownload());
+    }
+
+    private void editionLoaded(SubtitleSidecar download) {
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FULL)).thenReturn(List.of(fullDownload()));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FULL)).thenReturn(List.of(download));
         when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of());
     }
 
@@ -136,5 +140,24 @@ class FullFitServiceUnitTest {
 
         assertThat(service.due(Set.of())).singleElement()
             .satisfies(job -> assertThat(job.creditsStartMs()).isEqualTo(110 * MIN));
+    }
+
+    @Test
+    void aRetimedDownloadsJobCarriesTheDownloadsOwnRateSide() {
+        SubtitleSidecar download = fullDownload();
+        download.setTimedFps(23.976);
+        download.setRetime(RetimeChoice.AUTO);
+        download.setRetimedBy(0.959);
+        download.setOriginalCuesText("1\n00:01:40,000 --> 00:01:42,000\nHello\n\n");
+        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L));
+        editionLoaded(download);
+        when(credits.findById(10L)).thenReturn(Optional.empty());
+
+        Job job = service.due(Set.of()).get(0);
+
+        assertThat(job.side()).isEqualTo(RateComparison.Side.of(download));
+        assertThat(job.side().kind()).isEqualTo(RateComparison.Kind.DOWNLOAD);
+        assertThat(job.side().retimedBy()).isEqualTo(0.959);
+        assertThat(job.rateSide()).isSameAs(job.side());
     }
 }

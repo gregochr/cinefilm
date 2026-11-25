@@ -73,6 +73,11 @@ public final class RateComparison {
      */
     public record Side(Kind kind, Double timedFps, RetimeChoice retime, Double retimedBy, String originalCuesText) {
 
+        /** A download of no known rate that is not retimed: what a download with no side given is. */
+        public static Side download() {
+            return new Side(Kind.DOWNLOAD, null, null, null, null);
+        }
+
         /** The owner's file: on the film's timeline, never retimed. */
         public static Side file() {
             return new Side(Kind.FILE, null, null, null, null);

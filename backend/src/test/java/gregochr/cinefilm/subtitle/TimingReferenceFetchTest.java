@@ -772,4 +772,51 @@ class TimingReferenceFetchTest {
         assertThat(lines(Level.INFO)).contains("Forced timing reference of edition 10 (film 1): no verdict, "
             + "RATE_CONFLICT (sidecar 8, reference 5012)");
     }
+
+    /** A retimed 23.976 forced download: stored 92 s late, its original 2 s late (it fits the scattered reference). */
+    private static File retimedShifted() {
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, shifted(2_000).cuesText());
+        return new File(8L, Origin.DOWNLOAD, 12, shifted(92_000).cuesText(), 5099L, side);
+    }
+
+    @Test
+    void aStoredReferenceOfTheSameFamilyThatMatchesOnlyOnTheOriginalsStopsTheWalkAndNothingIsFetched() {
+        OpenSubtitlesReference first = stored(5012, scatteredReference());
+        first.setTimedFps(23.976);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
+            List.of(candidate(5012), candidate(5013)), Map.of(5012L, first))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(1);
+        verifyNoInteractions(api, budget);
+        assertThat(lines(Level.INFO)).singleElement().asString().contains("against OpenSubtitles file 5012")
+            .contains("ALIGNED at -2000 ms");
+    }
+
+    @Test
+    void aStoredReferenceOfUnknownRateIsPassedOverAndTheNextCandidateIsFetched() {
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5013, scatteredReference(), saved);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
+            List.of(candidate(5012), candidate(5013)), Map.of(5012L, stored(5012, scatteredReference())))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(budget).take(DAY, CHECK_LIMIT);
+        assertThat(saved).containsOnlyKeys(5013L);
+        assertThat(lines(Level.INFO)).contains("Forced timing reference of edition 10 (film 1): no verdict, "
+            + "UNKNOWN_RATE (sidecar 8, reference 5012)");
+    }
+
+    @Test
+    void aFileGivenNoSideIsTheOwnersFileWhenItIsTheOwnersAndADownloadOfNoKnownRateOtherwise() {
+        assertThat(new File(7L, Origin.OWNER, 12, "x").rateSide()).isEqualTo(RateComparison.Side.file());
+        assertThat(new File(8L, Origin.DOWNLOAD, 12, "x", 5011L).rateSide())
+            .isEqualTo(new RateComparison.Side(RateComparison.Kind.DOWNLOAD, null, null, null, null));
+        assertThat(new File(9L, Origin.CHOSEN, 12, "x").rateSide().kind()).isEqualTo(RateComparison.Kind.DOWNLOAD);
+    }
 }

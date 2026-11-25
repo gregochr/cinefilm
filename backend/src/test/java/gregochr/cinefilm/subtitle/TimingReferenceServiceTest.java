@@ -511,4 +511,26 @@ class TimingReferenceServiceTest {
         assertThat(service.filmIds()).isEmpty();
         assertThat(service.filmIds()).containsExactly(1L);
     }
+
+    @Test
+    void aFilesSideIsItsRowsOwnSoARetimedDownloadIsADownloadWithItsRetimeAndAnOwnersFileIsTheFile() {
+        SubtitleSidecar owner = sidecar(5, 10L, 20, false);
+        SubtitleSidecar retimed = sidecar(6, 10L, 30, true);
+        retimed.setTimedFps(23.976);
+        retimed.setRetime(RetimeChoice.AUTO);
+        retimed.setRetimedBy(0.959);
+        retimed.setOriginalCuesText("1\n00:01:40,000 --> 00:01:42,000\nHello\n\n");
+        qualifying(List.of(owner), List.of(retimed));
+        candidates(result(1, 23.976, false, 1));
+        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of());
+
+        List<Target> targets = service.targets();
+
+        assertThat(targets).singleElement().satisfies(target -> {
+            assertThat(target.files().get(0).rateSide()).isEqualTo(RateComparison.Side.file());
+            assertThat(target.files().get(1).side()).isEqualTo(RateComparison.Side.of(retimed));
+            assertThat(target.files().get(1).side().kind()).isEqualTo(RateComparison.Kind.DOWNLOAD);
+            assertThat(target.files().get(1).side().retimedBy()).isEqualTo(0.959);
+        });
+    }
 }

@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,8 +37,6 @@ import org.slf4j.LoggerFactory;
 public final class DownloadPlan {
 
     private static final Logger LOG = LoggerFactory.getLogger(DownloadPlan.class);
-    private static final Predicate<Result> OTHER_CUT = ReferenceWalk::looksLikeOtherCut;
-    private static final Predicate<Result> SAME_CUT = OTHER_CUT.negate();
 
     /** The most OpenSubtitles files ever made into downloads for an edition and IMDb id, removed ones included. */
     public static final int MAX_DOWNLOADS = 3;
@@ -153,7 +150,8 @@ public final class DownloadPlan {
             RateComparison.Side referenceSide = RateComparison.Side.of(reference);
             RateComparison.Judged<Result> judged = RateComparison.judge(fileSide, referenceSide, filmFps, fileCues,
                 RateComparison.originalOf(fileSide), SrtParser.cues(reference.getCuesText()),
-                RateComparison.originalOf(referenceSide), SubtitleComparison::compare, OTHER_CUT, SAME_CUT);
+                RateComparison.originalOf(referenceSide), SubtitleComparison::compare, ReferenceWalk.FAILS,
+                ReferenceWalk.AGREES);
             if (!judged.hasVerdict()) {
                 LOG.info("Reference {} (file {}) is not promoted: no verdict, {}", reference.getId(), fileId,
                     judged.reason());

@@ -251,4 +251,32 @@ class DownloadPlanTest {
         assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
             SERVED, () -> 25.0)).isEmpty();
     }
+
+    /** A reference listing every 25 s: the owner's ten lines, 100 s apart, are all in it, but it has far more. */
+    private static OpenSubtitlesReference retimedLonger(List<SubtitleCue> original) {
+        OpenSubtitlesReference retimed = reference(5001, spaced(40, 25_000));
+        retimed.setTimedFps(23.976);
+        retimed.setRetimedBy(0.959);
+        retimed.setOriginalCuesText(SrtParser.format(original));
+        return retimed;
+    }
+
+    @Test
+    void aFilmTimelineCheckThatIsNotAnotherCutIsARateConflictWhenTheOriginalsAgreeAndSoNothingIsPromoted() {
+        OpenSubtitlesReference retimed = retimedLonger(SERVED);
+        SubtitleComparison.Result onFilm = SubtitleComparison.compare(SERVED, SrtParser.cues(retimed.getCuesText()));
+        assertThat(onFilm.verdict()).isEqualTo(SubtitleComparison.Verdict.CHECK);
+        assertThat(ReferenceWalk.looksLikeOtherCut(onFilm)).isFalse();
+
+        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
+            SERVED, () -> 25.0)).isEmpty();
+    }
+
+    @Test
+    void theSameCheckThatIsNotAnotherCutStandsAndIsPromotedWhenTheOriginalsDoNotAgreeEither() {
+        OpenSubtitlesReference retimed = retimedLonger(spaced(10, 77_000));
+
+        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
+            SERVED, () -> 25.0)).containsSame(retimed);
+    }
 }

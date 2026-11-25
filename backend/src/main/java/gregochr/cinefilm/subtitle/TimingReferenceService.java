@@ -74,7 +74,8 @@ public class TimingReferenceService {
      * @param lines its cue count
      * @param cuesText its cues as stored (the raw file: no owner offset)
      * @param osFileId the OpenSubtitles file it was downloaded from, or null for an owner's file
-     * @param side what it is for the rate rule ({@link RateComparison}); the owner's file when null
+     * @param side what it is for the rate rule ({@link RateComparison}); when null, by its origin: the owner's
+     *     file, or a download of no known rate
      */
     record File(Long sidecarId, Origin origin, int lines, String cuesText, Long osFileId, RateComparison.Side side) {
 
@@ -83,9 +84,12 @@ public class TimingReferenceService {
             this(sidecarId, origin, lines, cuesText, osFileId, null);
         }
 
-        /** What it is for the rate rule: the owner's file unless a side was given. */
+        /** What it is for the rate rule: the side given, else by its origin. */
         RateComparison.Side rateSide() {
-            return side == null ? RateComparison.Side.file() : side;
+            if (side != null) {
+                return side;
+            }
+            return origin == Origin.OWNER ? RateComparison.Side.file() : RateComparison.Side.download();
         }
 
         /** A file with no known OpenSubtitles origin. */
