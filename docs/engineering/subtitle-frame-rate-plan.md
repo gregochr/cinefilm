@@ -179,10 +179,12 @@ the switch says, because rewritten rows outlive it:
 - **A rate conflict:** a retimed side and a raw side whose stated rates differ, which give `CHECK` on the film's
   timeline but agree when both are compared as originally stored. One stated rate is wrong, and the plan can't tell
   which. That is no verdict, counted and shown in the Admin as "rate conflict". The Bridge of Spies risk is a
-  reference stated as 25 that is timed like 24, and this is where it lands. This pair is the only protection against a wrong stated rate.
-  In every other compared pair a wrong rate can still fail a file, or make one fail: raw against raw (compared as
-  stored, as today), and a pair whose two sides state the same rate. Where both sides are retimed at different
-  stated rates, a 23.976 file mislabelled 24.0 (or the reverse) can newly drift by about 7 s over two hours.
+  reference stated as 25 that is timed like 24, and this is where it lands. Among comparisons, this pair is the only protection against a
+  wrong stated rate; outside them, only the `OFF_FITS` fit (below) catches one, for a download on a film with an
+  English embedded track. In every other compared pair a wrong rate can still fail a file, or make one fail: raw
+  against raw (compared as stored, as today), a pair whose two sides state the same rate, and two retimed sides at
+  different stated rates. In that last pair a 23.976 file mislabelled 24.0 (or the reverse) can also newly drift by
+  about 7 s over two hours.
 - **After a skip,** the walk moves on to the next candidate with a known rate, stored ones first. If none is left,
   the edition has no verdict this run and is counted.
 - **Tests:**
@@ -215,8 +217,9 @@ the switch says, because rewritten rows outlive it:
 timestamps, so there is nothing for the owner to read it from).
 - The stated rate decides. The Admin says what was done, for example "Timed for 23.976 fps; this film is 25 fps, so
   it is sped up 4%", or "rate unknown".
-- A wrong stated rate (Bridge of Spies: stated as 25, timed like 24) is caught only in the pair that "A rate
-  conflict" (above) names; elsewhere it can still fail a file. 3e's soundtrack check may later settle such a file's
+- A wrong stated rate (Bridge of Spies: stated as 25, timed like 24) is caught in comparisons only in the pair
+  that "A rate conflict" (above) names, and otherwise only by the `OFF_FITS` fit (above); elsewhere it can still fail
+  a file. 3e's soundtrack check may later settle such a file's
   rate with no owner input.
 - `owner_timed_fps` (added in phase 1) stays unused, kept for that automatic rate. V39's comment on it ("it wins
   over timed_fps") is out of date and stays as it is (Flyway checksum); whatever later sets the column says what it
@@ -329,8 +332,8 @@ lines, it is split: the endpoint and contract first, then the Admin view and the
 
 ## Decisions taken in this plan
 
-1. **The stated rate decides.** It held on 5 of the 6 files with signal. A wrong one is caught only as "A rate conflict"
-   describes. The owner sets no rate (2026-11-25).
+1. **The stated rate decides.** It held on 5 of the 6 files with signal. A wrong one is caught only as "A rate conflict" and
+   `OFF_FITS` describe. The owner sets no rate (2026-11-25).
 2. **Only across the PAL speed-up.** 30 fps copies run at film speed, and odd rates are left alone.
 3. **23.976 and 24.0 are kept apart** (k = 23.976/25 against 24/25). They differ by 0.1%, about 7 s over two hours.
    The stated value is used as given.
