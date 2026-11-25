@@ -173,7 +173,8 @@ the switch says, because rewritten rows outlive it:
 - In this order:
   1. **Neither side retimed** (`retimed_by` null on both): compared as stored, exactly as today, whatever the rates.
   2. **One side retimed, the other's rate unknown:** no verdict. The reference is skipped, the case is counted, and
-     it never gives `CHECK`.
+     it never gives `CHECK`. Against `FILE`, `EMBEDDED` or `OFF_FITS`, whose rate is unknown while the film's is, it
+     is also no verdict and counted, and there is nothing to walk on to.
   3. **Same family:** original against original. Both are on the timeline they were made for, so this is the
      comparison made today. It covers a raw 23.976 reference against a retimed 23.976 or 24.0 download.
   4. **Different families:** compared as stored, on the film's timeline. When either side is a reference and that
@@ -211,8 +212,10 @@ the switch says, because rewritten rows outlive it:
   - a retimed download that disagrees with the owner's file on the film's timeline fails, with no conflict;
   - a reference stated 25 but timed like 24, retimed by 2b on a 23.976 film, against the owner's file is a rate
     conflict, not `CHECK` (2b);
-  - a reference pair of different families that fails on the film's timeline and whose originals disagree too
-    fails; it is not a rate conflict;
+  - a retimed 23.976 download on a 25 fps film against a raw reference stated 25 that agrees on the film's timeline
+    is proven, though the originals disagree;
+  - a retimed 23.976 download on a 25 fps film against a raw reference stated 25 that fails on the film's timeline,
+    and whose originals disagree too, fails; it is not a rate conflict;
   - a raw download stated 25 but timed like 24, on a 25 fps film, against a reference stated 23.976 and retimed by
     2b: a rate conflict when the originals agree, a failure when they disagree (2b).
 
