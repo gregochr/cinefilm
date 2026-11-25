@@ -12,7 +12,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -223,6 +225,18 @@ final class TimingReferenceFetch {
             }
         }
         return written;
+    }
+
+    /**
+     * Forgets that some sidecars were measured, so the next pass measures them again (their cues changed). A key is
+     * {@code <sidecarId>:<cues>:<fileId>}, so it is removed by its whole sidecar id and the colon: 12 never takes 123.
+     *
+     * @param sidecarIds the sidecars to forget
+     */
+    void forget(Collection<Long> sidecarIds) {
+        Set<String> prefixes = new HashSet<>();
+        sidecarIds.forEach(id -> prefixes.add(id + ":"));
+        done.removeIf(key -> prefixes.contains(key.substring(0, key.indexOf(':') + 1)));
     }
 
     /** Measures against one reference; {@code candidate} is null for a stored file that is not a current candidate. */

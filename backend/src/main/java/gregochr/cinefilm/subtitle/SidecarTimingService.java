@@ -432,6 +432,7 @@ public class SidecarTimingService {
             && sidecar.getOffsetSource() == SubtitleSidecar.OffsetSource.AUTO
             && sidecar.getOffsetMs() == result.fittedOffsetMs());
         row.setCheckedAt(now);
+        row.setStaleSince(null);
         alignments.save(row);
         return applies ? SaveOutcome.APPLIED : SaveOutcome.SAVED;
     }
@@ -516,7 +517,9 @@ public class SidecarTimingService {
             return State.NEEDS_READ;
         }
         String key = referenceKey(s, reads, os);
-        return fit != null && fit.isCurrent(TimingKeys.identity(s.sidecar()), key) ? State.CURRENT : State.NEEDS_FIT;
+        // A row made outdated by changed cues is due again, whatever it says; until then it still decides.
+        return fit != null && fit.getStaleSince() == null && fit.isCurrent(TimingKeys.identity(s.sidecar()), key)
+            ? State.CURRENT : State.NEEDS_FIT;
     }
 
     /**

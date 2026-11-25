@@ -159,6 +159,83 @@ class SidecarTimingServiceUnitTest {
         assertThat(service.dueFilmIds()).isEmpty();
     }
 
+    private ForcedSubtitleAlignment currentFit(Verdict verdict, Instant staleSince) {
+        ForcedSubtitleAlignment fit = new ForcedSubtitleAlignment();
+        fit.setId(77L);
+        fit.setSidecarId(5L);
+        fit.setSidecarIdentity(TimingKeys.identity(sidecar));
+        fit.setReferenceKey("10:1000:" + NOW.toEpochMilli());
+        fit.setVerdict(verdict);
+        fit.setStaleSince(staleSince);
+        return fit;
+    }
+
+    @Test
+    void aStaleFitIsDueAgainEvenWhenItIsAlignedAndOtherwiseCurrent() {
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        served();
+        when(cache.findAllById(Set.of(10L))).thenReturn(List.of(read(STARTS)));
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(currentFit(Verdict.ALIGNED, NOW)));
+
+        assertThat(service.dueFilmIds()).containsExactly(1L);
+    }
+
+    @Test
+    void aStaleFitIsFittedAgainByTheFilmsJobs() {
+        served();
+        when(cache.findAllById(Set.of(10L))).thenReturn(List.of(read(STARTS)));
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(currentFit(Verdict.ALIGNED, NOW)));
+
+        assertThat(service.fitJobs(1L)).singleElement().satisfies(job -> {
+            assertThat(job.sidecarId()).isEqualTo(5L);
+            assertThat(job.identity()).isEqualTo(TimingKeys.identity(sidecar));
+        });
+    }
+
+    @Test
+    void aStaleFitStillDecidesWhatIsProvenAndIsReportedAsItIs() {
+        ForcedSubtitleAlignment fit = currentFit(Verdict.ALIGNED, NOW);
+        fit.setCheckedAt(NOW);
+        fit.setMatchedShare(0.92);
+        when(cache.findAllById(Set.of(10L))).thenReturn(List.of(read(STARTS)));
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(fit));
+
+        Map<Long, AlignmentDto> current = service.current(Map.of(5L, edition), List.of(sidecar));
+
+        assertThat(current.get(5L)).isEqualTo(new AlignmentDto("ALIGNED", List.of(), 0, 0.92, 0, 0, false, NOW,
+            "EMBEDDED", null));
+        assertThat(SidecarTrust.isAligned(current.get(5L))).isTrue();
+    }
+
+    @Test
+    void aNewFitReplacesTheStaleRowInPlaceAndClearsTheMark() {
+        readyToSave();
+        ForcedSubtitleAlignment stale = currentFit(Verdict.CHECK, NOW);
+        when(alignments.findBySidecarId(5L)).thenReturn(Optional.of(stale));
+
+        assertThat(service.save(job(), aligned(900), LATER)).isEqualTo(SaveOutcome.APPLIED);
+
+        assertThat(saved()).isSameAs(stale);
+        assertThat(stale.getId()).isEqualTo(77L);
+        assertThat(stale.getStaleSince()).isNull();
+        assertThat(stale.getVerdict()).isEqualTo(Verdict.ALIGNED);
+        assertThat(stale.getCheckedAt()).isEqualTo(LATER);
+    }
+
+    @Test
+    void aFitThatIsDroppedLeavesTheStaleRowAsItWasAndStillDue() {
+        served();
+        when(cache.findAllById(Set.of(10L))).thenReturn(List.of(read(STARTS)));
+        ForcedSubtitleAlignment stale = currentFit(Verdict.CHECK, NOW);
+        FitJob fitted = job();
+        sidecar.setCuesText("1\n00:00:01,000 --> 00:00:02,000\nOther\n\n");
+
+        assertThat(service.save(fitted, aligned(900), LATER)).isEqualTo(SaveOutcome.DROPPED);
+
+        assertThat(stale.getStaleSince()).isEqualTo(NOW);
+        assertThat(stale.getVerdict()).isEqualTo(Verdict.CHECK);
+    }
+
     @Test
     void aFilmWithNoServedFileHasNothingDueOrToRead() {
         when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of());

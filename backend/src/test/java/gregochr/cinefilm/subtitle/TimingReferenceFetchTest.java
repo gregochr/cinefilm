@@ -269,6 +269,33 @@ class TimingReferenceFetchTest {
     }
 
     @Test
+    void forgettingASidecarMeasuresItAgainAndTwelveNeverTakesOneHundredTwentyThree() {
+        when(service.targets()).thenReturn(List.of(target(1, 1, null,
+            List.of(forced(12, Origin.OWNER), forced(123, Origin.DOWNLOAD)), List.of(candidate(5012)),
+            Map.of(5012L, stored(5012, full(300))))));
+        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(2);
+
+        fetch.forget(List.of(12L));
+
+        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(1);
+        assertThat(lines(Level.INFO)).hasSize(3);
+        assertThat(lines(Level.INFO).get(2)).contains("OWNER file 12");
+        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
+    }
+
+    @Test
+    void forgettingEverySidecarOfAFilmMeasuresAllOfThemAgain() {
+        when(service.targets()).thenReturn(List.of(target(1, 1, null,
+            List.of(forced(7, Origin.OWNER), forced(8, Origin.DOWNLOAD)), List.of(candidate(5012)),
+            Map.of(5012L, stored(5012, full(300))))));
+        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(2);
+
+        fetch.forget(List.of(7L, 8L));
+
+        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(2);
+    }
+
+    @Test
     void aReferenceNotStoredIsFetchedWithinTheCheckCeilingStoredAndMeasured() {
         Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
         downloading(1, 5012, full(300), saved);

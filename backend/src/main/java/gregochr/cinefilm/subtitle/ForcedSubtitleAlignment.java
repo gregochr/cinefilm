@@ -81,6 +81,12 @@ public class ForcedSubtitleAlignment {
     private Instant checkedAt;
 
     /**
+     * When the row was made outdated by a change to the cues it was made on; null while it is not. An outdated row
+     * still decides what plays until a new fit replaces it, and the fit is due again whatever the row says.
+     */
+    private Instant staleSince;
+
+    /**
      * True while the row still describes the file: the same stored file, fitted to the same reference.
      *
      * @param identity the sidecar's identity now
