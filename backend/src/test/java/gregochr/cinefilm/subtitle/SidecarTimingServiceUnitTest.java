@@ -232,7 +232,7 @@ class SidecarTimingServiceUnitTest {
 
         assertThat(service.save(fitted, aligned(900), LATER)).isEqualTo(SaveOutcome.DROPPED);
 
-        // The drop reads nothing from the alignments and writes nothing to them; the sidecar is read once and not saved.
+        // The drop reads nothing from the alignments and writes nothing; the sidecar is read once, not saved.
         verify(sidecars).findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED);
         verifyNoMoreInteractions(alignments, sidecars);
         assertThat(sidecar.getOffsetMs()).isZero();
