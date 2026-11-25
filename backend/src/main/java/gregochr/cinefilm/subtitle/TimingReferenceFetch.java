@@ -146,7 +146,8 @@ final class TimingReferenceFetch {
         for (OpenSubtitlesResult candidate : target.candidates()) {
             OpenSubtitlesReference reference = shared.stored.get(candidate.fileId());
             boolean fetched = reference == null || !reference.isFinal();
-            if (reference == null && candidate.fps() == null && everyFileRetimed(target)) {
+            if (fetched && candidate.fps() == null && (reference == null || reference.getTimedFps() == null)
+                && everyDecidingFileRetimed(target, candidate)) {
                 // It would arrive with no rate, and a retimed file cannot be judged against it: no download and no
                 // slot, or a few such files would block one whose rate is known.
                 LOG.info("Timing reference for edition {} (film {}): file {} passed over, no verdict: UNKNOWN_RATE",
@@ -187,9 +188,16 @@ final class TimingReferenceFetch {
         }
     }
 
-    /** True when every forced file of the target is retimed, so a file that states no rate judges none of them. */
-    private static boolean everyFileRetimed(Target target) {
-        return !target.files().isEmpty() && target.files().stream().allMatch(f -> f.rateSide().retimed());
+    /**
+     * True when every file that decides the walk for this candidate is retimed, so a file that states no rate judges
+     * none of them. The deciding files are those {@link #judge} looks at: not the download's own file, and under
+     * {@value TimingReferenceRule#FULL_LINES} lines.
+     */
+    private static boolean everyDecidingFileRetimed(Target target, OpenSubtitlesResult candidate) {
+        List<File> deciding = target.files().stream()
+            .filter(f -> !(f.osFileId() != null && f.osFileId() == candidate.fileId())
+                && f.lines() < TimingReferenceRule.FULL_LINES).toList();
+        return !deciding.isEmpty() && deciding.stream().allMatch(f -> f.rateSide().retimed());
     }
 
     /** A download is never measured against the OpenSubtitles file it came from: it would match itself. */

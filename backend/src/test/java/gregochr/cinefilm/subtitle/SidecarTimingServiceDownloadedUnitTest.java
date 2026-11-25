@@ -259,7 +259,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
-    void aRetimedDownloadWhoseFilesAreAllOfUnknownRateGetsNoJobSoNothingIsSavedAndItStaysDue() {
+    void aRetimedDownloadWhoseFilesStateNoRateSavesANoRateFitBecauseIndexingNeverChangesThat() {
         retimed();
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         OpenSubtitlesReference unknown = reference(5012, 300, IMDB);
@@ -268,7 +268,10 @@ class SidecarTimingServiceDownloadedUnitTest {
         served();
         when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
 
-        assertThat(service.fitJobs(1L)).isEmpty();
+        assertThat(service.fitJobs(1L)).singleElement().satisfies(job -> {
+            assertThat(job.osReferences()).isEmpty();
+            assertThat(job.noReference()).isEqualTo(SidecarTimingService.NO_RATE_VERDICT);
+        });
     }
 
     @Test
@@ -989,6 +992,11 @@ class SidecarTimingServiceDownloadedUnitTest {
      * cues are {@code delta} ms after its originals (it is retimed), the reference's are the originals' own.
      */
     private OpenSubtitlesReference conflictingReference(long delta) {
+        return conflictingReference(delta, 0);
+    }
+
+    /** As above, the reference's cues being {@code referenceShift} ms after the originals. */
+    private OpenSubtitlesReference conflictingReference(long delta, long referenceShift) {
         retimed();
         // Irregular lines, so a fit is not put down to chance.
         List<SubtitleCue> stored = new ArrayList<>();
@@ -1000,7 +1008,10 @@ class SidecarTimingServiceDownloadedUnitTest {
         }
         sidecar.setCuesText(SrtParser.format(stored));
         sidecar.setOriginalCuesText(SrtParser.format(original));
-        List<SubtitleCue> theirs = new ArrayList<>(original);
+        List<SubtitleCue> theirs = new ArrayList<>();
+        for (SubtitleCue c : original) {
+            theirs.add(new SubtitleCue(c.startMs() + referenceShift, c.endMs() + referenceShift, c.text()));
+        }
         for (int i = 1; i <= 20; i++) {
             theirs.add(new SubtitleCue(10_000_000L + i * 600_000L, 10_000_000L + i * 600_000L + 1_000, "later"));
         }
@@ -1056,5 +1067,22 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         assertThat(job.osReferences()).isEmpty();
         assertThat(job.noReference()).isEqualTo(SidecarTimingService.RATE_CONFLICT_VERDICT);
+    }
+
+    @Test
+    void originalsThatAreNotWithinTheSavedJudgementsAllowanceDoNotMakeARateConflict() {
+        // The originals are 3 s off the reference: ALIGNED for TimingFit (10 s), CHECK as saved (1 s). The film
+        // timeline fails too (93 s), so the pair is a plain CHECK, kept for its reasons, not a rate conflict.
+        OpenSubtitlesReference raw = conflictingReference(-90_000, 3_000);
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(raw);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(raw));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        FitJob job = service.fitJobs(1L).get(0);
+
+        assertThat(job.noReference()).isNull();
+        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
     }
 }

@@ -52,6 +52,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class SidecarTimingService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SidecarTimingService.class);
+    /** Why a sidecar has no file to fit to when the rate rule left every file out for want of a stated rate. */
+    static final String NO_RATE_VERDICT = "The frame rates of the files are not known well enough to compare them";
     /** Why a sidecar has no file to fit to when the rate rule left a file out as a rate conflict. */
     static final String RATE_CONFLICT_VERDICT = "The files disagree about the frame rate (rate conflict)";
 
@@ -282,6 +284,7 @@ public class SidecarTimingService {
         RateComparison.Side served = RateComparison.Side.of(sidecar);
         List<DownloadedFit.Reference> fitTo = new ArrayList<>();
         boolean conflict = false;
+        boolean[] filmRateUnknown = {false};
         for (ReferenceFacts f : downloaded) {
             OpenSubtitlesReference reference = texts.get(f.osFileId());
             RateComparison.Side referenceSide = RateComparison.Side.of(reference);
@@ -294,7 +297,11 @@ public class SidecarTimingService {
             DownloadedFit.Reference judging = new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(),
                 List.of());
             RateComparison.Judged<TimingFit.Result> judged = RateComparison.judge(served, referenceSide,
-                () -> filmRate(s), SrtParser.cues(sidecar.getCuesText()), RateComparison.originalOf(served),
+                () -> {
+                    Double rate = filmRate(s);
+                    filmRateUnknown[0] |= rate == null;
+                    return rate;
+                }, SrtParser.cues(sidecar.getCuesText()), RateComparison.originalOf(served),
                 SrtParser.cues(reference.getCuesText()), RateComparison.originalOf(referenceSide),
                 (x, y) -> DownloadedFit.judge(TimingFit.fit(starts(x), starts(y)), judging),
                 r -> TimingFit.Verdict.CHECK.equals(r.verdict()), r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
@@ -307,7 +314,7 @@ public class SidecarTimingService {
             fitTo.add(new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(), starts(judged.second()),
                 starts(judged.first())));
         }
-        return new DownloadedFits(fitTo, conflict);
+        return new DownloadedFits(fitTo, conflict, served.onFilm() && filmRateUnknown[0]);
     }
 
     /**
@@ -315,8 +322,10 @@ public class SidecarTimingService {
      *
      * @param references the files with a verdict, in order
      * @param conflict true when a file was left out as a rate conflict
+     * @param waitsForFilmRate true when the sidecar takes the film's rate and it was not known: indexing may settle it
      */
-    private record DownloadedFits(List<DownloadedFit.Reference> references, boolean conflict) {
+    private record DownloadedFits(List<DownloadedFit.Reference> references, boolean conflict,
+                                  boolean waitsForFilmRate) {
     }
 
     private static List<Long> starts(List<SubtitleCue> cues) {
@@ -331,10 +340,11 @@ public class SidecarTimingService {
     }
 
     /**
-     * The fit to make for a sidecar, or null when there is nothing to save yet: every file was left out for want of a
-     * rate. Nothing is saved then, so the sidecar stays due and is fitted once the film's rate is indexed (neither its
-     * key nor its identity holds the rate, so a saved "no file" would be current for good). Files left out as a rate
-     * conflict are saved as that: indexing does not change them.
+     * The fit to make for a sidecar, or null when there is nothing to save yet: every file was left out for want of the
+     * film's rate, which the sidecar takes as its own (an owner's file, or a download that fits as it is). Nothing is
+     * saved then, so it stays due and is fitted once the film's rate is indexed (neither its key nor its identity holds
+     * the rate, so a saved "no file" would be current for good). When the files are the cause (one states no rate)
+     * indexing changes nothing, so the "no file" is saved, with the reason; so is a rate conflict.
      */
     private FitJob job(Long filmId, Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os) {
         SubtitleSidecar sidecar = s.sidecar();
@@ -349,12 +359,16 @@ public class SidecarTimingService {
             DownloadedFits fits = downloadedFits(s, downloaded, texts);
             List<DownloadedFit.Reference> fitTo = fits.references();
             if (fitTo.isEmpty()) {
+                String reason = RATE_CONFLICT_VERDICT;
                 if (!fits.conflict()) {
-                    return null;
+                    if (fits.waitsForFilmRate()) {
+                        return null;
+                    }
+                    reason = NO_RATE_VERDICT;
                 }
-                // Every file was left out by the rate rule and one as a rate conflict: saved as that, with no file.
+                // Every file was left out by the rate rule: saved with no file and the reason.
                 return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
-                    List.copyOf(starts), List.of(), RATE_CONFLICT_VERDICT);
+                    List.copyOf(starts), List.of(), reason);
             }
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
                 List.copyOf(starts), List.of(), null, fitTo);

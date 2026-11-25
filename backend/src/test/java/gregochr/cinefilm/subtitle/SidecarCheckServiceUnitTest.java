@@ -353,4 +353,20 @@ class SidecarCheckServiceUnitTest {
         assertThat(due.side().retimed()).isTrue();
         assertThat(due.originalCues()).isNull();
     }
+
+    @Test
+    void aRetimedDownloadWaitsForItsTimingFitUntilAFitRowExistsAndThenIsDueEvenWhenTheRowSaysNoFile() {
+        download.setTimedFps(23.976);
+        download.setRetime(RetimeChoice.AUTO);
+        download.setRetimedBy(0.959);
+        download.setOriginalCuesText(CUES);
+        AlignmentDto noFile = new AlignmentDto("NO_REFERENCE", List.of("The frame rates of the files are not known "
+            + "well enough to compare them"), 0, 0.0, 0, 1, false, NOW, "OPENSUBTITLES", null);
+
+        resolved(resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, null))));
+        assertThat(service.due()).isEmpty();
+
+        resolved(resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, noFile))));
+        assertThat(service.due()).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
+    }
 }
