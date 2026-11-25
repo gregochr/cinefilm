@@ -150,6 +150,8 @@ public class SidecarCheckService {
     private void addDownloadCheck(List<DueCheck> due, Edition edition, DownloadState download, OsBestRef ref,
                                   List<OpenSubtitlesResult> filmCandidates, Set<Long> tried, boolean stale) {
         SubtitleSidecar sidecar = download.sidecar();
+        // A stale alignment counts as "the fit exists" on purpose: treating it as waiting would hold back, for good,
+        // a download whose fit cannot land (NEEDS_READ or SKIP). The retime job fits first anyway.
         boolean waiting = download.alignment() == null && timingCheckEnabled;
         // An outdated row is due whatever the file's trust or the row's verdict, and it still decides until replaced.
         if (download.assessment().trust() != Trust.UNCHECKED && !stale || waiting) {

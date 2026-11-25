@@ -7,6 +7,7 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.Edition;
@@ -286,7 +287,7 @@ class SidecarCheckServiceUnitTest {
     }
 
     @Test
-    void aResultDroppedBecauseTheCuesChangedAgainLeavesTheStaleRowAsItWas() {
+    void aResultDroppedBecauseTheCuesChangedAgainWritesNothingAndTheStaleRowStaysDue() {
         DownloadState state = downloadState(Trust.FAILED, Proof.NONE, check("CHECK"), fit());
         readyToSave(resolution(null, List.of(state)));
         ForcedDownloadCheck stale = downloadRow(STALE);
@@ -296,7 +297,16 @@ class SidecarCheckServiceUnitTest {
 
         assertThat(service.save(due, reference(), AGREES, LATER)).isFalse();
 
+        verify(films).findById(1L);
+        verify(editions).findWithFilesByFilmIdIn(List.of(1L));
+        verify(resolver).resolve(List.of(edition));
+        verifyNoMoreInteractions(checks, downloadChecks);
         assertThat(stale.getStaleSince()).isEqualTo(STALE);
         assertThat(stale.getVerdict()).isEqualTo("CHECK");
+
+        resolved(resolution(null, List.of(state)));
+        when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L))).thenReturn(List.of(stale));
+
+        assertThat(service.due()).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
     }
 }

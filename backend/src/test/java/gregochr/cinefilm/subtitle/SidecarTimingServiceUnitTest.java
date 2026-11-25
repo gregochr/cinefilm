@@ -8,6 +8,7 @@ import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.credits.CreditsDetectionRepository;
@@ -223,15 +224,21 @@ class SidecarTimingServiceUnitTest {
     }
 
     @Test
-    void aFitThatIsDroppedLeavesTheStaleRowAsItWasAndStillDue() {
+    void aFitThatIsDroppedWritesNothingAndTheStaleRowStillMakesTheFilmDue() {
         served();
         when(cache.findAllById(Set.of(10L))).thenReturn(List.of(read(STARTS)));
-        ForcedSubtitleAlignment stale = currentFit(Verdict.CHECK, NOW);
         FitJob fitted = job();
         sidecar.setCuesText("1\n00:00:01,000 --> 00:00:02,000\nOther\n\n");
 
         assertThat(service.save(fitted, aligned(900), LATER)).isEqualTo(SaveOutcome.DROPPED);
 
+        // The drop reads nothing from the alignments and writes nothing to them.
+        verifyNoMoreInteractions(alignments);
+        sidecar.setCuesText(CUES);
+        ForcedSubtitleAlignment stale = currentFit(Verdict.CHECK, NOW);
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(stale));
+        assertThat(service.dueFilmIds()).containsExactly(1L);
         assertThat(stale.getStaleSince()).isEqualTo(NOW);
         assertThat(stale.getVerdict()).isEqualTo(Verdict.CHECK);
     }

@@ -706,6 +706,57 @@ class SidecarCheckRefresherTest {
         assertThat(saved.getValue().getLastCueEndMs()).isEqualTo(90_000L);
     }
 
+    /** A download's check that is due because its verdict is outdated; to the run it is a due check like any other. */
+    private static DueCheck staleDownloadDue() {
+        return new DueCheck(1L, 10L, "tt1", "Original", List.of(candidate(5011, "Release 5011")), Set.of(5011L),
+            "v10", false, CUES, 7L);
+    }
+
+    @Test
+    void anOutdatedCheckWhoseWalkKeepsNoAttemptIsNeverSavedSoTheOldRowStaysDue() {
+        when(service.due()).thenReturn(List.of(staleDownloadDue()));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(downloaded(List.of(), 50, null));
+        storingReferences();
+
+        startAndRun();
+
+        verify(service).due();
+        verifyNoMoreInteractions(service);
+        assertThat(messages()).containsExactly(UNREADABLE_10,
+            "Subtitle file checks finished: 0 saved, 0 changed meanwhile, 1 unusable references, 0 failed");
+    }
+
+    @Test
+    void anOutdatedCheckMetByASpentBudgetIsNeverSaved() {
+        when(service.due()).thenReturn(List.of(staleDownloadDue()));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(false);
+
+        startAndRun();
+
+        verify(service).due();
+        verifyNoMoreInteractions(service);
+        assertThat(messages()).containsExactly("Subtitle file checks stopped: today's download budget is spent",
+            NOTHING_DONE);
+    }
+
+    @Test
+    void anOutdatedCheckMetByAnOutageIsNeverSaved() {
+        when(service.due()).thenReturn(List.of(staleDownloadDue()));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenThrow(new OpenSubtitlesUnavailableException("OpenSubtitles unavailable"));
+
+        startAndRun();
+
+        verify(budget).refund(DAY);
+        verify(service).due();
+        verifyNoMoreInteractions(service);
+        assertThat(messages()).containsExactly("Subtitle file checks stopped: OpenSubtitles unavailable", NOTHING_DONE);
+    }
+
     @Test
     void aDownloadThatHasNoCuesIsStoredAsUnusableAndNothingIsComparedOrSaved() {
         DueCheck due = due(1, 10, 5011);
