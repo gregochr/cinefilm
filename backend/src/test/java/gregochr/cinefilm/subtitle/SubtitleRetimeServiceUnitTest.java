@@ -4,6 +4,9 @@ import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -100,7 +103,7 @@ class SubtitleRetimeServiceUnitTest {
     private ForcedDownloadCheck downloadCheck(String verdict) {
         ForcedDownloadCheck check = new ForcedDownloadCheck();
         check.setSidecarId(5L);
-        check.setServedVersion("old");
+        check.setServedVersion(ServedSubtitles.version(edition, Downloads.pick(row)));
         check.setVerdict(verdict);
         when(downloadChecks.findBySidecarId(5L)).thenReturn(Optional.of(check));
         return check;
@@ -109,7 +112,7 @@ class SubtitleRetimeServiceUnitTest {
     private ForcedSubtitleAlignment alignment(TimingFit.Verdict verdict) {
         ForcedSubtitleAlignment fit = new ForcedSubtitleAlignment();
         fit.setSidecarId(5L);
-        fit.setSidecarIdentity("old");
+        fit.setSidecarIdentity(TimingKeys.identity(row));
         fit.setReferenceKey("10:key");
         fit.setVerdict(verdict);
         when(alignments.findBySidecarId(5L)).thenReturn(Optional.of(fit));
@@ -573,5 +576,62 @@ class SubtitleRetimeServiceUnitTest {
             new SubtitleCue(5_755_240, 5_757_158, "Later"));
         assertThat(ServedSubtitles.originalCues(edition, Downloads.pick(row))).containsExactly(
             new SubtitleCue(101_000, 103_000, "Hello"), new SubtitleCue(6_001_000, 6_003_000, "Later"));
+    }
+
+    @Test
+    void theCommitHappensWhileTheLockIsStillHeld() {
+        rowIs();
+        filmRateIs(25.0);
+        List<String> heldAtCommit = new ArrayList<>();
+        doAnswer(call -> {
+            heldAtCommit.add(lock.holder());
+            return null;
+        }).when(transactions).commit(any());
+
+        service.process(5L, RetimeMode.ON);
+
+        assertThat(heldAtCommit).containsExactly(LibraryLock.SUBTITLE);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aFailureRollsBackReleasesTheLockAndReachesTheCaller() {
+        when(sidecars.findById(5L)).thenThrow(new IllegalStateException("db down"));
+
+        assertThatThrownBy(() -> service.process(5L, RetimeMode.ON)).isInstanceOf(IllegalStateException.class)
+            .hasMessage("db down");
+
+        verify(transactions).rollback(null);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aCheckThatWasAlreadyNotCurrentIsLeftAsItIsWhenTheOwnerHadNudgedTheOffset() {
+        retimedAlready();
+        row.setTimedFps(24.0);
+        rowIs();
+        filmRateIs(25.0);
+        ForcedDownloadCheck check = downloadCheck("CHECK");
+        String madeFor = check.getServedVersion();
+        row.setOffsetMs(700);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+
+        service.process(5L, RetimeMode.ON);
+
+        assertThat(check.getServedVersion()).isEqualTo(madeFor);
+        assertThat(check.getStaleSince()).isNull();
+    }
+
+    @Test
+    void aFitThatWasAlreadyNotCurrentIsLeftAsItIs() {
+        rowIs();
+        filmRateIs(25.0);
+        ForcedSubtitleAlignment fit = alignment(TimingFit.Verdict.CHECK);
+        fit.setSidecarIdentity("two versions old");
+
+        service.process(5L, RetimeMode.ON);
+
+        assertThat(fit.getSidecarIdentity()).isEqualTo("two versions old");
+        assertThat(fit.getStaleSince()).isNull();
     }
 }

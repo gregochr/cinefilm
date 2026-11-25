@@ -159,6 +159,9 @@ public class SubtitleRetimeService {
     /** The write that follows a rewrite or a restore, in the one transaction. */
     private void changed(SubtitleSidecar row, Edition edition, String cues) {
         Instant now = clock.instant();
+        // What a check or fit of the cues as they were is keyed to: read before the write changes the cues and offset.
+        String oldVersion = edition == null ? null : ServedSubtitles.version(edition, Downloads.pick(row));
+        String oldIdentity = TimingKeys.identity(row);
         row.setCuesText(cues);
         row.setLastEndMs(SrtParser.cues(cues).stream().mapToLong(SubtitleCue::endMs).max().orElse(0));
         // The fit, the owner's nudge and the owner's check were all made on cues that are no longer there.
@@ -167,19 +170,22 @@ public class SubtitleRetimeService {
         row.clearVerification();
         row.setUpdatedAt(now);
         sidecars.save(row);
-        carryChecks(row, edition, now);
+        carryChecks(row, edition, now, oldVersion, oldIdentity);
     }
 
     /**
-     * A failing check or fit is kept for the new cues, marked outdated so it is due again; a proving one is removed (it
-     * would otherwise prove the old cues again if they came back).
+     * A failing check or fit that was current for the cues as they were is kept for the new cues, marked outdated so it
+     * is due again; one that was already not current (the owner nudged the offset, the parts changed) is left as it is,
+     * so an old verdict never decides again. A proving one is removed (it would otherwise prove the old cues again if
+     * they came back).
      */
-    private void carryChecks(SubtitleSidecar row, Edition edition, Instant now) {
+    private void carryChecks(SubtitleSidecar row, Edition edition, Instant now, String oldVersion,
+                             String oldIdentity) {
         String version = edition == null ? null : ServedSubtitles.version(edition, Downloads.pick(row));
         downloadChecks.findBySidecarId(row.getId()).ifPresent(check -> {
             if (version == null || SubtitleComparison.Verdict.AGREES.name().equals(check.getVerdict())) {
                 downloadChecks.delete(check);
-            } else {
+            } else if (check.getServedVersion().equals(oldVersion)) {
                 check.setServedVersion(version);
                 check.setStaleSince(now);
                 downloadChecks.save(check);
@@ -188,7 +194,7 @@ public class SubtitleRetimeService {
         alignments.findBySidecarId(row.getId()).ifPresent(fit -> {
             if (fit.getVerdict() == TimingFit.Verdict.ALIGNED) {
                 alignments.delete(fit);
-            } else {
+            } else if (fit.getSidecarIdentity().equals(oldIdentity)) {
                 fit.setSidecarIdentity(TimingKeys.identity(row));
                 fit.setStaleSince(now);
                 alignments.save(fit);
