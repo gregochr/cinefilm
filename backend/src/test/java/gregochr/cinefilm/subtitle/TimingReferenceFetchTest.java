@@ -5,6 +5,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -818,5 +819,43 @@ class TimingReferenceFetchTest {
         assertThat(new File(8L, Origin.DOWNLOAD, 12, "x", 5011L).rateSide())
             .isEqualTo(new RateComparison.Side(RateComparison.Kind.DOWNLOAD, null, null, null, null));
         assertThat(new File(9L, Origin.CHOSEN, 12, "x").rateSide().kind()).isEqualTo(RateComparison.Kind.DOWNLOAD);
+    }
+
+    @Test
+    void candidatesThatStateNoRateAreNotFetchedOrCountedWhenEveryFileIsRetimedAndTheFourthIsFetched() {
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5014, scatteredReference(), saved);
+        List<OpenSubtitlesResult> candidates = List.of(noRate(5011), noRate(5012), noRate(5013), candidate(5014));
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(retimedShifted()), candidates,
+            Map.of())));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(api, never()).download(5011);
+        verify(api, never()).download(5012);
+        verify(api, never()).download(5013);
+        verify(budget, times(1)).take(DAY, CHECK_LIMIT);
+        assertThat(saved).containsOnlyKeys(5014L);
+        assertThat(lines(Level.INFO)).contains("Timing reference for edition 10 (film 1): file 5011 passed over, "
+            + "no verdict: UNKNOWN_RATE");
+    }
+
+    @Test
+    void aCandidateThatStatesNoRateIsStillFetchedWhenSomeFileIsNotRetimedBecauseThatFileCanJudgeIt() {
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5011, scatteredReference(), saved);
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(retimedShifted(), shifted(2_000)),
+            List.of(noRate(5011)), Map.of())));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        fetch.run(CHECK_LIMIT, true);
+
+        assertThat(saved).containsOnlyKeys(5011L);
+    }
+
+    private static OpenSubtitlesResult noRate(long fileId) {
+        return new OpenSubtitlesResult(fileId - 1000, fileId, "Release " + fileId, null, 10, true, false, null,
+            null);
     }
 }

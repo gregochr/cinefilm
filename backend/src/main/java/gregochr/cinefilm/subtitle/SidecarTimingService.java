@@ -52,8 +52,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class SidecarTimingService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SidecarTimingService.class);
-    /** Why a sidecar has no file to fit to when the rate rule gave no verdict against any of them. */
-    static final String NO_RATE_VERDICT = "The frame rates of the files are not known well enough to compare them";
     /** Why a sidecar has no file to fit to when the rate rule left a file out as a rate conflict. */
     static final String RATE_CONFLICT_VERDICT = "The files disagree about the frame rate (rate conflict)";
 
@@ -264,7 +262,10 @@ public class SidecarTimingService {
         List<FitJob> jobs = new ArrayList<>();
         for (Served s : served) {
             if (state(s, reads, os, fits.get(s.sidecar().getId())) == State.NEEDS_FIT) {
-                jobs.add(job(filmId, s, reads, os));
+                FitJob job = job(filmId, s, reads, os);
+                if (job != null) {
+                    jobs.add(job);
+                }
             }
         }
         return jobs;
@@ -289,11 +290,14 @@ public class SidecarTimingService {
                     starts(SrtParser.cues(reference.getCuesText())), null));
                 continue;
             }
+            // Judged as the fit is saved (DownloadedFit's 1 s allowance), so a failure here is a failure there.
+            DownloadedFit.Reference judging = new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(),
+                List.of());
             RateComparison.Judged<TimingFit.Result> judged = RateComparison.judge(served, referenceSide,
                 () -> filmRate(s), SrtParser.cues(sidecar.getCuesText()), RateComparison.originalOf(served),
                 SrtParser.cues(reference.getCuesText()), RateComparison.originalOf(referenceSide),
-                (x, y) -> TimingFit.fit(starts(x), starts(y)), r -> TimingFit.Verdict.CHECK.equals(r.verdict()),
-                r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
+                (x, y) -> DownloadedFit.judge(TimingFit.fit(starts(x), starts(y)), judging),
+                r -> TimingFit.Verdict.CHECK.equals(r.verdict()), r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
             if (!judged.hasVerdict()) {
                 LOG.info("Timing of subtitle {} against OpenSubtitles file {}: no verdict, {} (reference {})",
                     sidecar.getId(), f.osFileId(), judged.reason(), reference.getId());
@@ -326,6 +330,12 @@ public class SidecarTimingService {
             : filmRates.forFile(sidecar.getMediaFileId());
     }
 
+    /**
+     * The fit to make for a sidecar, or null when there is nothing to save yet: every file was left out for want of a
+     * rate. Nothing is saved then, so the sidecar stays due and is fitted once the film's rate is indexed (neither its
+     * key nor its identity holds the rate, so a saved "no file" would be current for good). Files left out as a rate
+     * conflict are saved as that: indexing does not change them.
+     */
     private FitJob job(Long filmId, Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os) {
         SubtitleSidecar sidecar = s.sidecar();
         List<Long> starts = SrtParser.cues(sidecar.getCuesText()).stream().map(SubtitleCue::startMs).toList();
@@ -339,9 +349,12 @@ public class SidecarTimingService {
             DownloadedFits fits = downloadedFits(s, downloaded, texts);
             List<DownloadedFit.Reference> fitTo = fits.references();
             if (fitTo.isEmpty()) {
-                // Every file was left out by the rate rule: the fit is made, with no file to fit to and the reason why.
+                if (!fits.conflict()) {
+                    return null;
+                }
+                // Every file was left out by the rate rule and one as a rate conflict: saved as that, with no file.
                 return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
-                    List.copyOf(starts), List.of(), fits.conflict() ? RATE_CONFLICT_VERDICT : NO_RATE_VERDICT);
+                    List.copyOf(starts), List.of(), RATE_CONFLICT_VERDICT);
             }
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
                 List.copyOf(starts), List.of(), null, fitTo);
