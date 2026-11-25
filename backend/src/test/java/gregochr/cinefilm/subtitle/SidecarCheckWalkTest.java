@@ -482,7 +482,7 @@ class SidecarCheckWalkTest {
         RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
             0.959, SrtParser.format(SERVED));
         return new DueCheck(FILM, EDITION, IMDB, "Extended Edition", plain.candidates(), tried, "v10", false,
-            cues(900_000, SERVED.size()), 77L, side);
+            cues(900_000, SERVED.size()), 77L, side, SERVED);
     }
 
     /** The same check with OpenSubtitles stating no rate for some files (the fetcher would otherwise fill it in). */
@@ -494,7 +494,7 @@ class SidecarCheckWalkTest {
         }).toList();
         return new DueCheck(due.filmId(), due.editionId(), due.imdbId(), due.editionName(), candidates,
             due.triedFileIds(), due.servedVersion(), due.ownerVerified(), due.cues(), due.downloadSidecarId(),
-            due.side());
+            due.side(), due.originalCues());
     }
 
     private static OpenSubtitlesReference stated(OpenSubtitlesReference reference, Double fps) {
@@ -600,5 +600,104 @@ class SidecarCheckWalkTest {
         assertThat(savedResult(due, agreeing).verdict()).isEqualTo(Verdict.AGREES);
         assertThat(messages()).contains("Edition 10: candidate 1 (file 5011) skipped, no verdict: RATE_CONFLICT "
             + "(sidecar 77, reference 8)");
+    }
+
+    private void fresh(long fileId, List<SubtitleCue> cues) {
+        notStored(fileId);
+        when(api.download(fileId)).thenReturn(downloaded(cues));
+    }
+
+    @Test
+    void candidatesThatStateNoRateAreNotDownloadedForARetimedDownloadAndTheFourthThatCanBeJudgedDecides() {
+        DueCheck due = statingNoRateFor(retimedDue(Set.of(), 5011, 5012, 5013, 5014), 5011, 5012, 5013);
+        notStored(5011);
+        notStored(5012);
+        notStored(5013);
+        fresh(5014, SERVED);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
+            OpenSubtitlesReference saved = call.getArgument(0);
+            saved.setId(77L);
+            return saved;
+        });
+        when(filmRates.forEdition(EDITION)).thenReturn(25.0);
+        savingEverything();
+
+        run(due);
+
+        verify(api, never()).download(5011);
+        verify(api, never()).download(5012);
+        verify(api, never()).download(5013);
+        verify(service, never()).markTried(EDITION, IMDB, 5011, NOW);
+        verify(service, never()).markTried(EDITION, IMDB, 5012, NOW);
+        verify(service, never()).markTried(EDITION, IMDB, 5013, NOW);
+        verify(service).markTried(EDITION, IMDB, 5014, NOW);
+        ArgumentCaptor<OpenSubtitlesReference> kept = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
+        ArgumentCaptor<Result> result = ArgumentCaptor.forClass(Result.class);
+        verify(service).save(eq(due), kept.capture(), result.capture(), eq(NOW));
+        assertThat(kept.getValue().getOsFileId()).isEqualTo(5014L);
+        assertThat(result.getValue().verdict()).isEqualTo(Verdict.AGREES);
+        assertThat(messages()).contains("Edition 10: candidate 1 (file 5011) skipped without a download, no verdict: "
+            + "UNKNOWN_RATE (sidecar 77)");
+    }
+
+    @Test
+    void anEditionWhoseCandidatesAllStateNoRateIsCountedAsNoVerdictNotAsUnusable() {
+        DueCheck due = statingNoRateFor(retimedDue(Set.of(), 5011), 5011);
+        notStored(5011);
+
+        run(due);
+
+        verify(api, never()).download(5011);
+        assertThat(messages()).last().isEqualTo("Subtitle file checks finished: 0 saved, 0 changed meanwhile, "
+            + "0 unusable references, 1 no verdict (unknown rate), 0 no verdict (rate conflict), 0 failed");
+    }
+
+    @Test
+    void anEditionWhoseOnlyCandidateIsARateConflictIsCountedAsNoVerdictForTheConflict() {
+        DueCheck due = retimedDue(Set.of(5011L), 5011);
+        storedIs(stated(stored(8, 5011, SERVED), 25.0));
+        when(filmRates.forEdition(EDITION)).thenReturn(25.0);
+
+        run(due);
+
+        assertThat(messages()).last().isEqualTo("Subtitle file checks finished: 0 saved, 0 changed meanwhile, "
+            + "0 unusable references, 0 no verdict (unknown rate), 1 no verdict (rate conflict), 0 failed");
+    }
+
+    @Test
+    void aRetimedDownloadWithAnOffsetIsComparedThroughOriginalCuesOnTheSameTimelineAsWhatIsServed() {
+        // Served 500 ms late; its original cues are carried with the same offset, not bare.
+        List<SubtitleCue> late = SERVED.stream().map(c -> new SubtitleCue(c.startMs() + 500, c.endMs() + 500,
+            c.text())).toList();
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, SrtParser.format(SERVED));
+        DueCheck plain = due(Set.of(5011L), 5011);
+        DueCheck due = new DueCheck(FILM, EDITION, IMDB, "Extended Edition", plain.candidates(), Set.of(5011L),
+            "v10", false, cues(900_000, SERVED.size()), 77L, side, late);
+        OpenSubtitlesReference reference = stated(stored(8, 5011, SERVED), 23.976);
+        storedIs(reference);
+        when(filmRates.forEdition(EDITION)).thenReturn(25.0);
+        savingEverything();
+
+        run(due);
+
+        Result result = savedResult(due, reference);
+        assertThat(result.verdict()).isEqualTo(Verdict.AGREES);
+        assertThat(result.bestOffsetMs()).isEqualTo(-500);
+    }
+
+    @Test
+    void aStoredReferenceThatStatesNoRateIsJudgedNotPassedOverAndIsCountedAsUnknownRate() {
+        DueCheck due = statingNoRateFor(retimedDue(Set.of(), 5011), 5011);
+        storedIs(stored(8, 5011, SERVED));
+        when(filmRates.forEdition(EDITION)).thenReturn(25.0);
+
+        run(due);
+
+        verify(api, never()).download(5011);
+        assertThat(messages()).contains("Edition 10: candidate 1 (file 5011) skipped, no verdict: UNKNOWN_RATE "
+            + "(sidecar 77, reference 8)");
+        assertThat(messages()).last().asString().contains("1 no verdict (unknown rate)");
     }
 }

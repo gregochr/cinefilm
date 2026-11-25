@@ -710,9 +710,12 @@ class SidecarCheckRefresherTest {
     }
 
     /** A download's check that is due because its verdict is outdated; to the run it is a due check like any other. */
+    private static final RateComparison.Side UNRATED_DOWNLOAD =
+        new RateComparison.Side(RateComparison.Kind.DOWNLOAD, null, null, null, null);
+
     private static DueCheck staleDownloadDue() {
         return new DueCheck(1L, 10L, "tt1", "Original", List.of(candidate(5011, "Release 5011")), Set.of(5011L),
-            "v10", false, CUES, 7L);
+            "v10", false, CUES, 7L, UNRATED_DOWNLOAD);
     }
 
     @Test

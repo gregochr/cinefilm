@@ -274,7 +274,7 @@ class SidecarCheckServiceUnitTest {
         ForcedDownloadCheck stale = downloadRow(STALE);
         when(downloadChecks.findBySidecarId(7L)).thenReturn(Optional.of(stale));
         DueCheck due = new DueCheck(1L, 40L, "tt1", "Original", List.of(), Set.of(), state.version(), false,
-            List.of(), 7L);
+            List.of(), 7L, new RateComparison.Side(RateComparison.Kind.DOWNLOAD, null, null, null, null));
 
         assertThat(service.save(due, reference(), AGREES, LATER)).isTrue();
 
@@ -293,7 +293,7 @@ class SidecarCheckServiceUnitTest {
         ForcedDownloadCheck stale = downloadRow(STALE);
         stale.setVerdict("CHECK");
         DueCheck due = new DueCheck(1L, 40L, "tt1", "Original", List.of(), Set.of(), "an older version", false,
-            List.of(), 7L);
+            List.of(), 7L, new RateComparison.Side(RateComparison.Kind.DOWNLOAD, null, null, null, null));
 
         assertThat(service.save(due, reference(), AGREES, LATER)).isFalse();
 
@@ -308,5 +308,49 @@ class SidecarCheckServiceUnitTest {
         when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L))).thenReturn(List.of(stale));
 
         assertThat(service.due()).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
+    }
+
+    @Test
+    void aDownloadsDueCheckCarriesItsRateSideAndItsOriginalCuesOnTheEditionsTimeline() {
+        String original = "1\n00:01:40,000 --> 00:01:42,000\nHello\n\n";
+        download.setTimedFps(23.976);
+        download.setRetime(RetimeChoice.AUTO);
+        download.setRetimedBy(0.959);
+        download.setOriginalCuesText(original);
+        download.setOffsetMs(500);
+        resolved(resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, fit()))));
+
+        DueCheck due = service.due().get(0);
+
+        assertThat(due.side()).isEqualTo(RateComparison.Side.of(download));
+        assertThat(due.side()).isEqualTo(new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976,
+            RetimeChoice.AUTO, 0.959, original));
+        assertThat(due.cues()).containsExactly(new SubtitleCue(10_500, 12_500, "Hello"));
+        assertThat(due.originalCues()).containsExactly(new SubtitleCue(100_500, 102_500, "Hello"));
+    }
+
+    @Test
+    void aDownloadThatIsNotRetimedCarriesItsSideAndNoOriginalCues() {
+        download.setTimedFps(25.0);
+        resolved(resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, fit()))));
+
+        DueCheck due = service.due().get(0);
+
+        assertThat(due.side()).isEqualTo(RateComparison.Side.of(download));
+        assertThat(due.side().kind()).isEqualTo(RateComparison.Kind.DOWNLOAD);
+        assertThat(due.originalCues()).isNull();
+    }
+
+    @Test
+    void aRetimedDownloadWithNoOriginalCuesCarriesNoOriginalCues() {
+        download.setTimedFps(23.976);
+        download.setRetime(RetimeChoice.AUTO);
+        download.setRetimedBy(0.959);
+        resolved(resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, fit()))));
+
+        DueCheck due = service.due().get(0);
+
+        assertThat(due.side().retimed()).isTrue();
+        assertThat(due.originalCues()).isNull();
     }
 }

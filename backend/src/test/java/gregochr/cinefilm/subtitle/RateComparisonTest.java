@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 /** The rate rule: which cues of two subtitles are compared, or why there is no verdict. Pure. */
 class RateComparisonTest {
@@ -52,10 +54,11 @@ class RateComparisonTest {
 
     private static Judged<String> judge(Side first, String firstStored, Side second, String secondStored,
                                         Supplier<Double> film, List<List<String>> compared) {
-        return RateComparison.judge(first, second, film, cues(firstStored), cues(secondStored), (a, b) -> {
-            compared.add(List.of(a.get(0).text(), b.get(0).text()));
-            return a.equals(b) ? SAME : DIFFERENT;
-        }, DIFFERENT::equals, SAME::equals);
+        return RateComparison.judge(first, second, film, cues(firstStored), RateComparison.originalOf(first),
+            cues(secondStored), RateComparison.originalOf(second), (a, b) -> {
+                compared.add(List.of(a.get(0).text(), b.get(0).text()));
+                return a.equals(b) ? SAME : DIFFERENT;
+            }, DIFFERENT::equals, SAME::equals);
     }
 
     @Test
@@ -99,70 +102,12 @@ class RateComparisonTest {
     }
 
     @Test
-    void aRetimedSideWithAnUnknownFilmRateAgainstTheOwnersFileHasNoVerdict() {
-        Judged<String> judged = judge(retimedDownload(23.976, "original"), "film", Side.file(), "film",
-            FILM_UNKNOWN, new ArrayList<>());
-
-        assertThat(judged.reason()).isEqualTo(Reason.UNKNOWN_RATE);
-    }
-
-    @Test
-    void aRetimedDownloadAgainstTheEmbeddedTrackOrADownloadThatFitsHasNoVerdictWhileTheFilmRateIsUnknown() {
-        List<List<String>> compared = new ArrayList<>();
-
-        Judged<String> embedded = judge(retimedDownload(23.976, "original"), "film", Side.embedded(), "film",
-            FILM_UNKNOWN, compared);
-        Judged<String> fits = judge(retimedDownload(23.976, "original"), "film", rawDownload(24.0,
-            RetimeChoice.OFF_FITS), "film", FILM_UNKNOWN, compared);
-
-        assertThat(embedded.reason()).isEqualTo(Reason.UNKNOWN_RATE);
-        assertThat(fits.reason()).isEqualTo(Reason.UNKNOWN_RATE);
-        assertThat(compared).isEmpty();
-    }
-
-    @Test
-    void aRetimedReferenceAgainstTheOwnersFileOrADownloadThatFitsHasNoVerdictWhileTheFilmRateIsUnknown() {
-        List<List<String>> compared = new ArrayList<>();
-
-        Judged<String> file = judge(retimedReference(23.976, "original"), "film", Side.file(), "film", FILM_UNKNOWN,
-            compared);
-        Judged<String> fits = judge(rawDownload(24.0, RetimeChoice.OFF_FITS), "film", retimedReference(23.976,
-            "original"), "film", FILM_UNKNOWN, compared);
-
-        assertThat(file.reason()).isEqualTo(Reason.UNKNOWN_RATE);
-        assertThat(fits.reason()).isEqualTo(Reason.UNKNOWN_RATE);
-        assertThat(compared).isEmpty();
-    }
-
-    @Test
     void aRetimedSideWithNoOriginalHasNoVerdict() {
         Side broken = new Side(Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO, 0.959, null);
 
         Judged<String> judged = judge(broken, "film", rawReference(23.976), "x", FILM_25, new ArrayList<>());
 
         assertThat(judged.reason()).isEqualTo(Reason.UNKNOWN_RATE);
-    }
-
-    @Test
-    void aRawReferenceOf23976AgainstARetimedDownloadOf23976OnA25FilmIsComparedOnTheOriginalsAndAgrees() {
-        List<List<String>> compared = new ArrayList<>();
-
-        Judged<String> judged = judge(retimedDownload(23.976, "original"), "film", rawReference(23.976), "original",
-            FILM_25, compared);
-
-        assertThat(judged.result()).isEqualTo(SAME);
-        assertThat(compared).containsExactly(List.of("original", "original"));
-    }
-
-    @Test
-    void aSplitRateFilmComparesA23976DownloadWithARawReferenceStated24OnTheOriginals() {
-        List<List<String>> compared = new ArrayList<>();
-
-        Judged<String> judged = judge(retimedDownload(23.976, "original"), "film", rawReference(24.0), "original",
-            FILM_25, compared);
-
-        assertThat(judged.result()).isEqualTo(SAME);
-        assertThat(compared).containsExactly(List.of("original", "original"));
     }
 
     @Test
@@ -291,45 +236,6 @@ class RateComparisonTest {
     }
 
     @Test
-    void aFilmOf2498IsInTheFilmsFamilyOf25AndComparesARetimedDownloadWithTheEmbeddedTrackOnTheFilmTimeline() {
-        List<List<String>> compared = new ArrayList<>();
-
-        Judged<String> judged = judge(retimedDownload(23.976, "original"), "film", Side.embedded(), "film",
-            () -> 24.98, compared);
-
-        assertThat(judged.hasVerdict()).isTrue();
-        assertThat(judged.result()).isEqualTo(SAME);
-        assertThat(compared).containsExactly(List.of("film", "film"));
-    }
-
-    @Test
-    void aFilmRateOf2405IsAbout24ButAStatedRateOf2405IsAFamilyOfItsOwn() {
-        List<List<String>> compared = new ArrayList<>();
-
-        // A stated 24.05 is outside the stated bands (its own family), a 24.05 film is about 24.
-        Judged<String> sameFamily = judge(retimedDownload(24.0, "o"), "f", Side.embedded(), "f", () -> 24.05,
-            compared);
-        Judged<String> otherFamily = judge(retimedDownload(24.0, "o"), "f", new Side(Kind.REFERENCE, 24.05, null,
-            null, null), "g", FILM_25, compared);
-
-        assertThat(sameFamily.result()).isEqualTo(DIFFERENT);
-        assertThat(otherFamily.hasVerdict()).isTrue();
-        assertThat(compared).containsExactly(List.of("o", "f"), List.of("f", "g"), List.of("o", "g"));
-    }
-
-    @Test
-    void aKnownRateOf2997AgainstARetimedSideIsComparedOnTheFilmTimelineNotUnknown() {
-        List<List<String>> compared = new ArrayList<>();
-
-        Judged<String> judged = judge(retimedDownload(23.976, "original"), "film", rawReference(29.97), "film",
-            FILM_25, compared);
-
-        assertThat(judged.hasVerdict()).isTrue();
-        assertThat(judged.result()).isEqualTo(SAME);
-        assertThat(compared).containsExactly(List.of("film", "film"));
-    }
-
-    @Test
     void aReferencePairOfDifferentFamiliesThatFailsOnTheFilmTimelineAndOnTheOriginalsFailsWithNoConflict() {
         List<List<String>> compared = new ArrayList<>();
 
@@ -409,28 +315,58 @@ class RateComparisonTest {
         assertThat(judged.reason()).isEqualTo(Reason.UNKNOWN_RATE);
     }
 
-    @Test
-    void aFilmRateOutsideBothFilmBandsIsAFamilyOfItsOwn() {
+    /**
+     * Whether the originals or the film timeline were compared first, for a retimed download of one stated rate against
+     * the owner's file or the embedded track (whose rate is the film's, the third column) or a raw reference (whose
+     * rate is its stated one, on a 25 fps film). A reference pair that fails on the film timeline is looked at on the
+     * originals afterwards, so the first comparison tells the timelines apart.
+     */
+    @ParameterizedTest(name = "{0} {2} against a retimed download stated {1}: {3}")
+    @CsvSource({
+        // film bands: about 24 is 23.9 to 24.1, 25 is 24.85 to 25.15, anything else is a family of its own
+        "FILE, 23.976, 23.899, FILM", "FILE, 23.976, 23.9, ORIGINALS", "FILE, 23.976, 24.0, ORIGINALS",
+        "EMBEDDED, 23.976, 24.1, ORIGINALS", "EMBEDDED, 23.976, 24.101, FILM",
+        "FILE, 25.0, 24.849, FILM", "FILE, 25.0, 24.85, ORIGINALS", "EMBEDDED, 25.0, 25.0, ORIGINALS",
+        "EMBEDDED, 25.0, 25.15, ORIGINALS", "FILE, 25.0, 25.151, FILM",
+        "FILE, 24.0, 24.05, ORIGINALS", "FILE, 23.976, 20.0, FILM", "FILE, 23.976, 24.5, FILM",
+        "FILE, 23.976, 25.2, FILM", "EMBEDDED, 23.976, 30.0, FILM", "EMBEDDED, 23.976, 24.98, FILM",
+        // stated bands: within 0.01 of 23.976 or 24.0, or of 25, else a family of its own
+        "REFERENCE, 23.976, 23.976, ORIGINALS", "REFERENCE, 23.976, 24.0, ORIGINALS",
+        "REFERENCE, 23.98, 23.976, ORIGINALS", "REFERENCE, 23.976, 23.966, ORIGINALS",
+        "REFERENCE, 23.976, 23.965, FILM", "REFERENCE, 23.976, 23.986, ORIGINALS",
+        "REFERENCE, 23.976, 23.987, FILM", "REFERENCE, 23.976, 23.99, ORIGINALS",
+        "REFERENCE, 23.976, 23.989, FILM", "REFERENCE, 23.976, 24.01, ORIGINALS",
+        "REFERENCE, 23.976, 24.011, FILM", "REFERENCE, 24.0, 24.05, FILM",
+        "REFERENCE, 24.99, 25.0, ORIGINALS", "REFERENCE, 24.989, 25.0, FILM", "REFERENCE, 25.01, 25.0, ORIGINALS",
+        "REFERENCE, 25.011, 25.0, FILM", "REFERENCE, 23.976, 29.97, FILM", "REFERENCE, 23.976, 25.0, FILM"})
+    void theFamilyBandsDecideWhetherTheOriginalsOrTheFilmTimelineAreCompared(String other, double retimedStated,
+                                                                           double otherRate, String expected) {
+        Side otherSide = "REFERENCE".equals(other) ? rawReference(otherRate)
+            : "FILE".equals(other) ? Side.file() : Side.embedded();
+        double film = "REFERENCE".equals(other) ? 25.0 : otherRate;
         List<List<String>> compared = new ArrayList<>();
 
-        Judged<String> judged = judge(retimedDownload(23.976, "original"), "film", Side.embedded(), "film",
-            () -> 30.0, compared);
+        Judged<String> judged = judge(retimedDownload(retimedStated, "original"), "film", otherSide, "other",
+            () -> film, compared);
 
-        assertThat(judged.result()).isEqualTo(SAME);
-        assertThat(compared).containsExactly(List.of("film", "film"));
+        assertThat(compared.get(0).equals(List.of("original", "other")) ? "ORIGINALS" : "FILM").isEqualTo(expected);
+        // Only a reference pair can be a conflict; any other pair, and any known rate, has a verdict.
+        assertThat(judged.reason() == null || "REFERENCE".equals(other)).isTrue();
     }
 
-    @Test
-    void aFilmRateBelowBetweenOrAboveTheFilmBandsIsAFamilyOfItsOwn() {
+    @ParameterizedTest(name = "a retimed {0} against {1} while the film rate is unknown")
+    @CsvSource({"DOWNLOAD, FILE", "DOWNLOAD, EMBEDDED", "DOWNLOAD, FITS", "REFERENCE, FILE", "REFERENCE, FITS"})
+    void aRetimedSideAgainstTheFilmsOwnRateHasNoVerdictWhileTheFilmRateIsUnknown(String retimed, String other) {
+        Side retimedSide = "DOWNLOAD".equals(retimed) ? retimedDownload(23.976, "original")
+            : retimedReference(23.976, "original");
+        Side otherSide = "FILE".equals(other) ? Side.file()
+            : "EMBEDDED".equals(other) ? Side.embedded() : rawDownload(24.0, RetimeChoice.OFF_FITS);
         List<List<String>> compared = new ArrayList<>();
 
-        for (double film : new double[] {20.0, 24.5, 25.2}) {
-            Judged<String> judged = judge(retimedDownload(23.976, "original"), "film", Side.embedded(), "film",
-                () -> film, compared);
-            assertThat(judged.result()).isEqualTo(SAME);
-        }
+        Judged<String> judged = judge(retimedSide, "film", otherSide, "film", FILM_UNKNOWN, compared);
 
-        assertThat(compared).containsExactly(List.of("film", "film"), List.of("film", "film"),
-            List.of("film", "film"));
+        assertThat(judged.hasVerdict()).isFalse();
+        assertThat(judged.reason()).isEqualTo(Reason.UNKNOWN_RATE);
+        assertThat(compared).isEmpty();
     }
 }

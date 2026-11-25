@@ -21,19 +21,22 @@ import java.util.Set;
  * @param ownerVerified true when the owner has said what is checked looks right
  * @param cues what is checked, on the edition's timeline
  * @param downloadSidecarId the downloaded subtitle that is checked, or null when it is the owner's file(s)
- * @param side what is checked, for the rate rule ({@link RateComparison}); the owner's file(s) when null
+ * @param side what is checked, for the rate rule ({@link RateComparison}); null for the owner's file(s)
+ * @param originalCues for a retimed download, its cues before they were retimed, on the edition's timeline with the
+ *     same offset and part starts as {@code cues}; null when it is not retimed
  */
 public record DueCheck(Long filmId, Long editionId, String imdbId, String editionName,
                        List<OpenSubtitlesResult> candidates, Set<Long> triedFileIds, String servedVersion,
                        boolean ownerVerified, List<SubtitleCue> cues, Long downloadSidecarId,
-                       RateComparison.Side side) {
+                       RateComparison.Side side, List<SubtitleCue> originalCues) {
 
-    /** A check of a download, with nothing known of its rate (as before the rate rule). */
+    /** A check of a download that is not retimed. */
     public DueCheck(Long filmId, Long editionId, String imdbId, String editionName,
                     List<OpenSubtitlesResult> candidates, Set<Long> triedFileIds, String servedVersion,
-                    boolean ownerVerified, List<SubtitleCue> cues, Long downloadSidecarId) {
+                    boolean ownerVerified, List<SubtitleCue> cues, Long downloadSidecarId,
+                    RateComparison.Side side) {
         this(filmId, editionId, imdbId, editionName, candidates, triedFileIds, servedVersion, ownerVerified, cues,
-            downloadSidecarId, null);
+            downloadSidecarId, side, null);
     }
 
     /** A check of the owner's file(s). */
@@ -41,12 +44,16 @@ public record DueCheck(Long filmId, Long editionId, String imdbId, String editio
                     List<OpenSubtitlesResult> candidates, Set<Long> triedFileIds, String servedVersion,
                     boolean ownerVerified, List<SubtitleCue> cues) {
         this(filmId, editionId, imdbId, editionName, candidates, triedFileIds, servedVersion, ownerVerified, cues,
-            null, null);
+            null, null, null);
     }
 
-    /** What is checked, as the rate rule sees it: the owner's file(s) unless a download was given. */
+    /** What is checked, as the rate rule sees it; a download that was given no side is a download of no known rate. */
     public RateComparison.Side rateSide() {
-        return side == null ? RateComparison.Side.file() : side;
+        if (side != null) {
+            return side;
+        }
+        return isDownload() ? new RateComparison.Side(RateComparison.Kind.DOWNLOAD, null, null, null, null)
+            : RateComparison.Side.file();
     }
 
     /** True when a downloaded subtitle is checked, not the owner's file(s). */

@@ -137,7 +137,10 @@ public final class RateComparison {
      * @param second the other side
      * @param filmFps the film's rate; asked for only when a side is retimed. May return null (unknown)
      * @param firstStored the first side's stored cues
+     * @param firstOriginal the first side's cues before it was retimed, on the same timeline as {@code firstStored};
+     *     asked for only when needed
      * @param secondStored the second side's stored cues
+     * @param secondOriginal as {@code firstOriginal}, for the second side
      * @param compare the site's comparison of two cue lists
      * @param fails whether a result would fail (the walk would move on, or CHECK)
      * @param agrees whether a result is an agreement
@@ -145,7 +148,8 @@ public final class RateComparison {
      * @return the result with the cues compared, or why there is no verdict
      */
     public static <R> Judged<R> judge(Side first, Side second, Supplier<Double> filmFps,
-                                      List<SubtitleCue> firstStored, List<SubtitleCue> secondStored,
+                                      List<SubtitleCue> firstStored, Supplier<List<SubtitleCue>> firstOriginal,
+                                      List<SubtitleCue> secondStored, Supplier<List<SubtitleCue>> secondOriginal,
                                       BiFunction<List<SubtitleCue>, List<SubtitleCue>, R> compare,
                                       Predicate<R> fails, Predicate<R> agrees) {
         if (!first.retimed() && !second.retimed()) {
@@ -158,19 +162,30 @@ public final class RateComparison {
             || second.retimed() && second.originalCuesText() == null) {
             return none(Reason.UNKNOWN_RATE);
         }
-        List<SubtitleCue> firstOriginal = first.retimed() ? SrtParser.cues(first.originalCuesText()) : firstStored;
-        List<SubtitleCue> secondOriginal = second.retimed() ? SrtParser.cues(second.originalCuesText())
-            : secondStored;
         if (sameFamily(family(first, firstRate), family(second, secondRate), firstRate, secondRate)) {
-            return new Judged<>(compare.apply(firstOriginal, secondOriginal), firstOriginal, secondOriginal, null);
+            List<SubtitleCue> firstCues = first.retimed() ? firstOriginal.get() : firstStored;
+            List<SubtitleCue> secondCues = second.retimed() ? secondOriginal.get() : secondStored;
+            return new Judged<>(compare.apply(firstCues, secondCues), firstCues, secondCues, null);
         }
         R onFilm = compare.apply(firstStored, secondStored);
         boolean eitherReference = first.kind() == Kind.REFERENCE || second.kind() == Kind.REFERENCE;
-        if (eitherReference && fails.test(onFilm)
-            && agrees.test(compare.apply(firstOriginal, secondOriginal))) {
+        if (eitherReference && fails.test(onFilm) && agrees.test(compare.apply(
+            first.retimed() ? firstOriginal.get() : firstStored,
+            second.retimed() ? secondOriginal.get() : secondStored))) {
             return none(Reason.RATE_CONFLICT);
         }
         return new Judged<>(onFilm, firstStored, secondStored, null);
+    }
+
+    /**
+     * The original cues of a side whose stored cues are not on another timeline than the original's own: the original
+     * text parsed (a reference's cues are on the film's own timeline, with no offset or part start to apply).
+     *
+     * @param side the side
+     * @return the cues, parsed only when asked for
+     */
+    public static Supplier<List<SubtitleCue>> originalOf(Side side) {
+        return () -> SrtParser.cues(side.originalCuesText());
     }
 
     private static <R> Judged<R> none(Reason reason) {

@@ -97,6 +97,12 @@ final class ReferenceFetcher {
         }
     }
 
+    /** True when a reference for this file is already stored for the film's IMDb id and needs no download. */
+    boolean isStored(Long filmId, String imdbId, long osFileId) {
+        return references.findByFilmIdAndImdbIdAndOsFileId(filmId, imdbId, osFileId)
+            .filter(OpenSubtitlesReference::isFinal).isPresent();
+    }
+
     private OpenSubtitlesReference fetchLocked(Long filmId, String imdbId, OpenSubtitlesResult candidate, int limit) {
         // Only a reference fetched for the film's current IMDb id may be reused.
         OpenSubtitlesReference stored = references

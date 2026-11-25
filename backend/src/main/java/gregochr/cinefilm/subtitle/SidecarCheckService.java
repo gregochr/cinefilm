@@ -161,11 +161,15 @@ public class SidecarCheckService {
         List<OpenSubtitlesResult> others = filmCandidates.stream()
             .filter(c -> c.fileId() != sidecar.getOpenSubtitlesFileId())
             .toList();
-        ServedSubtitle served = others.isEmpty() ? null : ServedSubtitles.of(edition, Downloads.pick(sidecar));
+        SidecarPrecedence.Pick pick = Downloads.pick(sidecar);
+        ServedSubtitle served = others.isEmpty() ? null : ServedSubtitles.of(edition, pick);
         if (served != null) {
+            // A retimed download is also compared through its original cues, on the same timeline as what is served.
+            List<SubtitleCue> original = sidecar.getRetimedBy() != null && sidecar.getOriginalCuesText() != null
+                ? ServedSubtitles.originalCues(edition, pick) : null;
             due.add(new DueCheck(ref.id(), edition.getId(), ref.imdbId(), edition.getName(),
                 OpenSubtitlesRanking.rankFor(others, edition.getName()), tried, served.version(), false,
-                served.cues(), sidecar.getId(), RateComparison.Side.of(sidecar)));
+                served.cues(), sidecar.getId(), RateComparison.Side.of(sidecar), original));
         }
     }
 
