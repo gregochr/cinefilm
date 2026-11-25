@@ -151,6 +151,9 @@ writes nothing), `on`, or `restore` (the rollback, below).
 - A file is restored by writing `original_cues_text` back and clearing `retimed_by`, and its checks are made again
   the same way.
 - A download set to `retime = OFF` is restored at once.
+- **Any rewrite or restore the job makes** (a new k, a restore, `restore`) clears an owner verification and resets
+  an OWNER offset that were set after the file's last rewrite, by the same rule as turning retime on. They were set
+  on cues that are no longer there. When retime is turned off, the owner's own choice, the owner re-verifies.
 - `off` restores nothing: the rewritten files stay right.
 - **The rollback is `restore`.** It restores every retimed download and reference by the same rule, and marks their
   rows as above. It is tested in phase 2a (downloads) and 2b (references). An image rollback alone would leave the
@@ -270,6 +273,7 @@ Not in this plan:
      - a failed download is checked again within the job's run;
      - a film file replaced at another rate is rewritten from the original.
      - `restore` puts every retimed download back.
+     - verify after retime, then `restore`: the file is no longer proven by the verification;
    - `operations.md` gains the rollback order: set `cinefilm.subtitles.retime` to `restore`, wait for the run to end,
      then roll back the image.
 3. **2b: references and arrivals, behind the switch.**
