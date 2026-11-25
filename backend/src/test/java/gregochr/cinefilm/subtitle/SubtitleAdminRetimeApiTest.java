@@ -1,0 +1,136 @@
+package gregochr.cinefilm.subtitle;
+
+import static gregochr.cinefilm.TestData.NOW;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.subtitle.SubtitleDtos.RetimeRequest;
+import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
+import gregochr.cinefilm.transcode.MediaKeyframes;
+import gregochr.cinefilm.transcode.MediaKeyframesRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import java.util.Arrays;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+/**
+ * The Admin's retime choice and its rate facts against real rows on H2: the choice takes effect at once, and the list
+ * costs a fixed number of statements however many editions have downloads (no N+1).
+ */
+class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
+
+    private static final long SIZE = 1_000L;
+
+    @Autowired
+    private MediaKeyframesRepository keyframes;
+
+    @Autowired
+    private EntityManager entityManager;
+
+    @Autowired
+    private EntityManagerFactory factory;
+
+    private Statistics statistics;
+
+    @BeforeEach
+    void enableStatistics() {
+        statistics = factory.unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+    }
+
+    @AfterEach
+    void disableStatistics() {
+        statistics.setStatisticsEnabled(false);
+    }
+
+    /** A film of one file at {@code fps}, with a download stated for {@code timed}. */
+    private SubtitleSidecar statedDownload(String title, long osFileId, double fps, double timed) {
+        Film film = searchedFilm(title, 1, result(osFileId, title + ".2008"));
+        MediaFile file = edition(film).originalParts().get(0);
+        file.setSizeBytes(SIZE);
+        mediaFiles.saveAndFlush(file);
+        MediaKeyframes index = new MediaKeyframes();
+        index.setMediaFileId(file.getId());
+        index.setCuts("0");
+        index.setSourceSize(SIZE);
+        index.setSourceMtime(1L);
+        index.setIndexedAt(NOW);
+        index.setFps(fps);
+        keyframes.saveAndFlush(index);
+        SubtitleSidecar download = download(film, osFileId);
+        download.setTimedFps(timed);
+        return sidecars.saveAndFlush(download);
+    }
+
+    private SidecarDto listed(Long id) {
+        return admin.list().stream().filter(d -> d.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    private long statementsOfOneList() {
+        entityManager.flush();
+        entityManager.clear();
+        statistics.clear();
+
+        admin.list();
+
+        return statistics.getPrepareStatementCount();
+    }
+
+    @Test
+    void aMatchedDownloadListsItsRateFactsAndAnOwnersFileListsNone() {
+        SubtitleSidecar download = statedDownload("Taken", 2001, 25.0, 23.976);
+        SubtitleSidecar file = sidecar("Taken.en.forced.srt", download.getMediaFileId(), true);
+
+        SidecarDto dto = listed(download.getId());
+
+        assertThat(dto.timedFps()).isEqualTo(23.976);
+        assertThat(dto.filmFps()).isEqualTo(25.0);
+        assertThat(dto.retime()).isNull();
+        assertThat(dto.retimedBy()).isNull();
+        assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+        SidecarDto owners = listed(file.getId());
+        assertThat(Arrays.asList(owners.timedFps(), owners.filmFps(), owners.retime(), owners.retimedBy(),
+            owners.rateLine())).containsOnlyNulls();
+    }
+
+    @Test
+    void theOwnersOnRetimesTheFileAtOnceAndTheOwnersOffPutsItBack() {
+        SubtitleSidecar download = statedDownload("Taken", 2001, 25.0, 23.976);
+        Long id = download.getId();
+
+        SidecarDto on = admin.retime(id, new RetimeRequest(true));
+
+        assertThat(on.retime()).isEqualTo("AUTO");
+        assertThat(on.retimedBy()).isEqualTo(23.976 / 25);
+        assertThat(on.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
+        assertThat(sidecars.findById(id).orElseThrow().getOriginalCuesText()).isEqualTo(CUES);
+        assertThat(sidecars.findById(id).orElseThrow().getCuesText()).isNotEqualTo(CUES);
+
+        SidecarDto off = admin.retime(id, new RetimeRequest(false));
+
+        assertThat(off.retime()).isEqualTo("OFF");
+        assertThat(off.retimedBy()).isNull();
+        assertThat(off.rateLine()).isEqualTo("Not retimed (you chose this); it may drift");
+        assertThat(sidecars.findById(id).orElseThrow().getCuesText()).isEqualTo(CUES);
+        assertThat(sidecars.findById(id).orElseThrow().getOriginalCuesText()).isNull();
+    }
+
+    @Test
+    void theListCostsNoMoreStatementsWithThreeEditionsOfDownloadsThanWithOne() {
+        statedDownload("One", 2001, 25.0, 23.976);
+        long withOne = statementsOfOneList();
+
+        statedDownload("Two", 2002, 23.976, 25.0);
+        statedDownload("Three", 2003, 25.0, 25.0);
+        long withThree = statementsOfOneList();
+
+        assertThat(withOne).isPositive();
+        assertThat(withThree).isEqualTo(withOne);
+    }
+}

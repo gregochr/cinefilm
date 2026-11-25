@@ -3,6 +3,7 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CuesDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
+import gregochr.cinefilm.subtitle.SubtitleDtos.RetimeRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -48,6 +49,11 @@ public class SubtitleAdminController {
     @PutMapping("/api/admin/subtitles/{id}/offset")
     SidecarDto offset(@PathVariable Long id, @RequestBody OffsetRequest request) {
         return service.offset(id, request);
+    }
+
+    @PutMapping("/api/admin/subtitles/{id}/retime")
+    SidecarDto retime(@PathVariable Long id, @RequestBody RetimeRequest request) {
+        return service.retime(id, request);
     }
 
     @PostMapping("/api/admin/subtitles/{id}/verify")

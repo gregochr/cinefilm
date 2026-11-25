@@ -6,6 +6,7 @@ import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.transcode.MediaKeyframes;
 import gregochr.cinefilm.transcode.MediaKeyframesRepository;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,12 +40,32 @@ public class FilmRates {
      * @return the rate, or null when the edition or a part has no current rate, or the parts differ
      */
     public Double forEdition(Long editionId) {
-        List<Edition> found = editions.findWithFilesByIdIn(Set.of(editionId));
-        if (found.isEmpty()) {
-            return null;
+        return forEditions(Set.of(editionId)).get(editionId);
+    }
+
+    /**
+     * The rates of several editions at once, in two reads however many there are (the Admin list).
+     *
+     * @param editionIds the editions
+     * @return each edition's rate by its id; an edition that is unknown or has no current common rate is left out
+     */
+    public Map<Long, Double> forEditions(Collection<Long> editionIds) {
+        if (editionIds.isEmpty()) {
+            return Map.of();
         }
-        List<MediaFile> parts = found.get(0).originalParts();
-        Map<Long, MediaKeyframes> indexes = indexes(parts);
+        List<Edition> found = editions.findWithFilesByIdIn(Set.copyOf(editionIds));
+        Map<Long, MediaKeyframes> indexes = indexes(found.stream().flatMap(e -> e.originalParts().stream()).toList());
+        Map<Long, Double> rates = new HashMap<>();
+        for (Edition edition : found) {
+            Double rate = common(edition.originalParts(), indexes);
+            if (rate != null) {
+                rates.put(edition.getId(), rate);
+            }
+        }
+        return rates;
+    }
+
+    private static Double common(List<MediaFile> parts, Map<Long, MediaKeyframes> indexes) {
         Double common = null;
         for (MediaFile part : parts) {
             Double rate = current(part, indexes.get(part.getId()));
@@ -72,6 +93,9 @@ public class FilmRates {
 
     private Map<Long, MediaKeyframes> indexes(List<MediaFile> parts) {
         Map<Long, MediaKeyframes> indexes = new HashMap<>();
+        if (parts.isEmpty()) {
+            return indexes;
+        }
         keyframes.findAllById(parts.stream().map(MediaFile::getId).toList())
             .forEach(k -> indexes.put(k.getMediaFileId(), k));
         return indexes;

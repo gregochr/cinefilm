@@ -93,6 +93,23 @@ public class SubtitleRetimeService {
         }
     }
 
+    /**
+     * Applies the owner's per-file choice for a download, under the caller's library lock and transaction (the Admin's
+     * retime route holds both). {@code retime} is set to {@code OFF} (a retimed file is restored at once) or to
+     * {@code AUTO} (the file is retimed at once when k is not 1 and both rates are known), whatever the global
+     * {@code cinefilm.subtitles.retime} setting says: it is the owner's own choice. The row is the caller's managed
+     * entity, so its change is written with the caller's transaction, before the lock is given back and the job reads
+     * it again.
+     *
+     * @param row the download, already read under the lock
+     * @param on true to retime it, false to leave it as it was timed
+     * @return what was done
+     */
+    public Outcome applyChoice(SubtitleSidecar row, boolean on) {
+        row.setRetime(on ? RetimeChoice.AUTO : RetimeChoice.OFF);
+        return processLocked(row.getId(), RetimeMode.ON);
+    }
+
     private Outcome processLocked(Long id, RetimeMode mode) {
         // Read again under the lock: what the candidate list said may be an edit ago.
         SubtitleSidecar row = sidecars.findById(id).orElse(null);

@@ -634,4 +634,112 @@ class SubtitleRetimeServiceUnitTest {
         assertThat(fit.getSidecarIdentity()).isEqualTo("two versions old");
         assertThat(fit.getStaleSince()).isNull();
     }
+
+    @Test
+    void theOwnersOffOnARetimedRowRestoresItAtOnceWhateverTheGlobalSwitchSays() {
+        retimedAlready();
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+        row.setOwnerVerifiedAt(NOW.minusSeconds(5));
+        rowIs();
+        lock.tryAcquire(LibraryLock.SUBTITLE);
+
+        Outcome outcome = service.applyChoice(row, false);
+
+        assertThat(outcome).isEqualTo(Outcome.RESTORED);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.OFF);
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getOriginalCuesText()).isNull();
+        assertThat(row.getRetimedBy()).isNull();
+        assertThat(row.getOffsetMs()).isZero();
+        assertThat(row.getOwnerVerifiedAt()).isNull();
+        // The caller's lock is the one held: the call neither takes nor gives it back.
+        assertThat(lock.holder()).isEqualTo(LibraryLock.SUBTITLE);
+    }
+
+    @Test
+    void theOwnersOffOnARowThatWasNeverRetimedOnlySetsOff() {
+        rowIs();
+
+        Outcome outcome = service.applyChoice(row, false);
+
+        assertThat(outcome).isEqualTo(Outcome.UNCHANGED);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.OFF);
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+    }
+
+    @Test
+    void theOwnersOnRetimesAtOnceResetsTheOffsetAndClearsTheVerification() {
+        row.setRetime(RetimeChoice.OFF);
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+        row.setOwnerVerifiedAt(NOW.minusSeconds(5));
+        row.setVerifiedParts("10");
+        rowIs();
+        filmRateIs(25.0);
+
+        Outcome outcome = service.applyChoice(row, true);
+
+        assertThat(outcome).isEqualTo(Outcome.REWRITTEN);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(row.getCuesText()).isEqualTo(SCALED);
+        assertThat(row.getOriginalCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getRetimedBy()).isEqualTo(K);
+        assertThat(row.getOffsetMs()).isZero();
+        assertThat(row.getOffsetSource()).isNull();
+        assertThat(row.getOwnerVerifiedAt()).isNull();
+        assertThat(row.getVerifiedParts()).isNull();
+    }
+
+    @Test
+    void theOwnersOnTakesAFitsAsItIsRowBackToAuto() {
+        row.setRetime(RetimeChoice.OFF_FITS);
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.applyChoice(row, true)).isEqualTo(Outcome.REWRITTEN);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+    }
+
+    @Test
+    void theOwnersOnWhenTheRatesMatchSetsAutoAndWritesNothingElse() {
+        row.setRetime(RetimeChoice.OFF);
+        row.setTimedFps(25.0);
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+        rowIs();
+        filmRateIs(25.0);
+
+        Outcome outcome = service.applyChoice(row, true);
+
+        assertThat(outcome).isEqualTo(Outcome.UNCHANGED);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getOffsetMs()).isEqualTo(900);
+        assertThat(row.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.OWNER);
+        assertThat(row.getUpdatedAt()).isEqualTo(NOW.minusSeconds(60));
+    }
+
+    @Test
+    void theOwnersOnWithAnUnknownRateSetsAutoAndLeavesTheCuesAsTheyAre() {
+        row.setRetime(RetimeChoice.OFF);
+        rowIs();
+        filmRateIs(null);
+
+        assertThat(service.applyChoice(row, true)).isEqualTo(Outcome.UNCHANGED);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+    }
+
+    @Test
+    void aJobRunAfterTheOwnersOffFindsTheChoiceAndNeverRetimesTheRowAgain() {
+        // The job reads the row again under the lock: the owner's OFF is there to be seen, so it rewrites nothing,
+        // even with the rates saying k is not 1.
+        row.setRetime(RetimeChoice.OFF);
+        rowIs();
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.UNCHANGED);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.OFF);
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+    }
 }

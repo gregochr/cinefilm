@@ -51,7 +51,8 @@ class SubtitleAdminLockTest {
         when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of(row));
         SubtitleAdminService service = new SubtitleAdminService(sidecars, mock(MediaFileRepository.class),
             mock(EditionRepository.class), mock(SidecarSync.class), mock(ForcedResolver.class),
-            mock(ForcedDownloadBlockRepository.class), CLOCK, lock, manager, mock(ApplicationEventPublisher.class));
+            mock(ForcedDownloadBlockRepository.class), CLOCK, lock, manager, mock(ApplicationEventPublisher.class),
+            mock(FilmRates.class), mock(SubtitleRetimeService.class));
 
         service.offset(5L, new OffsetRequest(250));
 

@@ -20,6 +20,7 @@ import gregochr.cinefilm.subtitle.SubtitleDtos.CheckDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CueDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CuesDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
+import gregochr.cinefilm.subtitle.SubtitleDtos.RetimeRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 import java.time.Clock;
 import java.time.Instant;
@@ -66,12 +67,15 @@ public class SubtitleAdminService {
     private final LibraryLock lock;
     private final TransactionTemplate tx;
     private final ApplicationEventPublisher events;
+    private final FilmRates filmRates;
+    private final SubtitleRetimeService retimer;
 
     /** Creates the service. */
     public SubtitleAdminService(SubtitleSidecarRepository sidecars, MediaFileRepository files,
                                 EditionRepository editions, SidecarSync sync, ForcedResolver resolver,
                                 ForcedDownloadBlockRepository blocks, Clock clock, LibraryLock lock,
-                                PlatformTransactionManager transactions, ApplicationEventPublisher events) {
+                                PlatformTransactionManager transactions, ApplicationEventPublisher events,
+                                FilmRates filmRates, SubtitleRetimeService retimer) {
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;
@@ -82,6 +86,8 @@ public class SubtitleAdminService {
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
         this.events = events;
+        this.filmRates = filmRates;
+        this.retimer = retimer;
     }
 
     /**
@@ -208,6 +214,34 @@ public class SubtitleAdminService {
         // A nudge keeps the owner's "Looks right" (owner decision 2026-11-16): it is the same file with the same
         // lines, so what proves it and serves it is unchanged. Only the version moves, so the player reloads it.
         sidecar.setUpdatedAt(clock.instant());
+        return one(id);
+    }
+
+    /**
+     * The owner's choice for one download: retime it onto the film's timeline, or leave it as it was timed. Applied at
+     * once under the library lock, so the retime job (which reads the row again under the same lock) either waits or
+     * finds the choice made, and never overwrites it. It holds whatever {@code cinefilm.subtitles.retime} says.
+     *
+     * @param id the download's row id
+     * @param request {@code retime} true or false
+     * @return the file as listed afterwards
+     * @throws NotFoundException when there is no such subtitle
+     * @throws BadRequestException when the choice is missing or the file is not a download
+     * @throws ConflictException when the library lock is busy
+     */
+    public SidecarDto retime(Long id, RetimeRequest request) {
+        return locked(() -> retimeLocked(id, request));
+    }
+
+    private SidecarDto retimeLocked(Long id, RetimeRequest request) {
+        SubtitleSidecar sidecar = find(id);
+        if (request == null || request.retime() == null) {
+            throw new BadRequestException("Say whether to retime it");
+        }
+        if (!sidecar.isDownload()) {
+            throw new BadRequestException("Only a subtitle downloaded from OpenSubtitles can be retimed");
+        }
+        retimer.applyChoice(sidecar, request.retime());
         return one(id);
     }
 
@@ -369,6 +403,7 @@ public class SubtitleAdminService {
                 editionById.put(file.getEdition().getId(), file.getEdition());
             }
         }
+        Map<Long, Double> rates = downloadRates(all);
         Map<Long, Resolution> resolutions = resolver.resolve(editionById.values());
         Set<Long> served = new HashSet<>();
         Set<Long> conflicting = new HashSet<>();
@@ -405,9 +440,19 @@ public class SubtitleAdminService {
             MediaFile file = fileById.get(sidecar.getMediaFileId());
             Long id = sidecar.getId();
             dtos.add(dto(sidecar, file, conflicting.contains(id), served.contains(id), checks.get(id),
-                alignments.get(id), reasons.get(id), replaced.contains(id)));
+                alignments.get(id), reasons.get(id), replaced.contains(id), rateOf(sidecar, rates)));
         }
         return dtos;
+    }
+
+    /** The film rate of every edition a download was made for, read once for the whole list. */
+    private Map<Long, Double> downloadRates(List<SubtitleSidecar> all) {
+        return filmRates.forEditions(all.stream().filter(SubtitleSidecar::isDownload)
+            .map(Downloads::madeForEditionId).collect(Collectors.toSet()));
+    }
+
+    private static RateLine rateOf(SubtitleSidecar sidecar, Map<Long, Double> rates) {
+        return RateLine.of(sidecar, sidecar.isDownload() ? rates.get(Downloads.madeForEditionId(sidecar)) : null);
     }
 
     /**
@@ -429,6 +474,7 @@ public class SubtitleAdminService {
                 rowsByEdition.computeIfAbsent(file.getEdition().getId(), k -> new ArrayList<>()).add(sidecar);
             }
         }
+        Map<Long, Double> rates = downloadRates(all);
         Set<Long> served = new HashSet<>();
         Set<Long> conflicting = new HashSet<>();
         Set<Long> noTimeline = new HashSet<>();
@@ -455,7 +501,8 @@ public class SubtitleAdminService {
                 ownerEditions, ownerConflicts);
             String reason = fullReason(sidecar, conflicting.contains(id), served.contains(id),
                 noTimeline.contains(id), beaten);
-            dtos.add(dto(sidecar, file, conflicting.contains(id), served.contains(id), null, null, reason, false));
+            dtos.add(dto(sidecar, file, conflicting.contains(id), served.contains(id), null, null, reason, false,
+                rateOf(sidecar, rates)));
         }
         return dtos;
     }
@@ -498,14 +545,15 @@ public class SubtitleAdminService {
     }
 
     private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict, boolean isServed,
-                                   CheckDto check, AlignmentDto alignment, String reason, boolean replaced) {
+                                   CheckDto check, AlignmentDto alignment, String reason, boolean replaced,
+                                   RateLine rate) {
         String source = s.getOffsetSource() == null ? null : s.getOffsetSource().name();
         if (file == null) {
             return new SidecarDto(s.getId(), s.getPath(), s.getPresence().name(), "unmatched", null, null, null, null,
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
                 false, s.getUpdatedAt().toEpochMilli(), false, null, source, null, s.getOrigin().name(),
                 s.getRelease(), s.getOpenSubtitlesFileId(), "Not used: it is not attached to a film", false,
-                s.getKind().name());
+                s.getKind().name(), rate.timedFps(), rate.filmFps(), rate.retime(), rate.retimedBy(), rate.line());
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -517,7 +565,8 @@ public class SubtitleAdminService {
             partIds.size(), s.isWholeEdition() ? null : file.getPartNumber(), s.isWholeEdition(),
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
             endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check, source, alignment, s.getOrigin().name(),
-            s.getRelease(), s.getOpenSubtitlesFileId(), reason, replaced, s.getKind().name());
+            s.getRelease(), s.getOpenSubtitlesFileId(), reason, replaced, s.getKind().name(), rate.timedFps(),
+            rate.filmFps(), rate.retime(), rate.retimedBy(), rate.line());
     }
 
     private static List<Long> partIds(Edition edition) {
