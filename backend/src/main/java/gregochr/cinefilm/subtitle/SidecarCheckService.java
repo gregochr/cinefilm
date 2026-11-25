@@ -94,6 +94,16 @@ public class SidecarCheckService {
         List<Edition> fetched = editions.findWithFilesByFilmIdIn(filmIds);
         Map<Long, Resolution> resolved = resolver.resolve(fetched);
         List<ForcedCheckCandidate> ledger = candidates.findByEditionIdInAndKind(resolved.keySet(), SubtitleKind.FORCED);
+        Set<Long> staleFiles = new HashSet<>();
+        checks.findByEditionIdInAndStaleSinceIsNotNull(resolved.keySet())
+            .forEach(c -> staleFiles.add(c.getEditionId()));
+        List<Long> downloadIds = resolved.values().stream().flatMap(r -> r.downloads().stream())
+            .map(d -> d.sidecar().getId()).toList();
+        Set<Long> staleDownloads = new HashSet<>();
+        if (!downloadIds.isEmpty()) {
+            downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(downloadIds)
+                .forEach(c -> staleDownloads.add(c.getSidecarId()));
+        }
         List<DueCheck> due = new ArrayList<>();
         for (Edition edition : fetched) {
             Resolution resolution = resolved.get(edition.getId());
@@ -107,9 +117,11 @@ public class SidecarCheckService {
             String key = edition.getId() + "/" + ref.imdbId();
             ledger.stream().filter(l -> key.equals(l.getEditionId() + "/" + l.getImdbId()))
                 .forEach(l -> tried.add(l.getOsFileId()));
-            addFileCheck(due, edition, resolution, ref, filmCandidates, Set.copyOf(tried));
+            addFileCheck(due, edition, resolution, ref, filmCandidates, Set.copyOf(tried),
+                staleFiles.contains(edition.getId()));
             for (DownloadState download : resolution.downloads()) {
-                addDownloadCheck(due, edition, download, ref, filmCandidates, Set.copyOf(tried));
+                addDownloadCheck(due, edition, download, ref, filmCandidates, Set.copyOf(tried),
+                    staleDownloads.contains(download.sidecar().getId()));
             }
         }
         due.sort(Comparator.comparing(DueCheck::ownerVerified).thenComparing(DueCheck::filmId)
@@ -118,12 +130,13 @@ public class SidecarCheckService {
     }
 
     private void addFileCheck(List<DueCheck> due, Edition edition, Resolution resolution, OsBestRef ref,
-                              List<OpenSubtitlesResult> filmCandidates, Set<Long> tried) {
+                              List<OpenSubtitlesResult> filmCandidates, Set<Long> tried, boolean stale) {
         if (resolution.filePick().slots().isEmpty()) {
             return;
         }
-        // The resolver only reports a check that still holds (version, rules, IMDb id, candidate and cut tags).
-        if (resolution.fileCheck() != null) {
+        // The resolver only reports a check that still holds (version, rules, IMDb id, candidate and cut tags); a row
+        // made outdated by changed cues still holds, and still decides, but is due again whatever it says.
+        if (resolution.fileCheck() != null && !stale) {
             return;
         }
         ServedSubtitle served = ServedSubtitles.of(edition, resolution.filePick());
@@ -135,10 +148,13 @@ public class SidecarCheckService {
     }
 
     private void addDownloadCheck(List<DueCheck> due, Edition edition, DownloadState download, OsBestRef ref,
-                                  List<OpenSubtitlesResult> filmCandidates, Set<Long> tried) {
+                                  List<OpenSubtitlesResult> filmCandidates, Set<Long> tried, boolean stale) {
         SubtitleSidecar sidecar = download.sidecar();
+        // A stale alignment counts as "the fit exists" on purpose: treating it as waiting would hold back, for good,
+        // a download whose fit cannot land (NEEDS_READ or SKIP). The retime job fits first anyway.
         boolean waiting = download.alignment() == null && timingCheckEnabled;
-        if (download.assessment().trust() != Trust.UNCHECKED || waiting) {
+        // An outdated row is due whatever the file's trust or the row's verdict, and it still decides until replaced.
+        if (download.assessment().trust() != Trust.UNCHECKED && !stale || waiting) {
             return;
         }
         // A file cannot be the second opinion on itself.
@@ -253,6 +269,7 @@ public class SidecarCheckService {
         row.setCutTags(CutTag.key(due.editionName()));
         row.setBestFileId(bestFileId(film.getOsBest()));
         row.setCheckedAt(now);
+        row.setStaleSince(null);
         if (row instanceof ForcedDownloadCheck downloadRow) {
             downloadChecks.save(downloadRow);
         } else {

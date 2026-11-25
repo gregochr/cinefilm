@@ -5,6 +5,7 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException;
 import gregochr.cinefilm.subtitle.FullFitService.Job;
 import gregochr.cinefilm.subtitle.TimingFit.Result;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -41,6 +42,15 @@ final class FullFitProbe {
     FullFitProbe(ReferenceFetcher fetcher, FullFitService service) {
         this.fetcher = fetcher;
         this.service = service;
+    }
+
+    /**
+     * Forgets that some sidecars were measured, so the next pass measures them again (their cues changed).
+     *
+     * @param sidecarIds the sidecars to forget
+     */
+    void forget(Collection<Long> sidecarIds) {
+        done.removeAll(sidecarIds);
     }
 
     /**

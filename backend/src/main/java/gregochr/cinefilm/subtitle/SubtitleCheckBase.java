@@ -81,6 +81,12 @@ public abstract class SubtitleCheckBase {
     private int rulesVersion = RULES_VERSION;
 
     /**
+     * When the row was made outdated by a change to the cues it was made on; null while it is not. An outdated row
+     * still decides what plays until a new verdict replaces it, and the check is due again whatever the row says.
+     */
+    private Instant staleSince;
+
+    /**
      * True while the check still describes what is served: it was made by the current rules, for the same served
      * version, against a reference that was fetched for the film's current IMDb id, and the film's best OpenSubtitles
      * file is the one it was when the check was made (a search that ranks another file first makes the check stale).

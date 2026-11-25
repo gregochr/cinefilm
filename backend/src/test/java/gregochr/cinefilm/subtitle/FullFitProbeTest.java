@@ -175,6 +175,19 @@ class FullFitProbeTest {
     }
 
     @Test
+    void aForgottenSidecarIsMeasuredAgainAndTheOthersAreNot() {
+        Map<Long, OpenSubtitlesReference> second = Map.of(5012L, stored(5012, lines(300, 0)));
+        serving(job(7L, null, List.of(candidate(5012)), second), job(8L, null, List.of(candidate(5012)), second));
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(2);
+
+        probe.forget(List.of(7L));
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        assertThat(infoLines()).hasSize(3);
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+    }
+
+    @Test
     void aSecondFileNotStoredIsFetchedWithinTheComparisonCeilingAndNothingElseIsStored() {
         serving(job(7L, null, List.of(candidate(5012)), Map.of()));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.empty());
