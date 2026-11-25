@@ -71,66 +71,57 @@ it applies only across the PAL speed-up:
 The owner's own files (origin `FILE`) are taken as on the film's timeline: k = 1, and never retimed. Embedded
 tracks are already on it.
 
-**One helper, every reader.** A single `FilmTimeline` helper turns a stored file into film-timeline cues:
-- inputs: the cue text, the stated rate, the film rate and the retime setting;
-- it is used for both sidecars and references;
-- it also gives the scaled last cue end.
+**The stored cues are rewritten, once.** Retiming at serve time would need every reader of cue times, every cache
+key and every stored verdict to know about k, and a careful hand-over while the checks are redone. Instead, the
+cues themselves are put on the film's timeline once, and every reader sees them as they are now.
+- A retimed file's `cues_text` is rewritten with every time scaled by k. The original goes to a new column,
+  `original_cues_text`, and k to `retimed_by`. The same is done for a stored reference (`opensubtitles_reference`).
+- In the same write:
+  - the file's stored last end (`lastEndMs` / `lastCueEndMs`) is recomputed;
+  - an AUTO offset is reset to 0, because it was fitted on the drifting cues;
+  - `updatedAt` is set.
+- Every reader then sees film-timeline cues with no change of its own: what plays, the served version, the URL
+  version (`ForcedSubtitleService.version`), the embedded fit, the comparisons, the timing references, the full-file
+  probe and the Admin.
+- The cue hash in `TimingKeys.identity` and the served version change, so each rewritten file's fits and checks are
+  stale. That is exactly the set that needs them made again.
 
-Every path that reads cue times uses it. The build brief lists each one, and a test pins each one:
-- **what plays:** `ServedSubtitles.vtt`, `ServedSubtitles.of` and the served version string;
-- **the embedded fit:** `SidecarTimingService`'s fit of a sidecar against the embedded English track;
-- **the comparisons:** the reference comparisons (`SidecarCheckRefresher`, `DownloadPlan`, `DownloadedFit`). The
-  reference is retimed by its own stated rate;
-- **timing references:** `TimingReferenceFetch`'s fits, and `TimingReferenceRule.usable` / `lastCueEnd`, which compare
-  the scaled last cue end with the runtime;
-- **the full-file probe:** `FullFitProbe` / `FullFitService`;
-- **the Admin:** the cue list (`SubtitleAdminService.cues`) and its "ends after the film" warning;
-- **stored end times:** `SubtitleSidecar.lastEndMs` and `OpenSubtitlesReference.lastCueEndMs` are raw, and they are read
-  before the cue text, so they are scaled by k wherever they are read.
+**The job.** `SubtitleRetimeJob`, behind `cinefilm.subtitles.retime-enabled` (default off until the last phase):
+- **Which files.** It retimes every downloaded file and every stored reference whose stated rate and film rate give
+  k ≠ 1 and which is not yet retimed. It skips:
+  - downloads with `retime = OFF`;
+  - downloads with an OWNER offset or owner verification, judged when the job runs (see below).
+- **The checks.** For each edition it touched, it then deletes the check and alignment rows of the rewritten files
+  and of the edition's served pick, and runs that edition's checks and timing fit at once, stored references first.
+  The time an edition spends unchecked is the length of that one run, not a nightly pass. During that run a download
+  that failed could play, unchecked. That is accepted and measured (Checks after release).
+- **When it runs.** At startup, nightly, and after an index pass. So a film whose rate arrives later, or a new
+  download, is retimed then. A new download or reference is also retimed as it is stored, when the switch is on.
+- **The film's rate.**
+  - It comes from `media_keyframes.fps`, used only when the row's `source_size` matches the media file's
+    `size_bytes`.
+  - A whole-edition file on a split edition takes a rate only when every part has a current row with the same rate.
+  - Anything else gives k = 1, and the file is not retimed.
 
-**Fits and checks are made again, and nothing flips while they are.**
-- **k marks what changed.** k is appended to `TimingKeys.identity` and to the served version **only when k ≠ 1**.
-  Every k = 1 identity and version stays byte-for-byte as today, and a test pins that.
-- **The rules versions follow the switch.** `SubtitleCheckBase.RULES_VERSION` and `DownloadedFit.RULES_VERSION` go up
-  only when the switch is on (the effective version is the base + 1). So there is one re-check pass, at switch-on, and
-  none at a merge.
-- **Two tests of a stored check or fit row:**
-  - **current** is today's exact match: served version or identity, and rules version.
-  - **deciding** also accepts a row that differs only by k or by the rules version.
-  - Trust (`ForcedResolver`, `ForcedChoice`) uses deciding. What is due (`SidecarCheckService.due`, `addFileCheck`,
-    `addDownloadCheck`) and the timing refresher's state use current.
-  - So a download that failed stays failed across switch-on and is due. A file proven only by `ALIGNED` stays proven
-    until it is fitted again. Neither lets the wrong file play while the pass runs. Tests pin both.
-- **An AUTO offset whose alignment row has another k is ignored when read.** The file plays retimed without the
-  drift-fitted offset, until the refit writes a new one. A write alone would leave a gap between the deploy and the
-  refresher's pass.
+**Undo.** A file is restored by writing `original_cues_text` back and clearing `retimed_by`. The cue hash changes, so
+its checks are made again the same way. A file set to `retime = OFF` is restored at once. Turning the switch off
+restores nothing by itself: the rewritten files stay right. A rollback, if ever needed, restores every retimed file
+by the same rule.
 
 **Unknown against retimed: no verdict.**
-- **The case.** A downloaded file or a reference with no stated rate (origin `OPENSUBTITLES`, `timed_fps` null) may
-  or may not drift. Compared with a side whose k ≠ 1, it can't be judged.
-- **What happens.** That reference is skipped and the case is counted. It never gives `CHECK`.
-- **Not this case.** The owner's files count as on the film's timeline, so they are compared as usual. An owner file
-  on a 23.976 film is compared with a 23.976 reference, and also with a reference stated as 25, which is retimed. Both
-  cases are pinned by tests.
-- **A skip ends the walk.** It fetches no further candidate. The edition keeps its previous row, which is deciding,
-  and a stored skip marker for the current identity stops it being due on every pass. The brief decides the marker's
-  form.
-- **Otherwise the re-check pass uses stored references first.** It may still fetch new candidates within the checks'
-  share of the daily downloads and `MAX_CANDIDATES`, as today.
-
-**The film's rate.**
-- It is read from `media_keyframes.fps`, batch-loaded for all the editions a request touches. The fixed query count
-  of `ForcedResolver` and the Admin summary holds.
-- A row is used only when its `source_size` matches the media file's stored `size_bytes`. A missing or stale row
-  means k = 1. When the rate arrives, the version and identity change, so the file is checked again.
+- **The case.** A downloaded file or reference with no stated rate (`OPENSUBTITLES`, `timed_fps` null) may or may not
+  drift. Compared with a retimed side, it can't be judged.
+- **What happens.** That reference is skipped, the case is counted, and it never gives `CHECK`. The walk moves on to
+  the next candidate with a stated rate, stored ones first. If none is left, the edition has no verdict this run
+  (unchecked) and is counted.
+- **The scope.** This rule applies only when the switch is on. The owner's files count as on the film's timeline,
+  so they are compared as usual. Tests pin both.
 
 **What the owner set by hand is left alone.**
-- A download with an OWNER offset or owner verification gets **retime off**, and plays as it does today. The Admin
-  says the file may drift and that retime is off because the owner set its timing. The owner can turn it on and set
-  the offset again.
-- This is set twice: by the backfill, and, while the switch is off, by the offset and verify endpoints whenever they
-  touch a download. A nudge made between phase 1 and switch-on is kept too. After switch-on, the owner's offset is
-  in film time and retime stays as it is.
+- A download with an OWNER offset or owner verification when the job first reaches it is set to **retime off**, and
+  plays as it does today.
+- The Admin says the file may drift and that retime is off because the owner set its timing. The owner can turn it
+  on, which retimes it and resets the offset.
 - A file the owner chose in the picker with neither is retimed, if its rate is known (phase 1).
 
 **The switch per file.** Each downloaded file has **Retime: automatic or off**. Bridge of Spies shows that a stated
@@ -138,12 +129,9 @@ rate can be wrong. The Admin also says what was done, for example "Timed for 23.
 it is sped up 4%", or "rate unknown".
 
 **Ranking is not changed.** Once downloads are retimed, a file stated as about 24 plays right on a 25 fps film. On
-the design films it held 5 of 5 times, against 0 of 1 for a file stated as 25. Re-ranking would also re-pick each
+the design films that held 5 of 5 times, against 0 of 1 for a file stated as 25. Re-ranking would also re-pick each
 film's best file and make every check stale a second time. `OpenSubtitlesRanking` and `TimingReferenceRule`'s plausible
 rates stay as they are.
-
-**A release switch.** The retime is behind `cinefilm.subtitles.retime-enabled`, default off, until the last phase. No
-merge in between changes what plays.
 
 Not in this plan:
 - the 10 forced downloads on 25 fps films with no stated rate. They stay as they are, and the Admin says the rate is
@@ -152,56 +140,56 @@ Not in this plan:
 
 ## Phases (each PR at most 1,500 changed lines, tests included; merged in this order)
 
-1. **The rate data.**
-   - Migration `V39`: `subtitle_sidecar.timed_fps`, `opensubtitles_reference.timed_fps` (nullable `DOUBLE
-     PRECISION`), and `subtitle_sidecar.retime` (`AUTO` or `OFF`, default `AUTO`).
+1. **The rate data.** Nothing that plays changes.
+   - Migration `V39` adds, on both `subtitle_sidecar` and `opensubtitles_reference`:
+     - `timed_fps` (nullable `DOUBLE PRECISION`);
+     - `original_cues_text` (nullable `TEXT`);
+     - `retimed_by` (nullable `DOUBLE PRECISION`).
+
+     It also adds `subtitle_sidecar.retime` (`AUTO` or `OFF`, default `AUTO`).
    - New downloads, picker downloads (`Offered.result().fps()`) and newly fetched references store their stated
      rate.
-   - While the switch is off, setting an OWNER offset on a download, or verifying one, also sets `retime = OFF`.
-   - The Java migration `V40__BackfillSubtitleFrameRates` (as `V27__BackfillPlaybackHealthFigures` does) does two
-     things:
-     - it fills stored rows by file id from `film.os_candidates`, `os_full_candidates` and `os_best`;
-     - it sets `retime = OFF` on downloads with an OWNER offset or owner verification.
-
-     A row it can't match stays null and is never retimed. Picker downloads are the likeliest misses, because the
-     picker's results were kept in memory only.
-   - The pure `FrameRateRetime` gives k, with unit tests at each band edge.
-   - `FilmTimeline` is added, unused.
-   - Tests: unit tests for both classes; the migration on H2; a `*IntegrationTest` for V39 and V40 on PostgreSQL
-     (CI).
-   - After release, before phase 2a merges, a read-only query on the server counts:
+   - The Java migration `V40__BackfillSubtitleFrameRates` (as `V27__BackfillPlaybackHealthFigures` does) fills
+     `timed_fps` on stored rows by file id, from `film.os_candidates`, `os_full_candidates` and `os_best`. A row it
+     can't match stays null and is never retimed. Picker downloads are the likeliest misses, because the picker's
+     results were kept in memory only.
+   - The pure `FrameRateRetime` gives k, with unit tests at each band edge. The pure cue scaler is tested on its
+     rounding, its order and its end times.
+   - Tests: the migration on H2, and a `*IntegrationTest` for V39 and V40 on PostgreSQL (CI).
+   - After release, a read-only query on the server counts:
      - rows backfilled, out of the expected 92;
-     - rows set to off;
-     - comparisons of unknown against retimed that would be skipped.
+     - downloads the job would set to off;
+     - comparisons of unknown against retimed.
 
-     **If fewer than 80 of the 92 are backfilled, the owner is asked before 2a.** The choice is a one-off file-info
-     lookup on OpenSubtitles, or leaving them listed.
-2. **2a: every reader on the film's timeline, behind the switch.**
-   - Every path listed above uses `FilmTimeline`.
-   - The film rate is batch-loaded.
-   - With the switch off, every result is unchanged, and a test pins that for each path.
-3. **2b: identity, rules and offsets, behind the switch.**
-   - k is appended to `TimingKeys.identity` and the version when k ≠ 1.
-   - The rules versions follow the switch.
-   - Current and deciding are split.
-   - AUTO offsets of another k are ignored when read, and refitted.
-   - Unknown against retimed gives no verdict, with a skip marker.
-   - With the switch off, nothing changes for any file, and a test pins that.
-4. **3: the Admin, then on.**
+     **If fewer than 80 of the 92 are backfilled, the owner is asked before phase 2.** The choice is a one-off
+     file-info lookup on OpenSubtitles, or leaving them listed.
+2. **The job, behind the switch.**
+   - `SubtitleRetimeJob`: the rewrite, the AUTO reset, the immediate re-check of each touched edition, and the
+     owner-timing rule.
+   - Retime on arrival when the switch is on.
+   - Unknown against retimed: no verdict.
+   - Restore on `retime = OFF`.
+   - Tests:
+     - with the switch off, nothing is written and every comparison is as today;
+     - a retimed file's served cues, fits and checks follow the rewrite;
+     - a failed download is checked again within the job's run.
+   - If the estimate passes 1,200 lines, it is split: the job and restore first, then the comparison rule and retime
+     on arrival.
+3. **The Admin, then on.**
    - `PUT /api/admin/subtitles/{id}/retime` takes `AUTO` or `OFF`.
    - The rate line and the switch go in the Admin's subtitle view.
    - The switch's default becomes on.
 
-Phase 3 may be built beside 2b (different files), but merged after it. 2a is the largest; if its estimate passes
-1,200 lines, it is split by reader (what plays and the Admin first, then the comparisons and fits), and both halves
-stay behind the switch.
+Phase 3 may be built beside 2 (different files), but merged after it.
 
 ## Checks after release
 
 - The owner plays Jack Ryan: Shadow Recruit at about 1:28:57. The Russian line's subtitle should be on screen.
-- When the re-check pass has finished (stored references first; it may fetch within the checks' share), a read-only
-  query counts:
-  - the downloads that now play retimed;
+- When the job's first run has finished, a read-only query counts the following. The job's run checks stored
+  references first, and may fetch within the checks' share.
+  - the downloads that now play retimed, and those set to off;
+  - how long the first run took, which is the longest any edition was unchecked;
+  - the editions left with no verdict;
   - the proven count of each kind, against the same count taken before release. Expect no drop beyond the skipped
     unknown-against-retimed cases, which phase 1 counted.
 
@@ -214,4 +202,6 @@ stay behind the switch.
 4. **No re-ranking, and no replacing downloads for their rate.** A retime fixes them without spending downloads or
    re-picking.
 5. **Hand-set timing is kept.** Owner offsets and verified files are not retimed unless the owner turns retime on.
-6. **No Plex input or answer.** The film's own rate and OpenSubtitles' stated rate only.
+6. **The cues are rewritten, not retimed when served.** Every reader then sees one timeline, and the existing cue
+   hashes mark exactly what must be checked again. The original is kept for undo.
+7. **No Plex input or answer.** The film's own rate and OpenSubtitles' stated rate only.
