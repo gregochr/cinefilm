@@ -1,7 +1,7 @@
 # Subtitles that follow the film's frame rate — plan
 
-Status: plan, 2026-11-25, written at the owner's request ("Fix playback first"). Found during 3e
-(`soundtrack-confirm-plan.md`), which waits until this is released.
+Status: plan, 2026-11-25, written at the owner's request ("Fix playback first"), revised the same day after an
+adversarial review. Found during 3e (`soundtrack-confirm-plan.md`), which waits until this is released.
 
 ## Why
 
@@ -59,72 +59,118 @@ Russian it translates is spoken at about 1:28:57.
 
 ## What changes
 
-A downloaded subtitle is **retimed to the film**: every cue time t becomes k·t, then the part's start and the
-owner's offset are added as today. k is the subtitle's stated rate over the film's rate, but only across the PAL
-speed-up:
-
-- the film is 25 fps (24.9–25.1) and the subtitle is stated as about 24: k = 23.976/25 when stated as 23.976 or 23.98,
-  and 24/25 when stated as 24.0;
-- the film is about 24 fps (23.9–24.1) and the subtitle is stated as 25: k = 25/23.976 or 25/24 by the film's rate;
-- anything else gives k = 1: an unknown rate on either side, a 30 fps copy, or a matching rate.
+**The retime.** A downloaded subtitle is put on the film's timeline: every cue time t becomes k·t, scaled from 0,
+and then the part's start and the offset are added as today. k is the subtitle's stated rate over the film's rate, and
+it applies only across the PAL speed-up:
+- **25 fps film** (24.85–25.15, which takes in the 24.887 and 24.98–25.001 files) and a subtitle stated as about 24:
+  k = 23.976/25 when it is stated as 23.976 or 23.98, and 24/25 when it is stated as 24.0;
+- **about 24 fps film** (23.9–24.1) and a subtitle stated as 25: k = 25/23.976, or 25/24 for a 24.0 film;
+- **anything else**, k = 1: an unknown rate on either side, a 30 fps copy (telecined, so it runs at film speed), a
+  matching rate, or retime switched off.
 
 The owner's own files have no stated rate, so they are never retimed. Embedded tracks are already on the film's
 timeline.
 
-Five more changes:
+**One helper, every reader.** A single `FilmTimeline` helper turns a stored file into film-timeline cues:
+- inputs: the cue text, the stated rate, the film rate and the retime setting;
+- it is used for both sidecars and references;
+- it also gives the scaled last cue end.
 
-- **Every check sees the film's timeline.** The served cues (`ServedSubtitles.of`) carry the retime. A reference file
-  that a download is compared with is retimed by its own stated rate before the comparison. Today a download and its
-  reference both drift the same way and the proof passes; once only the download is retimed, the proof would fail
-  and the download would stop playing. The comparison rules version goes up, so every check is made again.
-- **Ranking follows the film.** On a 25 fps film, a file stated as 25 ranks first, a file stated as about 24 next
-  (it can be retimed), and a file with no stated rate last; the reverse holds on a 23.976 film. The same order is used
-  for forced and full downloads, the checks' reference candidates, the owner's picker and `TimingReferenceRule`'s
-  plausible rates. A file already downloaded is not replaced because of this. It is retimed instead.
-- **The owner can switch a file's retime off.** Bridge of Spies shows that a stated rate can be wrong. Each
-  downloaded file gets **Retime: automatic or off**, set in the Admin. Off serves the file as it is, as today.
-- **The Admin says what happened.** For example: "Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%".
-  The picker shows each result's rate against the film's.
-- **The served version changes when the retime does**, so the player and the checks never keep a stale file.
+Every path that reads cue times uses it. The build brief lists each one, and a test pins each one:
+- **what plays:** `ServedSubtitles.vtt`, `ServedSubtitles.of` and the served version string;
+- **the embedded fit:** `SidecarTimingService`'s fit of a sidecar against the embedded English track;
+- **the comparisons:** the reference comparisons (`SidecarCheckRefresher`, `DownloadPlan`, `DownloadedFit`). The
+  reference is retimed by its own stated rate;
+- **timing references:** `TimingReferenceFetch`'s fits, and `TimingReferenceRule.usable` / `lastCueEnd`, which compare
+  the scaled last cue end with the runtime;
+- **the Admin:** the cue list (`SubtitleAdminService.cues`) and its "ends after the film" warning.
+
+**Fits and checks are made again.**
+- k joins `TimingKeys.identity`, so a fit or check made on raw cues is stale. That covers a retime that comes into
+  force, one switched off, and one changed when a film's rate arrives.
+- Both `SubtitleCheckBase.RULES_VERSION` and `DownloadedFit.RULES_VERSION` go up.
+- An AUTO offset on a file whose k changes is reset to 0 and fitted again. An offset fitted on drifting cues would
+  otherwise be applied on top of the retime.
+- Until its new check is saved, a stale-rules row keeps deciding as before. Otherwise an owner's file that failed its
+  check, replaced by a download, would play again while the checks run.
+
+**Unknown against known: no verdict.** A comparison whose two sides straddle the 24/25 gap, with one side's rate
+unknown, cannot be judged. One side would be retimed and the other not. That reference is skipped, the case is
+counted, and it never gives `CHECK`. A download is never dropped because of a rate the plan can't know.
+
+**The film's rate.**
+- It is read from `media_keyframes.fps`, batch-loaded for all the editions a request touches. The fixed query count
+  of `ForcedResolver` and the Admin summary holds.
+- A row is used only when its `source_size` matches the media file's stored `size_bytes`. A missing or stale row
+  means k = 1. When the rate arrives, the version and identity change, so the file is checked again.
+
+**What the owner set by hand is left alone.**
+- A download with an OWNER offset or owner verification gets **retime off** at the backfill, and plays as it does
+  today. The Admin says the file may drift and that retime is off because the owner set its timing. The owner can
+  turn it on and set the offset again.
+- A file the owner chose in the picker with neither is retimed.
+
+**The switch per file.** Each downloaded file has **Retime: automatic or off**. Bridge of Spies shows that a stated
+rate can be wrong. The Admin also says what was done, for example "Timed for 23.976 fps; this film is 25 fps, so
+it is sped up 4%", or "rate unknown".
+
+**Ranking is not changed.** Once downloads are retimed, a file stated as about 24 plays right on a 25 fps film. On
+the design films it held 5 of 5 times, against 0 of 1 for a file stated as 25. Re-ranking would also re-pick each
+film's best file and make every check stale a second time. `OpenSubtitlesRanking` and `TimingReferenceRule`'s plausible
+rates stay as they are.
+
+**A release switch.** The retime is behind `cinefilm.subtitles.retime-enabled`, default off, until the last phase. No
+merge in between changes what plays.
 
 Not in this plan:
 - the 10 forced downloads on 25 fps films with no stated rate. They stay as they are, and the Admin says the rate is
   unknown;
-- finding a file's rate from the soundtrack (3e) or from an embedded track. Only 3 forced files have one.
+- finding a rate from the soundtrack (3e) or from an embedded track (3 forced files have one).
 
-## Phases (each PR at most 1,500 changed lines, tests included)
+## Phases (each PR at most 1,500 changed lines, tests included; merged in this order)
 
-1. **The rate data (backend, no change in what plays).**
-   - Migration `V39`: `subtitle_sidecar.timed_fps` and `opensubtitles_reference.timed_fps` (nullable `DOUBLE
+1. **The rate data.**
+   - Migration `V39`: `subtitle_sidecar.timed_fps`, `opensubtitles_reference.timed_fps` (nullable `DOUBLE
      PRECISION`), and `subtitle_sidecar.retime` (`AUTO` or `OFF`, default `AUTO`).
-   - A download, and a reference when it is fetched, stores the rate from its OpenSubtitles result.
-   - A one-time backfill fills rows already stored from the film's candidate JSON (`os_candidates`,
-     `os_full_candidates`, by file id). It is done in Java, not SQL, because H2 has no `jsonb`. A file it can't match
-     stays null, so it is never retimed.
-   - A pure `FrameRateRetime` gives k from a stated rate and a film rate, by the rules above, with exhaustive unit
-     tests at each band edge.
-2. **Retime what plays (backend).**
-   - `ServedSubtitles.vtt`, `ServedSubtitles.of` and the version string apply k per slot. The rate is read from the
-     slot's media file (`media_keyframes`), and the scale comes before the part start and the offset.
-   - References are retimed before every comparison.
-   - The rules version goes up.
-   - The owner's offset stays in film time.
-3. **Rank by the film's rate (backend).** `OpenSubtitlesRanking` and `TimingReferenceRule` take the edition's film
-   rate instead of `TARGET_FPS`. The tests that pin 23.976 are rewritten for both film rates.
-4. **The Admin (frontend and one endpoint).**
+   - New downloads and newly fetched references store their stated rate.
+   - The Java migration `V40__BackfillSubtitleFrameRates` (as `V27__BackfillPlaybackHealthFigures` does) does two
+     things. It fills stored rows from the film's candidate JSON by file id, and it sets `retime = OFF` on downloads
+     with an OWNER offset or owner verification. A row it can't match stays null and is never retimed.
+   - The pure `FrameRateRetime` gives k, with unit tests at each band edge.
+   - `FilmTimeline` is added, unused.
+   - Tests: unit tests for both classes; the migration on H2; a `*IntegrationTest` for V39 and V40 on PostgreSQL
+     (CI).
+   - Before phase 2a merges, a read-only query on the server counts:
+     - rows backfilled out of the expected 92;
+     - rows set to off;
+     - unknown-against-known comparisons that would be skipped.
+2. **2a: every reader on the film's timeline, behind the switch.**
+   - Every path listed above uses `FilmTimeline`.
+   - The film rate is batch-loaded.
+   - With the switch off, every result is unchanged, and a test pins that for each path.
+3. **2b: identity, rules and offsets, behind the switch.**
+   - k joins `TimingKeys.identity` and the version.
+   - Both rules versions go up.
+   - AUTO offsets reset where k changes.
+   - Stale-rules rows keep deciding until replaced.
+   - Unknown against known gives no verdict.
+4. **3: the Admin, then on.**
    - `PUT /api/admin/subtitles/{id}/retime` takes `AUTO` or `OFF`.
-   - The file's rate line and the switch go in the Admin's subtitle view.
-   - The picker shows each result's rate against the film's.
+   - The rate line and the switch go in the Admin's subtitle view.
+   - The switch's default becomes on.
 
-Phases 1–3 are backend and 4 is frontend. 2 depends on 1. 3 and 4 depend only on 1 and touch different files from 2,
-so they may be built beside it (CLAUDE.md step 7).
+Phase 3 may be built beside 2b (different files), but merged after it. 2a is the largest; if its estimate passes
+1,200 lines, it is split by reader (what plays and the Admin first, then the comparisons and fits), and both halves
+stay behind the switch.
 
 ## Checks after release
 
 - The owner plays Jack Ryan: Shadow Recruit at about 1:28:57. The Russian line's subtitle should be on screen.
-- A read-only query counts the forced and full downloads on 25 fps films whose served version carries a retime, and
-  how many of them are proven (expect about 92, and no drop in the proven count).
-- The proven count of every kind, before and after, from the Admin's subtitle summary.
+- When the re-check pass has finished (it uses stored references, so no downloads are spent), a read-only query
+  counts:
+  - the downloads that now play retimed;
+  - the proven count of each kind, against the same count taken before release. Expect no drop beyond the skipped
+    unknown-against-known cases, which phase 1 counted.
 
 ## Decisions taken in this plan
 
@@ -132,5 +178,7 @@ so they may be built beside it (CLAUDE.md step 7).
 2. **Only across the PAL speed-up.** 30 fps copies run at film speed, and odd rates are left alone.
 3. **23.976 and 24.0 are kept apart** (k = 23.976/25 against 24/25). They differ by 0.1%, about 7 s over two hours.
    The stated value is used as given.
-4. **No replacing of downloads for their rate.** A retime fixes them without spending downloads.
-5. **No Plex input or answer.** The film's own rate and OpenSubtitles' stated rate only.
+4. **No re-ranking, and no replacing downloads for their rate.** A retime fixes them without spending downloads or
+   re-picking.
+5. **Hand-set timing is kept.** Owner offsets and verified files are not retimed unless the owner turns retime on.
+6. **No Plex input or answer.** The film's own rate and OpenSubtitles' stated rate only.
