@@ -36,12 +36,14 @@ final class FullFitProbe {
 
     private final ReferenceFetcher fetcher;
     private final FullFitService service;
+    private final FilmRates filmRates;
     private final Set<Long> done = ConcurrentHashMap.newKeySet();
 
     /** Creates the probe over the check job's fetcher, so every fetch goes through its lock and ceilings. */
-    FullFitProbe(ReferenceFetcher fetcher, FullFitService service) {
+    FullFitProbe(ReferenceFetcher fetcher, FullFitService service, FilmRates filmRates) {
         this.fetcher = fetcher;
         this.service = service;
+        this.filmRates = filmRates;
     }
 
     /**
@@ -88,13 +90,25 @@ final class FullFitProbe {
                 + "to compare with", job.editionId(), job.filmId());
             return false;
         }
-        List<SubtitleCue> reference = SrtParser.cues(second.getCuesText());
-        Result forward = TimingFit.fit(starts(job.download()), starts(reference));
-        Result backward = TimingFit.fit(starts(reference), starts(job.download()));
+        RateComparison.Side referenceSide = RateComparison.Side.of(second);
+        RateComparison.Judged<Result> judged = RateComparison.judge(job.rateSide(), referenceSide,
+            () -> filmRates.forEdition(job.editionId()), job.download(), RateComparison.originalOf(job.rateSide()),
+            SrtParser.cues(second.getCuesText()), RateComparison.originalOf(referenceSide),
+            (a, b) -> TimingFit.fit(starts(a), starts(b)), r -> TimingFit.Verdict.CHECK.equals(r.verdict()),
+            r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
+        if (!judged.hasVerdict()) {
+            LOG.info("Full subtitle fit of edition {} (film {}): not measured, no verdict: {} (sidecar {}, "
+                + "reference {})", job.editionId(), job.filmId(), judged.reason(), job.sidecarId(), second.getId());
+            return false;
+        }
+        List<SubtitleCue> download = judged.first();
+        List<SubtitleCue> reference = judged.second();
+        Result forward = judged.result();
+        Result backward = TimingFit.fit(starts(reference), starts(download));
         LOG.info("Full subtitle fit of edition {} (film {}): download file {} ({} cues, last cue {}) against "
                 + "reference file {} ({} cues, last cue {}); download to reference {}; reference to download {}; "
                 + "runtime {}; credits start {}",
-            job.editionId(), job.filmId(), job.downloadFileId(), job.download().size(), lastCue(job.download()),
+            job.editionId(), job.filmId(), job.downloadFileId(), download.size(), lastCue(download),
             second.getOsFileId(), reference.size(), lastCue(reference), describe(forward), describe(backward),
             clock(job.runtimeMs()), job.creditsStartMs() == null ? "unknown" : clock(job.creditsStartMs()));
         return true;

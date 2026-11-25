@@ -58,6 +58,9 @@ class ForcedDownloadServiceUnitTest {
     private static final Assessment FAILED = new Assessment(Trust.FAILED, Proof.NONE);
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private FilmRepository films;
 
     @Mock
@@ -95,7 +98,7 @@ class ForcedDownloadServiceUnitTest {
     @BeforeEach
     void setUp() {
         service = new ForcedDownloadService(films, editions, sidecars, resolver, need, fullNeed, references, blocks,
-            ledger, lock, transactions);
+            ledger, lock, transactions, filmRates);
         film = film(1L, "Taken", 2008, NOW);
         film.setImdbId(IMDB);
         film.setOsCandidates(OpenSubtitlesResult.listToJson(List.of(candidate(5011), candidate(5012))));
@@ -349,6 +352,7 @@ class ForcedDownloadServiceUnitTest {
 
         assertThat(due.promotion()).isNotNull();
         assertThat(due.promotion().getOsFileId()).isEqualTo(5011L);
+        verifyNoInteractions(filmRates);
         assertThat(due.candidates()).extracting(OpenSubtitlesResult::fileId).containsExactly(5012L);
     }
 

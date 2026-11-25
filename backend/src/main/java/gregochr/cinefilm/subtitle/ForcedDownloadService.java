@@ -99,13 +99,14 @@ public class ForcedDownloadService {
     private final ForcedCheckCandidateRepository ledger;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
+    private final FilmRates filmRates;
 
     /** Creates the service. */
     public ForcedDownloadService(FilmRepository films, EditionRepository editions, SubtitleSidecarRepository sidecars,
                                  ForcedResolver resolver, ForcedNeedService need, FullNeedService fullNeed,
                                  OpenSubtitlesReferenceRepository references, ForcedDownloadBlockRepository blocks,
                                  ForcedCheckCandidateRepository ledger, LibraryLock lock,
-                                 PlatformTransactionManager transactions) {
+                                 PlatformTransactionManager transactions, FilmRates filmRates) {
         this.films = films;
         this.editions = editions;
         this.sidecars = sidecars;
@@ -117,6 +118,7 @@ public class ForcedDownloadService {
         this.ledger = ledger;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
+        this.filmRates = filmRates;
     }
 
     /**
@@ -187,7 +189,8 @@ public class ForcedDownloadService {
                     resolution.filePick().slots().stream().mapToInt(x -> x.sidecar().getCueCount()).sum());
             }
             DueDownload item = dueFor(edition, resolution, ref, allBlocks, allLedger, allDownloads,
-                storedByFilm.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of()));
+                storedByFilm.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of()),
+                filmRates);
             if (item != null) {
                 due.add(item);
             }
@@ -295,7 +298,8 @@ public class ForcedDownloadService {
      */
     static DueDownload dueFor(Edition edition, Resolution resolution, OsBestRef ref,
                                List<ForcedDownloadBlock> allBlocks, List<ForcedCheckCandidate> allLedger,
-                               List<SubtitleSidecar> allDownloads, Map<Long, OpenSubtitlesReference> stored) {
+                               List<SubtitleSidecar> allDownloads, Map<Long, OpenSubtitlesReference> stored,
+                               FilmRates filmRates) {
         Optional<Kind> kind = kind(resolution);
         if (kind.isEmpty()) {
             return null;
@@ -318,7 +322,7 @@ public class ForcedDownloadService {
             // A file that has failed has a version, so its timeline is known and it can be served.
             ServedSubtitle served = ServedSubtitles.of(edition, resolution.filePick());
             promotion = DownloadPlan.promotion(ranked, resolution.fileReferenceFileId(), stored, compared, skipped,
-                served.cues()).orElse(null);
+                served.cues(), () -> filmRates.forEdition(edition.getId())).orElse(null);
         }
         List<OpenSubtitlesResult> toFetch = DownloadPlan.toFetch(ranked, skipped, compared, stored);
         if (promotion == null && toFetch.isEmpty()) {

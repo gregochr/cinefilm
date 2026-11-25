@@ -44,6 +44,9 @@ class ForcedDownloadServiceChosenUnitTest {
     private static final String CUES = "1\n00:00:10,000 --> 00:00:12,000\nHello\n\n";
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private FilmRepository films;
 
     @Mock
@@ -81,7 +84,7 @@ class ForcedDownloadServiceChosenUnitTest {
     @BeforeEach
     void setUp() {
         service = new ForcedDownloadService(films, editions, sidecars, resolver, need, fullNeed, references, blocks,
-            ledger, lock, transactions);
+            ledger, lock, transactions, filmRates);
         film = film(1L, "Taken", 2008, NOW);
         film.setImdbId(IMDB);
         edition = edition(film, 40L, "Original", 90 * MIN, null);

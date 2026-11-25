@@ -58,6 +58,9 @@ class TimingReferenceFetchTest {
     private static final long RUNTIME = 3_000_000;
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private OpenSubtitlesApi api;
 
     @Mock
@@ -101,7 +104,7 @@ class TimingReferenceFetchTest {
     @BeforeEach
     void setUp() {
         fetch = new TimingReferenceFetch(new ReferenceFetcher(api, budget, references, CLOCK,
-            new FakeDailyLimit(LIMIT)), service, clock);
+            new FakeDailyLimit(LIMIT)), service, clock, filmRates);
         logged.start();
         fetchLog.addAppender(logged);
     }
@@ -238,7 +241,44 @@ class TimingReferenceFetchTest {
             + "hearing-impaired true, "
             + "300 lines); ALIGNED at -2000 ms, 100% of 12 lines matched, median residual 0 ms; reference's last cue "
             + "ends 0:50:01, runtime 0:50:00, credits start unknown");
-        verifyNoInteractions(api, budget);
+        verifyNoInteractions(api, budget, filmRates);
+    }
+
+    /** A forced download retimed from 23.976: its stored cues are the original twelve, 90 s later. */
+    private static File retimedDownload() {
+        File plain = forced(8, Origin.DOWNLOAD);
+        List<SubtitleCue> onFilm = SrtParser.cues(plain.cuesText()).stream()
+            .map(c -> new SubtitleCue(c.startMs() + 90_000, c.endMs() + 90_000, c.text())).toList();
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, plain.cuesText());
+        return new File(8L, Origin.DOWNLOAD, 12, SrtParser.format(onFilm), 5099L, side);
+    }
+
+    @Test
+    void aRetimedForcedFileAndAReferenceOfUnknownRateAreNotMeasuredAndTheReasonIsLogged() {
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedDownload()),
+            List.of(candidate(5012)), Map.of(5012L, stored(5012, full(300))))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isZero();
+        assertThat(lines(Level.INFO)).contains("Forced timing reference of edition 10 (film 1): no verdict, "
+            + "UNKNOWN_RATE (sidecar 8, reference 5012)");
+    }
+
+    @Test
+    void aRetimedForcedFileIsMeasuredAgainstARawReferenceOfTheSameFamilyOnTheirOriginals() {
+        OpenSubtitlesReference reference = stored(5012, full(300));
+        reference.setTimedFps(23.976);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedDownload()),
+            List.of(candidate(5012)), Map.of(5012L, reference))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(1);
+        assertThat(lines(Level.INFO)).singleElement().asString().contains("ALIGNED at -2000 ms");
     }
 
     @Test
@@ -712,5 +752,24 @@ class TimingReferenceFetchTest {
             "Could not fetch a timing reference for edition 20: NullPointerException",
             "Could not measure the forced subtitles of edition 20: NullPointerException");
         assertThat(lines(Level.INFO)).singleElement().satisfies(line -> assertThat(line).contains("edition 10"));
+    }
+
+    @Test
+    void aRetimedForcedFileAndAReferenceStated25ThatOnlyAgreesOnTheOriginalsIsARateConflictAndNotMeasured() {
+        // An irregular reference: only the originals, 2 s apart, line up; 92 s apart they do not.
+        OpenSubtitlesReference reference = stored(5012, scatteredReference());
+        reference.setTimedFps(25.0);
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, shifted(2_000).cuesText());
+        File retimed = new File(8L, Origin.DOWNLOAD, 12, shifted(92_000).cuesText(), 5099L, side);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimed),
+            List.of(candidate(5012)), Map.of(5012L, reference))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isZero();
+        assertThat(lines(Level.INFO)).contains("Forced timing reference of edition 10 (film 1): no verdict, "
+            + "RATE_CONFLICT (sidecar 8, reference 5012)");
     }
 }

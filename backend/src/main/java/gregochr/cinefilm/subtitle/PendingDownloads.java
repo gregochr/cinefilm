@@ -42,12 +42,13 @@ public class PendingDownloads {
     private final ForcedDownloadBlockRepository blocks;
     private final ForcedCheckCandidateRepository ledger;
     private final OpenSubtitlesApi api;
+    private final FilmRates filmRates;
 
     /** Creates the service. */
     public PendingDownloads(FilmRepository films, EditionRepository editions, SubtitleSidecarRepository sidecars,
                             ForcedResolver resolver, OpenSubtitlesReferenceRepository references,
                             ForcedDownloadBlockRepository blocks, ForcedCheckCandidateRepository ledger,
-                            OpenSubtitlesApi api) {
+                            OpenSubtitlesApi api, FilmRates filmRates) {
         this.films = films;
         this.editions = editions;
         this.sidecars = sidecars;
@@ -56,6 +57,7 @@ public class PendingDownloads {
         this.blocks = blocks;
         this.ledger = ledger;
         this.api = api;
+        this.filmRates = filmRates;
     }
 
     /**
@@ -144,7 +146,8 @@ public class PendingDownloads {
         for (Edition edition : fetched) {
             OsBestRef ref = best.get(edition.getFilm().getId());
             if (ForcedDownloadService.dueFor(edition, resolved.get(edition.getId()), ref, allBlocks, allLedger,
-                downloads, stored.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of())) != null) {
+                downloads, stored.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of()),
+                filmRates) != null) {
                 due.add(ref.id());
             }
         }

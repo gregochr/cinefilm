@@ -94,8 +94,8 @@ public class SidecarCheckRefresher {
         this.budget = budget;
         this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
         this.service = service;
-        this.probe = new FullFitProbe(fetcher, fullFit);
-        this.timingReference = new TimingReferenceFetch(fetcher, timingReferences, clock);
+        this.probe = new FullFitProbe(fetcher, fullFit, filmRates);
+        this.timingReference = new TimingReferenceFetch(fetcher, timingReferences, clock, filmRates);
         this.clock = clock;
         this.executor = executor;
         // The comparisons may bring the day's total only to their share, so downloads of missing and replacement

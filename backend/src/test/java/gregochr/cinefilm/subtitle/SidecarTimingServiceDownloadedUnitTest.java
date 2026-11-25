@@ -60,6 +60,9 @@ class SidecarTimingServiceDownloadedUnitTest {
     private static final List<Long> STARTS = IntStream.range(0, 12).mapToObj(i -> 10_000L + i * 7_000L).toList();
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private SubtitleSidecarRepository sidecars;
 
     @Mock
@@ -91,7 +94,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     @BeforeEach
     void setUp() {
         service = new SidecarTimingService(sidecars, editions, files, cache, alignments, references, credits,
-            new LibraryLock(), transactions);
+            new LibraryLock(), transactions, filmRates);
         Film film = film(1L, "Taken", 2008, NOW);
         film.setImdbId(IMDB);
         film.setOsFullSearchedImdbId(IMDB);
@@ -209,6 +212,66 @@ class SidecarTimingServiceDownloadedUnitTest {
         assertThat(job.osReferences().get(0).starts()).hasSize(300).startsWith(10_000L, 20_000L);
         assertThat(job.osReferences().get(0).release()).isEqualTo("Release 5012");
         assertThat(job.referenceKey()).isEqualTo(BASE_KEY + OS_KEY + ":5012,5013");
+        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::servedStarts).containsOnlyNulls();
+        verifyNoInteractions(filmRates);
+    }
+
+    /** The served sidecar is a download of 23.976 that was retimed; its original cues start 90 s later. */
+    private void retimed() {
+        retimed(true);
+    }
+
+    private void retimed(boolean whole) {
+        sidecar.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        sidecar.setOpenSubtitlesFileId(5099L);
+        sidecar.setPath("opensubtitles:40:5099");
+        sidecar.setImdbId(IMDB);
+        sidecar.setWholeEdition(whole);
+        sidecar.setTimedFps(23.976);
+        sidecar.setRetime(RetimeChoice.AUTO);
+        sidecar.setRetimedBy(0.959);
+        sidecar.setOriginalCuesText(SrtParser.format(STARTS.stream()
+            .map(s -> new SubtitleCue(s + 90_000, s + 91_500, "line")).toList()));
+        if (whole) {
+            when(filmRates.forEdition(40L)).thenReturn(25.0);
+        } else {
+            when(filmRates.forFile(10L)).thenReturn(25.0);
+        }
+    }
+
+    @Test
+    void aRetimedDownloadIsFittedToARawFileOfTheSameRateThroughItsOriginalCues() {
+        retimed();
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference raw = reference(5012, 300, IMDB);
+        raw.setTimedFps(23.976);
+        stored(raw);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(raw));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        FitJob job = service.fitJobs(1L).get(0);
+
+        assertThat(job.osReferences()).singleElement().satisfies(fit -> {
+            assertThat(fit.starts()).hasSize(300).startsWith(10_000L, 20_000L);
+            assertThat(fit.servedStarts()).isEqualTo(STARTS.stream().map(start -> start + 90_000).toList());
+        });
+    }
+
+    @Test
+    void aRetimedDownloadHasNoFileToFitToWhenEveryFilesRateIsUnknown() {
+        retimed();
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference unknown = reference(5012, 300, IMDB);
+        stored(unknown);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(unknown));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        FitJob job = service.fitJobs(1L).get(0);
+
+        assertThat(job.osReferences()).isEmpty();
+        assertThat(job.noReference()).isEqualTo(SidecarTimingService.NO_RATE_VERDICT);
     }
 
     @Test
@@ -376,7 +439,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         LibraryLock busy = new LibraryLock();
         assertThat(busy.tryAcquire(LibraryLock.SCAN)).isTrue();
         return new SidecarTimingService(sidecars, editions, files, cache, alignments, references, credits, busy,
-            transactions);
+            transactions, filmRates);
     }
 
     /** The fit is current (as made without the file), so only a backfill can make the film due. */
@@ -836,5 +899,39 @@ class SidecarTimingServiceDownloadedUnitTest {
         assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
         assertThat(old.getLastCueEndMs()).isEqualTo(300 * 10_000L + 1_000);
         verify(references).save(old);
+    }
+
+    @Test
+    void aRetimedDownloadTimedForOnePartTakesTheRateOfThatFilmFileAndAFileOfAnotherFamilyIsFittedOnTheFilmTimeline() {
+        retimed(false);
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference other = reference(5012, 300, IMDB);
+        other.setTimedFps(25.0);
+        stored(other);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(other));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        assertThat(service.fitJobs(1L)).hasSize(1);
+        verify(filmRates).forFile(10L);
+    }
+
+    @Test
+    void aRawFileThatIsFittedToARetimedReferenceOfTheSameFamilyUsesTheReferencesOriginalCues() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference retimed = reference(5012, 300, IMDB);
+        retimed.setTimedFps(23.976);
+        retimed.setRetimedBy(0.959);
+        retimed.setOriginalCuesText(retimed.getCuesText());
+        stored(retimed);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(retimed));
+        when(filmRates.forFile(10L)).thenReturn(23.976);
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        FitJob job = service.fitJobs(1L).get(0);
+
+        assertThat(job.osReferences()).singleElement()
+            .satisfies(fit -> assertThat(fit.starts()).hasSize(300).startsWith(10_000L, 20_000L));
     }
 }

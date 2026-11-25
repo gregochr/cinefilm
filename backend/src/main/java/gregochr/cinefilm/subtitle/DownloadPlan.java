@@ -12,6 +12,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * What to download for an edition, and from which OpenSubtitles file. Pure: facts in, decisions out.
@@ -32,6 +36,10 @@ import java.util.Set;
  * the owner removed.
  */
 public final class DownloadPlan {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DownloadPlan.class);
+    private static final Predicate<Result> OTHER_CUT = ReferenceWalk::looksLikeOtherCut;
+    private static final Predicate<Result> SAME_CUT = OTHER_CUT.negate();
 
     /** The most OpenSubtitles files ever made into downloads for an edition and IMDb id, removed ones included. */
     public static final int MAX_DOWNLOADS = 3;
@@ -117,11 +125,13 @@ public final class DownloadPlan {
      * @param ledger the file ids this edition has been compared with
      * @param skipped the file ids that are blocked or already downloads for this edition
      * @param fileCues the owner's file's cues on the edition's timeline
+     * @param filmFps the film's rate, asked for only when a reference is retimed ({@link RateComparison}); may be null
      * @return the reference to promote, or empty
      */
     static Optional<OpenSubtitlesReference> promotion(List<OpenSubtitlesResult> ranked, Long keptFileId,
                                                        Map<Long, OpenSubtitlesReference> stored, Set<Long> ledger,
-                                                       Set<Long> skipped, List<SubtitleCue> fileCues) {
+                                                       Set<Long> skipped, List<SubtitleCue> fileCues,
+                                                       Supplier<Double> filmFps) {
         List<Long> order = new ArrayList<>();
         if (keptFileId != null) {
             order.add(keptFileId);
@@ -139,8 +149,17 @@ public final class DownloadPlan {
                 || !promotable(reference)) {
                 continue;
             }
-            Result result = SubtitleComparison.compare(fileCues, SrtParser.cues(reference.getCuesText()));
-            if (!ReferenceWalk.looksLikeOtherCut(result)) {
+            RateComparison.Side fileSide = RateComparison.Side.file();
+            RateComparison.Side referenceSide = RateComparison.Side.of(reference);
+            RateComparison.Judged<Result> judged = RateComparison.judge(fileSide, referenceSide, filmFps, fileCues,
+                RateComparison.originalOf(fileSide), SrtParser.cues(reference.getCuesText()),
+                RateComparison.originalOf(referenceSide), SubtitleComparison::compare, OTHER_CUT, SAME_CUT);
+            if (!judged.hasVerdict()) {
+                LOG.info("Reference {} (file {}) is not promoted: no verdict, {}", reference.getId(), fileId,
+                    judged.reason());
+                continue;
+            }
+            if (!ReferenceWalk.looksLikeOtherCut(judged.result())) {
                 return Optional.of(reference);
             }
         }

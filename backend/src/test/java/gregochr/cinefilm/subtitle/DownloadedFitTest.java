@@ -258,4 +258,18 @@ class DownloadedFitTest {
         assertThat(fitting.result().verdict()).isEqualTo(Verdict.ALIGNED);
         assertThat(tie.reference().osFileId()).isEqualTo(5013L);
     }
+
+    @Test
+    void aReferenceThatCarriesItsOwnServedStartsIsFittedWithThemInsteadOfTheGivenOnes() {
+        List<Long> reference = irregular(400);
+        List<Long> originals = served(reference, 10, 10);
+        List<Long> filmTimeline = originals.stream().map(start -> start + 90_000).toList();
+
+        Choice choice = DownloadedFit.choose(filmTimeline,
+            List.of(new Reference(5012, "Same timeline", 400, reference, originals)));
+
+        assertThat(choice.result().verdict()).isEqualTo(Verdict.ALIGNED);
+        assertThat(DownloadedFit.choose(filmTimeline, List.of(new Reference(5012, "Same timeline", 400, reference)))
+            .result().verdict()).isNotEqualTo(Verdict.ALIGNED);
+    }
 }

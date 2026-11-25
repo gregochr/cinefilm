@@ -74,8 +74,19 @@ public class TimingReferenceService {
      * @param lines its cue count
      * @param cuesText its cues as stored (the raw file: no owner offset)
      * @param osFileId the OpenSubtitles file it was downloaded from, or null for an owner's file
+     * @param side what it is for the rate rule ({@link RateComparison}); the owner's file when null
      */
-    record File(Long sidecarId, Origin origin, int lines, String cuesText, Long osFileId) {
+    record File(Long sidecarId, Origin origin, int lines, String cuesText, Long osFileId, RateComparison.Side side) {
+
+        /** A file with a known OpenSubtitles origin and nothing known of its rate. */
+        File(Long sidecarId, Origin origin, int lines, String cuesText, Long osFileId) {
+            this(sidecarId, origin, lines, cuesText, osFileId, null);
+        }
+
+        /** What it is for the rate rule: the owner's file unless a side was given. */
+        RateComparison.Side rateSide() {
+            return side == null ? RateComparison.Side.file() : side;
+        }
 
         /** A file with no known OpenSubtitles origin. */
         File(Long sidecarId, Origin origin, int lines, String cuesText) {
@@ -230,7 +241,7 @@ public class TimingReferenceService {
             if (TimingReferenceRule.qualifies(facts, resolution.decision().source() == Source.EMBEDDED,
                 edition.getRuntimeMs(), edition.originalParts().size())) {
                 List<File> files = served.stream().map(s -> new File(s.getId(), origin(s), s.getCueCount(),
-                    s.getCuesText(), s.getOpenSubtitlesFileId())).toList();
+                    s.getCuesText(), s.getOpenSubtitlesFileId(), RateComparison.Side.of(s))).toList();
                 qualified.add(new Qualified(edition, files, files.stream().anyMatch(f -> f.origin() == Origin.CHOSEN)));
             }
         }

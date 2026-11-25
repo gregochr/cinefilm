@@ -52,6 +52,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class SidecarTimingService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SidecarTimingService.class);
+    /** Why a sidecar has no file to fit to when the rate rule gave no verdict against any of them. */
+    static final String NO_RATE_VERDICT = "The frame rates of the files are not known well enough to compare them";
 
     /** A fitted offset closer than this to the current one is left alone. */
     static final int APPLY_THRESHOLD_MS = 100;
@@ -65,6 +67,7 @@ public class SidecarTimingService {
     private final CreditsDetectionRepository credits;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
+    private final FilmRates filmRates;
 
     /** A film file whose embedded track must be read (it has no read, or its file changed since). */
     public record ReferenceRead(Long mediaFileId, String path, String fingerprint) {
@@ -128,7 +131,8 @@ public class SidecarTimingService {
                                 MediaFileRepository files, EmbeddedCueStartsRepository cache,
                                 ForcedSubtitleAlignmentRepository alignments,
                                 OpenSubtitlesReferenceRepository references, CreditsDetectionRepository credits,
-                                LibraryLock lock, PlatformTransactionManager transactions) {
+                                LibraryLock lock, PlatformTransactionManager transactions,
+                                FilmRates filmRates) {
         this.sidecars = sidecars;
         this.editions = editions;
         this.files = files;
@@ -138,6 +142,7 @@ public class SidecarTimingService {
         this.credits = credits;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
+        this.filmRates = filmRates;
     }
 
     /**
@@ -263,6 +268,51 @@ public class SidecarTimingService {
         return jobs;
     }
 
+    /**
+     * The files to fit a sidecar to, by the rate rule ({@link RateComparison}). A file with no verdict is left out
+     * (and noted at INFO); one the rule compares through the sidecar's original cues carries those cue starts to
+     * be fitted instead of the sidecar's stored ones. The same texts and starts as before while nothing is retimed.
+     */
+    private List<DownloadedFit.Reference> downloadedFits(Served s, List<ReferenceFacts> downloaded,
+                                                         Map<Long, OpenSubtitlesReference> texts) {
+        SubtitleSidecar sidecar = s.sidecar();
+        RateComparison.Side served = RateComparison.Side.of(sidecar);
+        List<DownloadedFit.Reference> fitTo = new ArrayList<>();
+        for (ReferenceFacts f : downloaded) {
+            OpenSubtitlesReference reference = texts.get(f.osFileId());
+            RateComparison.Side referenceSide = RateComparison.Side.of(reference);
+            if (!served.retimed() && !referenceSide.retimed()) {
+                fitTo.add(new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(),
+                    starts(SrtParser.cues(reference.getCuesText())), null));
+                continue;
+            }
+            RateComparison.Judged<TimingFit.Result> judged = RateComparison.judge(served, referenceSide,
+                () -> filmRate(s), SrtParser.cues(sidecar.getCuesText()), RateComparison.originalOf(served),
+                SrtParser.cues(reference.getCuesText()), RateComparison.originalOf(referenceSide),
+                (x, y) -> TimingFit.fit(starts(x), starts(y)), r -> TimingFit.Verdict.CHECK.equals(r.verdict()),
+                r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
+            if (!judged.hasVerdict()) {
+                LOG.info("Timing of subtitle {} against OpenSubtitles file {}: no verdict, {} (reference {})",
+                    sidecar.getId(), f.osFileId(), judged.reason(), reference.getId());
+                continue;
+            }
+            fitTo.add(new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(), starts(judged.second()),
+                starts(judged.first())));
+        }
+        return fitTo;
+    }
+
+    private static List<Long> starts(List<SubtitleCue> cues) {
+        return cues.stream().map(SubtitleCue::startMs).toList();
+    }
+
+    /** The film's rate for a sidecar: the whole edition's, or the one film file it is timed for. */
+    private Double filmRate(Served s) {
+        SubtitleSidecar sidecar = s.sidecar();
+        return sidecar.isWholeEdition() ? filmRates.forEdition(s.edition().getId())
+            : filmRates.forFile(sidecar.getMediaFileId());
+    }
+
     private FitJob job(Long filmId, Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os) {
         SubtitleSidecar sidecar = s.sidecar();
         List<Long> starts = SrtParser.cues(sidecar.getCuesText()).stream().map(SubtitleCue::startMs).toList();
@@ -273,9 +323,12 @@ public class SidecarTimingService {
             Map<Long, OpenSubtitlesReference> texts = new HashMap<>();
             references.findAllById(downloaded.stream().map(ReferenceFacts::id).toList())
                 .forEach(r -> texts.put(r.getOsFileId(), r));
-            List<DownloadedFit.Reference> fitTo = downloaded.stream().map(f -> new DownloadedFit.Reference(
-                f.osFileId(), f.release(), f.cueCount(), SrtParser.cues(texts.get(f.osFileId()).getCuesText()).stream()
-                .map(SubtitleCue::startMs).toList())).toList();
+            List<DownloadedFit.Reference> fitTo = downloadedFits(s, downloaded, texts);
+            if (fitTo.isEmpty()) {
+                // Every file was left out by the rate rule: the fit is made, with no file to fit to and the reason why.
+                return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
+                    List.copyOf(starts), List.of(), NO_RATE_VERDICT);
+            }
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
                 List.copyOf(starts), List.of(), null, fitTo);
         }

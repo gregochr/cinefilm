@@ -41,8 +41,16 @@ public final class DownloadedFit {
      * @param release its release name, or null
      * @param cueCount its line count
      * @param starts its cue starts in milliseconds
+     * @param servedStarts the served file's cue starts to fit to it instead of the ones given to {@link #choose}, when
+     *     the rate rule compares the served file through its original cues; null otherwise
      */
-    public record Reference(long osFileId, String release, int cueCount, List<Long> starts) {
+    public record Reference(long osFileId, String release, int cueCount, List<Long> starts,
+                            List<Long> servedStarts) {
+
+        /** A file fitted with the served cues as they are stored. */
+        public Reference(long osFileId, String release, int cueCount, List<Long> starts) {
+            this(osFileId, release, cueCount, starts, null);
+        }
 
         /** The file as the reasons name it. */
         String label() {
@@ -135,7 +143,8 @@ public final class DownloadedFit {
     public static Choice choose(List<Long> served, List<Reference> references) {
         List<Choice> fits = new ArrayList<>();
         for (Reference reference : references) {
-            fits.add(new Choice(reference, judge(TimingFit.fit(served, reference.starts()), reference)));
+            List<Long> from = reference.servedStarts() != null ? reference.servedStarts() : served;
+            fits.add(new Choice(reference, judge(TimingFit.fit(from, reference.starts()), reference)));
         }
         return fits.stream().min(BEST_FIRST).orElseThrow();
     }

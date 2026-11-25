@@ -52,6 +52,9 @@ class FullFitProbeTest {
     private static final long HOUR = 3_600_000L;
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private OpenSubtitlesApi api;
 
     @Mock
@@ -70,7 +73,7 @@ class FullFitProbeTest {
     @BeforeEach
     void setUp() {
         probe = new FullFitProbe(new ReferenceFetcher(api, budget, references, CLOCK, new FakeDailyLimit(LIMIT)),
-            fullFit);
+            fullFit, filmRates);
         logged.start();
         probeLog.addAppender(logged);
     }
@@ -142,7 +145,39 @@ class FullFitProbeTest {
             + "download to reference ALIGNED at 2000 ms, 100% of 300 lines matched; "
             + "reference to download ALIGNED at -2000 ms, 100% of 300 lines matched; "
             + "runtime 3:02:05; credits start 3:01:00");
-        verifyNoInteractions(api, budget);
+        verifyNoInteractions(api, budget, filmRates);
+    }
+
+    private static Job retimedJob(OpenSubtitlesReference reference) {
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, SrtParser.format(lines(300, 0)));
+        return new Job(1L, 10L, "tt1", 7L, 5011L, lines(300, 90_000), 3 * HOUR + 125_000, null,
+            List.of(candidate(reference.getOsFileId())), Map.of(reference.getOsFileId(), reference), side);
+    }
+
+    @Test
+    void aRetimedDownloadIsComparedWithARawReferenceOfTheSameRateOnTheirOriginals() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        reference.setTimedFps(23.976);
+        serving(retimedJob(reference));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+
+        assertThat(infoLines()).singleElement().satisfies(line ->
+            assertThat(line).contains("download to reference ALIGNED at 0 ms, 100% of 300 lines matched"));
+    }
+
+    @Test
+    void aRetimedDownloadAndAReferenceOfUnknownRateAreNotMeasuredAndTheReasonIsLogged() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        serving(retimedJob(reference));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "UNKNOWN_RATE (sidecar 7, reference 5012)");
     }
 
     @Test
@@ -349,5 +384,18 @@ class FullFitProbeTest {
         assertThat(FullFitProbe.clock(59_999)).isEqualTo("0:00:59");
         assertThat(FullFitProbe.clock(3_600_000)).isEqualTo("1:00:00");
         assertThat(FullFitProbe.clock(36_000_000 + 61_000)).isEqualTo("10:01:01");
+    }
+
+    @Test
+    void aRetimedDownloadAndAReferenceStated25ThatOnlyAgreesOnTheOriginalsIsARateConflictAndNotMeasured() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        reference.setTimedFps(25.0);
+        serving(retimedJob(reference));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "RATE_CONFLICT (sidecar 7, reference 5012)");
     }
 }

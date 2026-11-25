@@ -60,10 +60,24 @@ public class FullFitService {
      * @param others the film's other single-file full candidates, in the order for this edition's cut (the download's
      *     own file is never among them)
      * @param stored the film's stored references for this IMDb id by file id
+     * @param side what the download is for the rate rule ({@link RateComparison}); an owner's file when null
      */
     record Job(Long filmId, Long editionId, String imdbId, Long sidecarId, long downloadFileId,
                List<SubtitleCue> download, long runtimeMs, Long creditsStartMs, List<OpenSubtitlesResult> others,
-               Map<Long, OpenSubtitlesReference> stored) {
+               Map<Long, OpenSubtitlesReference> stored, RateComparison.Side side) {
+
+        /** A job with nothing known of the download's rate. */
+        Job(Long filmId, Long editionId, String imdbId, Long sidecarId, long downloadFileId,
+            List<SubtitleCue> download, long runtimeMs, Long creditsStartMs, List<OpenSubtitlesResult> others,
+            Map<Long, OpenSubtitlesReference> stored) {
+            this(filmId, editionId, imdbId, sidecarId, downloadFileId, download, runtimeMs, creditsStartMs, others,
+                stored, null);
+        }
+
+        /** What the download is for the rate rule: an owner's file unless a side was given. */
+        RateComparison.Side rateSide() {
+            return side == null ? RateComparison.Side.file() : side;
+        }
     }
 
     /**
@@ -118,6 +132,6 @@ public class FullFitService {
             edition.getName());
         return new Job(ref.id(), edition.getId(), ref.imdbId(), download.getId(), download.getOpenSubtitlesFileId(),
             SrtParser.cues(download.getCuesText()), edition.getRuntimeMs(), CreditsStarts.of(edition, credits), others,
-            stored);
+            stored, RateComparison.Side.of(download));
     }
 }
