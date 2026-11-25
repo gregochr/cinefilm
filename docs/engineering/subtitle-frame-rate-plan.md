@@ -127,9 +127,11 @@ writes nothing), `on`, or `restore` (the rollback, below).
   - A stale row still decides what plays. What is due treats it as due. The new verdict replaces it in one write.
     - **No verdict for a passing reason** (the budget, an outage, the candidate cap): the old row stays, and stays
       due. So an owner's file that failed is never put back on screen by a deletion.
-    - **Only definite skips** (unknown rate, a rate conflict): a row carried over from a rewritten file, made on its
-      old cues, is dropped, so a failure caused only by drift doesn't outlive the fix. A row made stale only because
-      its reference changed is kept until a real verdict replaces it.
+    - **Only definite skips** (unknown rate, a rate conflict): every stale row is kept, a carried-over failure
+      included, until a real verdict replaces it. A wrong subtitle is never put back on screen by a skip. The cost:
+      a download that failed only because of drift, and is judged only by references it can't be compared with,
+      stays failed until a reference of known rate judges it, or the owner sets its rate or picks another. Phase 1
+      counts these cases.
   - **A save never lands on cues that have changed.** `opensubtitles_reference` gets a `cues_version`, raised on
     every change of its `cues_text`. Every check and fit carries the version it read and drops its save if it has
     changed, as it already does for the served version. A run racing the job therefore can't save a verdict made on
@@ -245,12 +247,15 @@ Not in this plan:
      - downloads the job would set to off;
      - comparisons of unknown against retimed;
      - retime candidates with a current `EMBEDDED` `ALIGNED` fit, which will be set off;
+     - downloads that fail today and whose only references have an unknown rate (they stay failed after retime);
      - references stated as 25 that act as judges, on 25 fps films and on 23.976 or 24 fps films (where 2b would
        speed them up). These are the Bridge of Spies risk, and they end as rate conflicts, not failures. If more than
        10 in all, the owner is asked before 2a.
 
      **If fewer than 80 of the 92 are backfilled, the owner is asked before phase 2.** The choice is a one-off
      file-info lookup on OpenSubtitles, or leaving them listed.
+   - If phase 1 is estimated over 1,200 lines, it is split: 1a is V39, `FrameRateRetime`, the cue scaler and storing
+     the rate on new rows; 1b is the V40 backfill and its integration test.
 2. **2a: the job for downloads, behind the switch.**
    - `stale_since` is honoured by every due test (above), with a test for each path.
    - `SubtitleRetimeJob`, for downloads only:
@@ -265,6 +270,8 @@ Not in this plan:
      - a failed download is checked again within the job's run;
      - a film file replaced at another rate is rewritten from the original.
      - `restore` puts every retimed download back.
+   - `operations.md` gains the rollback order: set `cinefilm.subtitles.retime` to `restore`, wait for the run to end,
+     then roll back the image.
 3. **2b: references and arrivals, behind the switch.**
    - References are rewritten under the agreed-rate rule.
    - The `cues_version` guard: it is raised on every change of a reference's `cues_text`, and a check or fit drops
