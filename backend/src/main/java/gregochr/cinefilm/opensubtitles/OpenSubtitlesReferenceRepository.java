@@ -4,8 +4,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Persistence for {@link OpenSubtitlesReference}. */
 public interface OpenSubtitlesReferenceRepository extends JpaRepository<OpenSubtitlesReference, Long> {
@@ -36,4 +38,17 @@ public interface OpenSubtitlesReferenceRepository extends JpaRepository<OpenSubt
 
     /** Every reference stored for some films (any IMDb id; the caller keeps those for the film's current one). */
     List<OpenSubtitlesReference> findByFilmIdIn(Collection<Long> filmIds);
+
+    /**
+     * Sets the stated frame rate of a reference that has none, and touches no other column, so it cannot write back
+     * a value another writer changed meanwhile. A reference that already has a rate is left alone.
+     *
+     * @param id the row id
+     * @param fps the rate OpenSubtitles states
+     * @return 1 when the rate was filled, 0 when the row already had one (or is gone)
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query("update OpenSubtitlesReference r set r.timedFps = :fps where r.id = :id and r.timedFps is null")
+    int fillTimedFps(@Param("id") long id, @Param("fps") double fps);
 }

@@ -15,6 +15,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
@@ -35,6 +38,7 @@ final class ReferenceFetcher {
     /** The largest reference kept, in characters of normalised SRT. */
     static final int MAX_REFERENCE_CHARS = 1024 * 1024;
 
+    private static final Logger LOG = LoggerFactory.getLogger(ReferenceFetcher.class);
     private static final Object FETCH = new Object();
 
     private final OpenSubtitlesApi api;
@@ -97,11 +101,7 @@ final class ReferenceFetcher {
         OpenSubtitlesReference stored = references
             .findByFilmIdAndImdbIdAndOsFileId(filmId, imdbId, candidate.fileId()).orElse(null);
         if (stored != null && stored.isFinal()) {
-            // A reference stored before the rate was kept gets the stated one now (never replacing one it has).
-            if (stored.getTimedFps() == null && candidate.fps() != null) {
-                stored.setTimedFps(candidate.fps());
-                references.saveAndFlush(stored);
-            }
+            fillRate(stored, candidate);
             return stored;
         }
         Instant now = clock.instant();
@@ -133,6 +133,23 @@ final class ReferenceFetcher {
             budget.exhaust(day, limit, cap(download.resetTimeUtc(), now));
         }
         return saved;
+    }
+
+    /**
+     * A reference stored before the rate was kept gets the stated one now, never replacing one it has. A targeted
+     * update of that one column (the row is also written by the cue-end backfill, under another lock), and best
+     * effort: a failed fill leaves the stored reference as it was and does not fail the fetch.
+     */
+    private void fillRate(OpenSubtitlesReference stored, OpenSubtitlesResult candidate) {
+        if (stored.getTimedFps() != null || candidate.fps() == null) {
+            return;
+        }
+        try {
+            references.fillTimedFps(stored.getId(), candidate.fps());
+            stored.setTimedFps(candidate.fps());
+        } catch (DataAccessException e) {
+            LOG.warn("Could not store the stated frame rate of reference {}: {}", stored.getId(), e.toString());
+        }
     }
 
     /**

@@ -817,7 +817,6 @@ class SidecarCheckRefresherTest {
         DueCheck first = due(1, 10, 5011);
         DueCheck second = due(2, 20, 5022);
         OpenSubtitlesReference two = stored(9, 2, 5022, CUES);
-        two.setTimedFps(23.976);
         when(service.due()).thenReturn(List.of(first, second));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.of(two));
@@ -976,7 +975,6 @@ class SidecarCheckRefresherTest {
         DueCheck first = due(1, 10, 5011);
         DueCheck second = due(2, 20, 5022);
         OpenSubtitlesReference two = stored(9, 2, 5022, CUES);
-        two.setTimedFps(23.976);
         when(service.due()).thenReturn(List.of(first, second));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.of(two));

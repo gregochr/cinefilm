@@ -141,6 +141,7 @@ class EditionOpenSubtitlesServiceTest {
         reference.setImdbId(IMDB);
         reference.setOsFileId(fileId);
         reference.setRelease("Release " + fileId);
+        reference.setTimedFps(23.976);
         reference.setCuesText(CUES);
         reference.setCueCount(cueCount);
         reference.setFetchedAt(NOW);

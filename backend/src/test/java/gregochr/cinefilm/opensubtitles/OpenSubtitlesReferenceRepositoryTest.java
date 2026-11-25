@@ -54,4 +54,33 @@ class OpenSubtitlesReferenceRepositoryTest extends ApiTestBase {
         assertThatThrownBy(() -> reference(filmId, "tt0000001", 5011, 0))
             .isInstanceOf(DataIntegrityViolationException.class);
     }
+
+    @Test
+    void fillTimedFpsFillsAMissingRateAndLeavesAnExistingOneAlone() {
+        Long filmId = film();
+        OpenSubtitlesReference without = reference(filmId, "tt0000001", 5011, 0);
+        OpenSubtitlesReference with = reference(filmId, "tt0000001", 5012, 0);
+        with.setTimedFps(23.976);
+        references.saveAndFlush(with);
+
+        assertThat(references.fillTimedFps(without.getId(), 25.0)).isEqualTo(1);
+        assertThat(references.fillTimedFps(with.getId(), 25.0)).isZero();
+
+        assertThat(references.findById(without.getId()).orElseThrow().getTimedFps()).isEqualTo(25.0);
+        assertThat(references.findById(with.getId()).orElseThrow().getTimedFps()).isEqualTo(23.976);
+    }
+
+    @Test
+    void fillTimedFpsChangesNothingElseOfTheRow() {
+        Long filmId = film();
+        OpenSubtitlesReference row = reference(filmId, "tt0000001", 5011, 2);
+        row.setLastCueEndMs(7_000L);
+        references.saveAndFlush(row);
+
+        references.fillTimedFps(row.getId(), 25.0);
+
+        OpenSubtitlesReference found = references.findById(row.getId()).orElseThrow();
+        assertThat(found.getLastCueEndMs()).isEqualTo(7_000L);
+        assertThat(found.getFailedDownloads()).isEqualTo(2);
+    }
 }

@@ -3,8 +3,10 @@ package gregochr.cinefilm.subtitle;
 import static gregochr.cinefilm.TestData.CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
@@ -21,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 /** What a fetched reference stores of the search result it was fetched for: its stated frame rate. */
 @ExtendWith(MockitoExtension.class)
@@ -67,6 +70,7 @@ class ReferenceFetcherTest {
 
     private OpenSubtitlesReference finalStored(Double fps) {
         OpenSubtitlesReference reference = new OpenSubtitlesReference();
+        reference.setId(7L);
         reference.setFilmId(1L);
         reference.setImdbId(IMDB);
         reference.setOsFileId(5011L);
@@ -77,48 +81,63 @@ class ReferenceFetcherTest {
         return reference;
     }
 
-    @Test
-    void aStoredReferenceWithNoRateTakesTheRateTheCandidateStatesAndNothingIsDownloaded() {
-        OpenSubtitlesReference reference = finalStored(null);
-        OpenSubtitlesResult result = new OpenSubtitlesResult(1, 5011, "Taken.2008", 25.0, 300, true, false, null,
-            null);
-
-        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, result, 20);
-
-        assertThat(returned).isSameAs(reference);
-        assertThat(stored().getTimedFps()).isEqualTo(25.0);
-        verifyNoInteractions(api, budget);
-    }
-
-    @Test
-    void aStoredReferenceThatAlreadyHasARateKeepsItAndIsNotSaved() {
-        OpenSubtitlesReference reference = finalStored(23.976);
-        OpenSubtitlesResult result = new OpenSubtitlesResult(1, 5011, "Taken.2008", 25.0, 300, true, false, null,
-            null);
-
-        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, result, 20);
-
-        assertThat(returned.getTimedFps()).isEqualTo(23.976);
-        assertThat(returned).isSameAs(reference);
-        verifyNoInteractions(api, budget);
-    }
-
-    @Test
-    void aStoredReferenceWithNoRateStaysSoWhenTheCandidateStatesNone() {
-        OpenSubtitlesReference reference = finalStored(null);
-        OpenSubtitlesResult result = new OpenSubtitlesResult(1, 5011, "Taken.2008", null, 300, true, false, null,
-            null);
-
-        assertThat(fetcher.fetch(1L, IMDB, result, 20)).isSameAs(reference);
-
-        assertThat(reference.getTimedFps()).isNull();
-        verifyNoInteractions(api, budget);
-    }
-
     private OpenSubtitlesReference stored() {
         ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
         verify(references).saveAndFlush(saved.capture());
         return saved.getValue();
+    }
+
+    private static OpenSubtitlesResult stating(Double fps) {
+        return new OpenSubtitlesResult(1, 5011, "Taken.2008", fps, 300, true, false, null, null);
+    }
+
+    @Test
+    void aStoredReferenceWithNoRateTakesTheRateTheCandidateStatesWithATargetedUpdateAndNoDownload() {
+        OpenSubtitlesReference reference = finalStored(null);
+
+        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), 20);
+
+        assertThat(returned).isSameAs(reference);
+        assertThat(returned.getTimedFps()).isEqualTo(25.0);
+        verify(references).fillTimedFps(7L, 25.0);
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void aStoredReferenceThatAlreadyHasARateKeepsItAndNothingIsWritten() {
+        OpenSubtitlesReference reference = finalStored(23.976);
+
+        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), 20);
+
+        assertThat(returned).isSameAs(reference);
+        assertThat(returned.getTimedFps()).isEqualTo(23.976);
+        verify(references).findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L);
+        verifyNoMoreInteractions(references);
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void aStoredReferenceWithNoRateStaysSoAndNothingIsWrittenWhenTheCandidateStatesNone() {
+        OpenSubtitlesReference reference = finalStored(null);
+
+        assertThat(fetcher.fetch(1L, IMDB, stating(null), 20)).isSameAs(reference);
+
+        assertThat(reference.getTimedFps()).isNull();
+        verify(references).findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L);
+        verifyNoMoreInteractions(references);
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void aFillThatFailsLeavesTheStoredReferenceAsItWasAndTheFetchStillSucceeds() {
+        OpenSubtitlesReference reference = finalStored(null);
+        doThrow(new DataAccessResourceFailureException("database busy")).when(references).fillTimedFps(7L, 25.0);
+
+        OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), 20);
+
+        assertThat(returned).isSameAs(reference);
+        assertThat(returned.getTimedFps()).isNull();
+        verifyNoInteractions(api, budget);
     }
 
     @Test
