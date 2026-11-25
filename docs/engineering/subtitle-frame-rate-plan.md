@@ -165,7 +165,9 @@ writes nothing), `on`, or `restore` (the rollback, below).
 the switch says, because rewritten rows outlive it:
 - **A row's rate** is the stated one, else unknown. The owner's own files (`FILE`), downloads that fit as is
   (`OFF_FITS`) and the film's embedded English track (`EMBEDDED`) take the film's rate: they are on the film's
-  timeline by nature. A rate's **family** is "about 24" (within 0.01 of 23.976 or 24.0) or "25" (within 0.01 of 25).
+  timeline by nature. A known rate's **family**: a stated rate is "about 24" within 0.01 of 23.976 or 24.0, and
+  "25" within 0.01 of 25; a film's rate (taken by `FILE`, `EMBEDDED` and `OFF_FITS`) is "about 24" in 23.9–24.1 and
+  "25" in 24.85–25.15, the retime bands. Any other known rate (29.97, say) is a family of its own.
   A row's **original** is its `original_cues_text` when it is retimed, else its stored cues.
 - In this order:
   1. **Neither side retimed** (`retimed_by` null on both): compared as stored, exactly as today, whatever the rates.
@@ -173,18 +175,23 @@ the switch says, because rewritten rows outlive it:
      it never gives `CHECK`.
   3. **Same family:** original against original. Both are on the timeline they were made for, so this is the
      comparison made today. It covers a raw 23.976 reference against a retimed 23.976 or 24.0 download.
-  4. **Different families:** compared as stored, on the film's timeline. When the raw side is a reference and that
+  4. **Different families:** compared as stored, on the film's timeline. When either side is a reference and that
      comparison fails, the originals are compared too. If they agree, it is a **rate conflict**: one stated rate is
      wrong and the plan can't tell which. That is no verdict, counted and shown in the Admin as "rate conflict".
-     Against `FILE`, `EMBEDDED` or `OFF_FITS` the film-timeline result stands, because those are on the film's
-     timeline: a retimed side that disagrees with them plays wrong.
+     The film-timeline result stands only for a download against `FILE`, `EMBEDDED` or `OFF_FITS`: those are on the
+     film's timeline, so a download that disagrees with them plays wrong.
 - **What a wrong stated rate does** (Bridge of Spies: stated as 25, timed like 24):
-  - **On a download, across the PAL gap:** it is retimed wrongly and plays wrong. On a film with an English embedded
-    track, the `OFF_FITS` decision (below) catches it first. Otherwise it fails against the owner's file or the
-    embedded track (rule 4), but a reference of its own family compares on the originals (rule 3) and can still prove
-    it.
-  - **On a reference:** against a retimed file of another family it ends as a rate conflict (rule 4) rather than
-    failing a correct file; within its family it judges as today (rule 3).
+  - **On a download stated across the PAL gap but timed for the film's rate:** it is retimed wrongly and plays
+    wrong. When the original fits the embedded English track `ALIGNED`, the `OFF_FITS` decision (below) catches it
+    first. Otherwise (no embedded track, or no `ALIGNED` fit) it fails against the owner's file or the embedded track
+    where there is one (rule 4), but a reference of its own family compares on the originals (rule 3) and can still
+    prove it.
+  - **On a download stated in the film's own family but timed for the other** (Bridge of Spies itself, on a 25 fps
+    film): it is not retimed, and plays wrong as it does today. `OFF_FITS` can't catch it (k = 1). It fails against a
+    retimed reference of the other family only when the originals disagree too; when they agree it is a rate
+    conflict (rule 4).
+  - **On a reference, raw or retimed by 2b:** against a file of another family it ends as a rate conflict (rule 4)
+    rather than failing a correct file; within its family it judges as today (rule 3).
   - **Raw against raw, and same-family pairs:** as today, so a wrong rate can still fail a file, or make one fail,
     there as it can now.
 - **After a skip,** the walk moves on to the next candidate with a known rate, stored ones first. If none is left,
@@ -198,7 +205,10 @@ the switch says, because rewritten rows outlive it:
   - a retimed download against the embedded English track gets a verdict on the film's timeline;
   - a retimed 23.976 download against a raw reference stated 25 but timed like 24 is a rate conflict: no verdict,
     never `CHECK`;
-  - a retimed download that disagrees with the owner's file on the film's timeline fails, with no conflict.
+  - a retimed download that disagrees with the owner's file on the film's timeline fails, with no conflict;
+  - a reference stated 25 but timed like 24, retimed by 2b on a 23.976 film, against the owner's file is a rate
+    conflict, not `CHECK` (2b);
+  - on a 24.98 fps film, a retimed download against the embedded track gets a verdict (the film's family is 25).
 
 **What the owner set by hand is left alone.**
 - `retime` starts **undecided** (null). The job decides it once:
