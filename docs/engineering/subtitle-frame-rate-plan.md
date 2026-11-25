@@ -200,8 +200,9 @@ the switch says, because rewritten rows outlive it:
   - **Raw against raw, and same-family pairs:** as today, so a wrong rate can still fail a file, or make one fail,
     there as it can now.
 - **After a skip,** the walk moves on to the next candidate that rules 1–4 can judge against that file (one that
-  would be skipped the same way is passed over), stored ones first. Only a rule 2 skip is foreseen this way; after a
-  rate conflict, every later candidate is compared, and one that conflicts too is skipped in turn. If none is left,
+  would be skipped the same way is passed over), stored ones first. Only a rule 2 skip is foreseen this way: a rate
+  conflict never causes a later candidate to be passed over, so each one the rules can judge is compared, and one
+  that conflicts too is skipped in turn. If none is left,
   the edition has no verdict this run and is counted.
 - **Tests:**
   - an owner file against a reference with no rate, on a 23.976 film, still gets a verdict;
@@ -213,8 +214,9 @@ the switch says, because rewritten rows outlive it:
     no stated rate after it gives the verdict (rule 1) (2b);
   - a download with no stated rate, against a reference retimed by 2b, is skipped and counted, and a raw reference
     with no stated rate after it gives the verdict (rule 1) (2b);
-  - after a rate conflict, a later reference of the other family that agrees on the film's timeline still proves the
-    download;
+  - a retimed 23.976 download on a 25 fps film is a rate conflict (counted) against a raw reference stated 25 but
+    timed like 24; a later raw reference stated 25 that agrees on the film's timeline proves it (a reference is never
+    passed over because its family conflicted);
   - a raw 23.976 reference against a retimed 23.976 download on a 25 fps film is compared on the originals and
     agrees; so is a raw 24.0 reference against a retimed 23.976 download (a split-rate film);
   - a retimed download against the embedded English track gets a verdict on the film's timeline;
