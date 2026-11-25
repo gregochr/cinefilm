@@ -1,7 +1,8 @@
 # Subtitles that follow the film's frame rate — plan
 
 Status: plan, 2026-11-25, written at the owner's request ("Fix playback first"), revised the same day after an
-adversarial review. Found during 3e (`soundtrack-confirm-plan.md`), which waits until this is released.
+adversarial review. Revised again the same day: no rate choice for the owner ("The owner's rate" below).
+Found during 3e (`soundtrack-confirm-plan.md`), which waits until this is released.
 
 ## Why
 
@@ -80,9 +81,9 @@ cues themselves are put on the film's timeline once, and every reader sees them 
   every edition of its film has one agreed rate. References are kept per film, not per edition. A film whose editions
   disagree keeps its references raw (below).
 - **A new download is copied from a reference's original cues** (`original_cues_text` when set, else `cues_text`),
-  with its `timed_fps` and `owner_timed_fps`, and then gets its own k. A download is never scaled twice.
+  with its `timed_fps`, and then gets its own k. A download is never scaled twice.
 - **k is worked out again on every run, from the original.** When it differs from `retimed_by` (the film file was
-  replaced by one at another rate, an edition was edited, or the owner changed the file's rate), the file is
+  replaced by one at another rate, or an edition was edited), the file is
   rewritten from its original, or restored when the new k is 1.
 - `ReferenceFetcher.store` resets `original_cues_text` and `retimed_by`, and sets `timed_fps`, on every write. So a
   re-fetched reference is never marked as already retimed. The job skips only references with no cues
@@ -101,7 +102,7 @@ cues themselves are put on the film's timeline once, and every reader sees them 
 **The job.** `SubtitleRetimeJob`, run by `cinefilm.subtitles.retime`: `off` (the default until the last phase; the job
 writes nothing), `on`, or `restore` (the rollback, below).
 - **Which files.** Each run, it visits:
-  - every download and every stored reference with a known rate (stated, or the owner's);
+  - every download and every stored reference with a known stated rate;
   - every row with `retimed_by` set.
 
   For each, it works k out again. When k differs from `retimed_by`, the row is rewritten from its original, or
@@ -109,7 +110,7 @@ writes nothing), `on`, or `restore` (the rollback, below).
   say), a retimed row is left as it is. It skips downloads with `retime = OFF` (restoring them if they were retimed), and applies the
   owner-timing rule below.
 - **Under the lock.** Each rewrite, restore and owner-rule decision is made under the `LibraryLock`, the same lock
-  the Admin's edits take. The row is read again under the lock, and `retime`, `owner_timed_fps`, the offset source
+  the Admin's edits take. The row is read again under the lock, and `retime`, the offset source
   and the verification are checked again. A `BUSY` is retried, so an owner's edit made at the same moment is never
   overwritten.
 - **The checks.**
@@ -131,7 +132,7 @@ writes nothing), `on`, or `restore` (the rollback, below).
     - **Only definite skips** (unknown rate, a rate conflict): every stale row is kept, a carried-over failure
       included, until a real verdict replaces it. A wrong subtitle is never put back on screen by a skip. The cost:
       a download that failed only because of drift, and is judged only by references it can't be compared with,
-      stays failed until a reference of known rate judges it, or the owner sets its rate or picks another. Phase 1
+      stays failed until a reference of known rate judges it, or the owner picks another. Phase 1
       counts these cases.
   - **A save never lands on cues that have changed.** `opensubtitles_reference` gets a `cues_version`, raised on
     every change of its `cues_text`. Every check and fit carries the version it read and drops its save if it has
@@ -162,7 +163,7 @@ writes nothing), `on`, or `restore` (the rollback, below).
 
 **How two files are compared** (a download or an owner's file against a reference). One rule, applied whatever
 the switch says, because rewritten rows outlive it:
-- **A row's rate** is the owner's rate if set, else the stated one, else unknown. The owner's own files (`FILE`) and
+- **A row's rate** is the stated one, else unknown. The owner's own files (`FILE`) and
   downloads that fit as is (`OFF_FITS`) take the film's rate as their known rate in every rule below. So does the
   film's embedded English track (`EMBEDDED`), which is on the film's timeline by nature.
 - **Neither side retimed** (`retimed_by` null on both): they are compared as stored, exactly as today. That covers
@@ -207,15 +208,15 @@ the switch says, because rewritten rows outlive it:
   Tests cover "verify after retime" and "turn on, then the next run".
 - A file the owner chose in the picker with neither is retimed, if its rate is known (phase 1).
 
-**The owner's choice per file.** Each downloaded file has **Timed for:**
-- **as stated**, the default: the rate OpenSubtitles gives, or none;
-- **23.976**, **24** or **25**: the owner's choice wins over the stated rate. This fixes Bridge of Spies, which is
-  stated as 25 but timed like a 24 fps file;
-- **don't retime**: the same as `retime = OFF`.
-
-It is stored as `owner_timed_fps` on the download, and copied to the stored reference with the same film and file id,
-so the reference judges other files at the owner's rate too. The Admin says what was done, for example
-"Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%", or "rate unknown".
+**The owner's rate.** The owner sets no rate (owner, 2026-11-25: a subtitle file carries no frame rate, only
+timestamps, so there is nothing for the owner to read it from).
+- The stated rate decides. The Admin says what was done, for example "Timed for 23.976 fps; this film is 25 fps, so
+  it is sped up 4%", or "rate unknown".
+- A wrong stated rate (Bridge of Spies: stated as 25, timed like 24) shows as a **rate conflict** in the comparisons
+  (above): no verdict, never a failure. 3e's soundtrack check may later settle such a file's rate with no owner input.
+- `owner_timed_fps` (added in phase 1) stays unused, kept for that automatic rate.
+- The owner's one per-file control is **don't retime** (`retime = OFF`), for a file that played better before, and
+  turning it back on. Both are judged by watching.
 
 **Ranking is not changed.** Once downloads are retimed, a file stated as about 24 plays right on a 25 fps film. On
 the design films that held 5 of 5 times, against 0 of 1 for a file stated as 25. Re-ranking would also re-pick each
@@ -298,7 +299,7 @@ Not in this plan:
      - an owner edit made while the job holds a row is kept.
    - If either 2a or 2b is estimated over 1,200 lines, it is split again along these bullets.
 4. **The Admin, then on.**
-   - `PUT /api/admin/subtitles/{id}/retime` takes "as stated", 23.976, 24, 25 or "don't retime".
+   - `PUT /api/admin/subtitles/{id}/retime` takes "retime" or "don't retime" (no rate: "The owner's rate").
    - The rate line and the switch go in the Admin's subtitle view.
    - The switch's default becomes on.
    - **Released on its own.** 2a and 2b are tagged and deployed before phase 4 is tagged. Any rollback of phase 4's
@@ -321,8 +322,8 @@ lines, it is split: the endpoint and contract first, then the Admin view and the
 
 ## Decisions taken in this plan
 
-1. **The stated rate decides, unless the owner says otherwise.** It held on 5 of the 6 files with signal. The owner's
-   choice of rate covers a wrong one, either way.
+1. **The stated rate decides.** It held on 5 of the 6 files with signal. A wrong one ends as a rate conflict, never a
+   failure; the owner sets no rate (2026-11-25).
 2. **Only across the PAL speed-up.** 30 fps copies run at film speed, and odd rates are left alone.
 3. **23.976 and 24.0 are kept apart** (k = 23.976/25 against 24/25). They differ by 0.1%, about 7 s over two hours.
    The stated value is used as given.
