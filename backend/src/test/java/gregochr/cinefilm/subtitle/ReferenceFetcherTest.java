@@ -17,13 +17,17 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.CannotCreateTransactionException;
 
 /** What a fetched reference stores of the search result it was fetched for: its stated frame rate. */
 @ExtendWith(MockitoExtension.class)
@@ -99,7 +103,9 @@ class ReferenceFetcherTest {
 
         assertThat(returned).isSameAs(reference);
         assertThat(returned.getTimedFps()).isEqualTo(25.0);
+        verify(references).findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L);
         verify(references).fillTimedFps(7L, 25.0);
+        verifyNoMoreInteractions(references);
         verifyNoInteractions(api, budget);
     }
 
@@ -128,16 +134,25 @@ class ReferenceFetcherTest {
         verifyNoInteractions(api, budget);
     }
 
-    @Test
-    void aFillThatFailsLeavesTheStoredReferenceAsItWasAndTheFetchStillSucceeds() {
+    @ParameterizedTest
+    @MethodSource("failures")
+    void aFillThatFailsLeavesTheStoredReferenceAsItWasAndTheFetchStillSucceeds(RuntimeException failure) {
         OpenSubtitlesReference reference = finalStored(null);
-        doThrow(new DataAccessResourceFailureException("database busy")).when(references).fillTimedFps(7L, 25.0);
+        doThrow(failure).when(references).fillTimedFps(7L, 25.0);
 
         OpenSubtitlesReference returned = fetcher.fetch(1L, IMDB, stating(25.0), 20);
 
         assertThat(returned).isSameAs(reference);
         assertThat(returned.getTimedFps()).isNull();
+        verify(references).findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L);
+        verify(references).fillTimedFps(7L, 25.0);
+        verifyNoMoreInteractions(references);
         verifyNoInteractions(api, budget);
+    }
+
+    static Stream<RuntimeException> failures() {
+        return Stream.of(new DataAccessResourceFailureException("database busy"),
+            new CannotCreateTransactionException("no connection"));
     }
 
     @Test

@@ -10,14 +10,19 @@ import java.time.Instant;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * A subtitle downloaded from OpenSubtitles as a film's reference (whole-film timeline). Kept and reused: the same file
  * is never downloaded twice for a film. A reference with no cues is unusable and is kept so that file is never fetched
  * again.
+ *
+ * <p>Updates write only the columns that changed, because several writers touch a row under different locks (the
+ * fetch, the cue-end backfill, the frame rate fill): one must not write another's column back to its old value.
  */
 @Entity
 @Table(name = "opensubtitles_reference")
+@DynamicUpdate
 @Getter
 @Setter
 @NoArgsConstructor

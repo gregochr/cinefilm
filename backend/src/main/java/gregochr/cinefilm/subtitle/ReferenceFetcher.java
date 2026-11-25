@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.TransactionException;
 
 /**
  * Gets one OpenSubtitles file as a stored reference, spending the shared daily download budget: the stored one when it
@@ -147,7 +148,7 @@ final class ReferenceFetcher {
         try {
             references.fillTimedFps(stored.getId(), candidate.fps());
             stored.setTimedFps(candidate.fps());
-        } catch (DataAccessException e) {
+        } catch (DataAccessException | TransactionException e) {
             LOG.warn("Could not store the stated frame rate of reference {}: {}", stored.getId(), e.toString());
         }
     }
