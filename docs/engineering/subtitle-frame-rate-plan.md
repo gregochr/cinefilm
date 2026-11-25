@@ -96,7 +96,8 @@ cues themselves are put on the film's timeline once, and every reader sees them 
 - The cue hash in `TimingKeys.identity` and the served version change, so each rewritten file's fits and checks are
   stale. That is exactly the set that needs them made again.
 
-**The job.** `SubtitleRetimeJob`, behind `cinefilm.subtitles.retime-enabled` (default off until the last phase):
+**The job.** `SubtitleRetimeJob`, run by `cinefilm.subtitles.retime`: `off` (the default until the last phase; the job
+writes nothing), `on`, or `restore` (the rollback, below).
 - **Which files.** Each run, it visits:
   - every download and every stored reference with a known rate (stated, or the owner's);
   - every row with `retimed_by` set.
@@ -109,15 +110,19 @@ cues themselves are put on the film's timeline once, and every reader sees them 
   and the verification are checked again. A `BUSY` is retried, so an owner's edit made at the same moment is never
   overwritten.
 - **The checks.**
-  - It deletes the check and alignment rows of the rewritten files and of each touched edition's served pick.
-  - Whenever a reference's `cues_text` changes, by a rewrite, a re-scale or a restore, it also deletes every
-    `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that names it, in every edition of the
-    film. Those keys name the reference, not its cues.
-  - Then, for each of those editions in turn, it runs the timing fit first and the checks after it, since a
-    download's check waits for its fit. Stored references come first. A save that comes back `BUSY` (the library
-    lock is held) is retried inside the job, so an edition is not left for the nightly pass.
-  The time an edition spends unchecked is the length of that one run, not a nightly pass. During that run a download
-  that failed could play, unchecked. That is accepted and measured (Checks after release).
+  - **A rewritten file's own rows go stale by its cue hash.** The file is unchecked until its re-check gives a verdict.
+    During that time a download that had failed could play, unchecked. That is accepted and measured (Checks after
+    release).
+  - **Rows that name a changed reference are not deleted.** Whenever a reference's `cues_text` changes, by a rewrite,
+    a re-scale or a restore, every `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that
+    names it, in every edition of the film, gets `stale_since` set (a new column on the three tables). Those keys name
+    the reference, not its cues.
+  - A stale row still decides what plays. What is due treats it as due. The new verdict replaces it in one write. If
+    no verdict comes back (the budget, an outage, the candidate cap), the old row stays and stays due. So an owner's
+    file that failed is never put back on screen by a deletion.
+  - **The re-check runs at once.** For each touched edition in turn, the job runs the timing fit first, then the
+    checks, since a download's check waits for its fit. Stored references come first. A save that comes back `BUSY`
+    is retried inside the job.
 - **When it runs.** At startup, nightly, and after an index pass. So a film whose rate arrives later, or a new
   download, is retimed then. A new download or reference is also retimed as it is stored, when the switch is on.
 - **The film's rate.**
@@ -126,30 +131,42 @@ cues themselves are put on the film's timeline once, and every reader sees them 
   - A whole-edition file on a split edition takes a rate only when every part has a current row with the same rate.
   - Anything else gives k = 1, and the file is not retimed.
 
-**Undo.** A file is restored by writing `original_cues_text` back and clearing `retimed_by`. The cue hash changes, so
-its checks are made again the same way. A file set to `retime = OFF` is restored at once. Turning the switch off
-restores nothing by itself: the rewritten files stay right. A rollback, if ever needed, restores every retimed file
-by the same rule.
+**Undo.**
+- A file is restored by writing `original_cues_text` back and clearing `retimed_by`, and its checks are made again
+  the same way.
+- A download set to `retime = OFF` is restored at once.
+- `off` restores nothing: the rewritten files stay right.
+- **The rollback is `restore`.** It restores every retimed download and reference by the same rule, and marks their
+  rows as above. It is tested in phase 2a (downloads) and 2b (references). An image rollback alone would leave the
+  rewritten cues in place, so `restore` is run first; `operations.md` says so.
 
 **Unknown against retimed: no verdict.**
 - **The case.**
-  - A downloaded file is on its edition's timeline when its k for that edition is 1, or when `retimed_by` equals it.
-  - A reference is on an edition's timeline on the same terms. That is, its k for that edition's rate is 1, or
-    `retimed_by` equals that k.
-  - Anything else is unknown for that comparison: no stated rate, a film whose editions disagree, or an edition
-    whose rate is unknown. Compared with a retimed side, it can't be judged.
+  - A row's **natural k** for an edition is worked out from the rates alone: its rate (the owner's, else the stated
+    one) against the edition's film rate. The switch and `retime` play no part.
+  - A downloaded file or a reference is **on the edition's timeline** when its natural k is 1, or when `retimed_by`
+    equals it.
+  - **A raw row whose natural k is not 1** (off by the owner's choice, or a new arrival while the switch is off) is
+    compared with the other side's `original_cues_text` when both have the same rate. So both are raw on the same
+    rate, as today. Otherwise there is no verdict.
+  - Anything else is unknown for that comparison: no rate, a film whose editions disagree, or an edition whose rate
+    is unknown. Compared with a retimed side, it can't be judged.
 - **What happens.** That reference is skipped, the case is counted, and it never gives `CHECK`. The walk moves on to
   the next candidate with a stated rate, stored ones first. If none is left, the edition has no verdict this run
   (unchecked) and is counted.
-- **The scope.** The rule applies whenever either side has `retimed_by` set, whatever the switch says, because the
-  rewritten rows outlive it. The owner's files count as on the film's timeline, so they are compared as usual. Tests
+- **The scope.** The rule applies whenever either side is not on the timeline, whatever the switch says, because the
+  rewritten rows outlive it. Tests cover an owner-offset download that is off against a retimed reference (compared
+  raw against raw), and a reference stored while the switch is off (no verdict against a retimed download). The owner's files count as on the film's timeline, so they are compared as usual. Tests
   pin both.
 
 **What the owner set by hand is left alone.**
-- A download with an OWNER offset or owner verification when the job first reaches it is set to **retime off**, and
-  plays as it does today.
-- The Admin says the file may drift and that retime is off because the owner set its timing. The owner can turn it
-  on, which retimes it and resets the offset.
+- `retime` starts **undecided** (null). The job decides it once: **off** for a download with an OWNER offset or owner
+  verification, which then plays as it does today, and **on** otherwise. A download that arrives while the switch is
+  on starts on.
+- Once decided, the job never decides it again. A later verify or offset nudge on a retimed file leaves it retimed.
+- The Admin says when the file may drift because retime is off. The owner can turn it on. That retimes the file,
+  resets the offset and clears the verification, since the rewritten cues are not what the owner verified.
+  Tests cover "verify after retime" and "turn on, then the next run".
 - A file the owner chose in the picker with neither is retimed, if its rate is known (phase 1).
 
 **The owner's choice per file.** Each downloaded file has **Timed for:**
@@ -158,7 +175,8 @@ by the same rule.
   stated as 25 but timed like a 24 fps file;
 - **don't retime**: the same as `retime = OFF`.
 
-It is stored as `subtitle_sidecar.owner_timed_fps` beside `retime`. The Admin says what was done, for example
+It is stored as `owner_timed_fps` on the download, and copied to the stored reference with the same film and file id,
+so the reference judges other files at the owner's rate too. The Admin says what was done, for example
 "Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%", or "rate unknown".
 
 **Ranking is not changed.** Once downloads are retimed, a file stated as about 24 plays right on a 25 fps film. On
@@ -178,8 +196,10 @@ Not in this plan:
      - `timed_fps`, `retimed_by` and `retimed_for_fps` (nullable `DOUBLE PRECISION`);
      - `original_cues_text` (nullable `TEXT`).
 
-     It also adds, on `subtitle_sidecar`, `retime` (`AUTO` or `OFF`, default `AUTO`) and `owner_timed_fps`
-     (nullable).
+     It also adds:
+     - on `subtitle_sidecar`, `retime` (nullable: undecided, `AUTO` or `OFF`);
+     - on both tables, `owner_timed_fps` (nullable);
+     - on `forced_subtitle_check`, `forced_download_check` and `forced_subtitle_alignment`, `stale_since` (nullable).
    - New downloads, picker downloads (`Offered.result().fps()`) and newly fetched references store their stated
      rate.
    - The Java migration `V40__BackfillSubtitleFrameRates` (as `V27__BackfillPlaybackHealthFigures` does) fills
@@ -192,7 +212,9 @@ Not in this plan:
    - After release, a read-only query on the server counts:
      - rows backfilled, out of the expected 92;
      - downloads the job would set to off;
-     - comparisons of unknown against retimed.
+     - comparisons of unknown against retimed;
+     - references stated as 25 on 25 fps films that act as judges. These are the Bridge of Spies risk; the owner's
+       rate choice is how one is corrected.
 
      **If fewer than 80 of the 92 are backfilled, the owner is asked before phase 2.** The choice is a one-off
      file-info lookup on OpenSubtitles, or leaving them listed.
@@ -208,9 +230,12 @@ Not in this plan:
      - a retimed file's served cues, fits and checks follow the rewrite;
      - a failed download is checked again within the job's run;
      - a film file replaced at another rate is rewritten from the original.
+     - `restore` puts every retimed download back.
 3. **2b: references and arrivals, behind the switch.**
    - References are rewritten under the agreed-rate rule.
-   - Rows that used a rewritten reference are deleted in every edition of the film.
+   - Rows that name a changed reference get `stale_since`, in every edition of the film. They keep deciding until
+     replaced, and are due.
+   - `restore` covers references too.
    - `ReferenceFetcher.store` resets the retime columns.
    - Downloads are copied from the original cues.
    - A file is retimed as it arrives.
