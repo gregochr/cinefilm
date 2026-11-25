@@ -893,16 +893,19 @@ class TimingReferenceFetchTest {
     }
 
     @Test
-    void aTransientlyFailedCandidateThatStatesNoRateIsNotFetchedAgainEvenWhenItsStoredRowHasOne() {
+    void aTransientlyFailedCandidateWhoseStoredRowStatesARateIsFetchedAgainBecauseTheFetchKeepsIt() {
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5011, scatteredReference(), saved);
         OpenSubtitlesReference transientFailure = stored(5011, List.of());
         transientFailure.setFailedDownloads(1);
         transientFailure.setTimedFps(23.976);
         when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(retimedShifted()),
             List.of(noRate(5011)), Map.of(5011L, transientFailure))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
 
         fetch.run(CHECK_LIMIT, true);
 
-        verifyNoInteractions(api, budget);
+        assertThat(saved).containsOnlyKeys(5011L);
     }
 
     @Test
@@ -952,5 +955,22 @@ class TimingReferenceFetchTest {
         fetch.run(CHECK_LIMIT, true);
 
         verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void whenEveryFileIsLongAndOnlySomeAreRetimedTheNoRateCandidateIsFetchedBecauseTheOtherCanJudgeIt() {
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5011, scatteredReference(), saved);
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, SrtParser.format(full(300)));
+        File longRetimed = new File(8L, Origin.DOWNLOAD, 300, SrtParser.format(full(300)), 5099L, side);
+        File longRaw = new File(9L, Origin.OWNER, 300, SrtParser.format(full(300)));
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(longRetimed, longRaw),
+            List.of(noRate(5011)), Map.of())));
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(api).download(5011);
+        assertThat(saved).containsOnlyKeys(5011L);
     }
 }

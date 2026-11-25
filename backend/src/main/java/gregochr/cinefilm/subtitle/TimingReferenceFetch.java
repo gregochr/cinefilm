@@ -146,9 +146,11 @@ final class TimingReferenceFetch {
         for (OpenSubtitlesResult candidate : target.candidates()) {
             OpenSubtitlesReference reference = shared.stored.get(candidate.fileId());
             boolean fetched = reference == null || !reference.isFinal();
-            if (fetched && candidate.fps() == null && everyDecidingFileRetimed(target, candidate)) {
-                // It would arrive with no rate, and a retimed file cannot be judged against it: no download and no
-                // slot, or a few such files would block one whose rate is known.
+            if (fetched && candidate.fps() == null && (reference == null || reference.getTimedFps() == null)
+                && everyDecidingFileRetimed(target, candidate)) {
+                // It would arrive with no rate (a stored row's rate is kept by a fetch), and a retimed file cannot be
+                // judged against it: no download and no slot, or a few such files would block one whose rate is
+                // known.
                 LOG.info("Timing reference for edition {} (film {}): file {} passed over, no verdict: UNKNOWN_RATE",
                     target.editionId(), target.filmId(), candidate.fileId());
                 continue;
