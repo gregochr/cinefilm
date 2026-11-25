@@ -75,7 +75,7 @@ public class FullFitService {
                 stored, null);
         }
 
-        /** What the download is for the rate rule: an owner's file unless a side was given. */
+        /** What the download is for the rate rule: a download of no known rate unless a side was given. */
         RateComparison.Side rateSide() {
             return side == null ? RateComparison.Side.download() : side;
         }

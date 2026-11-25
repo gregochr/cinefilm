@@ -273,8 +273,13 @@ class DownloadPlanTest {
     }
 
     @Test
-    void theSameCheckThatIsNotAnotherCutStandsAndIsPromotedWhenTheOriginalsDoNotAgreeEither() {
-        OpenSubtitlesReference retimed = retimedLonger(spaced(10, 77_000));
+    void theSameCheckThatIsNotAnotherCutStandsAndIsPromotedWhenTheOriginalsAreACheckThatIsNotAnotherCutEither() {
+        // The originals list every 25 s: the owner's lines are all in them, but they have far more (incomplete).
+        List<SubtitleCue> originals = spaced(40, 25_000);
+        SubtitleComparison.Result onOriginals = SubtitleComparison.compare(SERVED, originals);
+        assertThat(onOriginals.verdict()).isEqualTo(SubtitleComparison.Verdict.CHECK);
+        assertThat(ReferenceWalk.looksLikeOtherCut(onOriginals)).isFalse();
+        OpenSubtitlesReference retimed = retimedLonger(originals);
 
         assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
             SERVED, () -> 25.0)).containsSame(retimed);

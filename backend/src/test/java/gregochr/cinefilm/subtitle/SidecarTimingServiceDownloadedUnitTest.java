@@ -944,10 +944,9 @@ class SidecarTimingServiceDownloadedUnitTest {
         });
     }
 
-    @Test
-    void aFileLeftOutAsARateConflictGivesTheConflictReasonAndNotTheUnknownRateOne() {
+    /** A retimed sidecar with irregular lines and a stated-25 reference that only agrees with its originals. */
+    private OpenSubtitlesReference conflictingReference() {
         retimed();
-        read(EmbeddedCueStarts.Status.NO_REFERENCE);
         // Irregular lines, so a fit is not put down to chance: the sidecar's stored cues are 90 s before its originals.
         List<SubtitleCue> stored = new ArrayList<>();
         List<SubtitleCue> original = new ArrayList<>();
@@ -966,8 +965,31 @@ class SidecarTimingServiceDownloadedUnitTest {
         OpenSubtitlesReference conflicting = reference(5012, 300, IMDB);
         conflicting.setTimedFps(25.0);
         conflicting.setCuesText(SrtParser.format(theirs));
+        return conflicting;
+    }
+
+    @Test
+    void aFileLeftOutAsARateConflictGivesTheConflictReasonAndNotTheUnknownRateOne() {
+        OpenSubtitlesReference conflicting = conflictingReference();
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
         stored(conflicting);
         when(references.findAllById(List.of(5012L))).thenReturn(List.of(conflicting));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        FitJob job = service.fitJobs(1L).get(0);
+
+        assertThat(job.osReferences()).isEmpty();
+        assertThat(job.noReference()).isEqualTo(SidecarTimingService.RATE_CONFLICT_VERDICT);
+    }
+
+    @Test
+    void aRateConflictFollowedByAFileOfUnknownRateStillGivesTheConflictReason() {
+        OpenSubtitlesReference conflicting = conflictingReference();
+        OpenSubtitlesReference unknown = reference(5013, 300, IMDB);
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(conflicting, unknown);
+        when(references.findAllById(List.of(5012L, 5013L))).thenReturn(List.of(conflicting, unknown));
         served();
         when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
 
