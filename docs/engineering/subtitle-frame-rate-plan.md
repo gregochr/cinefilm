@@ -173,8 +173,9 @@ the switch says, because rewritten rows outlive it:
 - In this order:
   1. **Neither side retimed** (`retimed_by` null on both): compared as stored, exactly as today, whatever the rates.
   2. **One side retimed, the other's rate unknown:** no verdict. The reference is skipped, the case is counted, and
-     it never gives `CHECK`. Against `FILE`, `EMBEDDED` or `OFF_FITS`, whose rate is unknown while the film's is, it
-     is also no verdict and counted, and there is nothing to walk on to.
+     it never gives `CHECK`. `FILE`, `EMBEDDED` and `OFF_FITS` have no rate while the film's is unknown:
+     a retimed download against one of them is no verdict and counted, with nothing to walk on to; a retimed
+     reference judging `FILE` or `OFF_FITS` is skipped and counted, and the walk moves on (below).
   3. **Same family:** original against original. Both are on the timeline they were made for, so this is the
      comparison made today. It covers a raw 23.976 reference against a retimed 23.976 or 24.0 download.
   4. **Different families:** compared as stored, on the film's timeline. When either side is a reference and that
@@ -204,6 +205,9 @@ the switch says, because rewritten rows outlive it:
   - an owner file against a reference with no rate, on a 23.976 film, still gets a verdict;
   - an owner-offset download that is off, against a retimed reference of its family, is compared on the originals;
   - a reference of unknown rate gives no verdict against a retimed download;
+  - on a film whose rate is unknown for now, a retimed download against the owner's file or the embedded track
+    gives no verdict, is counted, and never `CHECK`; a retimed reference judging the owner's file is skipped, and a
+    raw reference of known rate after it still gives the verdict (2b);
   - a raw 23.976 reference against a retimed 23.976 download on a 25 fps film is compared on the originals and
     agrees; so is a raw 24.0 reference against a retimed 23.976 download (a split-rate film);
   - a retimed download against the embedded English track gets a verdict on the film's timeline;
