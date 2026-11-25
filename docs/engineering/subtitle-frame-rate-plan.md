@@ -78,9 +78,9 @@ cues themselves are put on the film's timeline once, and every reader sees them 
   `original_cues_text`, and k to `retimed_by`, with the film rate k came from in `retimed_for_fps`.
 - **A stored reference** (`opensubtitles_reference`) is rewritten the same way, but only when every original part of
   every edition of its film has one agreed rate. References are kept per film, not per edition. A film whose editions
-  disagree keeps its references raw, and those count as unknown-rate (below).
+  disagree keeps its references raw (below).
 - **A new download is copied from a reference's original cues** (`original_cues_text` when set, else `cues_text`),
-  with its `timed_fps`, and then gets its own k. A download is never scaled twice.
+  with its `timed_fps` and `owner_timed_fps`, and then gets its own k. A download is never scaled twice.
 - **k is worked out again on every run, from the original.** When it differs from `retimed_by` (the film file was
   replaced by one at another rate, an edition was edited, or the owner changed the file's rate), the file is
   rewritten from its original, or restored when the new k is 1.
@@ -123,9 +123,15 @@ writes nothing), `on`, or `restore` (the rollback, below).
     a re-scale or a restore, every `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that
     names it, in every edition of the film, gets `stale_since` set (a new column on the three tables). Those keys name
     the reference, not its cues.
-  - A stale row still decides what plays. What is due treats it as due. The new verdict replaces it in one write. If
-    no verdict comes back (the budget, an outage, the candidate cap), the old row stays and stays due. So an owner's
-    file that failed is never put back on screen by a deletion.
+  - A stale row still decides what plays. What is due treats it as due. The new verdict replaces it in one write.
+    - **No verdict for a passing reason** (the budget, an outage, the candidate cap): the old row stays, and stays
+      due. So an owner's file that failed is never put back on screen by a deletion.
+    - **Only definite skips** (unknown rate, a rate conflict): a carried row made on old cues is dropped, so a
+      failure caused only by drift doesn't outlive the fix.
+  - **A save never lands on cues that have changed.** `opensubtitles_reference` gets a `cues_version`, raised on
+    every change of its `cues_text`. Every check and fit carries the version it read and drops its save if it has
+    changed, as it already does for the served version. A run racing the job therefore can't save a verdict made on
+    the old cues.
   - **The re-check runs at once.** For each touched edition in turn, the job runs the timing fit first, then the
     checks, since a download's check waits for its fit. Stored references come first. A save that comes back `BUSY`
     is retried inside the job.
@@ -148,8 +154,8 @@ writes nothing), `on`, or `restore` (the rollback, below).
 
 **How two files are compared** (a download or an owner's file against a reference). One rule, applied whatever
 the switch says, because rewritten rows outlive it:
-- **A row's rate** is the owner's rate if set, else the stated one, else unknown. The owner's own files (`FILE`)
-  count as on the film's timeline.
+- **A row's rate** is the owner's rate if set, else the stated one, else unknown. The owner's own files (`FILE`) and
+  downloads that fit as is (`OFF_FITS`) count as on the film's timeline.
 - **Neither side retimed** (`retimed_by` null on both): they are compared as stored, exactly as today. That covers
   every pair on a 23.976 film with nothing retimed. It also covers an owner's file against a reference with no rate,
   and an owner-offset download that is off against a raw reference.
@@ -177,10 +183,12 @@ the switch says, because rewritten rows outlive it:
 **What the owner set by hand is left alone.**
 - `retime` starts **undecided** (null). The job decides it once:
   - **off** for a download with an OWNER offset or owner verification, which then plays as it does today;
-  - **off** for one whose current fit is `EMBEDDED` and `ALIGNED` as stored. That fit proves the cues are already on
-    this copy's timeline, so its stated rate is wrong (the reverse of Bridge of Spies);
-  - **on** otherwise. A download that arrives while the switch is
-  on starts on.
+  - **fits as is** (`OFF_FITS`) for one whose original cues fit the film's English track `ALIGNED`. That fit proves
+    they are already on this copy's timeline, so its stated rate is wrong (the reverse of Bridge of Spies). Such a
+    file counts as on the film's timeline in every comparison, like an owner's file. On a film with an English
+    embedded track, the decision waits until a fit of the original cues has been tried, at arrival too. Only 3
+    forced files have one today;
+  - **on** otherwise, including a download that arrives while the switch is on.
 - Once decided, the job never decides it again. A later verify or offset nudge on a retimed file leaves it retimed.
 - The Admin says when the file may drift because retime is off. The owner can turn it on. That retimes the file,
   resets the offset and clears the verification, since the rewritten cues are not what the owner verified.
@@ -215,7 +223,8 @@ Not in this plan:
      - `original_cues_text` (nullable `TEXT`).
 
      It also adds:
-     - on `subtitle_sidecar`, `retime` (nullable: undecided, `AUTO` or `OFF`);
+     - on `subtitle_sidecar`, `retime` (nullable: undecided, `AUTO`, `OFF` or `OFF_FITS`);
+     - on `opensubtitles_reference`, `cues_version` (integer, default 0);
      - on both tables, `owner_timed_fps` (nullable);
      - on `forced_subtitle_check`, `forced_download_check` and `forced_subtitle_alignment`, `stale_since` (nullable).
    - New downloads, picker downloads (`Offered.result().fps()`) and newly fetched references store their stated
