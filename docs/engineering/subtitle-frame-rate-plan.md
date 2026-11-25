@@ -199,15 +199,17 @@ the switch says, because rewritten rows outlive it:
     family it judges as today (rule 3).
   - **Raw against raw, and same-family pairs:** as today, so a wrong rate can still fail a file, or make one fail,
     there as it can now.
-- **After a skip,** the walk moves on to the next candidate with a known rate, stored ones first. If none is left,
+- **After a skip,** the walk moves on to the next candidate that rules 1–4 can judge against that file (one that
+  would be skipped the same way is passed over), stored ones first. If none is left,
   the edition has no verdict this run and is counted.
 - **Tests:**
   - an owner file against a reference with no rate, on a 23.976 film, still gets a verdict;
   - an owner-offset download that is off, against a retimed reference of its family, is compared on the originals;
   - a reference of unknown rate gives no verdict against a retimed download;
   - on a film whose rate is unknown for now, a retimed download against the owner's file or the embedded track
-    gives no verdict, is counted, and never `CHECK`; a retimed reference judging the owner's file is skipped, and a
-    raw reference of known rate after it still gives the verdict (2b);
+    gives no verdict, is counted, and never `CHECK`;
+  - on such a film, a retimed reference judging the owner's file is skipped and counted, and a raw reference with
+    no stated rate after it gives the verdict (rule 1) (2b);
   - a raw 23.976 reference against a retimed 23.976 download on a 25 fps film is compared on the originals and
     agrees; so is a raw 24.0 reference against a retimed 23.976 download (a split-rate film);
   - a retimed download against the embedded English track gets a verdict on the film's timeline;
