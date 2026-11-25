@@ -56,6 +56,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 /** The picker's search and download with OpenSubtitles, the budget and the download service faked. */
 @ExtendWith(MockitoExtension.class)
@@ -395,6 +396,24 @@ class EditionOpenSubtitlesServiceTest {
 
         assertThat(dto).isEqualTo(new DownloadDto(40L, "forced", 5011, "Taken.2008.BluRay", 2));
         verify(events).publishEvent(new SubtitleDownloadsFinished());
+    }
+
+    @Test
+    void aPickedFileGetsTheRateItsResultStatesWhenTheReferenceHasNoneAndTheFillFails() {
+        searchedForced(plain(5011));
+        readyToDownload(5011);
+        OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
+        reference.setId(7L);
+        reference.setTimedFps(null);
+        doThrow(new DataAccessResourceFailureException("database busy")).when(references).fillTimedFps(7L, 23.976);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW))
+            .thenReturn(ChosenOutcome.ADDED);
+        when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(2);
+
+        assertThat(service.download(40L, forced(5011)).fileId()).isEqualTo(5011L);
+
+        assertThat(reference.getTimedFps()).isNull();
+        verify(downloads).addChosen(1L, 40L, SubtitleKind.FORCED, reference, 23.976, NOW);
     }
 
     @Test
