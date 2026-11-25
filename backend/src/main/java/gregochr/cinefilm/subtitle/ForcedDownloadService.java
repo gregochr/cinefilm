@@ -535,16 +535,17 @@ public class ForcedDownloadService {
      * @param editionId the edition
      * @param kind forced or full
      * @param reference the stored reference of the picked file
+     * @param statedFps the rate the picked search result states, or null; used when the reference has none
      * @param now the time to stamp
      * @return what happened
      */
     public ChosenOutcome addChosen(Long filmId, Long editionId, SubtitleKind kind, OpenSubtitlesReference reference,
-                                   Instant now) {
+                                   Double statedFps, Instant now) {
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
             return ChosenOutcome.BUSY;
         }
         try {
-            return tx.execute(status -> addChosenLocked(filmId, editionId, kind, reference, now));
+            return tx.execute(status -> addChosenLocked(filmId, editionId, kind, reference, statedFps, now));
         } catch (DataIntegrityViolationException e) {
             // Another writer made the same download first.
             return ChosenOutcome.ALREADY_DOWNLOADED;
@@ -554,7 +555,7 @@ public class ForcedDownloadService {
     }
 
     private ChosenOutcome addChosenLocked(Long filmId, Long editionId, SubtitleKind kind,
-                                          OpenSubtitlesReference reference, Instant now) {
+                                          OpenSubtitlesReference reference, Double statedFps, Instant now) {
         Edition edition = loadEdition(filmId, editionId);
         if (edition == null) {
             return ChosenOutcome.CHANGED;
@@ -574,7 +575,7 @@ public class ForcedDownloadService {
                 sidecars.save(earlier);
             }
         }
-        SubtitleSidecar row = download(edition, reference, now, kind, null);
+        SubtitleSidecar row = download(edition, reference, now, kind, statedFps);
         row.setOwnerChosenAt(now);
         sidecars.save(row);
         if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), reference.getImdbId(),

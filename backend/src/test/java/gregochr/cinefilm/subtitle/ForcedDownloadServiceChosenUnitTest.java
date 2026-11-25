@@ -203,7 +203,7 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.hasOriginalFile(1L, 40L)).isFalse();
         assertThat(service.refusal(1L, 40L, SubtitleKind.FORCED, IMDB, 5011)).contains(ChosenOutcome.NO_FILE);
         assertThat(service.refusal(1L, 40L, SubtitleKind.FULL, IMDB, 6011)).contains(ChosenOutcome.NO_FILE);
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.NO_FILE);
         assertThat(lock.holder()).isNull();
     }
@@ -273,23 +273,34 @@ class ForcedDownloadServiceChosenUnitTest {
     }
 
     @Test
-    void aChosenFileKeepsTheRateItsReferenceStates() {
+    void aChosenFilesReferenceRateWinsOverTheRateThePickedResultStates() {
         editionLoads();
         used(SubtitleKind.FORCED, 0, 0);
         OpenSubtitlesReference stated = reference(5011, 12);
         stated.setTimedFps(23.976);
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, stated, NOW)).isEqualTo(ChosenOutcome.ADDED);
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, stated, 25.0, NOW)).isEqualTo(ChosenOutcome.ADDED);
 
         assertThat(savedRows()).extracting(SubtitleSidecar::getTimedFps).containsExactly(23.976);
     }
 
     @Test
-    void aChosenFileWhoseReferenceStatesNoRateHasNone() {
+    void aChosenFileWhoseReferenceHasNoRateTakesTheRateThePickedResultStates() {
         editionLoads();
         used(SubtitleKind.FORCED, 0, 0);
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), 25.0, NOW))
+            .isEqualTo(ChosenOutcome.ADDED);
+
+        assertThat(savedRows()).extracting(SubtitleSidecar::getTimedFps).containsExactly(25.0);
+    }
+
+    @Test
+    void aChosenFileWhoseReferenceAndResultStateNoRateHasNone() {
+        editionLoads();
+        used(SubtitleKind.FORCED, 0, 0);
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.ADDED);
 
         assertThat(savedRows()).extracting(SubtitleSidecar::getTimedFps).containsOnlyNulls();
@@ -300,7 +311,7 @@ class ForcedDownloadServiceChosenUnitTest {
         editionLoads();
         used(SubtitleKind.FORCED, 0, 0);
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.ADDED);
 
         ArgumentCaptor<SubtitleSidecar> saved = ArgumentCaptor.forClass(SubtitleSidecar.class);
@@ -328,7 +339,7 @@ class ForcedDownloadServiceChosenUnitTest {
         editionLoads();
         used(SubtitleKind.FULL, 0, 0);
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FULL, reference(6011, SubtitleComparison.FULL_LINES),
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FULL, reference(6011, SubtitleComparison.FULL_LINES), null,
             NOW)).isEqualTo(ChosenOutcome.ADDED);
 
         ArgumentCaptor<SubtitleSidecar> saved = ArgumentCaptor.forClass(SubtitleSidecar.class);
@@ -354,7 +365,7 @@ class ForcedDownloadServiceChosenUnitTest {
         SubtitleSidecar ordinary = download(7502, SubtitleKind.FORCED);
         rows(SubtitleKind.FORCED, List.of(), List.of(earlier, ordinary));
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.ADDED);
 
         assertThat(earlier.isOwnerChosen()).isFalse();
@@ -373,7 +384,7 @@ class ForcedDownloadServiceChosenUnitTest {
         otherEditions.setOwnerChosenAt(NOW.minusSeconds(60));
         rows(SubtitleKind.FORCED, List.of(), List.of(otherEditions));
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.ADDED);
 
         assertThat(otherEditions.getOwnerChosenAt()).isEqualTo(NOW.minusSeconds(60));
@@ -388,7 +399,7 @@ class ForcedDownloadServiceChosenUnitTest {
         when(ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(40L, IMDB, 5011, SubtitleKind.FORCED))
             .thenReturn(true);
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.ADDED);
 
         assertThat(savedRows()).singleElement().satisfies(row -> assertThat(row.getOpenSubtitlesFileId())
@@ -402,16 +413,16 @@ class ForcedDownloadServiceChosenUnitTest {
         editionLoads();
         used(SubtitleKind.FORCED, 0, 0);
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED,
-            reference(5011, SubtitleComparison.FULL_LINES), NOW)).isEqualTo(ChosenOutcome.UNUSABLE);
+            reference(5011, SubtitleComparison.FULL_LINES), null, NOW)).isEqualTo(ChosenOutcome.UNUSABLE);
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED,
-            reference(5011, SubtitleComparison.FULL_LINES - 1), NOW)).isEqualTo(ChosenOutcome.ADDED);
+            reference(5011, SubtitleComparison.FULL_LINES - 1), null, NOW)).isEqualTo(ChosenOutcome.ADDED);
 
         used(SubtitleKind.FULL, 0, 0);
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FULL,
-            reference(6011, SubtitleComparison.FULL_LINES - 1), NOW)).isEqualTo(ChosenOutcome.UNUSABLE);
+            reference(6011, SubtitleComparison.FULL_LINES - 1), null, NOW)).isEqualTo(ChosenOutcome.UNUSABLE);
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FULL,
-            reference(6011, SubtitleComparison.FULL_LINES), NOW)).isEqualTo(ChosenOutcome.ADDED);
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5012, 0), NOW))
+            reference(6011, SubtitleComparison.FULL_LINES), null, NOW)).isEqualTo(ChosenOutcome.ADDED);
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5012, 0), null, NOW))
             .isEqualTo(ChosenOutcome.UNUSABLE);
     }
 
@@ -420,7 +431,7 @@ class ForcedDownloadServiceChosenUnitTest {
         editionLoads();
         used(SubtitleKind.FORCED, 0, 0);
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 0), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 0), null, NOW))
             .isEqualTo(ChosenOutcome.UNUSABLE);
 
         verifyNoMoreInteractions(sidecars, ledger);
@@ -431,7 +442,7 @@ class ForcedDownloadServiceChosenUnitTest {
         editionLoads();
         used(SubtitleKind.FORCED, 2, 1);
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.CAP_REACHED);
 
         verifyNoMoreInteractions(sidecars, ledger);
@@ -443,7 +454,7 @@ class ForcedDownloadServiceChosenUnitTest {
         editionLoads();
         used(SubtitleKind.FORCED, 1, 1);
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.ADDED);
     }
 
@@ -452,23 +463,23 @@ class ForcedDownloadServiceChosenUnitTest {
         editionLoads();
         when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED))
             .thenReturn(List.of(block(5011, SubtitleKind.FORCED)));
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.BLOCKED);
 
         film.setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5012, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5012, 12), null, NOW))
             .isEqualTo(ChosenOutcome.NOT_WANTED);
 
         OpenSubtitlesReference other = reference(5013, 12);
         other.setImdbId("tt0000001");
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, other, NOW)).isEqualTo(ChosenOutcome.CHANGED);
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, other, null, NOW)).isEqualTo(ChosenOutcome.CHANGED);
     }
 
     @Test
     void anAddIsBusyWhileAScanHoldsTheLockAndLeavesTheScansLockAlone() {
         assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.BUSY);
 
         assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
@@ -478,7 +489,7 @@ class ForcedDownloadServiceChosenUnitTest {
     void anAddForAGoneEditionIsChangedAndGivesTheLockBack() {
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of());
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.CHANGED);
 
         assertThat(lock.holder()).isNull();
@@ -491,7 +502,7 @@ class ForcedDownloadServiceChosenUnitTest {
         when(sidecars.save(argThat(row -> "opensubtitles:40:5011".equals(row.getPath()))))
             .thenThrow(new DataIntegrityViolationException("dup"));
 
-        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), null, NOW))
             .isEqualTo(ChosenOutcome.ALREADY_DOWNLOADED);
 
         assertThat(lock.holder()).isNull();

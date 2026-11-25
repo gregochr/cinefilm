@@ -139,41 +139,20 @@ class ForcedDownloadEdgeTest extends ForcedDownloadTestBase {
             replacement.imdbId(), replacement.editionName(), null, replacement.candidates(), 3, "an older version");
         assertThat(service.add(stale, candidate, LATER)).isEqualTo(AddOutcome.DROPPED);
         assertThat(owner.getId()).isNotNull();
-        candidate.setTimedFps(25.0);
-        references.saveAndFlush(candidate);
         assertThat(service.add(replacement, candidate, LATER)).isEqualTo(AddOutcome.ADDED);
-        assertThat(sidecars.findAll()).filteredOn(SubtitleSidecar::isDownload)
-            .extracting(SubtitleSidecar::getTimedFps).containsExactly(25.0);
     }
 
-    /** Adds the one candidate's reference as a download and returns the rate the download row stores. */
-    private Double addedRate(Double candidateFps, Double referenceFps) {
+    @Test
+    void aPromotedReferenceWithNoRateIsStoredWithTheRateTheFilmsCandidateStates() {
         Film film = searchedFilm("Taken", 1,
-            new OpenSubtitlesResult(4011, 5011, "Release.5011", candidateFps, 10, true, false, null, null, 1));
+            new OpenSubtitlesResult(4011, 5011, "Release.5011", 25.0, 10, true, false, null, null, 1));
         OpenSubtitlesReference reference = reference(film, 5011);
-        reference.setTimedFps(referenceFps);
-        references.saveAndFlush(reference);
         DueDownload due = service.due().get(0);
 
         assertThat(service.add(due, reference, LATER)).isEqualTo(AddOutcome.ADDED);
 
-        return sidecars.findAll().stream().filter(SubtitleSidecar::isDownload)
-            .map(SubtitleSidecar::getTimedFps).toList().get(0);
-    }
-
-    @Test
-    void aPromotedReferenceWithNoRateTakesTheRateTheFilmsCandidateStates() {
-        assertThat(addedRate(25.0, null)).isEqualTo(25.0);
-    }
-
-    @Test
-    void aPromotedReferenceThatHasARateKeepsItWhateverTheCandidateStates() {
-        assertThat(addedRate(25.0, 23.976)).isEqualTo(23.976);
-    }
-
-    @Test
-    void aPromotedReferenceAndCandidateThatStateNoRateGiveADownloadWithNone() {
-        assertThat(addedRate(null, null)).isNull();
+        assertThat(sidecars.findAll()).filteredOn(SubtitleSidecar::isDownload)
+            .extracting(SubtitleSidecar::getTimedFps).containsExactly(25.0);
     }
 
     @Test

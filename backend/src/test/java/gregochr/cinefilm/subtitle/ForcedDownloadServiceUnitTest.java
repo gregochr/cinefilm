@@ -42,6 +42,7 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -381,5 +382,44 @@ class ForcedDownloadServiceUnitTest {
         assertThat(service.add(due, stored(5011, 1), NOW)).isEqualTo(AddOutcome.DROPPED);
         assertThat(lock.holder()).isNull();
         verify(sidecars).save(argThat(row -> row.getOpenSubtitlesFileId() == 5011));
+    }
+
+    /** Drives an add of the one candidate's reference through to the saved row and returns that row's rate. */
+    private Double addedRate(Double candidateFps, Double referenceFps) {
+        OpenSubtitlesResult stating = new OpenSubtitlesResult(4011, 5011, "Release 5011", candidateFps, 10, true,
+            false, null, null, 1);
+        film.setOsCandidates(OpenSubtitlesResult.listToJson(List.of(stating)));
+        OpenSubtitlesReference reference = stored(5011, 1);
+        reference.setTimedFps(referenceFps);
+        DueDownload due = new DueDownload(Kind.MISSING, 1L, 40L, IMDB, "Original", null, List.of(stating), 3, null);
+        when(films.findById(1L)).thenReturn(Optional.of(film));
+        when(need.isNeeded(1L)).thenReturn(true);
+        when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(edition));
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of());
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of());
+        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution(null, false, false)));
+        when(sidecars.save(argThat(row -> row.isDownload() && row.getPath().equals("opensubtitles:40:5011"))))
+            .thenAnswer(call -> call.getArgument(0));
+
+        assertThat(service.add(due, reference, NOW)).isEqualTo(AddOutcome.ADDED);
+
+        ArgumentCaptor<SubtitleSidecar> saved = ArgumentCaptor.forClass(SubtitleSidecar.class);
+        verify(sidecars).save(saved.capture());
+        return saved.getValue().getTimedFps();
+    }
+
+    @Test
+    void aPromotedReferenceWithNoRateTakesTheRateTheFilmsCandidateStates() {
+        assertThat(addedRate(23.976, null)).isEqualTo(23.976);
+    }
+
+    @Test
+    void aPromotedReferenceThatHasARateKeepsItWhateverTheCandidateStates() {
+        assertThat(addedRate(23.976, 25.0)).isEqualTo(25.0);
+    }
+
+    @Test
+    void aPromotedReferenceAndCandidateThatStateNoRateGiveADownloadWithNone() {
+        assertThat(addedRate(null, null)).isNull();
     }
 }
