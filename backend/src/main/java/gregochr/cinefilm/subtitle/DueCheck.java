@@ -21,17 +21,32 @@ import java.util.Set;
  * @param ownerVerified true when the owner has said what is checked looks right
  * @param cues what is checked, on the edition's timeline
  * @param downloadSidecarId the downloaded subtitle that is checked, or null when it is the owner's file(s)
+ * @param side what is checked, for the rate rule ({@link RateComparison}); the owner's file(s) when null
  */
 public record DueCheck(Long filmId, Long editionId, String imdbId, String editionName,
                        List<OpenSubtitlesResult> candidates, Set<Long> triedFileIds, String servedVersion,
-                       boolean ownerVerified, List<SubtitleCue> cues, Long downloadSidecarId) {
+                       boolean ownerVerified, List<SubtitleCue> cues, Long downloadSidecarId,
+                       RateComparison.Side side) {
+
+    /** A check of a download, with nothing known of its rate (as before the rate rule). */
+    public DueCheck(Long filmId, Long editionId, String imdbId, String editionName,
+                    List<OpenSubtitlesResult> candidates, Set<Long> triedFileIds, String servedVersion,
+                    boolean ownerVerified, List<SubtitleCue> cues, Long downloadSidecarId) {
+        this(filmId, editionId, imdbId, editionName, candidates, triedFileIds, servedVersion, ownerVerified, cues,
+            downloadSidecarId, null);
+    }
 
     /** A check of the owner's file(s). */
     public DueCheck(Long filmId, Long editionId, String imdbId, String editionName,
                     List<OpenSubtitlesResult> candidates, Set<Long> triedFileIds, String servedVersion,
                     boolean ownerVerified, List<SubtitleCue> cues) {
         this(filmId, editionId, imdbId, editionName, candidates, triedFileIds, servedVersion, ownerVerified, cues,
-            null);
+            null, null);
+    }
+
+    /** What is checked, as the rate rule sees it: the owner's file(s) unless a download was given. */
+    public RateComparison.Side rateSide() {
+        return side == null ? RateComparison.Side.file() : side;
     }
 
     /** True when a downloaded subtitle is checked, not the owner's file(s). */

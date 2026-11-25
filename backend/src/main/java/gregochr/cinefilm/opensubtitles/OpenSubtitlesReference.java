@@ -59,6 +59,16 @@ public class OpenSubtitlesReference {
     /** The frame rate OpenSubtitles states the file was timed for; null when it states none. */
     private Double timedFps;
 
+    /** The factor the stored cues were multiplied by to put them on the film's timeline; null = never retimed. */
+    private Double retimedBy;
+
+    /** The film rate {@link #retimedBy} came from; null until retimed. */
+    private Double retimedForFps;
+
+    /** The cues before they were retimed; null until then. */
+    @Column(columnDefinition = "TEXT")
+    private String originalCuesText;
+
     /** Downloads that were charged but gave no usable file; {@link #MAX_FAILED_DOWNLOADS} makes it final. */
     @Column(nullable = false)
     private int failedDownloads;

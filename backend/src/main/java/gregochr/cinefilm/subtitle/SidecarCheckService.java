@@ -165,7 +165,7 @@ public class SidecarCheckService {
         if (served != null) {
             due.add(new DueCheck(ref.id(), edition.getId(), ref.imdbId(), edition.getName(),
                 OpenSubtitlesRanking.rankFor(others, edition.getName()), tried, served.version(), false,
-                served.cues(), sidecar.getId()));
+                served.cues(), sidecar.getId(), RateComparison.Side.of(sidecar)));
         }
     }
 

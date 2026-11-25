@@ -47,6 +47,9 @@ class SidecarCheckRefresherFullFitTest {
     private static final int LIMIT = 20;
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private OpenSubtitlesApi api;
 
     @Mock
@@ -77,7 +80,7 @@ class SidecarCheckRefresherFullFitTest {
     void setUp() {
         refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit,
             timingReference, CLOCK, queued::add,
-            new FakeDailyLimit(LIMIT), events);
+            new FakeDailyLimit(LIMIT), events, filmRates);
         logged.start();
         refresherLog.addAppender(logged);
         probeLog.addAppender(logged);

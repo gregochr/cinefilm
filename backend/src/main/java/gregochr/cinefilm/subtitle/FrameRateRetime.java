@@ -58,6 +58,14 @@ public final class FrameRateRetime {
         return 1.0;
     }
 
+    /**
+     * Whether two stated rates are the same rate: both known and within the stated-rate tolerance of one another
+     * (23.976 and 23.98 are the same; 23.976 and 24.0 are not).
+     */
+    public static boolean sameRate(Double a, Double b) {
+        return a != null && b != null && Math.abs(a - b) <= STATED_TOLERANCE + SLACK;
+    }
+
     private static boolean between(double value, double min, double max) {
         return value >= min - SLACK && value <= max + SLACK;
     }

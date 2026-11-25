@@ -11,6 +11,7 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesSearchFinished;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException;
 import gregochr.cinefilm.subtitle.ReferenceWalk.Attempt;
 import gregochr.cinefilm.subtitle.SubtitleComparison.Result;
+import gregochr.cinefilm.subtitle.SubtitleComparison.Verdict;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -55,6 +57,7 @@ import org.springframework.stereotype.Service;
 public class SidecarCheckRefresher {
 
     private static final Logger LOG = LoggerFactory.getLogger(SidecarCheckRefresher.class);
+    private static final Predicate<Result> AGREES = r -> Verdict.AGREES.equals(r.verdict());
 
     /** A reset time further ahead than this is not believed (the reply is untrusted). */
     static final Duration MAX_BLOCK = ReferenceFetcher.MAX_BLOCK;
@@ -72,6 +75,7 @@ public class SidecarCheckRefresher {
     private final Clock clock;
     private final Executor executor;
     private final DailyDownloadLimit limits;
+    private final FilmRates filmRates;
     /** The ceiling for comparisons, set at the start of each run from the day's limit; one run at a time. */
     private volatile int checkLimit;
     private final ApplicationEventPublisher events;
@@ -85,7 +89,7 @@ public class SidecarCheckRefresher {
                                  FullFitService fullFit, TimingReferenceService timingReferences, Clock clock,
                                  @Qualifier("sidecarCheckExecutor") Executor executor,
                                  DailyDownloadLimit limits,
-                                 ApplicationEventPublisher events) {
+                                 ApplicationEventPublisher events, FilmRates filmRates) {
         this.api = api;
         this.budget = budget;
         this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
@@ -98,6 +102,7 @@ public class SidecarCheckRefresher {
         // subtitles are never starved (DownloadShares).
         this.limits = limits;
         this.events = events;
+        this.filmRates = filmRates;
     }
 
     /** Checks at start-up, and says so when the check is off. */
@@ -321,7 +326,18 @@ public class SidecarCheckRefresher {
                     position, candidate.fileId());
                 continue;
             }
-            Result result = SubtitleComparison.compare(due.cues(), SrtParser.cues(reference.getCuesText()));
+            RateComparison.Side served = due.rateSide();
+            RateComparison.Side referenceSide = RateComparison.Side.of(reference);
+            RateComparison.Judged<Result> judged = RateComparison.judge(served, referenceSide,
+                () -> filmRates.forEdition(due.editionId()), due.cues(), SrtParser.cues(reference.getCuesText()),
+                SubtitleComparison::compare, AGREES.negate(), AGREES);
+            if (!judged.hasVerdict()) {
+                LOG.info("Edition {}: candidate {} (file {}) skipped, no verdict: {} (sidecar {}, reference {})",
+                    due.editionId(), position, candidate.fileId(), judged.reason(), due.downloadSidecarId(),
+                    reference.getId());
+                continue;
+            }
+            Result result = judged.result();
             attempts.add(new Attempt(reference, result));
             if (!ReferenceWalk.moveOn(result)) {
                 break;

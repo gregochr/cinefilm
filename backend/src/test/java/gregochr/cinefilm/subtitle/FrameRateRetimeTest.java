@@ -86,4 +86,12 @@ class FrameRateRetimeTest {
         assertThat(FrameRateRetime.factor(30.0, 25.0)).isEqualTo(1.0);
         assertThat(FrameRateRetime.factor(29.97, 23.976)).isEqualTo(1.0);
     }
+
+    @Test
+    void twoRatesAreTheSameRateOnlyWhenBothAreKnownAndWithin001() {
+        assertThat(FrameRateRetime.sameRate(23.976, 23.98)).isTrue();
+        assertThat(FrameRateRetime.sameRate(23.976, 24.0)).isFalse();
+        assertThat(FrameRateRetime.sameRate(null, 25.0)).isFalse();
+        assertThat(FrameRateRetime.sameRate(25.0, null)).isFalse();
+    }
 }
