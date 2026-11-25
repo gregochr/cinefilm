@@ -179,7 +179,7 @@ the switch says, because rewritten rows outlive it:
 - **A rate conflict:** a retimed side and a raw side whose stated rates differ, which give `CHECK` on the film's
   timeline but agree when both are compared as originally stored. One stated rate is wrong, and the plan can't tell
   which. That is no verdict, counted and shown in the Admin as "rate conflict". The Bridge of Spies risk is a
-  reference stated as 25 that is timed like 24, and this is where it lands. A correct download is never failed by it.
+  reference stated as 25 that is timed like 24, and this is where it lands. When one side is retimed, a correct download is never failed by it.
 - **After a skip,** the walk moves on to the next candidate with a known rate, stored ones first. If none is left,
   the edition has no verdict this run and is counted.
 - **Tests:**
@@ -213,8 +213,12 @@ timestamps, so there is nothing for the owner to read it from).
 - The stated rate decides. The Admin says what was done, for example "Timed for 23.976 fps; this film is 25 fps, so
   it is sped up 4%", or "rate unknown".
 - A wrong stated rate (Bridge of Spies: stated as 25, timed like 24) shows as a **rate conflict** in the comparisons
-  (above): no verdict, never a failure. 3e's soundtrack check may later settle such a file's rate with no owner input.
-- `owner_timed_fps` (added in phase 1) stays unused, kept for that automatic rate.
+  (above) where one side is retimed: no verdict, never a failure. Raw against raw is compared as stored, as today, so
+  a wrongly stated file can still fail, or fail another, there. 3e's soundtrack check may later settle such a file's
+  rate with no owner input.
+- `owner_timed_fps` (added in phase 1) stays unused, kept for that automatic rate. V39's comment on it ("it wins
+  over timed_fps") is out of date and stays as it is (Flyway checksum); whatever later sets the column says what it
+  means.
 - The owner's one per-file control is **don't retime** (`retime = OFF`), for a file that played better before, and
   turning it back on. Both are judged by watching.
 
@@ -256,8 +260,9 @@ Not in this plan:
      - retime candidates with a current `EMBEDDED` `ALIGNED` fit, which will be set off;
      - downloads that fail today and whose only references have an unknown rate (they stay failed after retime);
      - references stated as 25 that act as judges, on 25 fps films and on 23.976 or 24 fps films (where 2b would
-       speed them up). These are the Bridge of Spies risk, and they end as rate conflicts, not failures. If more than
-       10 in all, the owner is asked before 2a.
+       speed them up). These are the Bridge of Spies risk. Against a retimed download they end as rate conflicts, not
+       failures; raw against raw they are compared as stored, as today. If more than 10 in all, the owner is asked
+       before 2a: go ahead (they end as rate conflicts, or are compared as today), or wait for 3e to settle their rate.
 
      **If fewer than 80 of the 92 are backfilled, the owner is asked before phase 2.** The choice is a one-off
      file-info lookup on OpenSubtitles, or leaving them listed.
@@ -322,8 +327,8 @@ lines, it is split: the endpoint and contract first, then the Admin view and the
 
 ## Decisions taken in this plan
 
-1. **The stated rate decides.** It held on 5 of the 6 files with signal. A wrong one ends as a rate conflict, never a
-   failure; the owner sets no rate (2026-11-25).
+1. **The stated rate decides.** It held on 5 of the 6 files with signal. Where one side is retimed, a wrong one ends as a rate
+   conflict, never a failure; raw against raw is compared as today. The owner sets no rate (2026-11-25).
 2. **Only across the PAL speed-up.** 30 fps copies run at film speed, and odd rates are left alone.
 3. **23.976 and 24.0 are kept apart** (k = 23.976/25 against 24/25). They differ by 0.1%, about 7 s over two hours.
    The stated value is used as given.
