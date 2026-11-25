@@ -147,7 +147,7 @@ final class ReferenceFetcher {
      * update of that one column (the row is also written by the cue-end backfill, under another lock), and best
      * effort: a failed fill leaves the stored reference as it was and does not fail the fetch.
      */
-    private void fillRate(OpenSubtitlesReference stored, OpenSubtitlesResult candidate) {
+    void fillRate(OpenSubtitlesReference stored, OpenSubtitlesResult candidate) {
         if (stored.getTimedFps() != null || candidate.fps() == null) {
             return;
         }

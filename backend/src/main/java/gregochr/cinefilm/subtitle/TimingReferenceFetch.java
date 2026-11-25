@@ -175,6 +175,11 @@ final class TimingReferenceFetch {
                 shared.kept += added ? 1 : 0;
                 shared.stored.put(candidate.fileId(), reference);
             }
+            if (!fetched && reference.getTimedFps() == null && candidate.fps() != null) {
+                // A final row stored before rates were kept gets the stated one first (the fetcher's own fill, with no
+                // download), or the rate rule would reject it as of unknown rate.
+                fetcher.fillRate(reference, candidate);
+            }
             Judgement judgement = judge(target, reference);
             if (fetched) {
                 LOG.info("Timing reference for edition {} (film {}): fetched file {} (\"{}\", hearing-impaired {}), "
@@ -276,13 +281,16 @@ final class TimingReferenceFetch {
                 continue;
             }
             String cues = JsonEtag.etag(file.cuesText().getBytes(StandardCharsets.UTF_8));
-            if (!done.add(file.sidecarId() + ":" + cues + ":" + reference.getOsFileId())) {
+            String key = file.sidecarId() + ":" + cues + ":" + reference.getOsFileId();
+            if (done.contains(key)) {
                 continue;
             }
             Result fit = fit(target, file, reference, referenceSide);
             if (fit == null) {
+                // No verdict yet (a rate is not known): the pair is tried again once it is, not marked measured.
                 continue;
             }
+            done.add(key);
             LOG.info("Forced timing reference of edition {} (film {}): {} file {} ({} lines, {}) against "
                     + "OpenSubtitles file {} (\"{}\", fps {}, hearing-impaired {}, {} lines); {} at {} ms, {}% of {} "
                     + "lines matched, median residual {} ms; reference's last cue ends {}, runtime {}, credits "

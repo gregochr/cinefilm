@@ -258,7 +258,7 @@ class TimingReferenceFetchTest {
     @Test
     void aRetimedForcedFileAndAReferenceOfUnknownRateAreNotMeasuredAndTheReasonIsLogged() {
         when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedDownload()),
-            List.of(candidate(5012)), Map.of(5012L, stored(5012, full(300))))));
+            List.of(noRate(5012)), Map.of(5012L, stored(5012, full(300))))));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
 
         int written = fetch.run(CHECK_LIMIT, true);
@@ -802,7 +802,7 @@ class TimingReferenceFetchTest {
         Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
         downloading(1, 5013, scatteredReference(), saved);
         when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
-            List.of(candidate(5012), candidate(5013)), Map.of(5012L, stored(5012, scatteredReference())))));
+            List.of(noRate(5012), candidate(5013)), Map.of(5012L, stored(5012, scatteredReference())))));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
 
         fetch.run(CHECK_LIMIT, true);
@@ -984,5 +984,39 @@ class TimingReferenceFetchTest {
 
         verify(api).download(5011);
         assertThat(saved).containsOnlyKeys(5011L);
+    }
+
+    @Test
+    void aStoredFinalReferenceWithNoRateGetsTheCandidatesRateWithoutADownloadAndThenJudges() {
+        OpenSubtitlesReference old = stored(5011, scatteredReference());
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
+            List.of(candidate(5011)), Map.of(5011L, old))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verifyNoInteractions(api, budget);
+        verify(references).fillTimedFps(5011L, 23.976);
+        assertThat(old.getTimedFps()).isEqualTo(23.976);
+        assertThat(lines(Level.INFO)).singleElement().asString().contains("against OpenSubtitles file 5011")
+            .contains("ALIGNED at -2000 ms");
+    }
+
+    @Test
+    void aPairWithNoVerdictBecauseARateIsUnknownIsMeasuredOnTheNextRunOnceTheRateArrives() {
+        OpenSubtitlesReference noRateYet = stored(5012, scatteredReference());
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()), List.of(),
+            Map.of(5012L, noRateYet))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
+
+        noRateYet.setTimedFps(23.976);
+
+        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(1);
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5012")
+            .contains("ALIGNED at -2000 ms"));
+        // And once measured, never again while the process runs.
+        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
     }
 }
