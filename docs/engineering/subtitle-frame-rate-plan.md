@@ -97,14 +97,22 @@ cues themselves are put on the film's timeline once, and every reader sees them 
   stale. That is exactly the set that needs them made again.
 
 **The job.** `SubtitleRetimeJob`, behind `cinefilm.subtitles.retime-enabled` (default off until the last phase):
-- **Which files.** It retimes every downloaded file and every stored reference whose stated rate and film rate give
-  k ≠ 1 and which is not yet retimed. It skips:
-  - downloads with `retime = OFF`;
-  - downloads with an OWNER offset or owner verification, judged when the job runs (see below).
+- **Which files.** Each run, it visits:
+  - every download and every stored reference with a known rate (stated, or the owner's);
+  - every row with `retimed_by` set.
+
+  For each, it works k out again. When k differs from `retimed_by`, the row is rewritten from its original, or
+  restored when k is 1. It skips downloads with `retime = OFF` (restoring them if they were retimed), and applies the
+  owner-timing rule below.
+- **Under the lock.** Each rewrite, restore and owner-rule decision is made under the `LibraryLock`, the same lock
+  the Admin's edits take. The row is read again under the lock, and `retime`, `owner_timed_fps`, the offset source
+  and the verification are checked again. A `BUSY` is retried, so an owner's edit made at the same moment is never
+  overwritten.
 - **The checks.**
   - It deletes the check and alignment rows of the rewritten files and of each touched edition's served pick.
-  - It also deletes every `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that used a
-    rewritten reference, in every edition of the film. Those keys name the reference, not its cues.
+  - Whenever a reference's `cues_text` changes, by a rewrite, a re-scale or a restore, it also deletes every
+    `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that names it, in every edition of the
+    film. Those keys name the reference, not its cues.
   - Then, for each of those editions in turn, it runs the timing fit first and the checks after it, since a
     download's check waits for its fit. Stored references come first. A save that comes back `BUSY` (the library
     lock is held) is retried inside the job, so an edition is not left for the nightly pass.
@@ -124,8 +132,12 @@ restores nothing by itself: the rewritten files stay right. A rollback, if ever 
 by the same rule.
 
 **Unknown against retimed: no verdict.**
-- **The case.** A downloaded file or reference with no stated rate (`OPENSUBTITLES`, `timed_fps` null) may or may not
-  drift. Compared with a retimed side, it can't be judged.
+- **The case.**
+  - A downloaded file is on its edition's timeline when its k for that edition is 1, or when `retimed_by` equals it.
+  - A reference is on an edition's timeline on the same terms. That is, its k for that edition's rate is 1, or
+    `retimed_by` equals that k.
+  - Anything else is unknown for that comparison: no stated rate, a film whose editions disagree, or an edition
+    whose rate is unknown. Compared with a retimed side, it can't be judged.
 - **What happens.** That reference is skipped, the case is counted, and it never gives `CHECK`. The walk moves on to
   the next candidate with a stated rate, stored ones first. If none is left, the edition has no verdict this run
   (unchecked) and is counted.
@@ -190,7 +202,7 @@ Not in this plan:
      - the AUTO reset and restore;
      - the owner-timing rule;
      - the immediate fit, then the checks, with the `BUSY` retry.
-   - Unknown against retimed: no verdict, keyed on `retimed_by`.
+   - Unknown against retimed: no verdict, with each side judged on the edition's timeline as defined above.
    - Tests:
      - with the switch off, nothing is written;
      - a retimed file's served cues, fits and checks follow the rewrite;
@@ -205,7 +217,10 @@ Not in this plan:
    - Tests:
      - a download copied from a retimed reference is scaled once;
      - a film whose editions disagree keeps its references raw;
-     - another edition's check against a rewritten reference is made again.
+     - another edition's check against a rewritten or restored reference is made again;
+     - a film that disagrees or is partly unknown, a retimed download and a raw stated reference give no verdict,
+       never `CHECK`;
+     - an owner edit made while the job holds a row is kept.
    - If either 2a or 2b is estimated over 1,200 lines, it is split again along these bullets.
 4. **The Admin, then on.**
    - `PUT /api/admin/subtitles/{id}/retime` takes "as stated", 23.976, 24, 25 or "don't retime".
