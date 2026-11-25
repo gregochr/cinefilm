@@ -163,46 +163,48 @@ writes nothing), `on`, or `restore` (the rollback, below).
 
 **How two files are compared** (a download or an owner's file against a reference). One rule, applied whatever
 the switch says, because rewritten rows outlive it:
-- **A row's rate** is the stated one, else unknown. The owner's own files (`FILE`) and
-  downloads that fit as is (`OFF_FITS`) take the film's rate as their known rate in every rule below. So does the
-  film's embedded English track (`EMBEDDED`), which is on the film's timeline by nature.
-- **Neither side retimed** (`retimed_by` null on both): they are compared as stored, exactly as today. That covers
-  every pair on a 23.976 film with nothing retimed. It also covers an owner's file against a reference with no rate,
-  and an owner-offset download that is off against a raw reference.
-- **One or both retimed, and both rates known:**
-  - each retimed side is compared through its film-timeline cues;
-  - a raw side whose rate differs from the film's is compared through the other side's `original_cues_text`, when
-    both have the same rate;
-  - otherwise the two are compared on the film's timeline.
-- **One side retimed, the other's rate unknown:** no verdict. The reference is skipped, the case is counted, and
-  it never gives `CHECK`.
-- **A rate conflict:** a retimed side and a raw side whose stated rates differ, which give `CHECK` on the film's
-  timeline but agree when both are compared as originally stored. One stated rate is wrong, and the plan can't tell
-  which. That is no verdict, counted and shown in the Admin as "rate conflict". The Bridge of Spies risk is a
-  reference stated as 25 that is timed like 24, and this is where it lands. Among comparisons, this pair is the only protection against a
-  wrong stated rate; outside them, only the `OFF_FITS` fit (below) catches one automatically, for a download on a film with an
-  English embedded track. In every other compared pair a wrong rate can still fail a file, or make one fail: raw
-  against raw (compared as stored, as today), a pair whose two sides state the same rate, and two retimed sides at
-  different stated rates. In that last pair a 23.976 file mislabelled 24.0 (or the reverse) can also newly drift by
-  about 7 s over two hours.
+- **A row's rate** is the stated one, else unknown. The owner's own files (`FILE`), downloads that fit as is
+  (`OFF_FITS`) and the film's embedded English track (`EMBEDDED`) take the film's rate: they are on the film's
+  timeline by nature. A rate's **family** is "about 24" (within 0.01 of 23.976 or 24.0) or "25" (within 0.01 of 25).
+  A row's **original** is its `original_cues_text` when it is retimed, else its stored cues.
+- In this order:
+  1. **Neither side retimed** (`retimed_by` null on both): compared as stored, exactly as today, whatever the rates.
+  2. **One side retimed, the other's rate unknown:** no verdict. The reference is skipped, the case is counted, and
+     it never gives `CHECK`.
+  3. **Same family:** original against original. Both are on the timeline they were made for, so this is the
+     comparison made today. It covers a raw 23.976 reference against a retimed 23.976 or 24.0 download.
+  4. **Different families:** compared as stored, on the film's timeline. When the raw side is a reference and that
+     comparison fails, the originals are compared too. If they agree, it is a **rate conflict**: one stated rate is
+     wrong and the plan can't tell which. That is no verdict, counted and shown in the Admin as "rate conflict".
+     Against `FILE`, `EMBEDDED` or `OFF_FITS` the film-timeline result stands, because those are on the film's
+     timeline: a retimed side that disagrees with them plays wrong.
+- **What a wrong stated rate does** (Bridge of Spies: stated as 25, timed like 24):
+  - **On a download, across the PAL gap:** it is retimed wrongly and plays wrong. On a film with an English embedded
+    track, the `OFF_FITS` decision (below) catches it first. Otherwise it fails against the owner's file or the
+    embedded track (rule 4), but a reference of its own family compares on the originals (rule 3) and can still prove
+    it.
+  - **On a reference:** against a retimed file of another family it ends as a rate conflict (rule 4) rather than
+    failing a correct file; within its family it judges as today (rule 3).
+  - **Raw against raw, and same-family pairs:** as today, so a wrong rate can still fail a file, or make one fail,
+    there as it can now.
 - **After a skip,** the walk moves on to the next candidate with a known rate, stored ones first. If none is left,
   the edition has no verdict this run and is counted.
 - **Tests:**
   - an owner file against a reference with no rate, on a 23.976 film, still gets a verdict;
-  - an owner-offset download that is off, against a retimed reference, is compared raw against raw;
+  - an owner-offset download that is off, against a retimed reference of its family, is compared on the originals;
   - a reference of unknown rate gives no verdict against a retimed download;
   - a raw 23.976 reference against a retimed 23.976 download on a 25 fps film is compared on the originals and
-    agrees;
-  - a retimed download against the embedded English track gets a verdict;
-  - a rate conflict gives no verdict, never `CHECK`;
-  - a split-rate film with a retimed download and a raw reference of the same stated rate is compared on the
-    originals.
+    agrees; so is a raw 24.0 reference against a retimed 23.976 download (a split-rate film);
+  - a retimed download against the embedded English track gets a verdict on the film's timeline;
+  - a retimed 23.976 download against a raw reference stated 25 but timed like 24 is a rate conflict: no verdict,
+    never `CHECK`;
+  - a retimed download that disagrees with the owner's file on the film's timeline fails, with no conflict.
 
 **What the owner set by hand is left alone.**
 - `retime` starts **undecided** (null). The job decides it once:
   - **off** for a download with an OWNER offset or owner verification, which then plays as it does today;
-  - **fits as is** (`OFF_FITS`) for one whose original cues fit the film's English track `ALIGNED`. That fit proves
-    they are already on this copy's timeline, so its stated rate is wrong (the reverse of Bridge of Spies). Such a
+  - **fits as is** (`OFF_FITS`) for a retime candidate (k ≠ 1) whose original cues fit the film's English track
+    `ALIGNED`. That fit proves they are already on this copy's timeline, so its stated rate is wrong. Such a
     file counts as on the film's timeline in every comparison, like an owner's file. On a film with an English
     embedded track, the decision waits until a fit of the original cues has been tried, at arrival too. Only 3
     forced files have one today;
@@ -217,10 +219,8 @@ the switch says, because rewritten rows outlive it:
 timestamps, so there is nothing for the owner to read it from).
 - The stated rate decides. The Admin says what was done, for example "Timed for 23.976 fps; this film is 25 fps, so
   it is sped up 4%", or "rate unknown".
-- A wrong stated rate (Bridge of Spies: stated as 25, timed like 24) is caught in comparisons only in the pair
-  that "A rate conflict" (above) names, and otherwise automatically only by the `OFF_FITS` fit (above); elsewhere it can still fail
-  a file. 3e's soundtrack check may later settle such a file's
-  rate with no owner input.
+- What a wrong stated rate does is set out under "What a wrong stated rate does" (above). 3e's soundtrack check may
+  later settle such a file's rate with no owner input.
 - `owner_timed_fps` (added in phase 1) stays unused, kept for that automatic rate. V39's comment on it ("it wins
   over timed_fps") is out of date and stays as it is (Flyway checksum); whatever later sets the column says what it
   means.
@@ -265,8 +265,8 @@ Not in this plan:
      - retime candidates with a current `EMBEDDED` `ALIGNED` fit, which will be set off;
      - downloads that fail today and whose only references have an unknown rate (they stay failed after retime);
      - references stated as 25 that act as judges, on 25 fps films and on 23.976 or 24 fps films (where 2b would
-       slow them down). These are the Bridge of Spies risk; "A rate conflict" (above) says which of their comparisons
-       end as rate conflicts and which can still fail a file. If more than 10 in all, the owner is asked before 2a:
+       slow them down). These are the Bridge of Spies risk; "What a wrong stated rate does" (above) says which of
+       their comparisons end as rate conflicts. If more than 10 in all, the owner is asked before 2a:
        go ahead, or wait for 3e to settle their rate.
 
      **If fewer than 80 of the 92 are backfilled, the owner is asked before phase 2.** The choice is a one-off
@@ -328,13 +328,13 @@ lines, it is split: the endpoint and contract first, then the Admin view and the
   - how long the first run took, and how many rows are still stale at its end;
   - the editions left with no verdict;
   - the proven count of each kind, against the same count taken before release. Expect no drop beyond the skipped
-    no-verdict cases (unknown rate and rate conflicts), which phase 1 counted, and files
-    with a wrong stated rate in the pairs that "A rate conflict" (above) says can still fail.
+    no-verdict cases (unknown rate and rate conflicts), which phase 1 counted, and downloads
+    whose stated rate is wrong ("What a wrong stated rate does", above).
 
 ## Decisions taken in this plan
 
-1. **The stated rate decides.** It held on 5 of the 6 files with signal. A wrong one is caught automatically only as "A rate
-   conflict" and `OFF_FITS` describe; the owner can still turn retime off for a file that played better before. The owner sets no rate (2026-11-25).
+1. **The stated rate decides.** It held on 5 of the 6 files with signal. "What a wrong stated rate does" sets out what a wrong one does;
+   the owner can still turn retime off for a file that played better before. The owner sets no rate (2026-11-25).
 2. **Only across the PAL speed-up.** 30 fps copies run at film speed, and odd rates are left alone.
 3. **23.976 and 24.0 are kept apart** (k = 23.976/25 against 24/25). They differ by 0.1%, about 7 s over two hours.
    The stated value is used as given.
