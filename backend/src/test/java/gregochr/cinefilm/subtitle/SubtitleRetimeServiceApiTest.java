@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.subtitle.SubtitleRetimeService.Outcome;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -15,6 +16,9 @@ class SubtitleRetimeServiceApiTest extends ForcedDownloadTestBase {
 
     @Autowired
     private SubtitleRetimeService service;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void theCandidatesAreTheDownloadsWithAStatedRateOrARetimedRowAndRestoreWritesTheStoredCues() {
@@ -37,7 +41,9 @@ class SubtitleRetimeServiceApiTest extends ForcedDownloadTestBase {
 
         assertThat(service.process(stated.getId(), RetimeMode.RESTORE)).isEqualTo(Outcome.UNCHANGED);
         assertThat(service.process(retimed.getId(), RetimeMode.RESTORE)).isEqualTo(Outcome.RESTORED);
-        sidecars.flush();
+        // The test's transaction is shared, so read back from H2, not from the managed entities.
+        entityManager.flush();
+        entityManager.clear();
 
         assertThat(sidecars.findById(retimed.getId()).orElseThrow().getCuesText()).isEqualTo(CUES);
         assertThat(sidecars.findById(retimed.getId()).orElseThrow().getOriginalCuesText()).isNull();
