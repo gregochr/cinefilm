@@ -179,6 +179,12 @@ export const adminApi = {
   /** Says the file's lines are right and in sync ("Looks right"); `unverifySubtitle` undoes it. */
   verifySubtitle: (id) => post(`/api/admin/subtitles/${pathSegment(id)}/verify`),
   unverifySubtitle: (id) => del(`/api/admin/subtitles/${pathSegment(id)}/verify`),
+  /**
+   * The owner's choice for one download: `true` puts it on the film's timeline (retimes it), `false` leaves it as it
+   * was timed. Answers the updated row; 409 while the server setting is `restore` or the file already fits as it is.
+   */
+  retimeSubtitle: (id, retime, options) =>
+    put(`/api/admin/subtitles/${pathSegment(id)}/retime`, { retime }, options),
   /** Removes an OpenSubtitles download (never the owner's own file); CineFilm will not use it for that edition again. */
   removeSubtitle: (id, options) => del(`/api/admin/subtitles/${pathSegment(id)}`, options),
   /** Every film with whether it needs forced subtitles and why: `{ films: [...], counts: {...} }`. */

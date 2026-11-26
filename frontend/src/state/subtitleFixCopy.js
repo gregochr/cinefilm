@@ -48,6 +48,16 @@ export const subtitlesWrong = {
 };
 
 /** The words of the removing flow (`RemoveDownload`), with AR7's name for it; the confirming steps are "planner, 8a". */
+/** The per-download retime control (frame-rate plan, 4b). The rate line itself is the server's wording. */
+export const fixRetime = {
+  dont: { label: 'Don’t retime', hint: 'Plays it as it was timed; it may drift.' },
+  retime: { label: 'Retime', hint: 'Puts it on this film’s timeline.' },
+  // The server resets both when it retimes a file the owner has timed or checked.
+  retimeResets:
+    'Puts it on this film’s timeline. This resets its timing change and its “Looks right” check.',
+  spoken: (label, name) => `${label}: ${name}`,
+};
+
 export const fixRemoveLabels = {
   open: 'Delete this download', // 07 (`buttons.deleteDownload`)
   openSpoken: (name) => `Delete this download: ${name}`,

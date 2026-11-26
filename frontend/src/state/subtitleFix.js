@@ -45,6 +45,17 @@ export function fileTools(item) {
 }
 
 /**
+ * The one retime control a download has, as the server says (`retimeAction`, worked out beside the rate line): `'dont'`
+ * ("Don't retime") for `DONT`, `'retime'` ("Retime") for `RETIME`, else null. Nothing is guessed here.
+ */
+export function retimeTool(item) {
+  if (!isDownload(item)) return null;
+  if (item.retimeAction === 'DONT') return 'dont';
+  if (item.retimeAction === 'RETIME') return 'retime';
+  return null;
+}
+
+/**
  * The kind (`'FULL'` or `'FORCED'`) of the OpenSubtitles download that is on screen right now, or null when what shows
  * is the owner's file, an embedded stream or nothing. The player's own rule decides what shows (`activeSubtitleKey`);
  * the edition says where the forced and full subtitle came from (`source` is `DOWNLOAD` for a download).

@@ -21,6 +21,7 @@ import { titleWithYear } from '../state/scanFormat.js';
 import { ActionWithHint } from './ActionWithHint.jsx';
 import { Button } from './Button.jsx';
 import RemoveDownload from './RemoveDownload.jsx';
+import RetimeControl from './RetimeControl.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { ErrorState } from './StateMessages.jsx';
 import SubtitleCueList from './SubtitleCueList.jsx';
@@ -65,6 +66,7 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
           {warning}
         </p>
       ))}
+      {isDownload(item) && item.rateLine ? <p className="subs__served">{item.rateLine}</p> : null}
       {problem ? (
         <p className="admin__warning" role="alert">
           {problem}
@@ -139,6 +141,7 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
         >
           {previewing ? copy.hideLines : buttons.previewLines.label}
         </ActionWithHint>
+        <RetimeControl item={item} name={name} busy={busy} actions={actions} />
         {tools.deleteDownload ? (
           <RemoveDownload
             item={item}

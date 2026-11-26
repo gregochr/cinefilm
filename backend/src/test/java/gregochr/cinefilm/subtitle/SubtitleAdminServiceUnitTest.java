@@ -569,6 +569,7 @@ class SubtitleAdminServiceUnitTest {
         assertThat(dto.retime()).isEqualTo("AUTO");
         assertThat(dto.retimedBy()).isEqualTo(23.976 / 25);
         assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
+        assertThat(dto.retimeAction()).isEqualTo("DONT");
     }
 
     @Test
@@ -736,7 +737,8 @@ class SubtitleAdminServiceUnitTest {
         assertThatThrownBy(() -> restoring.retime(8L, new RetimeRequest(true))).isInstanceOf(ConflictException.class)
             .hasMessage("Retiming is being undone on this server; try again once that is finished");
         assertThat(lock.holder()).isNull();
-        assertThat(restoring.retime(8L, new RetimeRequest(false)).id()).isEqualTo(8L);
+        assertThat(restoring.retime(8L, new RetimeRequest(false)).retimeAction()).isNull();
+        assertThat(restoring.list()).extracting(SidecarDto::retimeAction).containsExactly((String) null);
         verify(retimer).applyChoice(download, false);
     }
 

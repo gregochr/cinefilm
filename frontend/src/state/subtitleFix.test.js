@@ -6,6 +6,7 @@ import {
   fileTools,
   filmFiles,
   kindTag,
+  retimeTool,
   shownDownloadKind,
   shownFileKind,
   wrongProblem,
@@ -210,5 +211,30 @@ describe('wrongProblem', () => {
     ['a network failure', new TypeError('Failed to fetch')],
   ])('says one plain line for %s', (_name, failure) => {
     expect(wrongProblem(failure)).toBe(subtitlesWrong.failed);
+  });
+});
+
+describe('retimeTool', () => {
+  it('maps the server’s action: DONT to "dont", RETIME to "retime"', () => {
+    expect(retimeTool(row({ retimeAction: 'DONT' }))).toBe('dont');
+    expect(retimeTool(row({ retimeAction: 'RETIME' }))).toBe('retime');
+  });
+
+  it('is "retime" for a hand-timed file the server says is not retimed', () => {
+    const handTimed = row({
+      retime: null,
+      retimedBy: null,
+      offsetSource: 'OWNER',
+      rateLine: 'Not retimed: its timing was set by hand; it may drift',
+      retimeAction: 'RETIME',
+    });
+
+    expect(retimeTool(handTimed)).toBe('retime');
+  });
+
+  it('is null when the server offers nothing, and for an owner’s file', () => {
+    expect(retimeTool(row({ retimeAction: null }))).toBeNull();
+    expect(retimeTool(row({}))).toBeNull();
+    expect(retimeTool(row({ origin: 'FILE', retimeAction: 'DONT' }))).toBeNull();
   });
 });

@@ -540,6 +540,22 @@ function setSubtitleOffset(id, body) {
   return listedSubtitle(id);
 }
 
+/** The owner's retime choice for a download, kept in memory; the fixtures hold no frame rates, so only the choice shows. */
+function retimeSubtitle(id, body) {
+  const before = listedSubtitle(id);
+  if (typeof body?.retime !== 'boolean') throw apiError(400, 'Say whether to retime it');
+  if (before.origin !== 'OPENSUBTITLES') {
+    throw apiError(400, 'Only a subtitle downloaded from OpenSubtitles can be retimed');
+  }
+  attachedSubtitles.set(id, {
+    ...attachedSubtitles.get(id),
+    retime: body.retime ? 'AUTO' : 'OFF',
+    rateLine: body.retime ? 'Retimed' : 'Not retimed; it may drift',
+    retimeAction: body.retime ? 'DONT' : 'RETIME',
+  });
+  return listedSubtitle(id);
+}
+
 /** The first lines of a file on its film's timeline: three made-up cues per file, enough to preview. */
 function subtitleCues(id) {
   const row = listedSubtitle(id);
@@ -929,6 +945,8 @@ export async function handle(method, path, body) {
   if (match) return verifySubtitle(Number(match[1]), method === 'POST');
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/offset$/);
   if (match && method === 'PUT') return setSubtitleOffset(Number(match[1]), body);
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/retime$/);
+  if (match && method === 'PUT') return retimeSubtitle(Number(match[1]), body);
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/cues$/);
   if (match) return subtitleCues(Number(match[1]));
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)$/);

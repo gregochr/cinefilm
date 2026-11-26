@@ -109,9 +109,10 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
         assertThat(dto.retime()).isNull();
         assertThat(dto.retimedBy()).isNull();
         assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed");
+        assertThat(dto.retimeAction()).isEqualTo("RETIME");
         SidecarDto owners = listed(file.getId());
         assertThat(Arrays.asList(owners.timedFps(), owners.filmFps(), owners.retime(), owners.retimedBy(),
-            owners.rateLine())).containsOnlyNulls();
+            owners.rateLine(), owners.retimeAction())).containsOnlyNulls();
     }
 
     @Test
@@ -145,6 +146,7 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
 
         assertThat(dto.retime()).isEqualTo("OFF_FITS");
         assertThat(dto.rateLine()).isEqualTo("Fits this copy as it is");
+        assertThat(dto.retimeAction()).isNull();
         assertThat(reread(fits.getId()).getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
         assertThat(listed(fits.getId()).rateLine()).isEqualTo("Fits this copy as it is");
     }
@@ -185,6 +187,7 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
         assertThat(on.retime()).isEqualTo("AUTO");
         assertThat(on.retimedBy()).isEqualTo(23.976 / 25);
         assertThat(on.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
+        assertThat(on.retimeAction()).isEqualTo("DONT");
         assertThat(reread(id).getOriginalCuesText()).isEqualTo(CUES);
         assertThat(reread(id).getCuesText()).isNotEqualTo(CUES);
 
@@ -193,6 +196,7 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
         assertThat(off.retime()).isEqualTo("OFF");
         assertThat(off.retimedBy()).isNull();
         assertThat(off.rateLine()).isEqualTo("Not retimed; it may drift");
+        assertThat(off.retimeAction()).isEqualTo("RETIME");
         assertThat(reread(id).getCuesText()).isEqualTo(CUES);
         assertThat(reread(id).getOriginalCuesText()).isNull();
     }
