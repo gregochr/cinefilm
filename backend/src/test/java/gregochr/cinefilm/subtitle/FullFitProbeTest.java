@@ -5,6 +5,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -132,10 +133,10 @@ class FullFitProbeTest {
 
     /** The service as it behaves: a download measured by this process is not handed back again. */
     private void serving(Job... jobs) {
-        when(fullFit.due(any())).thenAnswer(call -> {
+        doAnswer(call -> {
             Set<Long> measured = call.getArgument(0);
             return List.of(jobs).stream().filter(j -> !measured.contains(j.sidecarId())).toList();
-        });
+        }).when(fullFit).due(any());
     }
 
     @Test
@@ -513,7 +514,7 @@ class FullFitProbeTest {
     }
 
     /** What a fetch of file 5013 needs: no stored row, budget, a download of the original cues, a save. */
-    private Map<Long, OpenSubtitlesReference> fetching5013() {
+    private Map<Long, OpenSubtitlesReference> fetching5013(Double savedRate) {
         Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5013)).thenReturn(Optional.empty());
         when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
@@ -521,6 +522,7 @@ class FullFitProbeTest {
         when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
             OpenSubtitlesReference reference = call.getArgument(0);
             reference.setId(reference.getOsFileId());
+            reference.setTimedFps(savedRate);
             saved.put(reference.getOsFileId(), reference);
             return reference;
         });
@@ -530,7 +532,7 @@ class FullFitProbeTest {
     @ParameterizedTest(name = "a stored reference giving {0}, then a candidate not stored")
     @CsvSource(value = {"UNKNOWN_RATE, NULL", "RATE_CONFLICT, 25.0"}, nullValues = "NULL")
     void whenNoStoredReferenceGivesAVerdictOneNewReferenceIsFetchedOnceAndMeasured(String reason, Double storedRate) {
-        fetching5013();
+        fetching5013(23.976);
         serving(retimedJobOf(RETIMED, List.of(noRate(5012), candidate(5013)), rated(5012, storedRate)));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
@@ -544,14 +546,24 @@ class FullFitProbeTest {
     }
 
     @Test
+    void aRetimedDownloadPassesOverAnUnstoredCandidateOfNoRateAndFetchesTheNextThatStatesOne() {
+        fetching5013(23.976);
+        serving(retimedJobOf(RETIMED, List.of(noRate(5012), candidate(5013))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        verify(api).download(5013);
+        verify(api, never()).download(5012);
+        assertThat(infoLines()).hasSize(1);
+    }
+
+    @Test
     void aStoredConflictThenAFetchedReferenceOfUnknownRateIsNotDoneSoTheNextPassesJudgeItAgainWithoutAnotherFetch() {
-        Map<Long, OpenSubtitlesReference> saved = fetching5013();
-        Job job = retimedJobOf(RETIMED, List.of(noRate(5012), noRate(5013)), rated(5012, 25.0));
-        serving(job);
+        Map<Long, OpenSubtitlesReference> saved = fetching5013(null);
+        serving(retimedJobOf(RETIMED, List.of(noRate(5012), candidate(5013)), rated(5012, 25.0)));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         // The next job read finds the fetched reference stored.
-        job.stored().put(5013L, saved.get(5013L));
+        serving(retimedJobOf(RETIMED, List.of(noRate(5012), noRate(5013)), rated(5012, 25.0), saved.get(5013L)));
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         // Only the first no-verdict line is written, and there was no second fetch.
         assertThat(infoLines()).containsExactly(NO_VERDICT + "RATE_CONFLICT (sidecar 7, reference 5012)");
@@ -563,21 +575,14 @@ class FullFitProbeTest {
 
     @Test
     void aFetchedReferenceOfUnknownRateGivesNoVerdictAndIsFetchedOnlyOncePerDownload() {
-        serving(retimedJobOf(RETIMED, List.of(noRate(5012))));
-        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.empty());
-        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
-        when(api.download(5012)).thenReturn(downloaded(lines(300, 0)));
-        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
-            OpenSubtitlesReference reference = call.getArgument(0);
-            reference.setId(reference.getOsFileId());
-            return reference;
-        });
+        fetching5013(null);
+        serving(retimedJobOf(RETIMED, List.of(candidate(5013))));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
-        assertThat(infoLines()).containsExactly(NO_VERDICT + "UNKNOWN_RATE (sidecar 7, reference 5012)");
+        assertThat(infoLines()).containsExactly(NO_VERDICT + "UNKNOWN_RATE (sidecar 7, reference 5013)");
         // A second pass makes no second fetch: one new reference per download.
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
-        verify(api).download(5012);
+        verify(api).download(5013);
     }
 
     @Test

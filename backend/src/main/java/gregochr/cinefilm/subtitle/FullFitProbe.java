@@ -196,6 +196,9 @@ final class FullFitProbe {
             OpenSubtitlesReference known = job.stored().get(candidate.fileId());
             // A final reference was judged above (usable and full) or is spent (permanent failure, not full); one that
             // is not final is a charged transient failure the fetcher retries, and which throws again while it fails.
+            if (known == null && candidate.fps() == null && job.rateSide().retimed()) {
+                continue; // certain to give UNKNOWN_RATE: keep the one fetch for a candidate that states a rate
+            }
             if (known == null || !known.isFinal()) {
                 OpenSubtitlesReference got = fetcher.fetch(job.filmId(), job.imdbId(), candidate, checkLimit);
                 fetched.add(job.sidecarId());
