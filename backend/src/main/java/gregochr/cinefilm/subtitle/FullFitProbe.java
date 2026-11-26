@@ -103,6 +103,13 @@ final class FullFitProbe {
      * download), and judged the same way. A reference with a rate conflict or an unknown rate is passed over.
      */
     private boolean measure(Job job, int checkLimit) {
+        if (lacksOriginal(job.rateSide()) && !job.others().isEmpty()) {
+            // Nothing can be judged against it, whatever the references: permanent, so no walk and no fetch.
+            done.add(job.sidecarId());
+            LOG.info("Full subtitle fit of edition {} (film {}): not measured, no verdict: {} (sidecar {})",
+                job.editionId(), job.filmId(), RateComparison.Reason.UNKNOWN_RATE, job.sidecarId());
+            return false;
+        }
         Tried tried = new Tried();
         for (OpenSubtitlesResult candidate : job.others()) {
             OpenSubtitlesReference stored = job.stored().get(candidate.fileId());
@@ -182,7 +189,7 @@ final class FullFitProbe {
      * null when there is none, when it has been tried, or when it came back not full (the one try this download gets).
      */
     private OpenSubtitlesReference fetchOne(Job job, int checkLimit) {
-        if (fetched.contains(job.sidecarId()) || lacksOriginal(job.rateSide())) {
+        if (fetched.contains(job.sidecarId())) {
             return null;
         }
         for (OpenSubtitlesResult candidate : job.others()) {
