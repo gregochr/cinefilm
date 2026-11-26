@@ -2,9 +2,13 @@ import { useState } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import FilmSubtitlesFix from './FilmSubtitlesFix.jsx';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const base = fixtures.adminSubtitles[5];
 const film = { id: 6, title: 'Blade Runner', year: 1982 };
