@@ -73,8 +73,9 @@ half-B files with 8 or more cues:
 - **G1, positives.** The set is the half-B files the server retimed whose cues from before the retime show foreign
   speech: f ≥ 0.20 at some k. On those cues the measure must flag at least 80%, each in the direction the server
   applied. (Half A: 5 of 5. The 4 retimed half-A files with f under 0.20 at every k are outside the set.)
-- **G2, files believed right.** The set is the half-B files as played that the server retimed (their stated rate
-  was right) or that the measure shows no slip for on their cues. At most 1 in 20 of them may be flagged as played.
+- **G2, files believed right.** The set is G1's files, as played: the server retimed them by a stated rate that the
+  soundtrack supports, so they should now play right. At most 1 in 20 of them may be flagged as played (with fewer
+  than 20, none).
   This is the real risk: a right file flagged would be put minutes out.
 - **G3, flags as played are heard.** Every half-B file flagged as played is ear-checked by the owner at its last
   cues, as in step 1. At least 80% must be heard near their 4% position.
