@@ -146,7 +146,7 @@ final class FullFitProbe {
         if (!judged.hasVerdict()) {
             // Indexing never changes a conflict or a missing original; any other unknown rate may be settled later.
             tried.references++;
-            if (judged.reason() != RateComparison.Reason.RATE_CONFLICT && !lacksOriginal(job.rateSide())
+            if (judged.reason() != RateComparison.Reason.RATE_CONFLICT
                 && !lacksOriginal(referenceSide)) {
                 tried.allPermanent = false;
             }

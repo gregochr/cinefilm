@@ -485,16 +485,17 @@ class FullFitProbeTest {
     }
 
     @ParameterizedTest(name = "a retimed {0} with no original cues")
-    @ValueSource(strings = {"download", "reference"})
+    @ValueSource(strings = {"download", "reference", "download, no candidates"})
     void aRetimedSideWithNoOriginalCuesIsNeverJudgedAgainAfterOnePass(String side) {
         OpenSubtitlesReference reference = rated(5012, 23.976);
-        boolean download = "download".equals(side);
+        boolean none = side.endsWith("candidates");
+        boolean download = side.startsWith("download");
         RateComparison.Side downloadSide = download ? new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976,
             RetimeChoice.AUTO, 0.959, null) : RETIMED;
         reference.setRetimedBy(download ? null : 0.959);
         // A download with no original is out before any fetch, even with a candidate not stored yet.
-        serving(retimedJobOf(downloadSide, download ? List.of(candidate(5012), candidate(5013))
-            : List.of(candidate(5012)), reference));
+        serving(retimedJobOf(downloadSide, none ? List.of() : download
+            ? List.of(candidate(5012), candidate(5013)) : List.of(candidate(5012)), reference));
         if (!download) {
             when(filmRates.forEdition(10L)).thenReturn(25.0);
         }
@@ -503,8 +504,9 @@ class FullFitProbeTest {
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
 
         // The download's own gap is said without a reference; a reference's is judged once, with the film rate.
-        assertThat(infoLines()).containsExactly(download ? NO_VERDICT + "UNKNOWN_RATE (sidecar 7)"
-            : NO_VERDICT + "UNKNOWN_RATE (sidecar 7, reference 5012)");
+        assertThat(infoLines()).containsExactly(none ? "Full subtitle fit of edition 10 (film 1): not measured, "
+            + "OpenSubtitles has no second full file to compare with" : download
+            ? NO_VERDICT + "UNKNOWN_RATE (sidecar 7)" : NO_VERDICT + "UNKNOWN_RATE (sidecar 7, reference 5012)");
         verifyNoInteractions(api, budget);
         verify(filmRates, download ? never() : times(1)).forEdition(10L);
     }
