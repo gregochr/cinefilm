@@ -3,6 +3,7 @@ package gregochr.cinefilm.subtitle;
 import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -21,7 +22,9 @@ import gregochr.cinefilm.subtitle.SubtitleComparison.Verdict;
 import gregochr.cinefilm.subtitle.SubtitleRetimeService.TouchedEdition;
 import gregochr.cinefilm.transcode.SessionManager;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -78,11 +81,18 @@ class SubtitleRetimeRecheckFlowTest {
     private SidecarTimingRefresher timingRefresher;
     private SubtitleRetimeRecheck recheck;
     private SubtitleRetimeJob job;
+    private boolean checksInline;
 
     @BeforeEach
     void setUp() {
         checkRefresher = new SidecarCheckRefresher(api, budget, references, checkService,
-            fullFit, timingReferences, CLOCK, checkQueue::add, new FakeDailyLimit(20), event -> { }, filmRates);
+            fullFit, timingReferences, CLOCK, task -> {
+                if (checksInline) {
+                    task.run();
+                } else {
+                    checkQueue.add(task);
+                }
+            }, new FakeDailyLimit(20), event -> { }, filmRates);
         timingRefresher = new SidecarTimingRefresher(timingService, reader, root, sessions,
             CLOCK, timingQueue::add, true, event -> {
                 if (event instanceof SidecarTimingFinished finished) {
@@ -206,5 +216,38 @@ class SubtitleRetimeRecheckFlowTest {
         assertThat(timingQueue).hasSize(1);
         // One request for a full check pass from the re-check; the event's own listener only forgets.
         assertThat(checkQueue).hasSize(1);
+    }
+
+    @Test
+    void theFullPassTheReCheckStartsFindsTheRewrittenSidecarDueBecauseTheProbeForgotItFirst() {
+        DueCheck due10 = due(1, 10, 5011);
+        OpenSubtitlesReference ref11 = stored(1, 5011);
+        List<Set<Long>> measuredWhenDueWasRead = new ArrayList<>();
+        FullFitService.Job full = new FullFitService.Job(1L, 10L, "tt1", 5L, 5011L, CUES, 100_000L, null, List.of(),
+            Map.of());
+        when(fullFit.due(anySet())).thenAnswer(call -> {
+            Set<Long> measured = new HashSet<>(call.getArgument(0));
+            measuredWhenDueWasRead.add(measured);
+            return measured.contains(5L) ? List.of() : List.of(full);
+        });
+        when(retimeService.candidateIds()).thenReturn(List.of(5L));
+        when(retimeService.process(5L, RetimeMode.ON)).thenReturn(SubtitleRetimeService.Outcome.REWRITTEN);
+        when(retimeService.touchedEditions(Set.of(5L))).thenReturn(List.of(new TouchedEdition(10L, 1L)));
+        when(api.downloadsEnabled()).thenReturn(true);
+        filmFits(1L, 5L);
+        when(checkService.due(List.of(10L))).thenReturn(List.of(due10));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(ref11));
+        checkSaves(due10, ref11);
+        // A pass measured the download before its cues were rewritten: it is in the probe's done set.
+        checkRefresher.run();
+
+        checksInline = true;
+        job.run();
+
+        // The pass the re-check asked for ran at once, on the check thread, and read its due list after the forget.
+        assertThat(measuredWhenDueWasRead).hasSize(2);
+        assertThat(measuredWhenDueWasRead.get(0)).isEmpty();
+        // Not containing 5: without the forget the sidecar would still be marked measured on its old cues.
+        assertThat(measuredWhenDueWasRead.get(1)).isEmpty();
     }
 }

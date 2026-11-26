@@ -39,6 +39,11 @@ public class SubtitleRetimeRecheck {
         this.retry = retry;
     }
 
+    /** The full-file probe and the timing references forget these sidecars, so their next pass measures them again. */
+    public void forgetMeasured(Set<Long> sidecarIds) {
+        checks.onCuesRewritten(new SubtitleCuesRewritten(sidecarIds));
+    }
+
     /** The timing fit of a film, tried again while the library is busy. */
     private Fit fit(Long filmId) {
         Fit[] last = new Fit[1];
