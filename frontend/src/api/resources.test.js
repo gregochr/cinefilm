@@ -423,6 +423,18 @@ describe('Forced subtitle resources', () => {
       method: 'PUT',
       body: { offsetMs: -250 },
     });
+    await adminApi.retimeSubtitle(5, false);
+    expect(last()).toEqual({
+      path: '/api/admin/subtitles/5/retime',
+      method: 'PUT',
+      body: { retime: false },
+    });
+    await adminApi.retimeSubtitle(5, true);
+    expect(last()).toEqual({
+      path: '/api/admin/subtitles/5/retime',
+      method: 'PUT',
+      body: { retime: true },
+    });
     await adminApi.verifySubtitle(5);
     expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/verify', method: 'POST' });
     await adminApi.unverifySubtitle(5);
@@ -548,6 +560,11 @@ describe('API resources: an id is one segment of the path', () => {
       'adminApi.setSubtitleOffset',
       (id) => adminApi.setSubtitleOffset(id, 500),
       (segment) => `/api/admin/subtitles/${segment}/offset`,
+    ],
+    [
+      'adminApi.retimeSubtitle',
+      (id) => adminApi.retimeSubtitle(id, false),
+      (segment) => `/api/admin/subtitles/${segment}/retime`,
     ],
     [
       'adminApi.verifySubtitle',

@@ -80,6 +80,8 @@ export function useSubtitles(version, onChanged) {
       });
       return done ? (row ?? true) : false;
     },
+    /** Retimes a download (`true`) or leaves it as it was timed (`false`); the row shows the server's answer. */
+    retime: (id, on) => act(id, () => adminApi.retimeSubtitle(id, on)),
     /** Removes an OpenSubtitles download; resolves true once it is gone. */
     remove: async (id) => {
       const removed = await act(id, () => adminApi.removeSubtitle(id));

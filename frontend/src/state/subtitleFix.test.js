@@ -6,6 +6,7 @@ import {
   fileTools,
   filmFiles,
   kindTag,
+  retimeTool,
   shownDownloadKind,
   shownFileKind,
   wrongProblem,
@@ -210,5 +211,36 @@ describe('wrongProblem', () => {
     ['a network failure', new TypeError('Failed to fetch')],
   ])('says one plain line for %s', (_name, failure) => {
     expect(wrongProblem(failure)).toBe(subtitlesWrong.failed);
+  });
+});
+
+describe('retimeTool', () => {
+  const dl = (over = {}) => row({ retime: 'AUTO', retimedBy: 0.95904, ...over });
+  const undecided = (over = {}) => dl({ retime: null, retimedBy: null, ...over });
+
+  it('is "dont" for a retimed download and "retime" for one switched off', () => {
+    expect(retimeTool(dl())).toBe('dont');
+    expect(retimeTool(dl({ retime: 'OFF', retimedBy: null }))).toBe('retime');
+    expect(retimeTool(dl({ retime: 'OFF' }))).toBe('retime');
+  });
+
+  it('is "dont" for an undecided download whose rates sit on either side of the speed-up', () => {
+    expect(retimeTool(undecided({ timedFps: 23.976, filmFps: 25 }))).toBe('dont');
+    expect(retimeTool(undecided({ timedFps: 25, filmFps: 24 }))).toBe('dont');
+  });
+
+  it('is null for an owner’s file and a file that fits', () => {
+    expect(retimeTool(dl({ origin: 'FILE' }))).toBeNull();
+    expect(retimeTool(dl({ retime: 'OFF_FITS', retimedBy: null }))).toBeNull();
+  });
+
+  it.each([
+    ['an unknown rate', { timedFps: null, filmFps: 25 }],
+    ['an unknown film rate', { timedFps: 25, filmFps: null }],
+    ['the same rate', { timedFps: 25, filmFps: 25 }],
+    ['a rate outside the speed-up', { timedFps: 29.97, filmFps: 25 }],
+    ['a factor of 1', { timedFps: 25, filmFps: 25, retime: 'AUTO', retimedBy: 1 }],
+  ])('is null for %s', (_name, over) => {
+    expect(retimeTool(undecided(over))).toBeNull();
   });
 });

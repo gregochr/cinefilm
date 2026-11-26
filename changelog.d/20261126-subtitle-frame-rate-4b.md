@@ -1,0 +1,3 @@
+### Added — Film detail: a downloaded subtitle's frame rate, and "Don't retime" / "Retime"
+
+In Film detail's Subtitles → Fix… each downloaded subtitle now says, in one quiet line, what frame rate it was timed for and whether it is retimed to this film (for example "Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%"). A file that is retimed, or will be, has a "Don't retime" button that plays it as it was timed; a file with retime switched off has "Retime". A file that already fits this copy, one with no rate to correct, and the owner's own files have no button. The server's refusal is shown if it says no.

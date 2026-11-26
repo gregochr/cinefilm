@@ -84,6 +84,7 @@ const WRITES = [
   ['adminApi.attachSubtitle', 'POST', '/api/admin/subtitles/:id/attach', HELD],
   ['adminApi.detachSubtitle', 'POST', '/api/admin/subtitles/:id/detach', HELD],
   ['adminApi.setSubtitleOffset', 'PUT', '/api/admin/subtitles/:id/offset', HELD],
+  ['adminApi.retimeSubtitle', 'PUT', '/api/admin/subtitles/:id/retime', HELD],
   ['adminApi.verifySubtitle', 'POST', '/api/admin/subtitles/:id/verify', HELD],
   ['adminApi.unverifySubtitle', 'DELETE', '/api/admin/subtitles/:id/verify', HELD],
   ['adminApi.removeSubtitle', 'DELETE', '/api/admin/subtitles/:id', HELD],
