@@ -5,6 +5,9 @@ Status: plan, 2026-11-24, written at the owner's request ("Yes, plan it") after 
 (3e-M, planner, no PR); build only if every gate passes.
 **2026-11-24: the first dry run failed on `tiny`'s labels (2 of 26 confirmed); 3e continues only with a better
 language detector** ("The dry run, and a better detector" below). The evaluation set is unspent.
+**2026-11-26: 3e ends, unproven** ("Result: 3e ends" below). Neither a better labeller nor the right frame rate
+lifts it: the speech maps cannot place a file to the 300 ms the confirmation needs. The evaluation set is unspent.
+Nothing is built.
 
 ## Why
 
@@ -201,7 +204,46 @@ cheaper wins a tie. If neither passes, **3e ends**, unproven, with the evaluatio
 (1 is `tiny`), and their numbers go into this section before step 5. After the choice, half B's films and the
 evaluation set are mapped with the chosen labeller only. Steps 5 to 7 then run as written.
 
-## Build (only if 3e-M passes; each PR at most 1,500 changed lines)
+## Result: 3e ends, unproven (2026-11-26)
+
+### Attempt 2: `base`, stopped early
+
+`base` relabelled 21 of the 54 media files to relabel (31 half-A and 23 bias files; it reached 21 half-A files and no
+bias file), taking 59,085 CPU seconds with peak
+RSS under 700 MB and no failures. On those files it labels the speech under the forced cues as `tiny` does: foreign
+32.4% against 32.6%, English 32.7% against 32.4%. It was stopped on the owner's word (2026-11-25) and not dry-run.
+L2 (SpeechBrain) was not tried, because the labeller was not the cause.
+
+### The frame rate is not the cause either
+
+A design check on half A (planner, 2026-11-25) tried each file at 7 frame-rate ratios and found 6 files that fit far
+better at a ratio other than 1: they drift, as a file timed for a 25 fps release does on a 23.976 fps film, or the
+reverse. Since v0.11.5 the server retimes every OpenSubtitles file by its stated rate
+(`subtitle-frame-rate-plan.md`). Hitman and Jack Ryan were heard in sync after it.
+
+The planner then ran the confirmation (kit `confirm.py`, `tiny` maps, half A only) on the cues as the server now
+plays them: each file's original cues × its `retimed_by` from the server, plus 4 further tries at 23.976/25,
+25/23.976, 24/25 and 25/24. **2 of the 26 eligible files pass every rule and the 3.458 threshold**, the same 2 as
+attempt 1 (2012 and John Wick).
+
+The rule that fails is the 300 ms peak rule. Hitman, heard in sync since the retime, peaks at −730 ms. Captain
+America (−820 ms) and Inferno (−1,360 ms), whose retime the fit supports but no one has heard, peak further out.
+Jack Ryan, also heard in sync, is the only one of these within 300 ms. The maps' speech stretches are too coarse to place a file to 300 ms. No labeller or rate change alters that, and the plan allows no
+change to the rules once a dry run has been seen.
+
+### What is left
+
+- **3e ends here, unproven.** Attempt 3 is not run: on design data it cannot reach the coverage bar. Half B was
+  never scored, and the 80-file evaluation list is unspent.
+- **What the maps can see** is a gross drift: a retimed Hitman's share of foreign speech under its cues goes from 0%
+  to 49%. A coarse check of that kind (is this file at the wrong rate?) is a separate question with a separate
+  plan (`subtitle-drift-check-plan.md`), proved on its own data. It is proved on half B, never scored by 3e, and on the
+  films of the evaluation list. That spends the list: a later 3e attempt would have no unseen set left.
+- 2 half-A files still drift after the retime, because their stated rate looks wrong: Bridge of Spies (sidecar 60)
+  and The Brutalist (sidecar 166; the film has an intermission, so its cause is not proven). The owner sets no rate
+  (owner, 2026-11-26: "3e-R only, no control"), so they wait for that check.
+
+## Build (not done: 3e ended unproven; kept for the record)
 
 This reuses 3d's build shape: a speech map stored per edition, made only for editions with a forced file, with a
 trigger when an edition gains its first one. A film added after Plex is gone is mapped like any other. The pure
