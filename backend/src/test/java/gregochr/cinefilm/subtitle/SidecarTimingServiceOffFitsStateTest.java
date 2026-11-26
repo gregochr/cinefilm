@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.Presence;
@@ -283,7 +284,21 @@ class SidecarTimingServiceOffFitsStateTest {
     void aDownloadOfAnEarlierImdbMatchIsNotOneTheCheckFitsSoItIsNever() {
         served();
         download.setImdbId("tt9999999");
+        when(sidecars.findById(5L)).thenReturn(java.util.Optional.of(download));
 
+        assertThat(state()).isEqualTo(OffFitsState.NEVER);
+    }
+
+    @Test
+    void aSidecarThatIsNotAForcedDownloadAndIsNotServedIsNever() {
+        served();
+        download.setKind(SubtitleKind.FULL);
+        when(sidecars.findById(5L)).thenReturn(java.util.Optional.of(download));
+        assertThat(state()).isEqualTo(OffFitsState.NEVER);
+
+        SubtitleSidecar owners = new SubtitleSidecar();
+        owners.setOrigin(SubtitleSidecar.Origin.FILE);
+        when(sidecars.findById(5L)).thenReturn(java.util.Optional.of(owners));
         assertThat(state()).isEqualTo(OffFitsState.NEVER);
     }
 
@@ -317,6 +332,17 @@ class SidecarTimingServiceOffFitsStateTest {
         download.setWholeEdition(true);
         part.setDurationMs(null);
 
+        assertThat(state()).isEqualTo(OffFitsState.PENDING);
+    }
+
+    @Test
+    void aDownloadNotServedOnlyBecauseTheOwnerMarkedForcedSubtitlesNotNeededIsPending() {
+        edition.getFilm().setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(download));
+        when(sidecars.findById(5L)).thenReturn(java.util.Optional.of(download));
+
+        // The owner may mark it needed again: a file that fit as it was must not have been fixed at AUTO meanwhile.
         assertThat(state()).isEqualTo(OffFitsState.PENDING);
     }
 

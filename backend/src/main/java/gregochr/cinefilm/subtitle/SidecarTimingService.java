@@ -274,7 +274,7 @@ public class SidecarTimingService {
         List<Served> served = served(Set.of(filmId)).stream().filter(s -> s.sidecar().getId().equals(sidecarId))
             .toList();
         if (served.isEmpty()) {
-            return OffFitsState.NEVER;
+            return notServed(filmId, sidecarId);
         }
         Served s = served.get(0);
         Map<Long, EmbeddedCueStarts> reads = reads(served);
@@ -296,6 +296,21 @@ public class SidecarTimingService {
         // Every read is current. A film with no English track has nothing to fit the original cues to: the fit that
         // is still to come (to OpenSubtitles files, whose key changes whenever one is stored) cannot change that.
         return OffFitsState.ready(reference.starts(), reference.noReference());
+    }
+
+    /**
+     * A download the check does not serve is never fitted, except while the owner has marked the film's forced
+     * subtitles NOT_NEEDED: that may be undone, and the rates must not decide for good meanwhile.
+     */
+    private OffFitsState notServed(Long filmId, Long sidecarId) {
+        SubtitleSidecar row = sidecars.findById(sidecarId).orElse(null);
+        if (row == null || !row.isDownload() || row.getKind() != SubtitleKind.FORCED) {
+            return OffFitsState.NEVER;
+        }
+        boolean notNeeded = editions.findWithFilesByFilmIdIn(Set.of(filmId)).stream()
+            .filter(e -> e.getId().equals(Downloads.madeForEditionId(row)))
+            .anyMatch(e -> Downloads.isNotNeeded(e, SubtitleKind.FORCED));
+        return notNeeded ? OffFitsState.PENDING : OffFitsState.NEVER;
     }
 
     /**
