@@ -37,6 +37,8 @@ class SubtitleRetimeJobTest {
     @Mock
     private SubtitleRetimeService service;
     @Mock
+    private ReferenceRetimeService referenceService;
+    @Mock
     private SubtitleRetimeRecheck recheck;
     @Mock
     private ApplicationEventPublisher events;
@@ -63,7 +65,12 @@ class SubtitleRetimeJobTest {
     }
 
     private SubtitleRetimeJob job(String setting) {
-        return new SubtitleRetimeJob(service, recheck, new BusyRetry(pauses::add), executor, setting, events);
+        return job(setting, executor);
+    }
+
+    private SubtitleRetimeJob job(String setting, Executor on) {
+        return new SubtitleRetimeJob(service, referenceService, recheck, new BusyRetry(pauses::add), on, setting,
+            events);
     }
 
     @Test
@@ -75,7 +82,7 @@ class SubtitleRetimeJobTest {
         off.onIndexPassFinished(new KeyframeIndexPassFinished());
 
         assertThat(queued).isEmpty();
-        verifyNoInteractions(service, recheck, events);
+        verifyNoInteractions(service, referenceService, recheck, events);
     }
 
     @Test
@@ -144,8 +151,8 @@ class SubtitleRetimeJobTest {
     void aRequestThatLandsAfterTheLastCheckButBeforeTheRunIsGivenUpStartsANewRun() {
         when(service.candidateIds()).thenReturn(List.of());
         boolean[] asked = {false};
-        SubtitleRetimeJob on = new SubtitleRetimeJob(service, recheck, new BusyRetry(pauses::add), executor, "on",
-            events) {
+        SubtitleRetimeJob on = new SubtitleRetimeJob(service, referenceService, recheck,
+            new BusyRetry(pauses::add), executor, "on", events) {
             @Override
             void afterLastCheck() {
                 if (!asked[0]) {
@@ -164,9 +171,10 @@ class SubtitleRetimeJobTest {
 
     @Test
     void aRefusedRunFreesTheJobAndTheErrorReachesTheCaller() {
-        SubtitleRetimeJob on = new SubtitleRetimeJob(service, recheck, new BusyRetry(pauses::add), task -> {
+        Executor refusing = task -> {
             throw new IllegalStateException("full");
-        }, "on", events);
+        };
+        SubtitleRetimeJob on = job("on", refusing);
 
         assertThatThrownBy(on::start).isInstanceOf(IllegalStateException.class).hasMessage("full");
         assertThatThrownBy(on::start).isInstanceOf(IllegalStateException.class);
@@ -187,12 +195,12 @@ class SubtitleRetimeJobTest {
         // The event is published after the re-check: its listeners book passes that would hold the re-check's fits.
         verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L, 2L)));
         InOrder order = inOrder(events, recheck);
-        order.verify(recheck).run(Set.of(1L, 2L));
+        order.verify(recheck).run(Set.of(1L, 2L), Set.of());
         order.verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L, 2L)));
         verifyNoMoreInteractions(recheck);
         assertThat(messages()).containsExactly("Could not retime download 6: IllegalStateException",
             "Subtitle retime (ON) finished: 1 rewritten, 1 restored, 1 set off, 1 fit as they are, 1 left as "
-                + "they were, 0 left for the next run (library busy), 1 failed");
+                + "they were, 0 left for the next run (library busy), 1 failed; references: 0 rewritten, 0 restored");
     }
 
     @Test
@@ -200,7 +208,7 @@ class SubtitleRetimeJobTest {
         when(service.candidateIds()).thenReturn(List.of(1L));
         when(service.process(1L, RetimeMode.RESTORE)).thenReturn(Outcome.RESTORED);
         List<List<String>> seenByRecheck = new ArrayList<>();
-        doAnswer(call -> seenByRecheck.add(messages())).when(recheck).run(Set.of(1L));
+        doAnswer(call -> seenByRecheck.add(messages())).when(recheck).run(Set.of(1L), Set.of());
 
         job("restore").run();
 
@@ -213,7 +221,7 @@ class SubtitleRetimeJobTest {
     void theFitsAreAnnouncedAfterTheEventWhenTheReCheckSavedAny() {
         when(service.candidateIds()).thenReturn(List.of(1L));
         when(service.process(1L, RetimeMode.ON)).thenReturn(Outcome.REWRITTEN);
-        when(recheck.run(Set.of(1L))).thenReturn(true);
+        when(recheck.run(Set.of(1L), Set.of())).thenReturn(true);
 
         job("on").run();
 
@@ -226,11 +234,11 @@ class SubtitleRetimeJobTest {
     void nothingIsAnnouncedWhenTheReCheckSavedNoFit() {
         when(service.candidateIds()).thenReturn(List.of(1L));
         when(service.process(1L, RetimeMode.ON)).thenReturn(Outcome.REWRITTEN);
-        when(recheck.run(Set.of(1L))).thenReturn(false);
+        when(recheck.run(Set.of(1L), Set.of())).thenReturn(false);
 
         job("on").run();
 
-        verify(recheck).run(Set.of(1L));
+        verify(recheck).run(Set.of(1L), Set.of());
         verifyNoMoreInteractions(recheck);
     }
 
@@ -269,7 +277,7 @@ class SubtitleRetimeJobTest {
         verifyNoInteractions(events, recheck);
         assertThat(messages()).containsExactly("Subtitle retime stops: the library is busy",
             "Subtitle retime (ON) finished: 0 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as they "
-                + "were, 1 left for the next run (library busy), 0 failed");
+                + "were, 1 left for the next run (library busy), 0 failed; references: 0 rewritten, 0 restored");
     }
 
     @Test
@@ -279,5 +287,70 @@ class SubtitleRetimeJobTest {
         job("on").run();
 
         verifyNoInteractions(events, recheck);
+    }
+
+    @Test
+    void referencesAreVisitedBeforeDownloadsAndTheFilmsOfChangedOnesAreRechecked() {
+        List<String> order = new ArrayList<>();
+        when(referenceService.candidateIds()).thenAnswer(call -> {
+            order.add("references");
+            return List.of(9L, 10L);
+        });
+        when(referenceService.process(9L, RetimeMode.ON)).thenReturn(Outcome.REWRITTEN);
+        when(referenceService.process(10L, RetimeMode.ON)).thenReturn(Outcome.RESTORED);
+        when(service.candidateIds()).thenAnswer(call -> {
+            order.add("downloads");
+            return List.of(1L);
+        });
+        when(service.process(1L, RetimeMode.ON)).thenReturn(Outcome.REWRITTEN);
+
+        job("on").run();
+
+        assertThat(order).containsExactly("references", "downloads");
+        verify(recheck).run(Set.of(1L), Set.of(9L, 10L));
+        verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L)));
+        assertThat(messages()).containsExactly(
+            "Subtitle retime (ON) finished: 1 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as "
+                + "they were, 0 left for the next run (library busy), 0 failed; references: 1 rewritten, "
+                + "1 restored");
+    }
+
+    @Test
+    void aRunThatChangedOnlyReferencesStillRechecksTheirFilmsAndAnnouncesWithNoDownloads() {
+        when(referenceService.candidateIds()).thenReturn(List.of(9L));
+        when(referenceService.process(9L, RetimeMode.ON)).thenReturn(Outcome.REWRITTEN);
+        when(recheck.run(Set.of(), Set.of(9L))).thenReturn(true);
+
+        job("on").run();
+
+        verify(events).publishEvent(new SubtitleCuesRewritten(Set.of()));
+        verify(recheck).announceFits();
+    }
+
+    @Test
+    void aLibraryThatStaysBusyDuringTheReferencesStopsTheRunBeforeAnyDownloadIsLookedAt() {
+        when(referenceService.candidateIds()).thenReturn(List.of(9L, 10L));
+        when(referenceService.process(9L, RetimeMode.ON)).thenReturn(Outcome.BUSY);
+
+        job("on").run();
+
+        verify(referenceService, times(BusyRetry.ATTEMPTS)).process(9L, RetimeMode.ON);
+        verifyNoInteractions(service, events, recheck);
+        assertThat(messages()).containsExactly("Subtitle retime stops: the library is busy",
+            "Subtitle retime (ON) finished: 0 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as they "
+                + "were, 0 left for the next run (library busy), 0 failed; references: 0 rewritten, 0 restored");
+    }
+
+    @Test
+    void aReferenceThatThrowsIsCountedAndPassedOverAndTheDownloadsStillRun() {
+        when(referenceService.candidateIds()).thenReturn(List.of(9L));
+        when(referenceService.process(9L, RetimeMode.ON)).thenThrow(new IllegalStateException("boom"));
+        when(service.candidateIds()).thenReturn(List.of());
+
+        job("on").run();
+
+        assertThat(messages()).containsExactly("Could not retime reference 9: IllegalStateException",
+            "Subtitle retime (ON) finished: 0 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as they "
+                + "were, 0 left for the next run (library busy), 1 failed; references: 0 rewritten, 0 restored");
     }
 }

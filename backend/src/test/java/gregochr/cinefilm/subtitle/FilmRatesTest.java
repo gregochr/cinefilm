@@ -161,4 +161,51 @@ class FilmRatesTest {
 
         assertThat(rates.forFile(9L)).isNull();
     }
+
+    private Edition secondEdition(long editionId, long fileId, Long size) {
+        Edition other = TestData.edition(TestData.film(1L, "Taken", 2008, NOW), editionId, "Extended", 0, null);
+        MediaFile otherPart = TestData.file(other, "extended.m4v");
+        otherPart.setId(fileId);
+        otherPart.setPartNumber(1);
+        otherPart.setSizeBytes(size);
+        return other;
+    }
+
+    @Test
+    void aFilmWhoseEditionsShareARateHasThatRateForItsReferences() {
+        part(1, 1, SIZE);
+        Edition other = secondEdition(41L, 2, SIZE);
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition, other));
+        when(keyframes.findAllById(List.of(1L, 2L))).thenReturn(List.of(index(1, SIZE, 25.0), index(2, SIZE, 25.0)));
+
+        assertThat(rates.forFilm(1L)).isEqualTo(new FilmRates.FilmRate(25.0, false));
+    }
+
+    @Test
+    void aFilmWhoseEditionsHaveDifferentKnownRatesDisagrees() {
+        part(1, 1, SIZE);
+        Edition other = secondEdition(41L, 2, SIZE);
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition, other));
+        when(keyframes.findAllById(List.of(1L, 2L))).thenReturn(
+            List.of(index(1, SIZE, 25.0), index(2, SIZE, 23.976)));
+
+        assertThat(rates.forFilm(1L)).isEqualTo(new FilmRates.FilmRate(null, true));
+    }
+
+    @Test
+    void aFilmWithAnEditionOfNoCurrentRateIsUnknownForNowNotDisagreeing() {
+        part(1, 1, SIZE);
+        Edition other = secondEdition(41L, 2, SIZE + 1);
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition, other));
+        when(keyframes.findAllById(List.of(1L, 2L))).thenReturn(List.of(index(1, SIZE, 25.0), index(2, SIZE, null)));
+
+        assertThat(rates.forFilm(1L)).isEqualTo(new FilmRates.FilmRate(null, false));
+    }
+
+    @Test
+    void aFilmWithNoEditionWithPartsIsUnknownForNow() {
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
+
+        assertThat(rates.forFilm(1L)).isEqualTo(new FilmRates.FilmRate(null, false));
+    }
 }

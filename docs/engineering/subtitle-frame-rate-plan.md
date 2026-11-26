@@ -342,6 +342,10 @@ Not in this plan:
      - a retimed download and a reference of unknown rate give no verdict, never `CHECK`;
      - an owner edit made while the job holds a row is kept.
    - If either 2a or 2b is estimated over 1,200 lines, it is split again along these bullets.
+   - Split: **2b-1** is the first six bullets (references rewritten, the guard, stale rows, `restore`, the fetcher's
+     reset, and the job's run and re-check over references; no migration, since V39 already added `cues_version`);
+     **2b-2** is "downloads are copied from the original cues" and "retimed as it arrives", with the tests under them
+     that 2b-1 does not cover.
 4. **The Admin, then on.**
    - `PUT /api/admin/subtitles/{id}/retime` takes "retime" or "don't retime" (no rate: "The owner's rate").
    - The rate line and the switch go in the Admin's subtitle view.

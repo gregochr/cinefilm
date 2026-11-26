@@ -69,6 +69,13 @@ public class OpenSubtitlesReference {
     @Column(columnDefinition = "TEXT")
     private String originalCuesText;
 
+    /**
+     * Raised on every change of {@link #cuesText}, so a check or fit that read older cues can drop its save. Change the
+     * cues only through {@link #replaceCues}.
+     */
+    @Column(nullable = false)
+    private int cuesVersion;
+
     /** Downloads that were charged but gave no usable file; {@link #MAX_FAILED_DOWNLOADS} makes it final. */
     @Column(nullable = false)
     private int failedDownloads;
@@ -78,6 +85,18 @@ public class OpenSubtitlesReference {
 
     /** Charged failed downloads of one file id after which it is never fetched again. */
     public static final int MAX_FAILED_DOWNLOADS = 3;
+
+    /**
+     * Puts new cues in and raises {@link #cuesVersion} when they differ from the ones held.
+     *
+     * @param text the cues as normalised SRT (empty when unusable)
+     */
+    public void replaceCues(String text) {
+        if (!text.equals(cuesText)) {
+            cuesText = text;
+            cuesVersion++;
+        }
+    }
 
     /** True when there is nothing more to try: it is usable, or its file id has failed the most times allowed. */
     public boolean isFinal() {

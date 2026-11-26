@@ -181,7 +181,7 @@ final class ReferenceFetcher {
     private OpenSubtitlesReference recordFailure(Long filmId, String imdbId, OpenSubtitlesResult candidate,
                                                  OpenSubtitlesReference stored, boolean permanent, Instant now) {
         OpenSubtitlesReference reference = blank(filmId, imdbId, candidate, stored, now);
-        reference.setCuesText("");
+        reference.replaceCues("");
         reference.setCueCount(0);
         reference.setLastCueEndMs(null);
         reference.setFailedDownloads(permanent ? OpenSubtitlesReference.MAX_FAILED_DOWNLOADS
@@ -199,6 +199,10 @@ final class ReferenceFetcher {
         reference.setRelease(candidate.release());
         // A rate the row has is never replaced by none (as fillRate): a candidate that states none keeps it.
         reference.setTimedFps(candidate.fps() != null ? candidate.fps() : reference.getTimedFps());
+        // Whatever is written is the file as OpenSubtitles gave it: never marked as already retimed.
+        reference.setOriginalCuesText(null);
+        reference.setRetimedBy(null);
+        reference.setRetimedForFps(null);
         reference.setFetchedAt(now);
         return reference;
     }
@@ -210,7 +214,7 @@ final class ReferenceFetcher {
         String text = SrtParser.format(cues);
         boolean usable = !cues.isEmpty() && text.length() <= MAX_REFERENCE_CHARS;
         OpenSubtitlesReference reference = blank(filmId, imdbId, candidate, stored, now);
-        reference.setCuesText(usable ? text : "");
+        reference.replaceCues(usable ? text : "");
         reference.setCueCount(usable ? cues.size() : 0);
         reference.setLastCueEndMs(usable ? cues.stream().mapToLong(SubtitleCue::endMs).max().orElse(0) : null);
         if (!usable) {

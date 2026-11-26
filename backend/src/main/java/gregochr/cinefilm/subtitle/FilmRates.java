@@ -44,6 +44,42 @@ public class FilmRates {
     }
 
     /**
+     * What a film's references are retimed by (references are kept per film, not per edition): the one rate every
+     * original part of every edition has.
+     *
+     * @param rate the agreed rate, or null when it is not known for now (an edition or a part has no current rate) or
+     *     the editions disagree
+     * @param disagree true when two editions have different known rates: the film's references stay raw
+     */
+    public record FilmRate(Double rate, boolean disagree) {
+    }
+
+    /**
+     * The agreed rate of a film's editions; an edition with no original part is not counted.
+     *
+     * @param filmId the film
+     * @return the rate, whether it is unknown for now, or whether the editions disagree
+     */
+    public FilmRate forFilm(Long filmId) {
+        List<Edition> found = editions.findWithFilesByFilmIdIn(Set.of(filmId)).stream()
+            .filter(e -> !e.originalParts().isEmpty()).toList();
+        Map<Long, MediaKeyframes> indexes = indexes(found.stream().flatMap(e -> e.originalParts().stream()).toList());
+        Double agreed = null;
+        boolean unknown = found.isEmpty();
+        for (Edition edition : found) {
+            Double rate = common(edition.originalParts(), indexes);
+            if (rate == null) {
+                unknown = true;
+            } else if (agreed == null) {
+                agreed = rate;
+            } else if (!FrameRateRetime.sameRate(agreed, rate)) {
+                return new FilmRate(null, true);
+            }
+        }
+        return new FilmRate(unknown ? null : agreed, false);
+    }
+
+    /**
      * The rates of several editions at once, in two reads however many there are (the Admin list).
      *
      * @param editionIds the editions

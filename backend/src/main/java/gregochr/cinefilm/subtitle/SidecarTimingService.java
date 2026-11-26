@@ -90,10 +90,19 @@ public class SidecarTimingService {
      * @param noReference why there is no usable track, or null
      * @param osReferences the usable stored OpenSubtitles files to fit to when the film has no track of its own (the
      *     fit keeps the best, see {@link DownloadedFit#choose}); empty for a fit to the film's own track
+     * @param referenceVersions the {@code cuesVersion} each of those files had when read, by OpenSubtitles file id: a
+     *     save drops the fit when a file's cues have changed since ({@link ReferenceRetimeService})
      */
     public record FitJob(Long filmId, Long sidecarId, String identity, String referenceKey, List<Long> servedStarts,
                          List<Long> referenceStarts, String noReference,
-                         List<DownloadedFit.Reference> osReferences) {
+                         List<DownloadedFit.Reference> osReferences, Map<Long, Integer> referenceVersions) {
+
+        /** A fit to stored OpenSubtitles files whose cue versions are not guarded. */
+        public FitJob(Long filmId, Long sidecarId, String identity, String referenceKey, List<Long> servedStarts,
+                      List<Long> referenceStarts, String noReference, List<DownloadedFit.Reference> osReferences) {
+            this(filmId, sidecarId, identity, referenceKey, servedStarts, referenceStarts, noReference, osReferences,
+                Map.of());
+        }
 
         /** A fit to the film's own track (or with none). */
         public FitJob(Long filmId, Long sidecarId, String identity, String referenceKey, List<Long> servedStarts,
@@ -398,6 +407,12 @@ public class SidecarTimingService {
                                   boolean waitsForFilmRate) {
     }
 
+    private static Map<Long, Integer> versions(Map<Long, OpenSubtitlesReference> texts) {
+        Map<Long, Integer> versions = new HashMap<>();
+        texts.forEach((osFileId, reference) -> versions.put(osFileId, reference.getCuesVersion()));
+        return versions;
+    }
+
     private static List<Long> starts(List<SubtitleCue> cues) {
         return cues.stream().map(SubtitleCue::startMs).toList();
     }
@@ -441,7 +456,7 @@ public class SidecarTimingService {
                     List.copyOf(starts), List.of(), reason);
             }
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
-                List.copyOf(starts), List.of(), null, fitTo);
+                List.copyOf(starts), List.of(), null, fitTo, versions(texts));
         }
         TimingKeys.EmbeddedReference embedded = TimingKeys.embeddedReference(s.edition(), sidecar, reads);
         return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar),
@@ -541,7 +556,8 @@ public class SidecarTimingService {
         }
         SubtitleSidecar sidecar = current.sidecar();
         Map<Long, EmbeddedCueStarts> currentReads = reads(List.of(current));
-        String key = referenceKey(current, currentReads, osRefs(List.of(current), currentReads));
+        Map<Long, OsRefs> currentRefs = osRefs(List.of(current), currentReads);
+        String key = referenceKey(current, currentReads, currentRefs);
         if (!TimingKeys.identity(sidecar).equals(job.identity()) || key == null || !key.equals(job.referenceKey())) {
             return SaveOutcome.DROPPED;
         }
@@ -549,6 +565,10 @@ public class SidecarTimingService {
         // fit to the film's own track comes from a job that fitted to none.
         if (osFileId == null ? !job.osReferences().isEmpty()
             : job.osReferences().stream().noneMatch(r -> r.osFileId() == osFileId)) {
+            return SaveOutcome.DROPPED;
+        }
+        if (osFileId != null && cuesChanged(job, osFileId, currentRefs.get(current.edition().getId()))) {
+            // The file was rewritten, restored or fetched again while it was fitted: this fit is of cues that are gone.
             return SaveOutcome.DROPPED;
         }
         ReferenceSource source = osFileId == null ? ReferenceSource.EMBEDDED : ReferenceSource.OPENSUBTITLES;
@@ -586,6 +606,13 @@ public class SidecarTimingService {
         row.setStaleSince(null);
         alignments.save(row);
         return applies ? SaveOutcome.APPLIED : SaveOutcome.SAVED;
+    }
+
+    /** True when the file's cues now have another version than the one the job read (a job with none is unguarded). */
+    private static boolean cuesChanged(FitJob job, long osFileId, OsRefs now) {
+        Integer read = job.referenceVersions().get(osFileId);
+        return read != null && now.usable().stream().filter(f -> f.osFileId() == osFileId)
+            .noneMatch(f -> f.cuesVersion() == read);
     }
 
     /**

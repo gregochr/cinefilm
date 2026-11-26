@@ -52,6 +52,8 @@ class SubtitleRetimeRecheckFlowTest {
     @Mock
     private SubtitleRetimeService retimeService;
     @Mock
+    private ReferenceRetimeService referenceService;
+    @Mock
     private SidecarTimingService timingService;
     @Mock
     private EmbeddedCueReader reader;
@@ -104,10 +106,11 @@ class SubtitleRetimeRecheckFlowTest {
                     checkRefresher.onTimingFinished(finished);
                 }
             }, new ReadFailures());
-        recheck = new SubtitleRetimeRecheck(retimeService, timingRefresher, checkRefresher,
+        recheck = new SubtitleRetimeRecheck(retimeService, referenceService, timingRefresher, checkRefresher,
             new BusyRetry(pause -> { }));
         // A publisher that delivers the retime job's event to the real listeners, on the publishing thread.
-        job = new SubtitleRetimeJob(retimeService, recheck, new BusyRetry(pause -> { }), Runnable::run, "on",
+        job = new SubtitleRetimeJob(retimeService, referenceService, recheck, new BusyRetry(pause -> { }),
+            Runnable::run, "on",
             event -> {
                 if (event instanceof SubtitleCuesRewritten rewritten) {
                     happened.add("cues rewritten announced");
@@ -151,7 +154,7 @@ class SubtitleRetimeRecheckFlowTest {
         checkSaves(due10, ref11);
         checkSaves(due20, ref22);
 
-        assertThat(recheck.run(IDS)).isTrue();
+        assertThat(recheck.run(IDS, Set.of())).isTrue();
 
         // Edition B's check is saved only after film 2's fit, edition A's after film 1's.
         // Every film is fitted before anything is checked, then one walk checks both editions and announces once.

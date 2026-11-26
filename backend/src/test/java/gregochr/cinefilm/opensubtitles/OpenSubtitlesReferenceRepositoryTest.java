@@ -109,4 +109,41 @@ class OpenSubtitlesReferenceRepositoryTest extends ApiTestBase {
         assertThat(((Number) row[0]).doubleValue()).isEqualTo(25.0);
         assertThat(((Number) row[1]).longValue()).isEqualTo(7_000L);
     }
+
+    private OpenSubtitlesReference usable(Long filmId, long fileId, Double timedFps, Double retimedBy) {
+        OpenSubtitlesReference reference = reference(filmId, "tt0000001", fileId, 0);
+        reference.setCuesText("1\n00:00:01,000 --> 00:00:02,000\nHi\n\n");
+        reference.setCueCount(1);
+        reference.setTimedFps(timedFps);
+        reference.setRetimedBy(retimedBy);
+        return references.saveAndFlush(reference);
+    }
+
+    @Test
+    void theRetimeCandidatesAreTheUsableReferencesWithAStatedRateOrARetimeInIdOrder() {
+        Long filmId = film();
+        OpenSubtitlesReference rated = usable(filmId, 5011, 23.976, null);
+        usable(filmId, 5012, null, null);
+        OpenSubtitlesReference retimed = usable(filmId, 5013, null, 0.96);
+        OpenSubtitlesReference unusable = reference(filmId, "tt0000001", 5014, 3);
+        unusable.setTimedFps(25.0);
+        references.saveAndFlush(unusable);
+
+        assertThat(references.findRetimeCandidateIds()).containsExactly(rated.getId(), retimed.getId());
+    }
+
+    @Test
+    void theCuesVersionStartsAtZeroIsRaisedByReplacingCuesAndReadAloneAndInTheFacts() {
+        Long filmId = film();
+        OpenSubtitlesReference reference = usable(filmId, 5011, 23.976, null);
+        assertThat(references.findCuesVersionById(reference.getId())).contains(0);
+
+        reference.replaceCues("1\n00:00:02,000 --> 00:00:03,000\nHi\n\n");
+        references.saveAndFlush(reference);
+
+        assertThat(references.findCuesVersionById(reference.getId())).contains(1);
+        assertThat(references.findFactsByFilmIdIn(java.util.List.of(filmId))).extracting(
+            OpenSubtitlesReferenceRepository.ReferenceFacts::cuesVersion).containsExactly(1);
+        assertThat(references.findCuesVersionById(reference.getId() + 1000)).isEmpty();
+    }
 }

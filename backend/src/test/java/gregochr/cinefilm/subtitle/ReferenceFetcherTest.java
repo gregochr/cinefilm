@@ -223,4 +223,42 @@ class ReferenceFetcherTest {
 
         assertThat(stored().getTimedFps()).isEqualTo(25.0);
     }
+
+    @Test
+    void aReferenceFetchedAgainIsNeverMarkedAsAlreadyRetimedAndItsCuesVersionIsRaised() {
+        OpenSubtitlesReference failed = finalStored(23.976);
+        failed.setCueCount(0);
+        failed.setCuesText("");
+        failed.setFailedDownloads(1);
+        failed.setOriginalCuesText("1\n00:00:01,000 --> 00:00:02,000\nOld\n\n");
+        failed.setRetimedBy(23.976 / 25);
+        failed.setRetimedForFps(25.0);
+        failed.setCuesVersion(4);
+        saves();
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011L)).thenReturn(new OpenSubtitlesDownload(
+            SrtParser.parse(SRT.getBytes(StandardCharsets.UTF_8)), null, null));
+
+        fetcher.fetch(1L, IMDB, stating(23.976), LIMIT);
+
+        OpenSubtitlesReference written = stored();
+        assertThat(written.getOriginalCuesText()).isNull();
+        assertThat(written.getRetimedBy()).isNull();
+        assertThat(written.getRetimedForFps()).isNull();
+        assertThat(written.getTimedFps()).isEqualTo(23.976);
+        assertThat(written.getCuesText()).isEqualTo(SRT);
+        assertThat(written.getCuesVersion()).isEqualTo(5);
+    }
+
+    @Test
+    void aNewReferenceStartsAtCuesVersionOneWithNothingRetimed() {
+        downloads();
+
+        fetcher.fetch(1L, IMDB, stating(25.0), LIMIT);
+
+        OpenSubtitlesReference written = stored();
+        assertThat(written.getCuesVersion()).isEqualTo(1);
+        assertThat(written.getRetimedBy()).isNull();
+        assertThat(written.getOriginalCuesText()).isNull();
+    }
 }

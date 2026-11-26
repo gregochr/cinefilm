@@ -30,6 +30,8 @@ class SidecarCheckDownloadsTest extends ForcedDownloadTestBase {
 
     @Autowired
     private ForcedSubtitleAlignmentRepository alignments;
+    @Autowired
+    private gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository referenceRepository;
 
     private Film film() {
         return searchedFilm("Taken", 1, result(5011, "Taken.2008.BluRay"), result(5012, "Taken.2008.WEB"),
@@ -38,7 +40,7 @@ class SidecarCheckDownloadsTest extends ForcedDownloadTestBase {
 
     private SidecarCheckService enabledTimingService() {
         return new SidecarCheckService(films, sidecars, editionRepository, resolver, checks,
-            downloadChecks, ledger, true, alignments, CLOCK);
+            downloadChecks, ledger, true, alignments, referenceRepository, CLOCK);
     }
 
     @Test

@@ -26,20 +26,36 @@ public interface OpenSubtitlesReferenceRepository extends JpaRepository<OpenSubt
      * @param cueCount its line count (0 when unusable)
      * @param lastCueEndMs where its last cue ends, or null for a file stored before that was kept
      * @param timedFps the rate OpenSubtitles states for it, or null
+     * @param cuesVersion the version of its cues when read ({@link OpenSubtitlesReference#getCuesVersion})
      */
     record ReferenceFacts(Long id, Long filmId, String imdbId, long osFileId, String release, int cueCount,
-                          Long lastCueEndMs, Double timedFps) {
+                          Long lastCueEndMs, Double timedFps, int cuesVersion) {
+
+        /** Facts of cues that were never changed (version 0). */
+        public ReferenceFacts(Long id, Long filmId, String imdbId, long osFileId, String release, int cueCount,
+                              Long lastCueEndMs, Double timedFps) {
+            this(id, filmId, imdbId, osFileId, release, cueCount, lastCueEndMs, timedFps, 0);
+        }
     }
 
     /** The facts of every reference stored for some films, for the timing check on the playback path. */
     @Query("select new gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository$ReferenceFacts(r.id, "
-        + "r.filmId, r.imdbId, r.osFileId, r.release, r.cueCount, r.lastCueEndMs, r.timedFps) "
+        + "r.filmId, r.imdbId, r.osFileId, r.release, r.cueCount, r.lastCueEndMs, r.timedFps, r.cuesVersion) "
         + "from OpenSubtitlesReference r "
         + "where r.filmId in :filmIds")
     List<ReferenceFacts> findFactsByFilmIdIn(@Param("filmIds") Collection<Long> filmIds);
 
     /** Every reference stored for some films (any IMDb id; the caller keeps those for the film's current one). */
     List<OpenSubtitlesReference> findByFilmIdIn(Collection<Long> filmIds);
+
+    /** The version of a reference's cues now (empty when the row is gone). */
+    @Query("select r.cuesVersion from OpenSubtitlesReference r where r.id = :id")
+    Optional<Integer> findCuesVersionById(@Param("id") Long id);
+
+    /** The ids of the usable references the retime job visits: one with a stated rate, and one that is retimed. */
+    @Query("select r.id from OpenSubtitlesReference r where r.cueCount > 0 "
+        + "and (r.timedFps is not null or r.retimedBy is not null) order by r.id")
+    List<Long> findRetimeCandidateIds();
 
     /**
      * Sets the stated frame rate of a reference that has none, and touches no other column, so it cannot write back

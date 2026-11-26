@@ -8,6 +8,7 @@ import gregochr.cinefilm.film.FilmRepository.OsBestRef;
 import gregochr.cinefilm.opensubtitles.CutTag;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRanking;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.ForcedResolver.DownloadState;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
@@ -45,6 +46,7 @@ public class SidecarCheckService {
     private final ForcedCheckCandidateRepository candidates;
     private final boolean timingCheckEnabled;
     private final ForcedSubtitleAlignmentRepository alignments;
+    private final OpenSubtitlesReferenceRepository references;
     private final Clock clock;
 
     /** How long a download waits for the timing fit a retime made outdated before it is checked as it would be. */
@@ -59,7 +61,8 @@ public class SidecarCheckService {
                                ForcedDownloadCheckRepository downloadChecks,
                                ForcedCheckCandidateRepository candidates,
                                @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean timingCheckEnabled,
-                               ForcedSubtitleAlignmentRepository alignments, Clock clock) {
+                               ForcedSubtitleAlignmentRepository alignments,
+                               OpenSubtitlesReferenceRepository references, Clock clock) {
         this.films = films;
         this.sidecars = sidecars;
         this.editions = editions;
@@ -69,6 +72,7 @@ public class SidecarCheckService {
         this.candidates = candidates;
         this.timingCheckEnabled = timingCheckEnabled;
         this.alignments = alignments;
+        this.references = references;
         this.clock = clock;
     }
 
@@ -253,7 +257,8 @@ public class SidecarCheckService {
      * Saves a check, but only while it still describes what was compared: the film still has the IMDb id the reference
      * was fetched for, the reference is still one of the film's single-file candidates (and, for a download, is not the
      * download's own file), and what was checked still has exactly the version that was compared (an attach, move,
-     * nudge, changed file or rescan meanwhile makes it stale: the result is dropped and it is due again). The owner's
+     * nudge, changed file or rescan meanwhile makes it stale: the result is dropped and it is due again), and the
+     * reference's cues are still the version that was read ({@code cuesVersion}). The owner's
      * files' check is the edition's one current row; a download's is its own row.
      *
      * @param due what was checked
@@ -267,6 +272,12 @@ public class SidecarCheckService {
                         Instant now) {
         Film film = films.findById(due.filmId()).orElse(null);
         if (film == null || !reference.getImdbId().equals(film.getImdbId())) {
+            return false;
+        }
+        // The reference's cues were rewritten, restored or fetched again since they were read: the verdict is of cues
+        // that are gone, and the check is due again.
+        if (references.findCuesVersionById(reference.getId()).filter(v -> v != reference.getCuesVersion())
+            .isPresent()) {
             return false;
         }
         // The reference must still be one of the film's candidates (it is kept either way).
