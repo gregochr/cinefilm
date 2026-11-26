@@ -35,6 +35,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
@@ -143,6 +145,22 @@ class FullFitProbeTest {
             + "reference to download ALIGNED at -2000 ms, 100% of 300 lines matched; "
             + "runtime 3:02:05; credits start 3:01:00");
         verifyNoInteractions(api, budget);
+    }
+
+    @ParameterizedTest(name = "a download of stated rate and retime {0}, not retimed, is measured as before")
+    @EnumSource(value = RetimeChoice.class, names = {"AUTO", "OFF_FITS"})
+    void aDownloadWithASideThatIsNotRetimedIsMeasuredNotPassedOver(RetimeChoice retime) {
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, retime, null, null);
+        serving(new Job(1L, 10L, "tt1", 7L, 5011L, lines(300, 0), 3 * HOUR + 125_000, 3 * HOUR + 60_000,
+            List.of(candidate(5012)), Map.of(5012L, stored(5012, lines(300, 2_000))), side));
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): download file 5011 "
+            + "(300 cues, last cue 0:50:01) against reference file 5012 (300 cues, last cue 0:50:03); "
+            + "download to reference ALIGNED at 2000 ms, 100% of 300 lines matched; "
+            + "reference to download ALIGNED at -2000 ms, 100% of 300 lines matched; "
+            + "runtime 3:02:05; credits start 3:01:00");
     }
 
     @Test
