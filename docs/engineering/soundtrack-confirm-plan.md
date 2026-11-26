@@ -238,7 +238,7 @@ change to the rules once a dry run has been seen.
 - **What the maps can see** is a gross drift: a retimed Hitman's share of foreign speech under its cues goes from 0%
   to 49%. A coarse check of that kind (is this file at the wrong rate?) is a separate question with a separate
   plan (`subtitle-drift-check-plan.md`), proved on its own data. It is proved on half B, never scored by 3e, and on the
-  films of the evaluation list.
+  films of the evaluation list. That spends the list: a later 3e attempt would have no unseen set left.
 - 2 half-A files still drift after the retime, because their stated rate looks wrong: Bridge of Spies (sidecar 60)
   and The Brutalist (sidecar 166; the film has an intermission, so its cause is not proven). The owner sets no rate
   (owner, 2026-11-26: "3e-R only, no control"), so they wait for that check.

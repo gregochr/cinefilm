@@ -66,7 +66,9 @@ different cut), the flag is wrong on design data and this plan ends. File 3 is r
 
 ### Step 2: the held-out set (half B and the evaluation list)
 
-Half B was never scored by 3e or by the 25 Nov check. 34 of its forced files have maps on the server already (the
+Half B was never scored by 3e or by the 25 Nov check. It is part of 3e's design set, so 3d's fits of it at
+k = 1 exist, but they were not looked at for this plan, and the measure and its numbers were frozen from half A
+alone. 34 of its forced files have maps on the server already (the
 kit's `run2/maps`). Half A gave only 2 flags as played in 26 files, so half B alone is likely to give too few for
 G2. The held-out set is therefore **half B and the forced films of 3e's 80-file evaluation list** (unspent; 3e has
 ended), fixed now, before any score. The owner maps the list's films (3d's kit, nice 19) and runs one read-only
@@ -82,13 +84,15 @@ query for every held-out file's `retimed_by` and stated rate. Then, once, on the
   A flag on a file the server retimed is checked the same way. This is the risk that matters: a wrong flag would put
   a file minutes out.
 - **G1 trusts the server's retime.** Its stated rate is right for most files but not all, so a G1 miss or hit may
-  rest on a wrong rate. G1 measures coverage only; whether a flag can be acted on is judged by ear in G2. No file is
-  dropped from G1's set after the scores are seen.
+  rest on a wrong rate. One rule, fixed now: a G1 file that is also flagged as played, and heard out in that k̂'s
+  direction in G2, was retimed by a wrong rate, so its G1 hit counts as a miss. No file is dropped from G1's set
+  after the scores are seen.
 - **G3, noise.** Half B's own decoys (cross-film and shuffled cues, built by the kit's `build_decoys` and never
   scored) are measured with their cues as the source file plays them, on the decoy's map. At most 5% may be
   flagged. (Half A's 72 decoys: 62 have 8 or more cues, and none is flagged; the largest f at k̂ is 0.19. Scratch
   script `g4a.py`.)
-- **Enough files.** G1 needs at least 5 files in its set, G2 at least 3 flags (step 1's two files don't count:
+- **Enough files.** G1 needs at least 5 files in its set, G2 at least 3 flags, G3 at least 50 decoys with 8 or
+  more cues from at least 10 films (step 1's two files don't count:
   they are design data). If the held-out set gives fewer, the plan ends unproven.
 
 The numbers and the files heard are recorded here.
