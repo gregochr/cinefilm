@@ -136,6 +136,51 @@ public class SidecarTimingRefresher {
         }
     }
 
+    /**
+     * The re-check after the retime job rewrote or restored cues (docs/engineering/subtitle-frame-rate-plan.md, "The
+     * re-check runs at once"): reads and fits one film now, on the calling thread (the job's, which is this
+     * service's own executor), so it never overlaps a pass. When a pass is already booked or going, that pass is asked
+     * to go round once more and this returns at once: it fits the same due sidecars.
+     *
+     * @param filmId the film
+     * @return true when the film was fitted, or is left to a pass that will; false when a scan, an edit or an
+     *     encoding session stopped it (try again)
+     */
+    public boolean fitFilm(Long filmId) {
+        if (!enabled) {
+            return true;
+        }
+        if (!running.compareAndSet(false, true)) {
+            pending.set(true);
+            return true;
+        }
+        boolean settled = true;
+        try {
+            if (sessions.isEncoding()) {
+                throw new Wait("a film is being transcoded");
+            }
+            int[] counts = new int[4];
+            film(filmId, counts);
+            LOG.info("Subtitle timing of film {} after a retime: {} files read, {} fitted ({} offsets set), "
+                + "{} failed", filmId, counts[0], counts[1], counts[2], counts[3]);
+            if (counts[1] > 0) {
+                announce();
+            }
+        } catch (Wait e) {
+            deferred.set(true);
+            settled = false;
+            LOG.info("Subtitle timing of film {} waits: {}", filmId, e.getMessage());
+        } catch (RuntimeException e) {
+            LOG.warn("Could not check the subtitle timing of film {}: {}", filmId, e.getClass().getSimpleName());
+        } finally {
+            running.set(false);
+        }
+        if (pending.get()) {
+            launch();
+        }
+        return settled;
+    }
+
     private boolean launch() {
         if (!running.compareAndSet(false, true)) {
             return false;

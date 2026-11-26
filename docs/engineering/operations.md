@@ -413,8 +413,9 @@ The rollback is the `restore` mode, in this order:
    old line first, as for `CINEFILM_CREDITS_AUTO_ENABLED` above).
 2. **Restart the app**, because the mode is read once, at startup:
    `export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d --force-recreate cinefilm`.
-3. **Wait for the run to end.** The run starts at startup and puts every retimed download back. It has ended when the
-   log shows the line `Subtitle retime (RESTORE) finished: ... restored ...`:
+3. **Wait for the run to end.** The run starts at startup and puts every retimed download back, then fits and checks
+   the touched editions again. It has ended when the log shows the line
+   `Subtitle retime (RESTORE) finished: ... restored ...`, which is written last, after that re-check:
 
    ```bash
    docker logs cinefilm 2>&1 | grep 'Subtitle retime (RESTORE) finished' | tail -1

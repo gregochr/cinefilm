@@ -486,6 +486,51 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
+    void theEditionsAndFilmsOfRewrittenDownloadsAreListedOnceEachInIdOrder() {
+        SubtitleSidecar other = new SubtitleSidecar();
+        other.setId(6L);
+        other.setPath("opensubtitles:" + EDITION_ID + ":778");
+        other.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        SubtitleSidecar file = new SubtitleSidecar();
+        file.setId(7L);
+        file.setPath("movie.srt");
+        file.setOrigin(SubtitleSidecar.Origin.FILE);
+        when(sidecars.findById(5L)).thenReturn(Optional.of(row));
+        when(sidecars.findById(6L)).thenReturn(Optional.of(other));
+        when(sidecars.findById(7L)).thenReturn(Optional.of(file));
+        when(sidecars.findById(8L)).thenReturn(Optional.empty());
+        when(editions.findWithFilesByIdIn(Set.of(EDITION_ID))).thenReturn(List.of(edition));
+
+        assertThat(service.touchedEditions(Set.of(8L, 7L, 6L, 5L)))
+            .containsExactly(new SubtitleRetimeService.TouchedEdition(EDITION_ID, 1L));
+    }
+
+    @Test
+    void touchedEditionsFollowTheIdOrderOfTheirDownloadsAcrossEditions() {
+        var second = TestData.edition(edition.getFilm(), 41L, "Director's Cut", 100 * MIN, null);
+        SubtitleSidecar later = new SubtitleSidecar();
+        later.setId(6L);
+        later.setPath("opensubtitles:41:778");
+        later.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        when(sidecars.findById(5L)).thenReturn(Optional.of(row));
+        when(sidecars.findById(6L)).thenReturn(Optional.of(later));
+        when(editions.findWithFilesByIdIn(Set.of(EDITION_ID))).thenReturn(List.of(edition));
+        when(editions.findWithFilesByIdIn(Set.of(41L))).thenReturn(List.of(second));
+
+        assertThat(service.touchedEditions(Set.of(6L, 5L))).containsExactly(
+            new SubtitleRetimeService.TouchedEdition(EDITION_ID, 1L),
+            new SubtitleRetimeService.TouchedEdition(41L, 1L));
+    }
+
+    @Test
+    void aDownloadWhoseEditionWasDeletedHasNoTouchedEdition() {
+        when(sidecars.findById(5L)).thenReturn(Optional.of(row));
+        when(editions.findWithFilesByIdIn(Set.of(EDITION_ID))).thenReturn(List.of());
+
+        assertThat(service.touchedEditions(Set.of(5L))).isEmpty();
+    }
+
+    @Test
     void anOwnerEditWinsOverAnEnglishTrackAndAnAlreadyDecidedRowIsNeverDecidedAgain() {
         retimedAlready();
         row.setOffsetMs(900);

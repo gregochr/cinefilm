@@ -5,7 +5,9 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.library.LibraryLock;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -264,5 +266,30 @@ public class SubtitleRetimeService {
         String original = row.getOriginalCuesText() != null ? row.getOriginalCuesText() : row.getCuesText();
         List<Long> starts = SrtParser.cues(original).stream().map(SubtitleCue::startMs).toList();
         return OffFitsRule.decide(state, starts);
+    }
+
+    /** The editions and films the given downloads were made for, in id order of the downloads, each edition once. */
+    public List<TouchedEdition> touchedEditions(Set<Long> sidecarIds) {
+        return tx.execute(status -> {
+            Map<Long, TouchedEdition> found = new LinkedHashMap<>();
+            for (Long id : sidecarIds.stream().sorted().toList()) {
+                SubtitleSidecar row = sidecars.findById(id).orElse(null);
+                Edition edition = row == null || !row.isDownload() ? null : edition(row);
+                if (edition != null) {
+                    found.putIfAbsent(edition.getId(),
+                        new TouchedEdition(edition.getId(), edition.getFilm().getId()));
+                }
+            }
+            return List.copyOf(found.values());
+        });
+    }
+
+    /**
+     * An edition whose downloads were rewritten or restored.
+     *
+     * @param editionId the edition
+     * @param filmId its film
+     */
+    public record TouchedEdition(Long editionId, Long filmId) {
     }
 }

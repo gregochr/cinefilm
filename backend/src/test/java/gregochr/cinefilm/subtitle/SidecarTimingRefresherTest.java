@@ -567,6 +567,95 @@ class SidecarTimingRefresherTest {
     }
 
     @Test
+    void fitFilmReadsAndFitsOneFilmOnTheCallingThreadAndAnnouncesIt() {
+        when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
+        when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
+        when(reader.read(FILE)).thenReturn(usable());
+        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(SaveOutcome.SAVED);
+        when(service.fitJobs(7L)).thenReturn(List.of(job(7L, 5L)));
+        when(service.save(any(FitJob.class), any(TimingFit.Result.class), any(Instant.class)))
+            .thenReturn(SaveOutcome.APPLIED);
+
+        assertThat(refresher.fitFilm(7L)).isTrue();
+
+        InOrder order = inOrder(service, reader);
+        order.verify(service).readsFor(7L);
+        order.verify(reader).read(FILE);
+        order.verify(service).fitJobs(7L);
+        order.verify(service).save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW);
+        verify(events).publishEvent(new SidecarTimingFinished());
+        assertThat(queued).isEmpty();
+        assertThat(refresher.isRunning()).isFalse();
+        assertThat(messages()).containsExactly(
+            "Subtitle timing of film 7 after a retime: 1 files read, 1 fitted (1 offsets set), 0 failed");
+    }
+
+    @Test
+    void fitFilmThatFindsNothingToFitAnnouncesNothing() {
+        when(service.readsFor(7L)).thenReturn(List.of());
+        when(service.fitJobs(7L)).thenReturn(List.of());
+
+        assertThat(refresher.fitFilm(7L)).isTrue();
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void fitFilmWhoseSaveFindsTheLibraryBusyIsNotSettledAndIsLeftToBeAskedForAgain() {
+        when(service.readsFor(7L)).thenReturn(List.of());
+        when(service.fitJobs(7L)).thenReturn(List.of(job(7L, 5L)));
+        when(service.save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW)).thenReturn(SaveOutcome.BUSY);
+
+        assertThat(refresher.fitFilm(7L)).isFalse();
+
+        assertThat(refresher.isRunning()).isFalse();
+        queued.clear();
+        refresher.startIfDeferred();
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
+    void fitFilmWhilePlaybackIsEncodingIsNotSettled() {
+        when(sessions.isEncoding()).thenReturn(true);
+
+        assertThat(refresher.fitFilm(7L)).isFalse();
+
+        verifyNoInteractions(service);
+        assertThat(refresher.isRunning()).isFalse();
+    }
+
+    @Test
+    void fitFilmWhileAPassIsBookedLeavesTheFilmToThatPassAndReturnsAtOnce() {
+        refresher.onScanFinished(new ScanFinished("nightly"));
+
+        assertThat(refresher.fitFilm(7L)).isTrue();
+
+        verifyNoInteractions(service, reader);
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
+    void fitFilmThatFailsIsLoggedAndGivesTheRunBack() {
+        when(service.readsFor(7L)).thenThrow(new IllegalStateException("db down"));
+
+        assertThat(refresher.fitFilm(7L)).isTrue();
+
+        assertThat(refresher.isRunning()).isFalse();
+        assertThat(messages()).containsExactly("Could not check the subtitle timing of film 7: "
+            + "IllegalStateException");
+    }
+
+    @Test
+    void fitFilmDoesNothingWhileTheTimingCheckIsOff() {
+        SidecarTimingRefresher off = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add,
+            false, events);
+
+        assertThat(off.fitFilm(7L)).isTrue();
+
+        verifyNoInteractions(service, reader);
+    }
+
+    @Test
     void startupIsAnApplicationReadyListener() throws NoSuchMethodException {
         assertThat(SidecarTimingRefresher.class.getMethod("onStartup")
             .getAnnotation(org.springframework.context.event.EventListener.class).value())

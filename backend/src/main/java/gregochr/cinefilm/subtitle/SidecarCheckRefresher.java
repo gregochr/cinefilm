@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -226,16 +227,21 @@ public class SidecarCheckRefresher {
         return lastFinishedAt;
     }
 
+    /** What one pass counted. */
+    private static final class Tally {
+        private int saved;
+        private int dropped;
+        private int unusable;
+        private int unknownRate;
+        private int rateConflict;
+        private int multiPart;
+        private int failed;
+        private boolean stopped;
+    }
+
     /** One pass over the due editions. */
     void run() {
-        int saved = 0;
-        int dropped = 0;
-        int unusable = 0;
-        int unknownRate = 0;
-        int rateConflict = 0;
-        int multiPart = 0;
-        int failed = 0;
-        boolean stopped = false;
+        Tally tally = new Tally();
         try {
             Instant blockedUntil = budget.blockedUntil(clock.instant());
             if (blockedUntil != null) {
@@ -247,52 +253,113 @@ public class SidecarCheckRefresher {
             // The comparisons may bring the day's total only to their share; the limit follows the account.
             checkLimit = DownloadShares.forChecks(limits.today());
             measureFullDownloads();
-            for (DueCheck due : service.due()) {
-                try {
-                    if (due.candidates().isEmpty()) {
-                        // Never compare part of a film against the whole: no download, no verdict.
-                        multiPart++;
-                        LOG.info("Edition {} not checked: {}", due.editionId(), MULTI_PART);
-                        continue;
-                    }
-                    Walked walked = walk(due);
-                    Attempt kept = walked.kept();
-                    if (kept == null) {
-                        // No attempt: counted by why. Skipped for an unknown rate, else for a conflict, else unusable.
-                        if (walked.unknownRate() > 0) {
-                            unknownRate++;
-                        } else if (walked.rateConflict() > 0) {
-                            rateConflict++;
-                        } else {
-                            unusable++;
-                        }
-                    } else if (service.save(due, kept.reference(), kept.result(), clock.instant())) {
-                        saved++;
-                    } else {
-                        dropped++;
-                    }
-                } catch (ReferenceFetcher.Stop e) {
-                    LOG.info("Subtitle file checks stopped: {}", e.getMessage());
-                    stopped = true;
-                    break;
-                } catch (OpenSubtitlesUnavailableException e) {
-                    LOG.warn("Subtitle file checks stopped: {}", e.getMessage());
-                    stopped = true;
-                    break;
-                } catch (RuntimeException e) {
-                    failed++;
-                    LOG.warn("Could not check the subtitle of edition {}: {}", due.editionId(),
-                        e.getClass().getSimpleName());
-                }
-            }
-            measureTimingReferences(!stopped);
+            checkDue(service.due(), false, tally);
+            measureTimingReferences(!tally.stopped);
             LOG.info("Subtitle file checks finished: {} saved, {} changed meanwhile, {} unusable references, "
-                + "{}{} failed", saved, dropped, unusable, noVerdict(unknownRate, rateConflict), failed);
-            if (saved > 0) {
+                + "{}{} failed", tally.saved, tally.dropped, tally.unusable,
+                noVerdict(tally.unknownRate, tally.rateConflict), tally.failed);
+            if (tally.saved > 0) {
                 announce();
             }
         } catch (RuntimeException e) {
             LOG.error("Subtitle file checks failed", e);
+        }
+    }
+
+    /**
+     * The re-check after the retime job rewrote or restored cues (docs/engineering/subtitle-frame-rate-plan.md, "The
+     * re-check runs at once"): checks the due files of these editions only, in the order given, with stored references
+     * first. It takes the run itself, so it never overlaps the pass over every edition: when one is going, it is asked
+     * to go round once more (the rewritten rows are due, so it picks them up) and this returns at once. The
+     * measurements of the full downloads and of the timing references are left to the normal pass.
+     *
+     * @param editionIds the editions to check, in order
+     * @return true when the checks were made or are left to the pass that is going; false when downloads are off
+     */
+    public boolean checkEditions(List<Long> editionIds) {
+        if (!api.downloadsEnabled()) {
+            return false;
+        }
+        if (!running.compareAndSet(false, true)) {
+            pending.set(true);
+            return true;
+        }
+        try {
+            checkOwnEditions(editionIds);
+        } finally {
+            running.set(false);
+        }
+        // A request that arrived while this ran would otherwise wait for the next one.
+        if (pending.get()) {
+            launch();
+        }
+        return true;
+    }
+
+    private void checkOwnEditions(List<Long> editionIds) {
+        Tally tally = new Tally();
+        try {
+            Instant blockedUntil = budget.blockedUntil(clock.instant());
+            if (blockedUntil != null) {
+                LOG.info("Subtitle file checks of the retimed files wait: OpenSubtitles' download limit is "
+                    + "reached until {}", blockedUntil);
+                return;
+            }
+            checkLimit = DownloadShares.forChecks(limits.today());
+            Set<Long> wanted = new HashSet<>(editionIds);
+            List<DueCheck> due = service.due().stream().filter(d -> wanted.contains(d.editionId()))
+                .sorted(Comparator.comparingInt(d -> editionIds.indexOf(d.editionId()))).toList();
+            checkDue(due, true, tally);
+            LOG.info("Subtitle file checks of the retimed files finished: {} saved, {} changed meanwhile, {} "
+                + "unusable references, {}{} failed", tally.saved, tally.dropped, tally.unusable,
+                noVerdict(tally.unknownRate, tally.rateConflict), tally.failed);
+            if (tally.saved > 0) {
+                announce();
+            }
+        } catch (RuntimeException e) {
+            LOG.error("Subtitle file checks of the retimed files failed", e);
+        }
+    }
+
+    /** Checks each due edition in turn. A stop (budget, limit, outage) ends the pass, a failure only that edition. */
+    private void checkDue(List<DueCheck> dues, boolean storedFirst, Tally tally) {
+        for (DueCheck due : dues) {
+            try {
+                if (due.candidates().isEmpty()) {
+                    // Never compare part of a film against the whole: no download, no verdict.
+                    tally.multiPart++;
+                    LOG.info("Edition {} not checked: {}", due.editionId(), MULTI_PART);
+                    continue;
+                }
+                Walked walked = walk(due, storedFirst);
+                Attempt kept = walked.kept();
+                if (kept == null) {
+                    // No attempt: counted by why. Skipped for an unknown rate, else for a conflict, else unusable.
+                    if (walked.unknownRate() > 0) {
+                        tally.unknownRate++;
+                    } else if (walked.rateConflict() > 0) {
+                        tally.rateConflict++;
+                    } else {
+                        tally.unusable++;
+                    }
+                } else if (service.save(due, kept.reference(), kept.result(), clock.instant())) {
+                    tally.saved++;
+                } else {
+                    tally.dropped++;
+                }
+            } catch (ReferenceFetcher.Stop e) {
+                LOG.info("Subtitle file checks stopped: {}", e.getMessage());
+                tally.stopped = true;
+                return;
+            } catch (OpenSubtitlesUnavailableException e) {
+                LOG.warn("Subtitle file checks stopped: {}", e.getMessage());
+                tally.stopped = true;
+                return;
+            } catch (RuntimeException e) {
+                tally.failed++;
+                LOG.warn("Could not check the subtitle of edition {}: {}", due.editionId(),
+                    e.getClass().getSimpleName());
+            }
         }
     }
 
@@ -363,13 +430,34 @@ public class SidecarCheckRefresher {
      * @return the reference and result to save (null when no candidate had a usable reference), and how many
      *     candidates were passed over for want of a verdict
      */
-    private Walked walk(DueCheck due) {
+    private Walked walk(DueCheck due, boolean storedFirst) {
+        return walkCandidates(due, ordered(due, storedFirst));
+    }
+
+    /**
+     * The candidates in the order to try them: as ranked, or, for the re-check after a retime, the stored references
+     * first (the ranking kept within each group), so a file already stored is compared before any is downloaded.
+     */
+    private List<OpenSubtitlesResult> ordered(DueCheck due, boolean storedFirst) {
+        if (!storedFirst) {
+            return due.candidates();
+        }
+        List<OpenSubtitlesResult> stored = new ArrayList<>();
+        List<OpenSubtitlesResult> others = new ArrayList<>();
+        for (OpenSubtitlesResult candidate : due.candidates()) {
+            (fetcher.isStored(due.filmId(), due.imdbId(), candidate.fileId()) ? stored : others).add(candidate);
+        }
+        stored.addAll(others);
+        return stored;
+    }
+
+    private Walked walkCandidates(DueCheck due, List<OpenSubtitlesResult> candidates) {
         Set<Long> tried = new HashSet<>(due.triedFileIds());
         List<Attempt> attempts = new ArrayList<>();
         int position = 0;
         int unknownRate = 0;
         int rateConflict = 0;
-        for (OpenSubtitlesResult candidate : due.candidates()) {
+        for (OpenSubtitlesResult candidate : candidates) {
             position++;
             boolean known = tried.contains(candidate.fileId());
             if (!known && tried.size() >= ReferenceWalk.MAX_CANDIDATES) {
