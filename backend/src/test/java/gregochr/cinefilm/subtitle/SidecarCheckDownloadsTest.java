@@ -27,6 +27,9 @@ class SidecarCheckDownloadsTest extends ForcedDownloadTestBase {
     @Autowired
     private SidecarCheckService service;
 
+    @Autowired
+    private SidecarTimingService timing;
+
     private Film film() {
         return searchedFilm("Taken", 1, result(5011, "Taken.2008.BluRay"), result(5012, "Taken.2008.WEB"),
             result(5013, "Taken.2008.DVD"));
@@ -34,7 +37,7 @@ class SidecarCheckDownloadsTest extends ForcedDownloadTestBase {
 
     private SidecarCheckService enabledTimingService() {
         return new SidecarCheckService(films, sidecars, editionRepository, resolver, checks,
-            downloadChecks, ledger, true);
+            downloadChecks, ledger, true, timing);
     }
 
     @Test

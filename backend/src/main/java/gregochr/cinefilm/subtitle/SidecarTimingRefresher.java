@@ -183,6 +183,8 @@ public class SidecarTimingRefresher {
             result = Fit.BUSY;
             LOG.info("Subtitle timing of film {} waits: {}", filmId, e.getMessage());
         } catch (RuntimeException e) {
+            // Left for the hourly retry: nothing else books this film's fit before the next daily pass.
+            deferred.set(true);
             result = Fit.FAILED;
             LOG.warn("Could not check the subtitle timing of film {}: {}", filmId, e.getClass().getSimpleName());
         } finally {

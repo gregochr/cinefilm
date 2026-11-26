@@ -41,6 +41,7 @@ public class SidecarCheckService {
     private final ForcedDownloadCheckRepository downloadChecks;
     private final ForcedCheckCandidateRepository candidates;
     private final boolean timingCheckEnabled;
+    private final SidecarTimingService timing;
 
     /** The longest reasons text the column holds. */
     static final int MAX_REASONS_CHARS = 1000;
@@ -50,7 +51,8 @@ public class SidecarCheckService {
                                ForcedResolver resolver, ForcedSubtitleCheckRepository checks,
                                ForcedDownloadCheckRepository downloadChecks,
                                ForcedCheckCandidateRepository candidates,
-                               @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean timingCheckEnabled) {
+                               @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean timingCheckEnabled,
+                               SidecarTimingService timing) {
         this.films = films;
         this.sidecars = sidecars;
         this.editions = editions;
@@ -59,6 +61,7 @@ public class SidecarCheckService {
         this.downloadChecks = downloadChecks;
         this.candidates = candidates;
         this.timingCheckEnabled = timingCheckEnabled;
+        this.timing = timing;
     }
 
     /**
@@ -150,11 +153,16 @@ public class SidecarCheckService {
     private void addDownloadCheck(List<DueCheck> due, Edition edition, DownloadState download, OsBestRef ref,
                                   List<OpenSubtitlesResult> filmCandidates, Set<Long> tried, boolean stale) {
         SubtitleSidecar sidecar = download.sidecar();
-        // A stale alignment counts as "the fit exists" on purpose: treating it as waiting would hold back, for good,
-        // a download whose fit cannot land (NEEDS_READ or SKIP). The retime job fits first anyway.
-        boolean waiting = download.alignment() == null && timingCheckEnabled;
         // An outdated row is due whatever the file's trust or the row's verdict, and it still decides until replaced.
-        if (download.assessment().trust() != Trust.UNCHECKED && !stale || waiting) {
+        if (download.assessment().trust() != Trust.UNCHECKED && !stale) {
+            return;
+        }
+        // A download waits for its timing fit: while it has none, and while the fit it has is outdated or marked stale
+        // by a retime and the timing check will make it again (PENDING, by the timing check's own state). A check that
+        // ran now would count that fit as "the fit exists", compare and download before the fit that may prove the
+        // file. Where the timing check will never fit it (off, cannot fit, read failed), nothing waits for good.
+        if (timingCheckEnabled && (download.alignment() == null
+            || timing.offFitsState(ref.id(), sidecar.getId()).kind() == OffFitsState.Kind.PENDING)) {
             return;
         }
         // A file cannot be the second opinion on itself.

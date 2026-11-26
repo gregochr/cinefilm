@@ -113,11 +113,29 @@ class SubtitleRetimeRecheckTest {
     }
 
     @Test
-    void anEditionThatFailsDoesNotStopTheNext() {
+    void aFilmWhoseFitFailedIsNotRetriedOrCheckedAndTheNextEditionStillGoesThroughWithoutAFullPass() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(20L, 2L)));
-        when(timing.fitFilm(1L)).thenThrow(new IllegalStateException("db down"));
+        when(timing.fitFilm(1L)).thenReturn(Fit.FAILED);
         when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
+
+        recheck.run(IDS);
+
+        verify(timing).fitFilm(1L);
+        assertThat(pauses).isEmpty();
+        // Edition 20 is checked; edition 10 waits for the retry of its fit; no full pass is asked for meanwhile (the
+        // refresher keeps the failed film for the hourly retry, whose pass announces itself).
+        verify(checks).checkEditions(List.of(20L));
+        verifyNoMoreInteractions(checks);
+    }
+
+    @Test
+    void anEditionWhoseChecksThrowDoesNotStopTheNext() {
+        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
+            new TouchedEdition(20L, 2L)));
+        when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
+        when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
+        when(checks.checkEditions(List.of(10L))).thenThrow(new IllegalStateException("db down"));
 
         recheck.run(IDS);
 
