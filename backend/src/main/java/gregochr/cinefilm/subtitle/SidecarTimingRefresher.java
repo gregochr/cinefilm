@@ -159,11 +159,10 @@ public class SidecarTimingRefresher {
 
     /**
      * The re-check after the retime job rewrote or restored cues (docs/engineering/subtitle-frame-rate-plan.md, "The
-     * re-check runs at once"): reads and fits one film now, on the calling thread (the job's, which is this
-     * service's own executor), so it never overlaps a pass. It does not announce {@link SidecarTimingFinished}: that
-     * would start a full check pass at once, in the middle of the caller's walk over many films. When a pass is
-     * already booked or going, that pass is asked to go round once more and this returns at once: it fits the same
-     * due sidecars.
+     * re-check runs at once"): reads and fits one film now, on the calling thread (this service's own executor). It
+     * does not announce {@link SidecarTimingFinished}: that would start a full check pass in the middle of the
+     * caller's walk. When a pass is already booked or going, that pass is asked to go round once more and this
+     * returns at once.
      *
      * @param filmId the film
      * @return what happened: the film was fitted (or the check is off, so there is nothing to wait for), the work is
@@ -192,7 +191,6 @@ public class SidecarTimingRefresher {
             result = Fit.BUSY;
             LOG.info("Subtitle timing of film {} waits: {}", filmId, e.getMessage());
         } catch (RuntimeException e) {
-            // Left for the hourly retry: nothing else books this film's fit before the next daily pass.
             deferred.set(true);
             result = Fit.FAILED;
             LOG.warn("Could not check the subtitle timing of film {}: {}", filmId, e.getClass().getSimpleName());
@@ -246,6 +244,8 @@ public class SidecarTimingRefresher {
                 } catch (Wait e) {
                     throw e;
                 } catch (RuntimeException e) {
+                    // Kept for the hourly retry, as a Wait is: nothing else books this film's fit again today.
+                    deferred.set(true);
                     counts[3]++;
                     LOG.warn("Could not check the subtitle timing of film {}: {}", filmId,
                         e.getClass().getSimpleName());

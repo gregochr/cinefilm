@@ -140,7 +140,8 @@ writes nothing), `on`, or `restore` (the rollback, below).
     the old cues.
   - **The re-check runs at once.** For each touched edition in turn, the job runs the timing fit first, then the
     checks, since a download's check waits for its fit. Stored references come first. A save that comes back `BUSY`
-    is retried inside the job.
+    is retried inside the job. When a film's fit can't be made in the run (its read is backed off or fails), its
+    downloads wait up to a day and are checked by the next daily pass.
 - **When it runs.** At startup, nightly, and after an index pass. So a film whose rate arrives later, or a new
   download, is retimed then. A new download or reference is also retimed as it is stored, when the switch is on.
 - **The film's rate.**

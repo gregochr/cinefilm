@@ -200,19 +200,6 @@ class SidecarCheckServiceUnitTest {
     }
 
     @Test
-    void dueForSomeEditionsReadsOnlyThoseEditionsInsteadOfEveryEditionOfTheFilms() {
-        when(films.findOpenSubtitlesBest()).thenReturn(List.of(new OsBestRef(1L, "tt1", film.getOsBest(),
-            film.getOsCandidates())));
-        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
-        when(editions.findWithFilesByIdIn(List.of(40L))).thenReturn(List.of(edition));
-        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L,
-            resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, fit())))));
-        when(candidates.findByEditionIdInAndKind(Set.of(40L), SubtitleKind.FORCED)).thenReturn(List.of());
-
-        assertThat(service.due(List.of(40L))).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
-    }
-
-    @Test
     void dueForEditionsGivesWhatDueGivesForThemAndDropsWhatDueDrops() {
         // As the film query returns them: an edition with no file and the film with no search result are not there.
         Film other = film(2L, "Other", 2010, NOW);

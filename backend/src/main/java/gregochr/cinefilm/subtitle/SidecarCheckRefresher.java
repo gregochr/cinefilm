@@ -162,12 +162,17 @@ public class SidecarCheckRefresher {
 
     /**
      * The retime job rewrote or restored some downloads' cues: the full-file probe and the timing references forget
-     * that they measured these sidecars, so the next pass measures them again.
+     * that they measured these sidecars, so the next pass measures them again. With the timing check off nothing
+     * else follows a rewrite (an Admin retime, say), so a check pass is asked for; with it on, the timing pass the
+     * event books announces its end, which starts the checks.
      */
     @EventListener
     public void onCuesRewritten(SubtitleCuesRewritten event) {
         probe.forget(event.sidecarIds());
         timingReference.forget(event.sidecarIds());
+        if (!service.isTimingCheckEnabled()) {
+            startDue();
+        }
     }
 
     /**
@@ -268,10 +273,9 @@ public class SidecarCheckRefresher {
 
     /**
      * The re-check after the retime job rewrote or restored cues (docs/engineering/subtitle-frame-rate-plan.md, "The
-     * re-check runs at once"): checks the due files of these editions only, in the order given, with stored references
-     * first. It takes the run itself, so it never overlaps the pass over every edition: when one is going, it is asked
-     * to go round once more (the rewritten rows are due, so it picks them up) and this returns at once. The
-     * measurements of the full downloads and of the timing references are left to the normal pass.
+     * re-check runs at once"): checks the due files of these editions only, in the order given, stored references
+     * first. It takes the run itself: when a pass is going, that pass is asked to go round once more and this returns
+     * at once. The probes' measurements are left to the normal pass.
      *
      * @param editionIds the editions to check, in order
      * @return true when the checks were made or are left to the pass that is going; false when downloads are off

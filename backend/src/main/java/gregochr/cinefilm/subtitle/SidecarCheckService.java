@@ -72,6 +72,11 @@ public class SidecarCheckService {
         this.clock = clock;
     }
 
+    /** True when the timing check is on: a download then waits for its fit, whose pass announces itself. */
+    public boolean isTimingCheckEnabled() {
+        return timingCheckEnabled;
+    }
+
     /**
      * The subtitles to check: the film has results from a search of its current IMDb id that also stored its
      * candidates (a film searched before they were kept waits for the search to run again), and either
@@ -185,11 +190,10 @@ public class SidecarCheckService {
         if (download.assessment().trust() != Trust.UNCHECKED && !stale) {
             return;
         }
-        // A download waits for its timing fit while it has none (as before this change) and, new, while the fit it has
-        // was made outdated by a rewrite or restore of its cues less than a day ago (the retime job or an Admin retime
-        // sets stale_since; the timing passes fit those rows again within that time): a check now would count that fit
-        // as "the fit exists", compare and download before the fit that may prove the file. Later it is checked as it
-        // would be.
+        // A download waits for its timing fit while it has none (as before this change) and, new, while its fit was
+        // made outdated by a rewrite or restore of its cues less than a day ago (the retime job or an Admin retime
+        // sets stale_since): a check now would count that fit as "the fit exists" and compare and download before
+        // the fit that may prove the file. Later it is checked as it would be.
         boolean fitStillToCome = fitStaleSince != null && fitStaleSince.isAfter(clock.instant().minus(STALE_FIT_WAIT));
         if (timingCheckEnabled && (download.alignment() == null || fitStillToCome)) {
             return;

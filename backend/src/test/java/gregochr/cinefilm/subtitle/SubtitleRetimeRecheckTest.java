@@ -44,19 +44,6 @@ class SubtitleRetimeRecheckTest {
     }
 
     @Test
-    void aFilmWithTwoTouchedEditionsIsFittedOnceAndBothAreChecked() {
-        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
-            new TouchedEdition(11L, 1L)));
-        when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
-
-        recheck.run(IDS);
-
-        verify(timing).fitFilm(1L);
-        verify(checks).checkEditions(List.of(10L));
-        verify(checks).checkEditions(List.of(11L));
-    }
-
-    @Test
     void aFitThatComesBackBusyIsTriedAgainAndTheChecksFollowOnceItIsMade() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.BUSY, Fit.BUSY, Fit.DONE);

@@ -93,11 +93,25 @@ class SidecarCheckRefresherRetimeTest {
     }
 
     @Test
-    void sidecarsWhoseCuesWereRewrittenAreForgottenByTheProbeAndTheTimingReference() {
+    void sidecarsWhoseCuesWereRewrittenAreForgottenAndWithTheTimingCheckOnItsPassStartsTheChecks() {
+        when(service.isTimingCheckEnabled()).thenReturn(true);
+
         refresher.onCuesRewritten(new SubtitleCuesRewritten(Set.of(5L, 12L)));
 
         verify(probe).forget(Set.of(5L, 12L));
         verify(timingReference).forget(Set.of(5L, 12L));
+        assertThat(queued).isEmpty();
+    }
+
+    @Test
+    void withTheTimingCheckOffRewrittenCuesBookACheckPassBecauseNothingElseWill() {
+        when(service.isTimingCheckEnabled()).thenReturn(false);
+        when(api.downloadsEnabled()).thenReturn(true);
+
+        refresher.onCuesRewritten(new SubtitleCuesRewritten(Set.of(5L)));
+
+        verify(probe).forget(Set.of(5L));
+        assertThat(queued).hasSize(1);
     }
 
     @Test

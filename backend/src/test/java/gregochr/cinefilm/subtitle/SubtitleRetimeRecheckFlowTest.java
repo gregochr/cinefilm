@@ -203,6 +203,7 @@ class SubtitleRetimeRecheckFlowTest {
         when(retimeService.process(5L, RetimeMode.ON)).thenReturn(SubtitleRetimeService.Outcome.REWRITTEN);
         when(retimeService.touchedEditions(Set.of(5L))).thenReturn(List.of(new TouchedEdition(10L, 1L)));
         when(api.downloadsEnabled()).thenReturn(true);
+        when(checkService.isTimingCheckEnabled()).thenReturn(true);
         filmFits(1L, 5L);
         when(checkService.due(List.of(10L))).thenReturn(List.of(due10));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(ref11));
@@ -239,6 +240,7 @@ class SubtitleRetimeRecheckFlowTest {
         when(retimeService.process(5L, RetimeMode.ON)).thenReturn(SubtitleRetimeService.Outcome.REWRITTEN);
         when(retimeService.touchedEditions(Set.of(5L))).thenReturn(List.of(new TouchedEdition(10L, 1L)));
         when(api.downloadsEnabled()).thenReturn(true);
+        when(checkService.isTimingCheckEnabled()).thenReturn(true);
         filmFits(1L, 5L);
         when(checkService.due(List.of(10L))).thenReturn(List.of(due10));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(ref11));

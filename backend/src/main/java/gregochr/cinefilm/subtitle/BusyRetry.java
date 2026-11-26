@@ -33,8 +33,8 @@ public class BusyRetry {
      * Tries a step until it is settled or the tries run out.
      *
      * @param what what the step does, for the log
-     * @param attempt the step; true when it is settled (done, or nothing more to do), false when the lock was busy
-     * @return true when it settled; false when every try was busy (or the thread was interrupted): leave it due
+     * @param attempt the step: true when settled, false when the lock was busy
+     * @return true when it settled; false when every try was busy (or interrupted): leave it due
      */
     public boolean until(String what, BooleanSupplier attempt) {
         Duration pause = FIRST_PAUSE;
