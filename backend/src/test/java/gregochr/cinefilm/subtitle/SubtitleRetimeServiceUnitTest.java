@@ -704,13 +704,13 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void theOwnersOnTakesAFitsAsItIsRowBackToAuto() {
+    void theOwnersOnLeavesAFitsAsItIsRowAsItIsAndRewritesNothing() {
         row.setRetime(RetimeChoice.OFF_FITS);
-        rowIs();
-        filmRateIs(25.0);
 
-        assertThat(service.applyChoice(row, true)).isEqualTo(Outcome.REWRITTEN);
-        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(service.applyChoice(row, true)).isEqualTo(Outcome.UNCHANGED);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getRetimedBy()).isNull();
     }
 
     @Test

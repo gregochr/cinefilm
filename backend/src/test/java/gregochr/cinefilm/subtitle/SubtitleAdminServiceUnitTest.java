@@ -690,6 +690,20 @@ class SubtitleAdminServiceUnitTest {
     }
 
     @Test
+    void anOnForAFitsAsItIsRowIsRefusedAndNothingIsWrittenOrPublished() {
+        SubtitleSidecar download = downloadRow();
+        download.setRetime(RetimeChoice.OFF_FITS);
+        when(sidecars.findById(8L)).thenReturn(Optional.of(download));
+
+        assertThatThrownBy(() -> service.retime(8L, new RetimeRequest(true))).isInstanceOf(ConflictException.class)
+            .hasMessage("This file already fits this copy as it is, so it is not retimed");
+
+        assertThat(download.getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
+        assertThat(lock.holder()).isNull();
+        verifyNoInteractions(retimer, events);
+    }
+
+    @Test
     void anUnchangedRetimePublishesNothing() {
         SubtitleSidecar download = statedDownload();
         when(retimer.applyChoice(download, true)).thenReturn(SubtitleRetimeService.Outcome.UNCHANGED);

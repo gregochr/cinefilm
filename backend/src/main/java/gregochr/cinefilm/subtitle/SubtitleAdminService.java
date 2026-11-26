@@ -269,6 +269,11 @@ public class SubtitleAdminService {
             // The rollback is putting every retimed file back: an "on" now would be undone by the next run.
             throw new ConflictException("Retiming is being undone on this server; try again once that is finished");
         }
+        if (request.retime() && sidecar.getRetime() == RetimeChoice.OFF_FITS) {
+            // Its fit to the film's own English track proves it is on this copy's timeline: retiming would break it,
+            // and nothing would set OFF_FITS back.
+            throw new ConflictException("This file already fits this copy as it is, so it is not retimed");
+        }
         SubtitleRetimeService.Outcome outcome = retimer.applyChoice(sidecar, request.retime());
         return new Retimed(one(id), outcome);
     }

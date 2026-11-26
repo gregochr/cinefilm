@@ -2,7 +2,9 @@ package gregochr.cinefilm.subtitle;
 
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.subtitle.SubtitleDtos.RetimeRequest;
@@ -145,6 +147,21 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
         assertThat(dto.rateLine()).isEqualTo("Fits this copy as it is");
         assertThat(reread(fits.getId()).getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
         assertThat(listed(fits.getId()).rateLine()).isEqualTo("Fits this copy as it is");
+    }
+
+    @Test
+    void anOnForAFitsAsItIsRowIsRefusedWithA409AndTheRowIsUntouchedInTheDatabase() {
+        SubtitleSidecar fits = statedDownload("Taken", 2001, 25.0, 23.976);
+        fits.setRetime(RetimeChoice.OFF_FITS);
+        sidecars.saveAndFlush(fits);
+        Long id = fits.getId();
+
+        assertThatThrownBy(() -> admin.retime(id, new RetimeRequest(true))).isInstanceOf(ConflictException.class)
+            .hasMessage("This file already fits this copy as it is, so it is not retimed");
+
+        assertThat(reread(id).getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
+        assertThat(reread(id).getCuesText()).isEqualTo(CUES);
+        assertThat(reread(id).getRetimedBy()).isNull();
     }
 
     @Test
