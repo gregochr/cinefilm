@@ -482,10 +482,6 @@ class SidecarTimingRefresherTest {
 
         assertThat(messages()).containsExactly("Could not check the subtitle timing of film 7: IllegalStateException",
             FINISHED.formatted(0, 1, 0, 1));
-        // The failed film is kept for the hourly retry.
-        queued.clear();
-        refresher.startIfDeferred();
-        assertThat(queued).hasSize(1);
     }
 
     @Test
@@ -644,10 +640,6 @@ class SidecarTimingRefresherTest {
         assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.FAILED);
 
         assertThat(refresher.isRunning()).isFalse();
-        // The hourly retry picks the film up again.
-        queued.clear();
-        refresher.startIfDeferred();
-        assertThat(queued).hasSize(1);
         assertThat(messages()).containsExactly("Could not check the subtitle timing of film 7: "
             + "IllegalStateException");
     }

@@ -16,9 +16,9 @@ import org.springframework.stereotype.Component;
  * waits for its fit), so a failed download is judged again within the run. A fit that comes back busy is tried again
  * ({@link BusyRetry}); the first film whose fit stays busy stops the walk. The checks of an edition run only when its
  * film was fitted here: a fit left to a booked timing pass (it runs on this thread after the job) or a busy one leaves
- * them to the pass that follows the timing pass; a failed fit is kept by the timing refresher for its hourly retry,
- * and that pass announces itself. After the walk, with every film fitted, one check pass is asked for. Nothing here
- * throws to its caller.
+ * them to the pass that follows the timing pass; a failed fit is retried by the timing pass the event books straight
+ * after the job, then by the daily pass. {@link #run} says whether every film was fitted, which is when the caller may
+ * start a full check pass. Nothing here throws to its caller.
  */
 @Component
 public class SubtitleRetimeRecheck {
@@ -78,6 +78,11 @@ public class SubtitleRetimeRecheck {
             LOG.error("Subtitle retime re-check failed", e);
             return false;
         }
+    }
+
+    /** True when the timing check is on; with it off, the event's listener has already asked for a check pass. */
+    public boolean timingCheckOn() {
+        return checks.timingCheckOn();
     }
 
     /**

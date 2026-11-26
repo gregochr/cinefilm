@@ -66,12 +66,12 @@ class SidecarCheckRefresherRetimeTest {
             queued::add, limits, events, filmRates);
     }
 
-    private static OpenSubtitlesResult candidate(long fileId) {
+    static OpenSubtitlesResult candidate(long fileId) {
         return new OpenSubtitlesResult(fileId - 1000, fileId, "Release " + fileId, 23.976, 10, true, false, null,
             null);
     }
 
-    private static DueCheck due(long filmId, long editionId, long... fileIds) {
+    static DueCheck due(long filmId, long editionId, long... fileIds) {
         List<OpenSubtitlesResult> candidates = new ArrayList<>();
         for (long fileId : fileIds) {
             candidates.add(candidate(fileId));
@@ -80,7 +80,7 @@ class SidecarCheckRefresherRetimeTest {
             false, CUES);
     }
 
-    private static OpenSubtitlesReference reference(long id, long filmId, long fileId) {
+    static OpenSubtitlesReference reference(long id, long filmId, long fileId) {
         OpenSubtitlesReference reference = new OpenSubtitlesReference();
         reference.setId(id);
         reference.setFilmId(filmId);
@@ -97,6 +97,7 @@ class SidecarCheckRefresherRetimeTest {
         when(service.isTimingCheckEnabled()).thenReturn(true);
 
         refresher.onCuesRewritten(new SubtitleCuesRewritten(Set.of(5L, 12L)));
+        assertThat(refresher.timingCheckOn()).isTrue();
 
         verify(probe).forget(Set.of(5L, 12L));
         verify(timingReference).forget(Set.of(5L, 12L));

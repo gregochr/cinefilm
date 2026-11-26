@@ -214,12 +214,31 @@ class SubtitleRetimeJobTest {
         when(service.candidateIds()).thenReturn(List.of(1L));
         when(service.process(1L, RetimeMode.ON)).thenReturn(Outcome.REWRITTEN);
         when(recheck.run(Set.of(1L))).thenReturn(true);
+        when(recheck.timingCheckOn()).thenReturn(true);
 
         job("on").run();
 
         InOrder order = inOrder(events, recheck);
         order.verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L)));
         order.verify(recheck).startFullPass();
+    }
+
+    @Test
+    void noFullPassIsStartedWhileAFitIsStillToComeOrWhenTheTimingCheckIsOff() {
+        when(service.candidateIds()).thenReturn(List.of(1L));
+        when(service.process(1L, RetimeMode.ON)).thenReturn(Outcome.REWRITTEN);
+        when(recheck.run(Set.of(1L))).thenReturn(false, true);
+        when(recheck.timingCheckOn()).thenReturn(false);
+        SubtitleRetimeJob on = job("on");
+
+        // A fit is still to come.
+        on.run();
+        // Every film was fitted, but the timing check is off: the event's listener already asked for a pass.
+        on.run();
+
+        verify(recheck, times(2)).run(Set.of(1L));
+        verify(recheck).timingCheckOn();
+        verifyNoMoreInteractions(recheck);
     }
 
     @Test

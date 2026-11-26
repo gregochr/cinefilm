@@ -157,7 +157,8 @@ public class SubtitleRetimeJob {
                 Set<Long> ids = Set.copyOf(changed);
                 boolean allFitted = recheck.run(ids);
                 events.publishEvent(new SubtitleCuesRewritten(ids));
-                if (allFitted) {
+                // With the timing check off the event's listener has already asked for a check pass.
+                if (allFitted && recheck.timingCheckOn()) {
                     recheck.startFullPass();
                 }
             }

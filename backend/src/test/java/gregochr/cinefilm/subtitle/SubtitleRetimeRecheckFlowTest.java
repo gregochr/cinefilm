@@ -2,6 +2,8 @@ package gregochr.cinefilm.subtitle;
 
 import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
+import static gregochr.cinefilm.subtitle.SidecarCheckRefresherRetimeTest.due;
+import static gregochr.cinefilm.subtitle.SidecarCheckRefresherRetimeTest.reference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.atLeastOnce;
@@ -14,7 +16,6 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesBudget;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.SidecarTimingService.FitJob;
 import gregochr.cinefilm.subtitle.SidecarTimingService.SaveOutcome;
 import gregochr.cinefilm.subtitle.SubtitleComparison.Result;
@@ -113,32 +114,6 @@ class SubtitleRetimeRecheckFlowTest {
             });
     }
 
-    private static OpenSubtitlesResult candidate(long fileId) {
-        return new OpenSubtitlesResult(fileId - 1000, fileId, "Release " + fileId, 23.976, 10, true, false, null,
-            null);
-    }
-
-    private static DueCheck due(long filmId, long editionId, long... fileIds) {
-        List<OpenSubtitlesResult> candidates = new ArrayList<>();
-        for (long fileId : fileIds) {
-            candidates.add(candidate(fileId));
-        }
-        return new DueCheck(filmId, editionId, "tt" + filmId, "Original", candidates, Set.of(), "v" + editionId,
-            false, CUES);
-    }
-
-    private static OpenSubtitlesReference stored(long filmId, long fileId) {
-        OpenSubtitlesReference reference = new OpenSubtitlesReference();
-        reference.setId(fileId);
-        reference.setFilmId(filmId);
-        reference.setImdbId("tt" + filmId);
-        reference.setOsFileId(fileId);
-        reference.setCuesText(SrtParser.format(CUES));
-        reference.setCueCount(CUES.size());
-        reference.setFetchedAt(NOW);
-        return reference;
-    }
-
     private void filmFits(long filmId, long sidecarId) {
         FitJob job = new FitJob(filmId, sidecarId, "id" + sidecarId, "key" + sidecarId, STARTS, TRACK, null);
         when(timingService.fitJobs(filmId)).thenReturn(List.of(job));
@@ -160,8 +135,8 @@ class SubtitleRetimeRecheckFlowTest {
     void eachEditionIsCheckedAfterItsFilmsFitFromStoredReferencesAndNoFullPassStartsEarly() {
         DueCheck due10 = due(1, 10, 5011);
         DueCheck due20 = due(2, 20, 5021, 5022);
-        OpenSubtitlesReference ref11 = stored(1, 5011);
-        OpenSubtitlesReference ref22 = stored(2, 5022);
+        OpenSubtitlesReference ref11 = reference(5011, 1, 5011);
+        OpenSubtitlesReference ref22 = reference(5022, 2, 5022);
         when(retimeService.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(20L, 2L)));
         when(api.downloadsEnabled()).thenReturn(true);
@@ -198,7 +173,7 @@ class SubtitleRetimeRecheckFlowTest {
     @Test
     void aJobRunChecksItsEditionsInTheRunBecauseTheEventIsPublishedAfterTheReCheck() {
         DueCheck due10 = due(1, 10, 5011);
-        OpenSubtitlesReference ref11 = stored(1, 5011);
+        OpenSubtitlesReference ref11 = reference(5011, 1, 5011);
         when(retimeService.candidateIds()).thenReturn(List.of(5L));
         when(retimeService.process(5L, RetimeMode.ON)).thenReturn(SubtitleRetimeService.Outcome.REWRITTEN);
         when(retimeService.touchedEditions(Set.of(5L))).thenReturn(List.of(new TouchedEdition(10L, 1L)));
@@ -222,7 +197,7 @@ class SubtitleRetimeRecheckFlowTest {
     @Test
     void eachRewrittenSidecarIsMeasuredOnceBecauseTheFullPassStartsAfterTheEventsForget() {
         DueCheck due10 = due(1, 10, 5011);
-        OpenSubtitlesReference ref11 = stored(1, 5011);
+        OpenSubtitlesReference ref11 = reference(5011, 1, 5011);
         List<Set<Long>> measuredWhenDueWasRead = new ArrayList<>();
         int[] served = {0};
         FullFitService.Job full = new FullFitService.Job(1L, 10L, "tt1", 5L, 5011L, CUES, 100_000L, null, List.of(),

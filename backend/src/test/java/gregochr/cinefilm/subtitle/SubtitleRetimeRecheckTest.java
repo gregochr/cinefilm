@@ -45,13 +45,16 @@ class SubtitleRetimeRecheckTest {
 
     @Test
     void aFitThatComesBackBusyIsTriedAgainAndTheChecksFollowOnceItIsMade() {
-        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
+        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
+            new TouchedEdition(11L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.BUSY, Fit.BUSY, Fit.DONE);
 
         assertThat(recheck.run(IDS)).isTrue();
 
+        // The film is fitted once, and both of its touched editions are checked.
         verify(timing, times(3)).fitFilm(1L);
         verify(checks).checkEditions(List.of(10L));
+        verify(checks).checkEditions(List.of(11L));
         // The full pass is the caller's to start, after its own steps.
         verifyNoMoreInteractions(checks);
         assertThat(pauses).hasSize(2);
@@ -62,7 +65,7 @@ class SubtitleRetimeRecheckTest {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.BUSY);
 
-        recheck.run(IDS);
+        assertThat(recheck.run(IDS)).isFalse();
 
         verify(timing, times(BusyRetry.ATTEMPTS)).fitFilm(1L);
         assertThat(pauses).hasSize(BusyRetry.ATTEMPTS - 1);
@@ -78,7 +81,7 @@ class SubtitleRetimeRecheckTest {
         when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
         when(timing.fitFilm(2L)).thenReturn(Fit.BUSY);
 
-        recheck.run(IDS);
+        assertThat(recheck.run(IDS)).isFalse();
 
         verify(checks).checkEditions(List.of(10L));
         verify(timing, times(BusyRetry.ATTEMPTS)).fitFilm(2L);
@@ -93,7 +96,7 @@ class SubtitleRetimeRecheckTest {
             new TouchedEdition(11L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.LEFT_TO_PASS);
 
-        recheck.run(IDS);
+        assertThat(recheck.run(IDS)).isFalse();
 
         verify(timing).fitFilm(1L);
         assertThat(pauses).isEmpty();
@@ -107,12 +110,11 @@ class SubtitleRetimeRecheckTest {
         when(timing.fitFilm(1L)).thenReturn(Fit.FAILED);
         when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
 
-        recheck.run(IDS);
+        assertThat(recheck.run(IDS)).isFalse();
 
         verify(timing).fitFilm(1L);
         assertThat(pauses).isEmpty();
-        // Edition 20 is checked; edition 10 waits for the retry of its fit; no full pass is asked for meanwhile (the
-        // refresher keeps the failed film for the hourly retry, whose pass announces itself).
+        // Edition 20 is checked; edition 10 waits for the timing pass the event books after the job.
         verify(checks).checkEditions(List.of(20L));
         verifyNoMoreInteractions(checks);
     }
@@ -141,7 +143,7 @@ class SubtitleRetimeRecheckTest {
     void aFailureToListTheEditionsIsLoggedNotThrown() {
         when(service.touchedEditions(IDS)).thenThrow(new IllegalStateException("db down"));
 
-        recheck.run(IDS);
+        assertThat(recheck.run(IDS)).isFalse();
 
         assertThat(pauses).isEmpty();
         verifyNoInteractions(timing, checks);
