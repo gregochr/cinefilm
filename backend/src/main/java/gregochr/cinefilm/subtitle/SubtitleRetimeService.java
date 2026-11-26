@@ -150,8 +150,8 @@ public class SubtitleRetimeService {
                 sidecars.save(row);
                 return Outcome.DECIDED_OFF;
             }
-            // A file whose original cues fit the film's own English track as they are is left alone (OFF_FITS); on a
-            // film that may have such a track, nothing is decided until it has been read.
+            // A file whose original cues fit the film's own English track as they are is left alone (OFF_FITS); a
+            // forced download waits until the timing check has settled it.
             OffFitsRule.Decision decision = decide(row, edition);
             if (decision == OffFitsRule.Decision.WAIT) {
                 return Outcome.UNCHANGED;
@@ -256,24 +256,27 @@ public class SubtitleRetimeService {
             .orElse(null);
     }
 
-    /** The fit of the row's original cues to the film's own English track, by the timing fit's own rule. */
+    /**
+     * The decision for a download that would be retimed. The timing check fits a forced download of an edition that
+     * needs one, when it can; that is the only row that waits, until the check has saved a fit for it (the check reads
+     * the film's track itself, of any codec). Once it has, the original cues are fitted to the embedded starts the
+     * check read, by the check's own rule; with none, the rates decide. Any other row is decided by the rates at once.
+     */
     private OffFitsRule.Decision decide(SubtitleSidecar row, Edition edition) {
-        List<MediaFile> files = TimingKeys.referenceFiles(edition, row);
-        Map<Long, EmbeddedCueStarts> reads = new HashMap<>();
-        cache.findAllById(files.stream().map(MediaFile::getId).toList())
-            .forEach(read -> reads.put(read.getMediaFileId(), read));
-        // The same condition the timing fit uses to know every file has a current read.
-        TimingKeys.EmbeddedReference reference = TimingKeys.referenceKey(edition, row, reads) == null ? null
-            : TimingKeys.embeddedReference(edition, row, reads);
+        boolean fitted = row.getKind() == SubtitleKind.FORCED && !Downloads.isNotNeeded(edition, SubtitleKind.FORCED)
+            && TimingKeys.fittable(edition, row);
+        boolean settled = fitted && alignments.findBySidecarId(row.getId()).isPresent();
+        TimingKeys.EmbeddedReference reference = null;
+        if (settled) {
+            Map<Long, EmbeddedCueStarts> reads = new HashMap<>();
+            cache.findAllById(TimingKeys.referenceFiles(edition, row).stream().map(MediaFile::getId).toList())
+                .forEach(read -> reads.put(read.getMediaFileId(), read));
+            // The same condition the timing fit uses to know every file has a current read.
+            reference = TimingKeys.referenceKey(edition, row, reads) == null ? null
+                : TimingKeys.embeddedReference(edition, row, reads);
+        }
         String original = row.getOriginalCuesText() != null ? row.getOriginalCuesText() : row.getCuesText();
         List<Long> starts = SrtParser.cues(original).stream().map(SubtitleCue::startMs).toList();
-        return OffFitsRule.decide(mayHaveEnglishTrack(edition), reference, starts);
-    }
-
-    private static boolean mayHaveEnglishTrack(Edition edition) {
-        return edition.originalParts().stream()
-            .flatMap(part -> part.getSubtitleStreams().stream())
-            .anyMatch(stream -> EmbeddedStreams.mayBeFullEnglish(stream.getLanguage(), stream.isForced(),
-                stream.getFormat(), stream.getTitle()));
+        return OffFitsRule.decide(fitted, settled, reference, starts);
     }
 }

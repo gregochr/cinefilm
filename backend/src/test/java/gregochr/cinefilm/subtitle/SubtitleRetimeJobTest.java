@@ -123,6 +123,27 @@ class SubtitleRetimeJobTest {
     }
 
     @Test
+    void aRequestThatLandsAfterTheLastCheckButBeforeTheRunIsGivenUpStartsANewRun() {
+        when(service.candidateIds()).thenReturn(List.of());
+        boolean[] asked = {false};
+        SubtitleRetimeJob on = new SubtitleRetimeJob(service, executor, "on", events) {
+            @Override
+            void afterLastCheck() {
+                if (!asked[0]) {
+                    asked[0] = true;
+                    // The run is still held, so this cannot start one: only the relaunch after it is given up can.
+                    assertThat(start()).isFalse();
+                }
+            }
+        };
+        on.start();
+
+        queued.remove(0).run();
+
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
     void aRefusedRunFreesTheJobAndTheErrorReachesTheCaller() {
         SubtitleRetimeJob on = new SubtitleRetimeJob(service, task -> {
             throw new IllegalStateException("full");

@@ -98,6 +98,12 @@ class SubtitleRetimeServiceUnitTest {
         edition.originalParts().get(0).getSubtitleStreams().add(stream);
     }
 
+    /** The film file has a fingerprint, so the timing check can fit the row to it. */
+    private void fittable() {
+        edition.originalParts().get(0).setSizeBytes(1_000L);
+        edition.originalParts().get(0).setModifiedAt(NOW);
+    }
+
     /** Ten cues, irregularly spaced so that no offset but the right one lines two files up. */
     private static List<SubtitleCue> tenCues(double scale) {
         List<SubtitleCue> cues = new ArrayList<>();
@@ -114,8 +120,7 @@ class SubtitleRetimeServiceUnitTest {
      */
     private void filmTrackRead(double readScale, EmbeddedCueStarts.Status status) {
         var part = edition.originalParts().get(0);
-        part.setSizeBytes(1_000L);
-        part.setModifiedAt(NOW);
+        fittable();
         String original = SrtParser.format(tenCues(1.0));
         row.setCuesText(original);
         EmbeddedCueStarts read = new EmbeddedCueStarts();
@@ -417,21 +422,36 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void aFilmWithAnEnglishTrackLeavesTheDecisionOpenAndTheCuesAsTheyAre() {
+    void aFullDownloadOnAFilmWithAnEnglishTextStreamIsDecidedByTheRatesAtOnce() {
         english();
+        row.setKind(SubtitleKind.FULL);
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+    }
+
+    @Test
+    void aForcedDownloadWaitsUntilTheTimingCheckHasSavedAFitForIt() {
+        fittable();
         rowIs();
         filmRateIs(25.0);
 
         assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.UNCHANGED);
+
         assertThat(row.getRetime()).isNull();
         assertThat(row.getRetimedBy()).isNull();
         assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        verify(sidecars).findById(5L);
+        verifyNoMoreInteractions(sidecars);
     }
 
     @Test
-    void originalCuesThatFitTheFilmsEnglishTrackAreSetToFitAsIsAndNothingIsRewritten() {
-        english();
+    void originalCuesThatFitTheFilmsTrackTheCheckReadAreSetToFitAsIsAndNothingIsRewritten() {
+        // No stored stream says there is a track: a picture track is read by the timing check all the same.
         filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
+        alignment(TimingFit.Verdict.CHECK);
         rowIs();
         filmRateIs(25.0);
 
@@ -445,9 +465,9 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void originalCuesThatDoNotFitTheFilmsEnglishTrackAreRetimedAsUsual() {
-        english();
+    void originalCuesThatDoNotFitTheFilmsTrackAreRetimedAsUsual() {
         filmTrackRead(1.0427, EmbeddedCueStarts.Status.USABLE);
+        alignment(TimingFit.Verdict.CHECK);
         rowIs();
         filmRateIs(25.0);
 
@@ -458,9 +478,9 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void aFilmFileWithNoEnglishTrackInItDecidesAutoOnceItHasBeenRead() {
-        english();
+    void aSettledForcedDownloadWhoseFilmFileHasNoEnglishTrackIsDecidedByTheRates() {
         filmTrackRead(1.0, EmbeddedCueStarts.Status.NO_REFERENCE);
+        alignment(TimingFit.Verdict.NO_REFERENCE);
         rowIs();
         filmRateIs(25.0);
 
@@ -469,33 +489,19 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void embeddedStartsNotReadYetKeepTheRowUndecidedAndWriteNothing() {
-        english();
-        rowIs();
-        filmRateIs(25.0);
-
-        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.UNCHANGED);
-
-        assertThat(row.getRetime()).isNull();
-        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
-        verify(sidecars).findById(5L);
-        verifyNoMoreInteractions(sidecars);
-    }
-
-    @Test
-    void aReadOfAnOlderVersionOfTheFilmFileCountsAsNotReadYet() {
-        english();
+    void aSettledForcedDownloadWithNoCurrentReadIsDecidedByTheRates() {
         filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
         edition.originalParts().get(0).setSizeBytes(2_000L);
+        alignment(TimingFit.Verdict.CHECK);
         rowIs();
         filmRateIs(25.0);
 
-        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.UNCHANGED);
-        assertThat(row.getRetime()).isNull();
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
     }
 
     @Test
-    void aFilmWithNoEnglishStreamDecidesAutoAtOnceWithoutALook() {
+    void aForcedDownloadTheTimingCheckCannotFitIsDecidedByTheRatesAtOnce() {
         rowIs();
         filmRateIs(25.0);
 
@@ -505,12 +511,12 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void aRowThatWasRetimedAndNowFitsAsIsIsPutBack() {
-        english();
         filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
         row.setOriginalCuesText(SrtParser.format(tenCues(1.0)));
         row.setCuesText(CueScaler.scale(row.getOriginalCuesText(), K));
         row.setRetimedBy(K);
         row.setRetimedForFps(25.0);
+        alignment(TimingFit.Verdict.CHECK);
         rowIs();
         filmRateIs(25.0);
 
@@ -522,29 +528,7 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void aForcedTrackOrAnotherLanguageIsNotAnEnglishTrack() {
-        var forced = new gregochr.cinefilm.film.SubtitleStream();
-        forced.setLanguage("English");
-        forced.setForced(true);
-        forced.setFormat("subrip");
-        var french = new gregochr.cinefilm.film.SubtitleStream();
-        french.setLanguage("French");
-        french.setFormat("subrip");
-        var unlabelled = new gregochr.cinefilm.film.SubtitleStream();
-        unlabelled.setFormat("subrip");
-        var picture = new gregochr.cinefilm.film.SubtitleStream();
-        picture.setLanguage("English");
-        picture.setFormat("webvtt");
-        edition.originalParts().get(0).getSubtitleStreams().addAll(List.of(forced, french, unlabelled, picture));
-        rowIs();
-        filmRateIs(25.0);
-
-        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
-    }
-
-    @Test
     void anOwnerEditWinsOverAnEnglishTrackAndAnAlreadyDecidedRowIsNeverDecidedAgain() {
-        english();
         retimedAlready();
         row.setOffsetMs(900);
         row.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);

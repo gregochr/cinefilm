@@ -17,14 +17,14 @@ class OffFitsRuleTest {
 
     @Test
     void originalCuesThatFitTheFilmsTrackFitAsIs() {
-        assertThat(OffFitsRule.decide(true, SAME, STARTS)).isEqualTo(Decision.FITS_AS_IS);
+        assertThat(OffFitsRule.decide(true, true, SAME, STARTS)).isEqualTo(Decision.FITS_AS_IS);
     }
 
     @Test
     void originalCuesThatFitAfterASmallConstantOffsetStillFitAsIs() {
         List<Long> shifted = STARTS.stream().map(start -> start + 1_500).toList();
 
-        assertThat(OffFitsRule.decide(true, new TimingKeys.EmbeddedReference(shifted, null), STARTS))
+        assertThat(OffFitsRule.decide(true, true, new TimingKeys.EmbeddedReference(shifted, null), STARTS))
             .isEqualTo(Decision.FITS_AS_IS);
     }
 
@@ -32,34 +32,42 @@ class OffFitsRuleTest {
     void originalCuesThatDriftAgainstTheTrackAreRetimed() {
         List<Long> drifted = STARTS.stream().map(start -> Math.round(start * 1.0427)).toList();
 
-        assertThat(OffFitsRule.decide(true, new TimingKeys.EmbeddedReference(drifted, null), STARTS))
+        assertThat(OffFitsRule.decide(true, true, new TimingKeys.EmbeddedReference(drifted, null), STARTS))
             .isEqualTo(Decision.RETIME);
     }
 
     @Test
     void tooFewCuesToFitAreRetimed() {
-        assertThat(OffFitsRule.decide(true, SAME, STARTS.subList(0, 3))).isEqualTo(Decision.RETIME);
+        assertThat(OffFitsRule.decide(true, true, SAME, STARTS.subList(0, 3))).isEqualTo(Decision.RETIME);
     }
 
     @Test
     void aTrackWithNoLinesIsRetimed() {
-        assertThat(OffFitsRule.decide(true, new TimingKeys.EmbeddedReference(List.of(), null), STARTS))
+        assertThat(OffFitsRule.decide(true, true, new TimingKeys.EmbeddedReference(List.of(), null), STARTS))
             .isEqualTo(Decision.RETIME);
     }
 
     @Test
     void aFilmFileReadAndFoundToHaveNoEnglishTrackIsRetimedAtOnce() {
-        assertThat(OffFitsRule.decide(true, new TimingKeys.EmbeddedReference(List.of(), "No English track"), STARTS))
-            .isEqualTo(Decision.RETIME);
+        TimingKeys.EmbeddedReference none = new TimingKeys.EmbeddedReference(List.of(), "No English track");
+
+        assertThat(OffFitsRule.decide(true, true, none, STARTS)).isEqualTo(Decision.RETIME);
     }
 
     @Test
-    void aFilmThatMayHaveATrackWaitsUntilItIsRead() {
-        assertThat(OffFitsRule.decide(true, null, STARTS)).isEqualTo(Decision.WAIT);
+    void aForcedDownloadTheTimingCheckHasNotSettledWaits() {
+        assertThat(OffFitsRule.decide(true, false, null, STARTS)).isEqualTo(Decision.WAIT);
+        assertThat(OffFitsRule.decide(true, false, SAME, STARTS)).isEqualTo(Decision.WAIT);
     }
 
     @Test
-    void aFilmThatCannotHaveATrackIsRetimedWithoutWaiting() {
-        assertThat(OffFitsRule.decide(false, null, STARTS)).isEqualTo(Decision.RETIME);
+    void aSettledDownloadWithNoEmbeddedStartsIsDecidedByTheRates() {
+        assertThat(OffFitsRule.decide(true, true, null, STARTS)).isEqualTo(Decision.RETIME);
+    }
+
+    @Test
+    void aDownloadTheTimingCheckNeverFitsIsDecidedByTheRatesAtOnce() {
+        assertThat(OffFitsRule.decide(false, false, null, STARTS)).isEqualTo(Decision.RETIME);
+        assertThat(OffFitsRule.decide(false, false, SAME, STARTS)).isEqualTo(Decision.RETIME);
     }
 }

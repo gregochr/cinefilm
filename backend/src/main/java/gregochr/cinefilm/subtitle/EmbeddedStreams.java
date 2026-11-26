@@ -102,23 +102,6 @@ final class EmbeddedStreams {
         return new Choice(chosen, startsByIndex.get(chosen.index()), null);
     }
 
-    /**
-     * True when a stored stream of a film file could be its full English track: the same test as {@link #candidates}
-     * (English by name or code, not forced, a codec that can be read, a title that is not "forced", "foreign" or
-     * "signs"). The scan stores a language as its English name, so {@code English} counts; an undetermined or missing
-     * language does not, as in the read.
-     *
-     * @param language the stored language, or null
-     * @param forced true when the stream is flagged forced
-     * @param codec the stored codec name, or null
-     * @param title the stream's title, or null
-     * @return true when the read could choose it
-     */
-    static boolean mayBeFullEnglish(String language, boolean forced, String codec, String title) {
-        String code = "english".equalsIgnoreCase(language) ? "eng" : language;
-        return !candidates(List.of(new Stream(0, codec, code, forced, false, title))).isEmpty();
-    }
-
     private static boolean reliable(String codec) {
         return codec != null && RELIABLE.contains(codec.toLowerCase(Locale.ROOT));
     }

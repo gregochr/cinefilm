@@ -135,4 +135,14 @@ final class TimingKeys {
         }
         return new EmbeddedReference(noReference == null ? List.copyOf(reference) : List.of(), noReference);
     }
+
+    /**
+     * Whether the timing check can fit a sidecar at all: it has reference files, each with a fingerprint, and a
+     * whole-edition sidecar's edition has a timeline. Otherwise the check skips it and stores nothing.
+     */
+    static boolean fittable(Edition edition, SubtitleSidecar sidecar) {
+        List<MediaFile> refFiles = referenceFiles(edition, sidecar);
+        return !refFiles.isEmpty() && refFiles.stream().noneMatch(f -> fingerprint(f) == null)
+            && !(sidecar.isWholeEdition() && timelineOrNull(edition) == null);
+    }
 }

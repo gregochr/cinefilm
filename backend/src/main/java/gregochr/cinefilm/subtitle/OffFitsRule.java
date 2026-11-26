@@ -8,14 +8,15 @@ import java.util.List;
  *
  * <p>A file whose original cues fit the film's own English track {@code ALIGNED} is on this copy's timeline already, so
  * its stated rate is wrong and it is left as it is ({@link RetimeChoice#OFF_FITS}). Any other verdict means retime it.
- * On a film that may have an English track of its own, the decision waits until the track has been read; a film that
- * cannot have one is decided at once.
+ * The decision waits only for a forced download that the timing check will fit and has not settled yet (it has saved
+ * no fit for it): the check does the reading of the film's track, whatever its codec. Any other download is decided
+ * from the rates at once.
  */
 final class OffFitsRule {
 
     /** What to do with the download. */
     enum Decision {
-        /** The film's track has not been read yet: leave the download undecided, a later run decides. */
+        /** The timing check has not settled the download yet: leave it undecided, a later run decides. */
         WAIT,
         /** The original cues fit the film's track: leave them (OFF_FITS). */
         FITS_AS_IS,
@@ -29,19 +30,22 @@ final class OffFitsRule {
     /**
      * Decides.
      *
-     * @param mayHaveEnglishTrack true when a stream of the film's files could be its full English track
-     *     ({@link EmbeddedStreams#mayBeFullEnglish})
+     * @param fittedByTimingCheck true when the timing check fits this download (a forced download it can fit)
+     * @param settled true when the timing check has saved a fit for it
      * @param reference what the film's files read as ({@link TimingKeys#embeddedReference}), or null when a file has
-     *     no current read yet
+     *     no current read
      * @param originalStarts the download's original cue starts in milliseconds
      * @return the decision
      */
-    static Decision decide(boolean mayHaveEnglishTrack, TimingKeys.EmbeddedReference reference,
+    static Decision decide(boolean fittedByTimingCheck, boolean settled, TimingKeys.EmbeddedReference reference,
                            List<Long> originalStarts) {
-        if (reference == null) {
-            return mayHaveEnglishTrack ? Decision.WAIT : Decision.RETIME;
+        if (!fittedByTimingCheck) {
+            return Decision.RETIME;
         }
-        if (reference.noReference() != null) {
+        if (!settled) {
+            return Decision.WAIT;
+        }
+        if (reference == null || reference.noReference() != null) {
             return Decision.RETIME;
         }
         return TimingFit.fit(originalStarts, reference.starts()).verdict() == TimingFit.Verdict.ALIGNED

@@ -589,8 +589,7 @@ public class SidecarTimingService {
     private State state(Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os,
                          ForcedSubtitleAlignment fit) {
         List<MediaFile> refFiles = TimingKeys.referenceFiles(s.edition(), s.sidecar());
-        if (refFiles.isEmpty() || refFiles.stream().anyMatch(f -> TimingKeys.fingerprint(f) == null)
-            || s.sidecar().isWholeEdition() && TimingKeys.timelineOrNull(s.edition()) == null) {
+        if (!TimingKeys.fittable(s.edition(), s.sidecar())) {
             return State.SKIP;
         }
         if (!refFiles.stream().allMatch(f -> isRead(f, reads))) {

@@ -246,6 +246,20 @@ class TimingKeysTest {
     }
 
     @Test
+    void theTimingCheckCanFitASidecarOnlyWithPresentFingerprintedFilesAndATimelineWhenWhole() {
+        Edition edition = split();
+        MediaFile one = edition.originalParts().get(0);
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, false, "x"))).isTrue();
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, true, "x"))).isTrue();
+        assertThat(TimingKeys.fittable(edition, sidecar(99L, false, "x"))).isFalse();
+        edition.originalParts().get(1).setDurationMs(null);
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, true, "x"))).isFalse();
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, false, "x"))).isTrue();
+        one.setSizeBytes(null);
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, false, "x"))).isFalse();
+    }
+
+    @Test
     void theTimelineIsNullWhenAPartHasNoLength() {
         Edition edition = split();
         assertThat(TimingKeys.timelineOrNull(edition)).isNotNull();

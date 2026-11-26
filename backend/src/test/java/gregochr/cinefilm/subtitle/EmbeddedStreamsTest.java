@@ -136,21 +136,6 @@ class EmbeddedStreamsTest {
     }
 
     @Test
-    void aStoredStreamMayBeTheFullEnglishTrackOnlyByTheSameTestAsTheRead() {
-        assertThat(EmbeddedStreams.mayBeFullEnglish("English", false, "subrip", null)).isTrue();
-        assertThat(EmbeddedStreams.mayBeFullEnglish("eng", false, "hdmv_pgs_subtitle", "English SDH")).isTrue();
-        assertThat(EmbeddedStreams.mayBeFullEnglish("en-GB", false, "ass", null)).isTrue();
-        // Forced, another language, no language, a codec the read cannot trust, a forced title.
-        assertThat(EmbeddedStreams.mayBeFullEnglish("English", true, "subrip", null)).isFalse();
-        assertThat(EmbeddedStreams.mayBeFullEnglish("French", false, "subrip", null)).isFalse();
-        assertThat(EmbeddedStreams.mayBeFullEnglish(null, false, "subrip", null)).isFalse();
-        assertThat(EmbeddedStreams.mayBeFullEnglish("und", false, "subrip", null)).isFalse();
-        assertThat(EmbeddedStreams.mayBeFullEnglish("English", false, "webvtt", null)).isFalse();
-        assertThat(EmbeddedStreams.mayBeFullEnglish("English", false, null, null)).isFalse();
-        assertThat(EmbeddedStreams.mayBeFullEnglish("English", false, "subrip", "Foreign parts only")).isFalse();
-    }
-
-    @Test
     void aStreamWithNoCodecIsAPicture() {
         assertThat(new Stream(2, null, "eng", false, false, null).picture()).isTrue();
         assertThat(new Stream(2, "dvd_subtitle", "eng", false, false, null).picture()).isTrue();

@@ -95,6 +95,7 @@ public class SubtitleRetimeJob {
             while (pending.getAndSet(false)) {
                 run();
             }
+            afterLastCheck();
         } finally {
             running.set(false);
         }
@@ -102,6 +103,10 @@ public class SubtitleRetimeJob {
         if (pending.get()) {
             launch();
         }
+    }
+
+    /** Called after the last look at the request flag and before the run is given up: a seam for the test. */
+    void afterLastCheck() {
     }
 
     /** One pass over every download that may need retiming. */
