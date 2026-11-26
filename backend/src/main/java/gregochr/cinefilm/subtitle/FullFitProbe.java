@@ -84,8 +84,8 @@ final class FullFitProbe {
 
     private boolean measure(Job job, int checkLimit) {
         OpenSubtitlesReference second = second(job, checkLimit);
-        done.add(job.sidecarId());
         if (second == null) {
+            done.add(job.sidecarId());
             LOG.info("Full subtitle fit of edition {} (film {}): not measured, OpenSubtitles has no second full file "
                 + "to compare with", job.editionId(), job.filmId());
             return false;
@@ -99,8 +99,13 @@ final class FullFitProbe {
         if (!judged.hasVerdict()) {
             LOG.info("Full subtitle fit of edition {} (film {}): not measured, no verdict: {} (sidecar {}, "
                 + "reference {})", job.editionId(), job.filmId(), judged.reason(), job.sidecarId(), second.getId());
+            if (judged.reason() == RateComparison.Reason.RATE_CONFLICT) {
+                // Indexing never changes a conflict; an unknown rate may be settled later, so it is tried again.
+                done.add(job.sidecarId());
+            }
             return false;
         }
+        done.add(job.sidecarId());
         List<SubtitleCue> download = judged.first();
         List<SubtitleCue> reference = judged.second();
         Result forward = judged.result();
@@ -123,6 +128,14 @@ final class FullFitProbe {
         for (OpenSubtitlesResult candidate : job.others()) {
             OpenSubtitlesReference stored = job.stored().get(candidate.fileId());
             if (stored != null && isFull(stored)) {
+                // A final row stored before rates were kept gets the candidate's stated one (the fetcher's own fill, no
+                // download), or the rate rule would reject it as of unknown rate.
+                try {
+                    fetcher.fillRate(stored, candidate);
+                } catch (RuntimeException e) {
+                    LOG.warn("Could not fill the stated frame rate of OpenSubtitles file {}: {}", candidate.fileId(),
+                        e.getClass().getSimpleName());
+                }
                 return stored;
             }
         }

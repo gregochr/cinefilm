@@ -4,6 +4,7 @@ import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -149,10 +150,14 @@ class FullFitProbeTest {
     }
 
     private static Job retimedJob(OpenSubtitlesReference reference) {
+        return retimedJob(reference, candidate(reference.getOsFileId()));
+    }
+
+    private static Job retimedJob(OpenSubtitlesReference reference, OpenSubtitlesResult candidate) {
         RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
             0.959, SrtParser.format(lines(300, 0)));
         return new Job(1L, 10L, "tt1", 7L, 5011L, lines(300, 90_000), 3 * HOUR + 125_000, null,
-            List.of(candidate(reference.getOsFileId())), Map.of(reference.getOsFileId(), reference), side);
+            List.of(candidate), Map.of(reference.getOsFileId(), reference), side);
     }
 
     @Test
@@ -173,15 +178,62 @@ class FullFitProbeTest {
     }
 
     @Test
-    void aRetimedDownloadAndAReferenceOfUnknownRateAreNotMeasuredAndTheReasonIsLogged() {
+    void aRatelessFinalReferenceGetsTheRateItsCandidateStatesAndIsMeasured() {
         OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        serving(retimedJob(reference));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+
+        verify(references).fillTimedFps(5012L, 23.976);
+        assertThat(reference.getTimedFps()).isEqualTo(23.976);
+        assertThat(infoLines()).singleElement().asString()
+            .contains("download to reference ALIGNED at 0 ms, 100% of 300 lines matched");
+    }
+
+    @Test
+    void aRetimedDownloadAndAReferenceThatStatesNoRateAreNotMeasuredAndTheReasonIsLogged() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        OpenSubtitlesResult noRate = new OpenSubtitlesResult(4012, 5012, "Release 5012", null, 10, true, false, null,
+            null);
+        serving(retimedJob(reference, noRate));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        verify(references, never()).fillTimedFps(5012L, 23.976);
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "UNKNOWN_RATE (sidecar 7, reference 5012)");
+    }
+
+    @Test
+    void aPairWithNoVerdictForWantOfARateIsMeasuredOnALaterPassOnceTheRateArrives() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        OpenSubtitlesResult noRate = new OpenSubtitlesResult(4012, 5012, "Release 5012", null, 10, true, false, null,
+            null);
+        serving(retimedJob(reference, noRate));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        reference.setTimedFps(23.976);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        // And once measured it is not measured again.
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+    }
+
+    @Test
+    void aFillThatThrowsIsLoggedAndTheMeasurementGoesOnWithoutTheRate() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        doThrow(new IllegalStateException("boom")).when(references).fillTimedFps(5012L, 23.976);
         serving(retimedJob(reference));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
 
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
 
-        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
-            + "UNKNOWN_RATE (sidecar 7, reference 5012)");
+        assertThat(logged.list).extracting(ILoggingEvent::getFormattedMessage)
+            .contains("Could not fill the stated frame rate of OpenSubtitles file 5012: IllegalStateException");
     }
 
     @Test
