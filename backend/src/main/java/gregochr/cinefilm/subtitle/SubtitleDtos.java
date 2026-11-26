@@ -52,6 +52,14 @@ public final class SubtitleDtos {
      * @param kind {@code FORCED} or {@code FULL} (a full English subtitle beside the film, offered in the Subtitles
      *     menu: it never plays as forced and has no checks, so {@code check}, {@code alignment} and
      *     {@code replacedByDownload} are empty for it)
+     * @param timedFps the frame rate a download is stated to be timed for, or null (unknown, or not a download)
+     * @param filmFps the frame rate of the film file the download was made for, or null (unknown, or not a download)
+     * @param retime {@code AUTO}, {@code OFF} (the owner chose not to retime it) or {@code OFF_FITS} (it fits this copy
+     *     as it is), or null while undecided and for an owner's file
+     * @param retimedBy the factor its cue times were scaled by to put it on the film's timeline, or null when it is not
+     *     retimed
+     * @param rateLine one plain sentence on all of that, for the Admin to show as it is (for example "Timed for 23.976
+     *     fps; this film is 25 fps, so it is sped up 4%"); null for an owner's file
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
@@ -59,7 +67,16 @@ public final class SubtitleDtos {
                              boolean verified, boolean endsAfterRuntime, long version, boolean served, CheckDto check,
                              String offsetSource, AlignmentDto alignment, String origin, String release,
                              Long openSubtitlesFileId, String servedReason,
-                             boolean replacedByDownload, String kind) {
+                             boolean replacedByDownload, String kind, Double timedFps,
+                             Double filmFps, String retime, Double retimedBy, String rateLine) {
+    }
+
+    /**
+     * The body of "retime" or "don't retime" for one downloaded subtitle.
+     *
+     * @param retime true to retime it onto the film's timeline, false to leave it as it was timed
+     */
+    public record RetimeRequest(Boolean retime) {
     }
 
     /**
