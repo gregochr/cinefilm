@@ -63,7 +63,7 @@ record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy
         if (choice == RetimeChoice.OFF) {
             return "Not retimed; it may drift";
         }
-        return timedFor + ", so it is not retimed yet";
+        return timedFor + ", so it is not retimed";
     }
 
     private static String retimed(Double timed, Double film, double retimedBy) {

@@ -146,9 +146,9 @@ class RateLineTest {
         autoChoice.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
 
         assertThat(RateLine.of(autoOffset, 25.0).line())
-            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed");
         assertThat(RateLine.of(autoChoice, 25.0).line())
-            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed");
     }
 
     @Test
@@ -160,7 +160,7 @@ class RateLineTest {
     @Test
     void aFileWithADifferentRateThatIsNotRetimedYetSaysSo() {
         assertThat(RateLine.of(download(23.976, null, null), 25.0).line())
-            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed");
         assertThat(RateLine.of(download(23.976, RetimeChoice.AUTO, null), 25.0).retime()).isEqualTo("AUTO");
     }
 }

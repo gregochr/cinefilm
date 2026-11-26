@@ -108,7 +108,7 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
         assertThat(dto.filmFps()).isEqualTo(25.0);
         assertThat(dto.retime()).isNull();
         assertThat(dto.retimedBy()).isNull();
-        assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+        assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed");
         SidecarDto owners = listed(file.getId());
         assertThat(Arrays.asList(owners.timedFps(), owners.filmFps(), owners.retime(), owners.retimedBy(),
             owners.rateLine())).containsOnlyNulls();
@@ -172,7 +172,7 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
 
         assertThat(dto.kind()).isEqualTo("FULL");
         assertThat(dto.filmFps()).isEqualTo(25.0);
-        assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+        assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed");
     }
 
     @Test

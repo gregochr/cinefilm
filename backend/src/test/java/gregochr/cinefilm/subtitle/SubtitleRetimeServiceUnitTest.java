@@ -704,6 +704,20 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
+    void theOwnersOnDecidesAnUndecidedRowAtOnceEvenOnAFilmWithAnEnglishTrack() {
+        // An accepted owner override: the job would wait for its fit check here, the owner's click does not.
+        english();
+        rowIs();
+        filmRateIs(25.0);
+
+        Outcome outcome = service.applyChoice(row, true);
+
+        assertThat(outcome).isEqualTo(Outcome.REWRITTEN);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(row.getCuesText()).isEqualTo(SCALED);
+    }
+
+    @Test
     void theOwnersOnLeavesAFitsAsItIsRowAsItIsAndRewritesNothing() {
         row.setRetime(RetimeChoice.OFF_FITS);
 
