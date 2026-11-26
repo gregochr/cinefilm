@@ -430,6 +430,12 @@ The rollback is the `restore` mode, in this order:
    next step.
 4. Roll back the image (above).
 
+The switch is `on` by default (since the release that finished phase 4 of the frame-rate plan). That release is made
+on its own, after the phases that taught the app retimed rows (2a, 2b), so a rollback of it, including the automatic
+one when smoke fails, lands on an image that understands retimed rows. To turn retime off without a rollback, set
+`CINEFILM_SUBTITLES_RETIME=off` in `~/cinefilm/.env` (the app container reads that file through `env_file`) and restart
+as in step 2. To roll the release back, use `restore` first, as above.
+
 `off` restores nothing: it stops the job and leaves the rewritten cues as they are, which is right while the image
 stays.
 

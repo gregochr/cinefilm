@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
  * The nightly retime of downloaded subtitles, 05:45 in the application time zone (before the checks at 06:30 and the
  * timing fits at 07:00, so they see the cues as retimed). Switched off with the scan schedule
  * ({@code cinefilm.scan.schedule=false}, as in tests); the job itself does nothing while
- * {@code cinefilm.subtitles.retime} is {@code off}.
+ * {@code cinefilm.subtitles.retime} is {@code off} (it is {@code on} by default).
  */
 @Component
 @ConditionalOnProperty(name = "cinefilm.scan.schedule", havingValue = "true", matchIfMissing = true)
