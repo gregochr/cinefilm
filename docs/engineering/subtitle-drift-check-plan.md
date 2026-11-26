@@ -67,27 +67,29 @@ different cut), the flag is wrong on design data and this plan ends. File 3 is r
 ### Step 2: half B, held out
 
 Half B was never scored by 3e or by the 25 Nov check. 34 of its forced files have maps on the server already (the
-kit's `run2/maps`). The owner runs one read-only query for their `retimed_by` and stated rates. Then, once, on the
-half-B files with 8 or more cues:
+kit's `run2/maps`). Half A gave only 2 flags as played in 26 files, so half B alone is likely to give too few for
+G2. The held-out set is therefore **half B and the forced films of 3e's 80-file evaluation list** (unspent; 3e has
+ended), fixed now, before any score. The owner maps the list's films (3d's kit, nice 19) and runs one read-only
+query for every held-out file's `retimed_by` and stated rate. Then, once, on the held-out files with 8 or more cues:
 
-- **G1, coverage of known slips.** The set is every half-B file the server retimed (8 or more cues). On its cues
+- **G1, coverage of known slips.** The set is every held-out file the server retimed (8 or more cues). On its cues
   from before the retime, the measure must flag at least 50% of the set, and every flag must be in the direction the
   server applied. (Half A: 5 of 9, 56%, all in the server's direction. The other 4 lie on little foreign speech.)
   This is a coverage bar, not a precision bar: a file the measure cannot see is a miss, never a pass.
-- **G2, no false flags.** Every half-B file flagged as played is ear-checked by the owner at its last cues, as in
-  step 1. At most 1 in 10 of them may be heard to play right (with fewer than 10 flags, none). A flag on a file the
-  server retimed is checked the same way. This is the risk that matters: a right file flagged would be put minutes
-  out.
-- **G1 trusts the server's retime.** Its stated rate is right for most files but not all. A file retimed by a wrong
-  rate can only count against the measure in G1, never for it, so G1 errs towards failing. No file is dropped from
-  its set after the scores are seen.
+- **G2, no false flags.** Every held-out file flagged as played is ear-checked by the owner at its last cues, as in
+  step 1. A flag is right only if the line is heard near its 4% position in k̂'s direction. At most 1 in 10 flags
+  may be wrong (with fewer than 10 flags, none): heard to play right, out for another reason, or out the other way.
+  A flag on a file the server retimed is checked the same way. This is the risk that matters: a wrong flag would put
+  a file minutes out.
+- **G1 trusts the server's retime.** Its stated rate is right for most files but not all, so a G1 miss or hit may
+  rest on a wrong rate. G1 measures coverage only; whether a flag can be acted on is judged by ear in G2. No file is
+  dropped from G1's set after the scores are seen.
 - **G3, noise.** Half B's own decoys (cross-film and shuffled cues, built by the kit's `build_decoys` and never
   scored) are measured with their cues as the source file plays them, on the decoy's map. At most 5% may be
-  flagged. (Half A's 72 decoys: 62 have 8 or more cues, and none is flagged; the largest f is 0.19.)
-- **Enough files.** G1 needs at least 5 files in its set, G2 at least 3 flags (half B and step 1's two files
-  together don't count: step 1 is design data). If half B gives fewer, the forced films of 3e's 80-file evaluation
-  list (unspent; 3e has ended) are mapped by the owner and measured the same way, once, and the gates are judged on
-  half B and that list together. If there are still too few, the plan ends unproven.
+  flagged. (Half A's 72 decoys: 62 have 8 or more cues, and none is flagged; the largest f at k̂ is 0.19. Scratch
+  script `g4a.py`.)
+- **Enough files.** G1 needs at least 5 files in its set, G2 at least 3 flags (step 1's two files don't count:
+  they are design data). If the held-out set gives fewer, the plan ends unproven.
 
 The numbers and the files heard are recorded here.
 
