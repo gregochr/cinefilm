@@ -51,6 +51,11 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
 
     /** A film of one file at {@code fps}, with a download stated for {@code timed}. */
     private SubtitleSidecar statedDownload(String title, long osFileId, double fps, double timed) {
+        return statedDownload(title, osFileId, fps, timed, SubtitleKind.FORCED);
+    }
+
+    private SubtitleSidecar statedDownload(String title, long osFileId, double fps, double timed,
+                                           SubtitleKind kind) {
         Film film = searchedFilm(title, 1, result(osFileId, title + ".2008"));
         MediaFile file = edition(film).originalParts().get(0);
         file.setSizeBytes(SIZE);
@@ -65,7 +70,15 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
         keyframes.saveAndFlush(index);
         SubtitleSidecar download = download(film, osFileId);
         download.setTimedFps(timed);
+        download.setKind(kind);
         return sidecars.saveAndFlush(download);
+    }
+
+    /** What the database holds for the row, read with nothing of it left in the persistence context. */
+    private SubtitleSidecar reread(Long id) {
+        entityManager.flush();
+        entityManager.clear();
+        return sidecars.findById(id).orElseThrow();
     }
 
     private SidecarDto listed(Long id) {
@@ -100,6 +113,17 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
     }
 
     @Test
+    void aFullDownloadListsItsRateFactsToo() {
+        SubtitleSidecar full = statedDownload("Taken", 2101, 25.0, 23.976, SubtitleKind.FULL);
+
+        SidecarDto dto = listed(full.getId());
+
+        assertThat(dto.kind()).isEqualTo("FULL");
+        assertThat(dto.filmFps()).isEqualTo(25.0);
+        assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+    }
+
+    @Test
     void theOwnersOnRetimesTheFileAtOnceAndTheOwnersOffPutsItBack() {
         SubtitleSidecar download = statedDownload("Taken", 2001, 25.0, 23.976);
         Long id = download.getId();
@@ -109,25 +133,28 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
         assertThat(on.retime()).isEqualTo("AUTO");
         assertThat(on.retimedBy()).isEqualTo(23.976 / 25);
         assertThat(on.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
-        assertThat(sidecars.findById(id).orElseThrow().getOriginalCuesText()).isEqualTo(CUES);
-        assertThat(sidecars.findById(id).orElseThrow().getCuesText()).isNotEqualTo(CUES);
+        assertThat(reread(id).getOriginalCuesText()).isEqualTo(CUES);
+        assertThat(reread(id).getCuesText()).isNotEqualTo(CUES);
 
         SidecarDto off = admin.retime(id, new RetimeRequest(false));
 
         assertThat(off.retime()).isEqualTo("OFF");
         assertThat(off.retimedBy()).isNull();
         assertThat(off.rateLine()).isEqualTo("Not retimed (you chose this); it may drift");
-        assertThat(sidecars.findById(id).orElseThrow().getCuesText()).isEqualTo(CUES);
-        assertThat(sidecars.findById(id).orElseThrow().getOriginalCuesText()).isNull();
+        assertThat(reread(id).getCuesText()).isEqualTo(CUES);
+        assertThat(reread(id).getOriginalCuesText()).isNull();
     }
 
     @Test
     void theListCostsNoMoreStatementsWithThreeEditionsOfDownloadsThanWithOne() {
         statedDownload("One", 2001, 25.0, 23.976);
+        statedDownload("OneFull", 2101, 25.0, 23.976, SubtitleKind.FULL);
         long withOne = statementsOfOneList();
 
         statedDownload("Two", 2002, 23.976, 25.0);
         statedDownload("Three", 2003, 25.0, 25.0);
+        statedDownload("TwoFull", 2102, 23.976, 25.0, SubtitleKind.FULL);
+        statedDownload("ThreeFull", 2103, 25.0, 25.0, SubtitleKind.FULL);
         long withThree = statementsOfOneList();
 
         assertThat(withOne).isPositive();

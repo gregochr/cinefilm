@@ -90,6 +90,37 @@ class RateLineTest {
     }
 
     @Test
+    void ratesOutsideTheSpeedUpAreNotCalledMatchingAndSayWhatIsRetimed() {
+        assertThat(RateLine.of(download(29.97, null, null), 25.0).line())
+            .isEqualTo("Timed for 29.97 fps; this film is 25 fps; only the 24 to 25 fps speed-up is retimed");
+        assertThat(RateLine.of(download(23.976, RetimeChoice.AUTO, null), 24.0).line())
+            .isEqualTo("Timed for 23.976 fps; this film is 24 fps; only the 24 to 25 fps speed-up is retimed");
+        assertThat(RateLine.of(download(23.976, RetimeChoice.OFF, null), 24.0).line())
+            .isEqualTo("Timed for 23.976 fps; this film is 24 fps; only the 24 to 25 fps speed-up is retimed");
+    }
+
+    @Test
+    void aRetimedFileIsDescribedFromWhatWasDoneWhateverTheRatesAreNow() {
+        SubtitleSidecar noFilmRate = download(23.976, RetimeChoice.AUTO, K_UP);
+        noFilmRate.setRetimedForFps(25.0);
+        SubtitleSidecar nowMatching = download(25.0, RetimeChoice.AUTO, K_UP);
+        SubtitleSidecar notRestoredYet = download(23.976, RetimeChoice.OFF, K_UP);
+
+        assertThat(RateLine.of(noFilmRate, null).line())
+            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
+        assertThat(RateLine.of(nowMatching, 25.0).line())
+            .isEqualTo("Timed for 25 fps; this film is 25 fps, so it is sped up 4%");
+        assertThat(RateLine.of(notRestoredYet, 25.0).line())
+            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
+    }
+
+    @Test
+    void aRetimedFileWithNoKnownRateAtAllStillSaysWhatWasDone() {
+        assertThat(RateLine.of(download(null, RetimeChoice.AUTO, K_UP), null).line())
+            .isEqualTo("Timed for an unknown frame rate; this film's frame rate is unknown, so it is sped up 4%");
+    }
+
+    @Test
     void aFileWithADifferentRateThatIsNotRetimedYetSaysSo() {
         assertThat(RateLine.of(download(23.976, null, null), 25.0).line())
             .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");

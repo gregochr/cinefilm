@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.config.BadRequestException;
@@ -80,7 +81,7 @@ class SubtitleAdminServiceUnitTest {
     @BeforeEach
     void setUp() {
         service = new SubtitleAdminService(sidecars, files, editions, sync, resolver, blocks, CLOCK, lock,
-            transactions, events, filmRates, retimer);
+            transactions, events, filmRates, retimer, "off");
         row = new SubtitleSidecar();
         row.setId(5L);
         row.setPath("A/Other.en.forced.srt");
@@ -559,6 +560,8 @@ class SubtitleAdminServiceUnitTest {
 
         SidecarDto dto = service.retime(8L, new RetimeRequest(true));
 
+        verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(8L)));
+
         assertThat(heldWhenApplied).containsExactly(LibraryLock.SUBTITLE);
         assertThat(lock.holder()).isNull();
         assertThat(dto.timedFps()).isEqualTo(23.976);
@@ -578,6 +581,7 @@ class SubtitleAdminServiceUnitTest {
 
         SidecarDto dto = service.retime(8L, new RetimeRequest(false));
 
+        verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(8L)));
         assertThat(dto.retime()).isEqualTo("OFF");
         assertThat(dto.retimedBy()).isNull();
         assertThat(dto.rateLine()).isEqualTo("Not retimed (you chose this); it may drift");
@@ -644,10 +648,93 @@ class SubtitleAdminServiceUnitTest {
     }
 
     @Test
-    void aListWithNoDownloadsAsksForNoRates() {
+    void aListWithNoDownloadsReadsNoRates() {
         when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of(row));
-        when(filmRates.forEditions(Set.of())).thenReturn(Map.of());
 
         assertThat(service.list()).extracting(SidecarDto::rateLine).containsExactly((String) null);
+
+        verifyNoInteractions(filmRates);
+    }
+
+    @Test
+    void aFullDownloadListsItsRateFactsFromTheSameSingleRatesRead() {
+        noForcedRows();
+        SubtitleSidecar full = fullRow(11L, "opensubtitles:40:5099", null);
+        full.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        full.setTimedFps(23.976);
+        full.setRetimedBy(23.976 / 25);
+        full.setRetime(RetimeChoice.AUTO);
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL)).thenReturn(List.of(full));
+        when(filmRates.forEditions(Set.of(40L))).thenReturn(Map.of(40L, 25.0));
+
+        SidecarDto dto = service.list().get(0);
+
+        assertThat(dto.kind()).isEqualTo("FULL");
+        assertThat(dto.filmFps()).isEqualTo(25.0);
+        assertThat(dto.rateLine()).isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
+        verify(filmRates).forEditions(Set.of(40L));
+    }
+
+    @Test
+    void aForcedAndAFullDownloadOfOneListShareOneRatesRead() {
+        SubtitleSidecar forcedDownload = downloadRow();
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of(forcedDownload));
+        SubtitleSidecar full = fullRow(11L, "opensubtitles:41:5099", null);
+        full.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL)).thenReturn(List.of(full));
+        when(filmRates.forEditions(Set.of(40L, 41L))).thenReturn(Map.of());
+
+        assertThat(service.list()).hasSize(2);
+
+        verify(filmRates).forEditions(Set.of(40L, 41L));
+    }
+
+    @Test
+    void anUnchangedRetimePublishesNothing() {
+        SubtitleSidecar download = statedDownload();
+        when(retimer.applyChoice(download, true)).thenReturn(SubtitleRetimeService.Outcome.UNCHANGED);
+
+        service.retime(8L, new RetimeRequest(true));
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void aListenerThatFailsAfterTheRetimeCommittedDoesNotMakeItAnError() {
+        SubtitleSidecar download = statedDownload();
+        when(retimer.applyChoice(download, true)).thenReturn(SubtitleRetimeService.Outcome.REWRITTEN);
+        org.mockito.Mockito.doThrow(new IllegalStateException("executor refused")).when(events)
+            .publishEvent(new SubtitleCuesRewritten(Set.of(8L)));
+
+        SidecarDto dto = service.retime(8L, new RetimeRequest(true));
+
+        assertThat(dto.id()).isEqualTo(8L);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void whileTheSettingIsRestoreAnOnIsRefusedAndAnOffIsStillApplied() {
+        SubtitleSidecar download = statedDownload();
+        SubtitleAdminService restoring = new SubtitleAdminService(sidecars, files, editions, sync, resolver, blocks,
+            CLOCK, lock, transactions, events, filmRates, retimer, "restore");
+        when(retimer.applyChoice(download, false)).thenReturn(SubtitleRetimeService.Outcome.RESTORED);
+
+        assertThatThrownBy(() -> restoring.retime(8L, new RetimeRequest(true))).isInstanceOf(ConflictException.class)
+            .hasMessage("Retiming is being undone on this server; try again once that is finished");
+        assertThat(lock.holder()).isNull();
+        assertThat(restoring.retime(8L, new RetimeRequest(false)).id()).isEqualTo(8L);
+        verify(retimer).applyChoice(download, false);
+    }
+
+    @Test
+    void anOnIsAllowedWhateverTheOtherSettingsAre() {
+        SubtitleSidecar download = statedDownload();
+        for (String setting : List.of("off", "on", "nonsense")) {
+            SubtitleAdminService other = new SubtitleAdminService(sidecars, files, editions, sync, resolver, blocks,
+                CLOCK, lock, transactions, events, filmRates, retimer, setting);
+            when(retimer.applyChoice(download, true)).thenReturn(SubtitleRetimeService.Outcome.UNCHANGED);
+
+            assertThat(other.retime(8L, new RetimeRequest(true)).id()).isEqualTo(8L);
+        }
     }
 }

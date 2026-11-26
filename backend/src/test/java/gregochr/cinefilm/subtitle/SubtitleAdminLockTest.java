@@ -52,7 +52,7 @@ class SubtitleAdminLockTest {
         SubtitleAdminService service = new SubtitleAdminService(sidecars, mock(MediaFileRepository.class),
             mock(EditionRepository.class), mock(SidecarSync.class), mock(ForcedResolver.class),
             mock(ForcedDownloadBlockRepository.class), CLOCK, lock, manager, mock(ApplicationEventPublisher.class),
-            mock(FilmRates.class), mock(SubtitleRetimeService.class));
+            mock(FilmRates.class), mock(SubtitleRetimeService.class), "off");
 
         service.offset(5L, new OffsetRequest(250));
 

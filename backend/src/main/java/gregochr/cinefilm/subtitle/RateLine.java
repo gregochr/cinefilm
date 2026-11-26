@@ -31,29 +31,41 @@ record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy
         }
         RetimeChoice choice = row.getRetime();
         return new RateLine(row.getTimedFps(), filmFps, choice == null ? null : choice.name(), row.getRetimedBy(),
-            sentence(row.getTimedFps(), filmFps, choice, row.getRetimedBy()));
+            sentence(row, filmFps));
     }
 
-    private static String sentence(Double timed, Double film, RetimeChoice choice, Double retimedBy) {
+    private static String sentence(SubtitleSidecar row, Double film) {
+        Double timed = row.getTimedFps();
+        RetimeChoice choice = row.getRetime();
         if (choice == RetimeChoice.OFF_FITS) {
             return "Fits this copy as it is";
+        }
+        if (row.getRetimedBy() != null) {
+            // Retimed for the film rate it was retimed for, even when that rate is unknown now or k is 1 now.
+            return retimed(timed, film != null ? film : row.getRetimedForFps(), row.getRetimedBy());
         }
         if (timed == null || film == null) {
             return "Frame rate unknown";
         }
-        double k = FrameRateRetime.factor(timed, film);
-        if (k == 1.0) {
+        if (FrameRateRetime.sameRate(timed, film)) {
             return "Timed for this film's frame rate";
+        }
+        String timedFor = "Timed for " + fps(timed) + " fps; this film is " + fps(film) + " fps";
+        if (FrameRateRetime.factor(timed, film) == 1.0) {
+            return timedFor + "; only the 24 to 25 fps speed-up is retimed";
         }
         if (choice == RetimeChoice.OFF) {
             return "Not retimed (you chose this); it may drift";
         }
-        String timedFor = "Timed for " + fps(timed) + " fps; this film is " + fps(film) + " fps";
-        if (retimedBy == null) {
-            return timedFor + ", so it is not retimed yet";
-        }
+        return timedFor + ", so it is not retimed yet";
+    }
+
+    private static String retimed(Double timed, Double film, double retimedBy) {
+        String timedFor = timed == null ? "Timed for an unknown frame rate" : "Timed for " + fps(timed) + " fps";
+        String filmIs = film == null ? "this film's frame rate is unknown" : "this film is " + fps(film) + " fps";
         long percent = Math.round(Math.abs(1 - retimedBy) * 100);
-        return timedFor + ", so it is " + (retimedBy < 1 ? "sped up " : "slowed down ") + percent + "%";
+        return timedFor + "; " + filmIs + ", so it is " + (retimedBy < 1 ? "sped up " : "slowed down ") + percent
+            + "%";
     }
 
     /** A rate as people write it: at most three decimals, none when whole ("25", "23.976"). */

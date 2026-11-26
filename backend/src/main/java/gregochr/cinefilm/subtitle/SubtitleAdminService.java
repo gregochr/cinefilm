@@ -35,6 +35,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -69,13 +70,15 @@ public class SubtitleAdminService {
     private final ApplicationEventPublisher events;
     private final FilmRates filmRates;
     private final SubtitleRetimeService retimer;
+    private final RetimeMode retimeMode;
 
     /** Creates the service. */
     public SubtitleAdminService(SubtitleSidecarRepository sidecars, MediaFileRepository files,
                                 EditionRepository editions, SidecarSync sync, ForcedResolver resolver,
                                 ForcedDownloadBlockRepository blocks, Clock clock, LibraryLock lock,
                                 PlatformTransactionManager transactions, ApplicationEventPublisher events,
-                                FilmRates filmRates, SubtitleRetimeService retimer) {
+                                FilmRates filmRates, SubtitleRetimeService retimer,
+                                @Value("${cinefilm.subtitles.retime:off}") String retimeSetting) {
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;
@@ -88,6 +91,7 @@ public class SubtitleAdminService {
         this.events = events;
         this.filmRates = filmRates;
         this.retimer = retimer;
+        this.retimeMode = RetimeMode.parse(retimeSetting);
     }
 
     /**
@@ -97,13 +101,16 @@ public class SubtitleAdminService {
      */
     @Transactional(readOnly = true)
     public List<SidecarDto> list() {
-        List<SidecarDto> forced = build(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED));
+        List<SubtitleSidecar> forcedRows = sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED);
         List<SubtitleSidecar> fullRows = sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL);
+        // The film rates of every download of both kinds, read once for the whole list.
+        Map<Long, Double> rates = downloadRates(forcedRows, fullRows);
+        List<SidecarDto> forced = build(forcedRows, rates);
         if (fullRows.isEmpty()) {
             return forced;
         }
         List<SidecarDto> all = new ArrayList<>(forced);
-        all.addAll(buildFull(fullRows));
+        all.addAll(buildFull(fullRows, rates));
         all.sort(Comparator.comparing(SidecarDto::path).thenComparing(SidecarDto::id));
         return all;
     }
@@ -220,20 +227,37 @@ public class SubtitleAdminService {
     /**
      * The owner's choice for one download: retime it onto the film's timeline, or leave it as it was timed. Applied at
      * once under the library lock, so the retime job (which reads the row again under the same lock) either waits or
-     * finds the choice made, and never overwrites it. It holds whatever {@code cinefilm.subtitles.retime} says.
+     * finds the choice made, and never overwrites it. "On" holds whatever {@code cinefilm.subtitles.retime} says,
+     * except {@code restore}, the rollback, which it would undo: that is refused. After the commit a rewrite or a
+     * restore is published as {@link SubtitleCuesRewritten}, as the job does.
      *
      * @param id the download's row id
      * @param request {@code retime} true or false
      * @return the file as listed afterwards
      * @throws NotFoundException when there is no such subtitle
      * @throws BadRequestException when the choice is missing or the file is not a download
-     * @throws ConflictException when the library lock is busy
+     * @throws ConflictException when the library lock is busy, or "on" while the setting is {@code restore}
      */
     public SidecarDto retime(Long id, RetimeRequest request) {
-        return locked(() -> retimeLocked(id, request));
+        Retimed done = lockedRun(() -> retimeLocked(id, request));
+        // The change has committed: tell the listeners that keep what they measured of the old cues, as the job
+        // does. A listener that fails must not turn the committed change into an error the client would retry.
+        if (done.outcome() == SubtitleRetimeService.Outcome.REWRITTEN
+            || done.outcome() == SubtitleRetimeService.Outcome.RESTORED) {
+            try {
+                events.publishEvent(new SubtitleCuesRewritten(Set.of(id)));
+            } catch (RuntimeException e) {
+                LOG.warn("A listener of the subtitle retime failed: {}", e.getClass().getSimpleName());
+            }
+        }
+        return done.dto();
     }
 
-    private SidecarDto retimeLocked(Long id, RetimeRequest request) {
+    /** What a retime choice did, for the caller to publish after the commit. */
+    private record Retimed(SidecarDto dto, SubtitleRetimeService.Outcome outcome) {
+    }
+
+    private Retimed retimeLocked(Long id, RetimeRequest request) {
         SubtitleSidecar sidecar = find(id);
         if (request == null || request.retime() == null) {
             throw new BadRequestException("Say whether to retime it");
@@ -241,8 +265,12 @@ public class SubtitleAdminService {
         if (!sidecar.isDownload()) {
             throw new BadRequestException("Only a subtitle downloaded from OpenSubtitles can be retimed");
         }
-        retimer.applyChoice(sidecar, request.retime());
-        return one(id);
+        if (request.retime() && retimeMode == RetimeMode.RESTORE) {
+            // The rollback is putting every retimed file back: an "on" now would be undone by the next run.
+            throw new ConflictException("Retiming is being undone on this server; try again once that is finished");
+        }
+        SubtitleRetimeService.Outcome outcome = retimer.applyChoice(sidecar, request.retime());
+        return new Retimed(one(id), outcome);
     }
 
     /**
@@ -391,7 +419,7 @@ public class SubtitleAdminService {
         return list().stream().filter(d -> d.id().equals(id)).findFirst().orElseThrow();
     }
 
-    private List<SidecarDto> build(List<SubtitleSidecar> all) {
+    private List<SidecarDto> build(List<SubtitleSidecar> all, Map<Long, Double> rates) {
         Set<Long> fileIds = all.stream().map(SubtitleSidecar::getMediaFileId).filter(i -> i != null)
             .collect(Collectors.toSet());
         Map<Long, MediaFile> fileById = new HashMap<>();
@@ -403,7 +431,6 @@ public class SubtitleAdminService {
                 editionById.put(file.getEdition().getId(), file.getEdition());
             }
         }
-        Map<Long, Double> rates = downloadRates(all);
         Map<Long, Resolution> resolutions = resolver.resolve(editionById.values());
         Set<Long> served = new HashSet<>();
         Set<Long> conflicting = new HashSet<>();
@@ -446,9 +473,10 @@ public class SubtitleAdminService {
     }
 
     /** The film rate of every edition a download was made for, read once for the whole list. */
-    private Map<Long, Double> downloadRates(List<SubtitleSidecar> all) {
-        return filmRates.forEditions(all.stream().filter(SubtitleSidecar::isDownload)
-            .map(Downloads::madeForEditionId).collect(Collectors.toSet()));
+    private Map<Long, Double> downloadRates(List<SubtitleSidecar> forced, List<SubtitleSidecar> full) {
+        Set<Long> editionIds = java.util.stream.Stream.concat(forced.stream(), full.stream())
+            .filter(SubtitleSidecar::isDownload).map(Downloads::madeForEditionId).collect(Collectors.toSet());
+        return editionIds.isEmpty() ? Map.of() : filmRates.forEditions(editionIds);
     }
 
     private static RateLine rateOf(SubtitleSidecar sidecar, Map<Long, Double> rates) {
@@ -460,7 +488,7 @@ public class SubtitleAdminService {
      * page offers it ({@link FullChoice}'s pick over the full files only: the owner's file wins over a download). They
      * have no comparison, no timing fit and no download to replace them, and nothing here reads the forced resolver.
      */
-    private List<SidecarDto> buildFull(List<SubtitleSidecar> all) {
+    private List<SidecarDto> buildFull(List<SubtitleSidecar> all, Map<Long, Double> rates) {
         Set<Long> fileIds = all.stream().map(SubtitleSidecar::getMediaFileId).filter(i -> i != null)
             .collect(Collectors.toSet());
         Map<Long, MediaFile> fileById = new HashMap<>();
@@ -474,7 +502,6 @@ public class SubtitleAdminService {
                 rowsByEdition.computeIfAbsent(file.getEdition().getId(), k -> new ArrayList<>()).add(sidecar);
             }
         }
-        Map<Long, Double> rates = downloadRates(all);
         Set<Long> served = new HashSet<>();
         Set<Long> conflicting = new HashSet<>();
         Set<Long> noTimeline = new HashSet<>();
