@@ -1077,6 +1077,44 @@ describe('fixture server: Admin settings', () => {
       await call('PUT', '/api/admin/subtitles/3/offset', { offsetMs: before.offsetMs });
     });
 
+    it('answers the owner’s retime choice for a download with the row, and refuses what the server refuses', async () => {
+      const list = await call('GET', '/api/admin/subtitles');
+      const download = list.find((f) => f.origin === 'OPENSUBTITLES');
+      const path = `/api/admin/subtitles/${download.id}/retime`;
+
+      const off = await call('PUT', path, { retime: false });
+      expect(off).toMatchObject({
+        id: download.id,
+        retime: 'OFF',
+        retimeAction: 'RETIME',
+        rateLine: 'Not retimed; it may drift',
+      });
+      const on = await call('PUT', path, { retime: true });
+      expect(on).toMatchObject({
+        id: download.id,
+        retime: 'AUTO',
+        retimeAction: 'DONT',
+        rateLine: 'Retimed',
+      });
+      expect((await call('GET', '/api/admin/subtitles')).find((f) => f.id === download.id)).toEqual(
+        on,
+      );
+
+      const owner = list.find((f) => f.origin !== 'OPENSUBTITLES');
+      const notADownload = await failure('PUT', `/api/admin/subtitles/${owner.id}/retime`, {
+        retime: true,
+      });
+      expect(notADownload.status).toBe(400);
+      expect(notADownload.body.error).toBe(
+        'Only a subtitle downloaded from OpenSubtitles can be retimed',
+      );
+      expect((await failure('PUT', path, {})).status).toBe(400);
+      expect((await failure('PUT', path, { retime: 'yes' })).status).toBe(400);
+      expect(
+        (await failure('PUT', '/api/admin/subtitles/999/retime', { retime: true })).status,
+      ).toBe(404);
+    });
+
     it('serves a few lines of a file on its timeline, and 404s a file that is gone', async () => {
       const cues = await call('GET', '/api/admin/subtitles/3/cues');
       expect(cues.offsetMs).toBe(0);
