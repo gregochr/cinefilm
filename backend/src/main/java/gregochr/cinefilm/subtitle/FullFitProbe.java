@@ -22,8 +22,11 @@ import org.slf4j.LoggerFactory;
  * <p>The second file is a reference already stored for the film (free), else the first other candidate for the
  * edition's cut, fetched through {@link ReferenceFetcher} (its one lock, its stored-never-twice rule and the
  * comparison ceiling it is given: {@link DownloadShares#forChecks}). At most one file is fetched per download. A
- * download is measured once per process (an in-memory set); one that has no second file at all is noted once. A spent
- * budget or an OpenSubtitles limit ends the pass and the download is measured on a later one. Run by
+ * download is measured once per process (an in-memory set); one that has no second file at all is noted once, and so
+ * is a pair the rate rule can never judge (a rate conflict, or a retimed file with no original cues). A pair with no
+ * verdict for want of a rate is tried again on every pass, silently after the first: its "no verdict" line is written
+ * once per process, until the rate arrives and it is measured. A spent budget or an OpenSubtitles limit ends the pass
+ * and the download is measured on a later one. Run by
  * {@link SidecarCheckRefresher} in its check job; nothing here throws a budget stop or an outage to its caller.
  */
 final class FullFitProbe {
@@ -38,6 +41,8 @@ final class FullFitProbe {
     private final FullFitService service;
     private final FilmRates filmRates;
     private final Set<Long> done = ConcurrentHashMap.newKeySet();
+    /** The sidecars whose "no verdict for want of a rate" line has been written: it is written once, not every pass. */
+    private final Set<Long> noted = ConcurrentHashMap.newKeySet();
 
     /** Creates the probe over the check job's fetcher, so every fetch goes through its lock and ceilings. */
     FullFitProbe(ReferenceFetcher fetcher, FullFitService service, FilmRates filmRates) {
@@ -53,6 +58,7 @@ final class FullFitProbe {
      */
     void forget(Collection<Long> sidecarIds) {
         done.removeAll(sidecarIds);
+        noted.removeAll(sidecarIds);
     }
 
     /**
@@ -97,11 +103,17 @@ final class FullFitProbe {
             (a, b) -> TimingFit.fit(starts(a), starts(b)), r -> TimingFit.Verdict.CHECK.equals(r.verdict()),
             r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
         if (!judged.hasVerdict()) {
-            LOG.info("Full subtitle fit of edition {} (film {}): not measured, no verdict: {} (sidecar {}, "
-                + "reference {})", job.editionId(), job.filmId(), judged.reason(), job.sidecarId(), second.getId());
-            if (judged.reason() == RateComparison.Reason.RATE_CONFLICT) {
-                // Indexing never changes a conflict; an unknown rate may be settled later, so it is tried again.
+            // Indexing never changes a conflict or a missing original; any other unknown rate may be settled later, so
+            // it is tried again, with its line written once.
+            boolean permanent = judged.reason() == RateComparison.Reason.RATE_CONFLICT
+                || lacksOriginal(job.rateSide()) || lacksOriginal(referenceSide);
+            if (permanent) {
                 done.add(job.sidecarId());
+            }
+            if (permanent || noted.add(job.sidecarId())) {
+                LOG.info("Full subtitle fit of edition {} (film {}): not measured, no verdict: {} (sidecar {}, "
+                    + "reference {})", job.editionId(), job.filmId(), judged.reason(), job.sidecarId(),
+                    second.getId());
             }
             return false;
         }
@@ -149,6 +161,11 @@ final class FullFitProbe {
             }
         }
         return null;
+    }
+
+    /** True for a retimed side with no original cues to compare through. */
+    private static boolean lacksOriginal(RateComparison.Side side) {
+        return side.retimed() && side.originalCuesText() == null;
     }
 
     private static boolean isFull(OpenSubtitlesReference reference) {

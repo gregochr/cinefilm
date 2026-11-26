@@ -215,10 +215,14 @@ class FullFitProbeTest {
         when(filmRates.forEdition(10L)).thenReturn(25.0);
 
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        // Still no rate: tried again, and its line is not written a second time.
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(infoLines()).hasSize(1);
 
         reference.setTimedFps(23.976);
 
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        assertThat(infoLines()).hasSize(2);
         // And once measured it is not measured again.
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
     }
@@ -453,6 +457,29 @@ class FullFitProbeTest {
 
         assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
             + "RATE_CONFLICT (sidecar 7, reference 5012)");
+        // A conflict is never changed by indexing: the pair is not judged again and its line is not repeated.
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "RATE_CONFLICT (sidecar 7, reference 5012)");
+    }
+
+    @Test
+    void aRetimedDownloadWithNoOriginalCuesIsNeverJudgedAgainAfterOnePass() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        reference.setTimedFps(23.976);
+        RateComparison.Side noOriginal = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976,
+            RetimeChoice.AUTO, 0.959, null);
+        serving(new Job(1L, 10L, "tt1", 7L, 5011L, lines(300, 90_000), 3 * HOUR + 125_000, null,
+            List.of(candidate(5012)), Map.of(5012L, reference), noOriginal));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "UNKNOWN_RATE (sidecar 7, reference 5012)");
+        // Judged once only: the film rate was asked for on the first pass alone.
+        verify(filmRates).forEdition(10L);
     }
 
     @Test
