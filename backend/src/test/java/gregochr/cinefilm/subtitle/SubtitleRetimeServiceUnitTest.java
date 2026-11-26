@@ -52,7 +52,7 @@ class SubtitleRetimeServiceUnitTest {
     @Mock
     private ForcedSubtitleAlignmentRepository alignments;
     @Mock
-    private EmbeddedCueStartsRepository cache;
+    private SidecarTimingService timing;
     @Mock
     private PlatformTransactionManager transactions;
 
@@ -63,7 +63,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        service = new SubtitleRetimeService(sidecars, editions, rates, downloadChecks, alignments, cache, lock, CLOCK,
+        service = new SubtitleRetimeService(sidecars, editions, rates, downloadChecks, alignments, timing, lock, CLOCK,
             transactions);
         edition = TestData.edition(TestData.film(1L, "Taken", 2008, NOW), EDITION_ID, "Original", 100 * MIN, null);
         var part = TestData.file(edition, "Taken.m4v");
@@ -91,19 +91,6 @@ class SubtitleRetimeServiceUnitTest {
         when(rates.forEdition(EDITION_ID)).thenReturn(fps);
     }
 
-    private void english() {
-        var stream = new gregochr.cinefilm.film.SubtitleStream();
-        stream.setLanguage("English");
-        stream.setFormat("subrip");
-        edition.originalParts().get(0).getSubtitleStreams().add(stream);
-    }
-
-    /** The film file has a fingerprint, so the timing check can fit the row to it. */
-    private void fittable() {
-        edition.originalParts().get(0).setSizeBytes(1_000L);
-        edition.originalParts().get(0).setModifiedAt(NOW);
-    }
-
     /** Ten cues, irregularly spaced so that no offset but the right one lines two files up. */
     private static List<SubtitleCue> tenCues(double scale) {
         List<SubtitleCue> cues = new ArrayList<>();
@@ -114,22 +101,16 @@ class SubtitleRetimeServiceUnitTest {
         return cues;
     }
 
-    /**
-     * The row's original cues are {@link #tenCues}, and the film file has a current read of its English track whose
-     * cue starts are those cues' scaled by {@code readScale} (1 fits exactly).
-     */
-    private void filmTrackRead(double readScale, EmbeddedCueStarts.Status status) {
-        var part = edition.originalParts().get(0);
-        fittable();
-        String original = SrtParser.format(tenCues(1.0));
-        row.setCuesText(original);
-        EmbeddedCueStarts read = new EmbeddedCueStarts();
-        read.setMediaFileId(10L);
-        read.setFingerprint(part.fingerprint());
-        read.setStatus(status);
-        read.setReason(status == EmbeddedCueStarts.Status.NO_REFERENCE ? "No English track" : null);
-        read.setStartsMs(tenCues(readScale).stream().map(SubtitleCue::startMs).toList());
-        when(cache.findAllById(List.of(10L))).thenReturn(List.of(read));
+    /** The timing check will never fit the download: the rates decide. */
+    private void neverFit() {
+        when(timing.offFitsState(1L, 5L)).thenReturn(OffFitsState.NEVER);
+    }
+
+    /** The timing check has fitted the row, reading the film's track: its cue starts are the ten cues scaled. */
+    private void checkReadTrack(double readScale) {
+        row.setCuesText(SrtParser.format(tenCues(1.0)));
+        when(timing.offFitsState(1L, 5L)).thenReturn(OffFitsState.ready(
+            tenCues(readScale).stream().map(SubtitleCue::startMs).toList(), null));
     }
 
     private SubtitleSidecar saved() {
@@ -189,6 +170,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void aDownloadStatedFor23976OnA25FpsFilmIsRewrittenFromTheOriginalByK() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
         row.setOffsetMs(1_500);
@@ -213,6 +195,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void theLockIsTakenBeforeTheRowIsReadAndGivenBackAfterTheWrite() {
+        neverFit();
         when(editions.findWithFilesByIdIn(Set.of(EDITION_ID))).thenReturn(List.of(edition));
         filmRateIs(25.0);
         List<String> heldWhenRead = new ArrayList<>();
@@ -402,6 +385,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void noOwnerTimingDecidesAuto() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
 
@@ -422,9 +406,8 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void aFullDownloadOnAFilmWithAnEnglishTextStreamIsDecidedByTheRatesAtOnce() {
-        english();
-        row.setKind(SubtitleKind.FULL);
+    void aDownloadTheTimingCheckWillNeverFitIsDecidedByTheRatesAtOnce() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
 
@@ -433,8 +416,8 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void aForcedDownloadWaitsUntilTheTimingCheckHasSavedAFitForIt() {
-        fittable();
+    void aDownloadTheTimingCheckWillFitButHasNotYetWaitsAndNothingIsWritten() {
+        when(timing.offFitsState(1L, 5L)).thenReturn(OffFitsState.PENDING);
         rowIs();
         filmRateIs(25.0);
 
@@ -449,9 +432,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void originalCuesThatFitTheFilmsTrackTheCheckReadAreSetToFitAsIsAndNothingIsRewritten() {
-        // No stored stream says there is a track: a picture track is read by the timing check all the same.
-        filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
-        alignment(TimingFit.Verdict.CHECK);
+        checkReadTrack(1.0);
         rowIs();
         filmRateIs(25.0);
 
@@ -466,8 +447,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void originalCuesThatDoNotFitTheFilmsTrackAreRetimedAsUsual() {
-        filmTrackRead(1.0427, EmbeddedCueStarts.Status.USABLE);
-        alignment(TimingFit.Verdict.CHECK);
+        checkReadTrack(1.0427);
         rowIs();
         filmRateIs(25.0);
 
@@ -478,9 +458,8 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void aSettledForcedDownloadWhoseFilmFileHasNoEnglishTrackIsDecidedByTheRates() {
-        filmTrackRead(1.0, EmbeddedCueStarts.Status.NO_REFERENCE);
-        alignment(TimingFit.Verdict.NO_REFERENCE);
+    void aFitThatFoundNoTrackInTheFilmFileIsDecidedByTheRates() {
+        when(timing.offFitsState(1L, 5L)).thenReturn(OffFitsState.ready(List.of(), "No English track"));
         rowIs();
         filmRateIs(25.0);
 
@@ -489,29 +468,8 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void aSettledForcedDownloadWithNoCurrentReadIsDecidedByTheRates() {
-        filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
-        edition.originalParts().get(0).setSizeBytes(2_000L);
-        alignment(TimingFit.Verdict.CHECK);
-        rowIs();
-        filmRateIs(25.0);
-
-        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
-        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
-    }
-
-    @Test
-    void aForcedDownloadTheTimingCheckCannotFitIsDecidedByTheRatesAtOnce() {
-        rowIs();
-        filmRateIs(25.0);
-
-        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
-        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
-    }
-
-    @Test
     void aRowThatWasRetimedAndNowFitsAsIsIsPutBack() {
-        filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
+        checkReadTrack(1.0);
         row.setOriginalCuesText(SrtParser.format(tenCues(1.0)));
         row.setCuesText(CueScaler.scale(row.getOriginalCuesText(), K));
         row.setRetimedBy(K);
@@ -612,6 +570,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void aFailingCheckIsCarriedOverToTheNewServedVersionAndMarkedOutdated() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
         ForcedDownloadCheck check = downloadCheck("CHECK");
@@ -628,6 +587,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void anAgreeingCheckIsRemovedSoItProvesNothingAboutTheNewCues() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
         ForcedDownloadCheck check = downloadCheck("AGREES");
@@ -639,6 +599,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void aFailingFitIsReKeyedToTheNewIdentityAndMarkedOutdated() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
         ForcedSubtitleAlignment fit = alignment(TimingFit.Verdict.CHECK);
@@ -657,6 +618,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void anAlignedFitIsRemovedSoItProvesNothingAboutTheNewCues() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
         ForcedSubtitleAlignment fit = alignment(TimingFit.Verdict.ALIGNED);
@@ -681,6 +643,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void whatPlaysAfterARewriteIsTheFilmTimelineCuesWithThePartStartAndOffsetApplied() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
 
@@ -696,6 +659,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void theCommitHappensWhileTheLockIsStillHeld() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
         List<String> heldAtCommit = new ArrayList<>();
@@ -740,6 +704,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @Test
     void aFitThatWasAlreadyNotCurrentIsLeftAsItIs() {
+        neverFit();
         rowIs();
         filmRateIs(25.0);
         ForcedSubtitleAlignment fit = alignment(TimingFit.Verdict.CHECK);

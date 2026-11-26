@@ -8,9 +8,9 @@ import java.util.List;
  *
  * <p>A file whose original cues fit the film's own English track {@code ALIGNED} is on this copy's timeline already, so
  * its stated rate is wrong and it is left as it is ({@link RetimeChoice#OFF_FITS}). Any other verdict means retime it.
- * The decision waits only for a forced download that the timing check will fit and has not settled yet (it has saved
- * no fit for it): the check does the reading of the film's track, whatever its codec. Any other download is decided
- * from the rates at once.
+ * The decision waits only while the timing check will fit the download and has not yet, on the film file as it is now
+ * ({@link OffFitsState}): the check does the reading of the film's track, whatever its codec. A download the check will
+ * never fit is decided from the rates at once.
  */
 final class OffFitsRule {
 
@@ -30,25 +30,17 @@ final class OffFitsRule {
     /**
      * Decides.
      *
-     * @param fittedByTimingCheck true when the timing check fits this download (a forced download it can fit)
-     * @param settled true when the timing check has saved a fit for it
-     * @param reference what the film's files read as ({@link TimingKeys#embeddedReference}), or null when a file has
-     *     no current read
+     * @param state what the timing check says about the download ({@link SidecarTimingService#offFitsState})
      * @param originalStarts the download's original cue starts in milliseconds
      * @return the decision
      */
-    static Decision decide(boolean fittedByTimingCheck, boolean settled, TimingKeys.EmbeddedReference reference,
-                           List<Long> originalStarts) {
-        if (!fittedByTimingCheck) {
-            return Decision.RETIME;
-        }
-        if (!settled) {
-            return Decision.WAIT;
-        }
-        if (reference == null || reference.noReference() != null) {
-            return Decision.RETIME;
-        }
-        return TimingFit.fit(originalStarts, reference.starts()).verdict() == TimingFit.Verdict.ALIGNED
-            ? Decision.FITS_AS_IS : Decision.RETIME;
+    static Decision decide(OffFitsState state, List<Long> originalStarts) {
+        return switch (state.kind()) {
+            case NEVER -> Decision.RETIME;
+            case PENDING -> Decision.WAIT;
+            case READY -> state.noReference() == null
+                && TimingFit.fit(originalStarts, state.starts()).verdict() == TimingFit.Verdict.ALIGNED
+                ? Decision.FITS_AS_IS : Decision.RETIME;
+        };
     }
 }

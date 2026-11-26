@@ -2,13 +2,10 @@ package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
-import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.library.LibraryLock;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -52,7 +49,7 @@ public class SubtitleRetimeService {
     private final FilmRates rates;
     private final ForcedDownloadCheckRepository downloadChecks;
     private final ForcedSubtitleAlignmentRepository alignments;
-    private final EmbeddedCueStartsRepository cache;
+    private final SidecarTimingService timing;
     private final LibraryLock lock;
     private final Clock clock;
     private final TransactionTemplate tx;
@@ -60,14 +57,14 @@ public class SubtitleRetimeService {
     /** Creates the service. */
     public SubtitleRetimeService(SubtitleSidecarRepository sidecars, EditionRepository editions, FilmRates rates,
                                  ForcedDownloadCheckRepository downloadChecks,
-                                 ForcedSubtitleAlignmentRepository alignments, EmbeddedCueStartsRepository cache,
+                                 ForcedSubtitleAlignmentRepository alignments, SidecarTimingService timing,
                                  LibraryLock lock, Clock clock, PlatformTransactionManager transactions) {
         this.sidecars = sidecars;
         this.editions = editions;
         this.rates = rates;
         this.downloadChecks = downloadChecks;
         this.alignments = alignments;
-        this.cache = cache;
+        this.timing = timing;
         this.lock = lock;
         this.clock = clock;
         this.tx = new TransactionTemplate(transactions);
@@ -257,26 +254,15 @@ public class SubtitleRetimeService {
     }
 
     /**
-     * The decision for a download that would be retimed. The timing check fits a forced download of an edition that
-     * needs one, when it can; that is the only row that waits, until the check has saved a fit for it (the check reads
-     * the film's track itself, of any codec). Once it has, the original cues are fitted to the embedded starts the
-     * check read, by the check's own rule; with none, the rates decide. Any other row is decided by the rates at once.
+     * The decision for a download that would be retimed, from what the timing check says about it
+     * ({@link SidecarTimingService#offFitsState}): it waits while the check will fit the download and has not yet, on
+     * the film file as it is now; where the check never will, the rates decide; once it has, the original cues are
+     * fitted to the embedded starts the check read, by the check's own rule.
      */
     private OffFitsRule.Decision decide(SubtitleSidecar row, Edition edition) {
-        boolean fitted = row.getKind() == SubtitleKind.FORCED && !Downloads.isNotNeeded(edition, SubtitleKind.FORCED)
-            && TimingKeys.fittable(edition, row);
-        boolean settled = fitted && alignments.findBySidecarId(row.getId()).isPresent();
-        TimingKeys.EmbeddedReference reference = null;
-        if (settled) {
-            Map<Long, EmbeddedCueStarts> reads = new HashMap<>();
-            cache.findAllById(TimingKeys.referenceFiles(edition, row).stream().map(MediaFile::getId).toList())
-                .forEach(read -> reads.put(read.getMediaFileId(), read));
-            // The same condition the timing fit uses to know every file has a current read.
-            reference = TimingKeys.referenceKey(edition, row, reads) == null ? null
-                : TimingKeys.embeddedReference(edition, row, reads);
-        }
+        OffFitsState state = timing.offFitsState(edition.getFilm().getId(), row.getId());
         String original = row.getOriginalCuesText() != null ? row.getOriginalCuesText() : row.getCuesText();
         List<Long> starts = SrtParser.cues(original).stream().map(SubtitleCue::startMs).toList();
-        return OffFitsRule.decide(fitted, settled, reference, starts);
+        return OffFitsRule.decide(state, starts);
     }
 }

@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,6 +70,8 @@ public class SidecarTimingService {
     private final LibraryLock lock;
     private final TransactionTemplate tx;
     private final FilmRates filmRates;
+    private final ReadFailures failures;
+    private final boolean enabled;
 
     /** A film file whose embedded track must be read (it has no read, or its file changed since). */
     public record ReferenceRead(Long mediaFileId, String path, String fingerprint) {
@@ -133,7 +136,8 @@ public class SidecarTimingService {
                                 ForcedSubtitleAlignmentRepository alignments,
                                 OpenSubtitlesReferenceRepository references, CreditsDetectionRepository credits,
                                 LibraryLock lock, PlatformTransactionManager transactions,
-                                FilmRates filmRates) {
+                                FilmRates filmRates, ReadFailures failures,
+                                @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean enabled) {
         this.sidecars = sidecars;
         this.editions = editions;
         this.files = files;
@@ -144,6 +148,8 @@ public class SidecarTimingService {
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
         this.filmRates = filmRates;
+        this.failures = failures;
+        this.enabled = enabled;
     }
 
     /**
@@ -245,6 +251,47 @@ public class SidecarTimingService {
         row.setReadAt(now);
         cache.save(row);
         return SaveOutcome.SAVED;
+    }
+
+    /**
+     * What the check says about one download, for the retime job: whether the check will fit it, and whether it has on
+     * the film file as it is now. Built from the check's own rules: the sidecars it serves and fits (the downloads that
+     * count for an edition: present, with cues, made for it, of the film's current IMDb id),
+     * {@link TimingKeys#fittable}, the switch, and whether its read and its fit are current for the file's present
+     * fingerprint.
+     * {@link OffFitsState.Kind#NEVER} when the check is off, does not serve the download, cannot fit it, or the film
+     * file's read failed as it is now; {@link OffFitsState.Kind#PENDING} when a read or a fit is missing, outdated or
+     * stale; {@link OffFitsState.Kind#READY} with what the read found when both are current.
+     *
+     * @param filmId the film
+     * @param sidecarId the download
+     * @return the state
+     */
+    public OffFitsState offFitsState(Long filmId, Long sidecarId) {
+        if (!enabled) {
+            return OffFitsState.NEVER;
+        }
+        List<Served> served = served(Set.of(filmId)).stream().filter(s -> s.sidecar().getId().equals(sidecarId))
+            .toList();
+        if (served.isEmpty()) {
+            return OffFitsState.NEVER;
+        }
+        Served s = served.get(0);
+        Map<Long, EmbeddedCueStarts> reads = reads(served);
+        State state = state(s, reads, osRefs(served, reads), fits(served).get(sidecarId));
+        if (state == State.SKIP) {
+            return OffFitsState.NEVER;
+        }
+        if (state == State.NEEDS_READ) {
+            boolean failed = TimingKeys.referenceFiles(s.edition(), s.sidecar()).stream()
+                .anyMatch(f -> !isRead(f, reads) && failures.failedFor(f.getId(), TimingKeys.fingerprint(f)));
+            return failed ? OffFitsState.NEVER : OffFitsState.PENDING;
+        }
+        if (state == State.NEEDS_FIT) {
+            return OffFitsState.PENDING;
+        }
+        TimingKeys.EmbeddedReference reference = TimingKeys.embeddedReference(s.edition(), s.sidecar(), reads);
+        return OffFitsState.ready(reference.starts(), reference.noReference());
     }
 
     /**

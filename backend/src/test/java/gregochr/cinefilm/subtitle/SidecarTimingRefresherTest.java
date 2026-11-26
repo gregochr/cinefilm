@@ -93,11 +93,13 @@ class SidecarTimingRefresherTest {
             return now;
         }
     };
+    private final ReadFailures failures = new ReadFailures();
     private SidecarTimingRefresher refresher;
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add, true, events);
+        refresher = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add, true, events,
+            failures);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -507,7 +509,7 @@ class SidecarTimingRefresherTest {
         SidecarTimingRefresher refusing = new SidecarTimingRefresher(service, reader, root, sessions, clock,
             task -> {
                 throw new RejectedExecutionException("full");
-            }, true, events);
+            }, true, events, failures);
 
         assertThatThrownBy(refusing::startDue).isInstanceOf(RejectedExecutionException.class);
 
@@ -517,7 +519,7 @@ class SidecarTimingRefresherTest {
     @Test
     void whenItIsSwitchedOffNothingStartsAndStartUpSaysWhy() {
         SidecarTimingRefresher off = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add,
-            false, events);
+            false, events, failures);
 
         assertThat(off.startDue()).isFalse();
         off.startIfDeferred();

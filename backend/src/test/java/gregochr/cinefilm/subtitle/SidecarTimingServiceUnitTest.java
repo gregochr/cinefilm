@@ -87,7 +87,7 @@ class SidecarTimingServiceUnitTest {
     @BeforeEach
     void setUp() {
         service = new SidecarTimingService(sidecars, editions, files, cache, alignments, references, credits, lock,
-            transactions, filmRates);
+            transactions, filmRates, new ReadFailures(), true);
         edition = edition(film(1L, "Taken", 2008, NOW), 40L, "Original", 90 * MIN, null);
         film1 = file(edition, "Taken.m4v");
         film1.setId(10L);
