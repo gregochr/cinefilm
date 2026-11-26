@@ -82,6 +82,12 @@ public class SidecarCheckRefresher {
     private final AtomicBoolean pending = new AtomicBoolean();
     private volatile Instant lastFinishedAt;
 
+    /** Retimes a reference as it is stored while the retime setting is on; required. */
+    @Autowired
+    void retimeOnArrival(RetimeOnArrival arrival) {
+        fetcher.onArrival(arrival::referenceArrived);
+    }
+
     /** Creates the service; the executor is {@code sidecarCheckExecutor}. */
     @Autowired
     public SidecarCheckRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,

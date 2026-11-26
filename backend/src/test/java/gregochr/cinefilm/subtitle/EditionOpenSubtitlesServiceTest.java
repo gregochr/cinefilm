@@ -30,6 +30,7 @@ import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesBudget;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesDownload;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesQuotaException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
@@ -791,5 +792,35 @@ class EditionOpenSubtitlesServiceTest {
         assertThatThrownBy(() -> service.download(40L, forced(5011))).isInstanceOf(OpenSubtitlesQuotaException.class);
 
         verify(budget).take(DAY, 7);
+    }
+
+    @Test
+    void aPickedFileRetimedAsItIsStoredIsReadAgainAndTheRewrittenRowIsWhatBecomesTheDownload() {
+        searchedForced(plain(5011));
+        readyToDownload(5011);
+        when(limits.today()).thenReturn(20);
+        when(budget.take(DAY, 20)).thenReturn(true);
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L)).thenReturn(Optional.empty());
+        when(api.download(5011L)).thenReturn(new OpenSubtitlesDownload(SrtParser.parse(
+            "1\n00:00:10,000 --> 00:00:12,000\nHello\n\n".getBytes(java.nio.charset.StandardCharsets.UTF_8)), null,
+            null));
+        when(references.saveAndFlush(argThat(saved -> saved.getOsFileId() == 5011L))).thenAnswer(call -> {
+            OpenSubtitlesReference reference = call.getArgument(0);
+            reference.setId(9L);
+            return reference;
+        });
+        RetimeOnArrival arrival = org.mockito.Mockito.mock(RetimeOnArrival.class);
+        when(arrival.referenceArrived(9L)).thenReturn(true);
+        OpenSubtitlesReference rewritten = stored(5011, 1);
+        rewritten.setId(9L);
+        when(references.findById(9L)).thenReturn(Optional.of(rewritten));
+        service.retimeOnArrival(arrival);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, rewritten, 23.976, NOW))
+            .thenReturn(ChosenOutcome.ADDED);
+        when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(2);
+
+        assertThat(service.download(40L, forced(5011)).fileId()).isEqualTo(5011L);
+
+        verify(downloads).addChosen(1L, 40L, SubtitleKind.FORCED, rewritten, 23.976, NOW);
     }
 }

@@ -6,9 +6,12 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -76,6 +79,9 @@ class ForcedDownloadServiceChosenUnitTest {
     @Mock
     private PlatformTransactionManager transactions;
 
+    @Mock
+    private RetimeOnArrival arrival;
+
     private final LibraryLock lock = new LibraryLock();
     private ForcedDownloadService service;
     private Film film;
@@ -84,7 +90,7 @@ class ForcedDownloadServiceChosenUnitTest {
     @BeforeEach
     void setUp() {
         service = new ForcedDownloadService(films, editions, sidecars, resolver, need, fullNeed, references, blocks,
-            ledger, lock, transactions, filmRates);
+            ledger, lock, transactions, filmRates, arrival);
         film = film(1L, "Taken", 2008, NOW);
         film.setImdbId(IMDB);
         edition = edition(film, 40L, "Original", 90 * MIN, null);
@@ -544,5 +550,35 @@ class ForcedDownloadServiceChosenUnitTest {
             .isEqualTo(ChosenOutcome.ADDED);
 
         assertThat(savedRows().get(0).getCuesText()).isEqualTo(CUES);
+    }
+
+    @Test
+    void aChosenFileIsRetimedOnlyAfterTheStoresTransactionCommitsAndTheLockIsGivenBack() {
+        editionLoads();
+        used(SubtitleKind.FORCED, 0, 0);
+        List<String> events = new ArrayList<>();
+        doAnswer(call -> events.add("commit")).when(transactions).commit(any());
+        doAnswer(call -> events.add("arrival, lock held by " + lock.holder())).when(arrival).downloadArrived(77L);
+        when(sidecars.save(argThat(row -> row.isDownload() && row.getPath().equals("opensubtitles:40:5011"))))
+            .thenAnswer(call -> {
+                SubtitleSidecar row = call.getArgument(0);
+                row.setId(77L);
+                return row;
+            });
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 1), null, NOW))
+            .isEqualTo(ChosenOutcome.ADDED);
+
+        assertThat(events).containsExactly("commit", "arrival, lock held by null");
+    }
+
+    @Test
+    void aChosenFileThatFindsTheLockBusyIsNeverGivenToTheArrivalHook() {
+        lock.tryAcquire(LibraryLock.SCAN);
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 1), null, NOW))
+            .isEqualTo(ChosenOutcome.BUSY);
+
+        verifyNoInteractions(arrival);
     }
 }

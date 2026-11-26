@@ -101,12 +101,16 @@ public class ForcedDownloadService {
     private final TransactionTemplate tx;
     private final FilmRates filmRates;
 
+    private final RetimeOnArrival retimeOnArrival;
+
     /** Creates the service. */
     public ForcedDownloadService(FilmRepository films, EditionRepository editions, SubtitleSidecarRepository sidecars,
                                  ForcedResolver resolver, ForcedNeedService need, FullNeedService fullNeed,
                                  OpenSubtitlesReferenceRepository references, ForcedDownloadBlockRepository blocks,
                                  ForcedCheckCandidateRepository ledger, LibraryLock lock,
-                                 PlatformTransactionManager transactions, FilmRates filmRates) {
+                                 PlatformTransactionManager transactions, FilmRates filmRates,
+                                 RetimeOnArrival retimeOnArrival) {
+        this.retimeOnArrival = retimeOnArrival;
         this.films = films;
         this.editions = editions;
         this.sidecars = sidecars;
@@ -373,17 +377,25 @@ public class ForcedDownloadService {
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
             return AddOutcome.BUSY;
         }
+        AddOutcome outcome;
+        SubtitleSidecar[] made = new SubtitleSidecar[1];
         try {
-            return tx.execute(status -> addLocked(due, reference, now));
+            outcome = tx.execute(status -> addLocked(due, reference, now, made));
         } catch (DataIntegrityViolationException e) {
             // Another writer made the same download first.
             return AddOutcome.DROPPED;
         } finally {
             lock.release();
         }
+        // After the commit and the lock: a failure of the retime can then never undo or half-write the download.
+        if (outcome == AddOutcome.ADDED) {
+            retimeOnArrival.downloadArrived(made[0].getId());
+        }
+        return outcome;
     }
 
-    private AddOutcome addLocked(DueDownload due, OpenSubtitlesReference reference, Instant now) {
+    private AddOutcome addLocked(DueDownload due, OpenSubtitlesReference reference, Instant now,
+                                 SubtitleSidecar[] made) {
         boolean full = due.kind() == Kind.FULL;
         SubtitleKind kind = full ? SubtitleKind.FULL : SubtitleKind.FORCED;
         Film film = films.findById(due.filmId()).orElse(null);
@@ -417,7 +429,8 @@ public class ForcedDownloadService {
         if (full ? !stillDueFull(edition, ofKind) : !stillDueForced(edition, due)) {
             return AddOutcome.DROPPED;
         }
-        sidecars.save(download(edition, reference, now, kind, candidate.fps()));
+        made[0] = download(edition, reference, now, kind, candidate.fps());
+        sidecars.save(made[0]);
         if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), due.imdbId(),
             reference.getOsFileId(), kind)) {
             ForcedCheckCandidate row = new ForcedCheckCandidate();
@@ -550,18 +563,26 @@ public class ForcedDownloadService {
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
             return ChosenOutcome.BUSY;
         }
+        ChosenOutcome outcome;
+        SubtitleSidecar[] made = new SubtitleSidecar[1];
         try {
-            return tx.execute(status -> addChosenLocked(filmId, editionId, kind, reference, statedFps, now));
+            outcome = tx.execute(status -> addChosenLocked(filmId, editionId, kind, reference, statedFps, now, made));
         } catch (DataIntegrityViolationException e) {
             // Another writer made the same download first.
             return ChosenOutcome.ALREADY_DOWNLOADED;
         } finally {
             lock.release();
         }
+        // After the commit and the lock: a failure of the retime can then never undo or half-write the download.
+        if (outcome == ChosenOutcome.ADDED) {
+            retimeOnArrival.downloadArrived(made[0].getId());
+        }
+        return outcome;
     }
 
     private ChosenOutcome addChosenLocked(Long filmId, Long editionId, SubtitleKind kind,
-                                          OpenSubtitlesReference reference, Double statedFps, Instant now) {
+                                          OpenSubtitlesReference reference, Double statedFps, Instant now,
+                                          SubtitleSidecar[] made) {
         Edition edition = loadEdition(filmId, editionId);
         if (edition == null) {
             return ChosenOutcome.CHANGED;
@@ -584,6 +605,7 @@ public class ForcedDownloadService {
         SubtitleSidecar row = download(edition, reference, now, kind, statedFps);
         row.setOwnerChosenAt(now);
         sidecars.save(row);
+        made[0] = row;
         if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), reference.getImdbId(),
             reference.getOsFileId(), kind)) {
             ForcedCheckCandidate entry = new ForcedCheckCandidate();

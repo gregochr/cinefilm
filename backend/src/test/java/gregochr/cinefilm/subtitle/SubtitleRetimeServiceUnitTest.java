@@ -892,4 +892,42 @@ class SubtitleRetimeServiceUnitTest {
         assertThat(row.getRetime()).isEqualTo(RetimeChoice.OFF);
         assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
     }
+
+    @Test
+    void aDownloadThatArrivesIsDecidedAndRewrittenByTheJobsOwnEntryUnderItsOwnLock() {
+        neverFit();
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
+
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(row.getCuesText()).isEqualTo(SCALED);
+        assertThat(row.getOriginalCuesText()).isEqualTo(ORIGINAL);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aDownloadThatArrivesWhileAnotherHoldsTheLibraryIsLeftRawForTheJob() {
+        lock.tryAcquire(LibraryLock.SCAN);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.BUSY);
+
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getRetimedBy()).isNull();
+        assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
+    }
+
+    @Test
+    void aForcedDownloadThatArrivesOnAFilmWithAnEnglishTrackWaitsForTheTimingFit() {
+        when(timing.offFitsState(1L, 5L)).thenReturn(OffFitsState.PENDING);
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.UNCHANGED);
+
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getRetimedBy()).isNull();
+        assertThat(row.getRetime()).isNull();
+    }
 }

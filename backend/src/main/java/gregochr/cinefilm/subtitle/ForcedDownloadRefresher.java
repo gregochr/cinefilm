@@ -17,6 +17,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
@@ -63,6 +64,12 @@ public class ForcedDownloadRefresher {
     private boolean pending;
     private volatile Instant lastFinishedAt;
     private final AtomicBoolean deferred = new AtomicBoolean();
+
+    /** Retimes a reference as it is stored while the retime setting is on; required. */
+    @Autowired
+    void retimeOnArrival(RetimeOnArrival arrival) {
+        fetcher.onArrival(arrival::referenceArrived);
+    }
 
     /** Creates the service; the executor is {@code forcedDownloadExecutor}. */
     public ForcedDownloadRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,

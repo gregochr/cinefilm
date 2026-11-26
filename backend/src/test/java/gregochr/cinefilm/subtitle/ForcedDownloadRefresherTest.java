@@ -763,4 +763,26 @@ class ForcedDownloadRefresherTest {
             && e.getLevel() == ch.qos.logback.classic.Level.ERROR);
         assertThat(refresher.isRunning()).isFalse();
     }
+
+    @Test
+    void aReferenceRetimedAsItIsStoredIsReadAgainAndTheDownloadIsMadeFromTheStoredRow() {
+        DueDownload due = due(Kind.MISSING, 1, 10, 5011);
+        when(service.due()).thenReturn(List.of(due));
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(downloaded(CUES));
+        storingReferences();
+        RetimeOnArrival arrival = org.mockito.Mockito.mock(RetimeOnArrival.class);
+        when(arrival.referenceArrived(5011L)).thenReturn(true);
+        OpenSubtitlesReference rewritten = new OpenSubtitlesReference();
+        rewritten.setId(5011L);
+        rewritten.setCuesText(SrtParser.format(CUES));
+        rewritten.setCueCount(1);
+        when(references.findById(5011L)).thenReturn(java.util.Optional.of(rewritten));
+        refresher.retimeOnArrival(arrival);
+        when(service.add(due, rewritten, NOW)).thenReturn(AddOutcome.ADDED);
+
+        startAndRun();
+
+        verify(service).add(due, rewritten, NOW);
+    }
 }
