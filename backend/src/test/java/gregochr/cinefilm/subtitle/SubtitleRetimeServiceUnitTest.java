@@ -658,6 +658,18 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
+    void theOwnersOffOnAFitsAsItIsRowChangesNothing() {
+        row.setRetime(RetimeChoice.OFF_FITS);
+
+        Outcome outcome = service.applyChoice(row, false);
+
+        assertThat(outcome).isEqualTo(Outcome.UNCHANGED);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getUpdatedAt()).isEqualTo(NOW.minusSeconds(60));
+    }
+
+    @Test
     void theOwnersOffOnARowThatWasNeverRetimedOnlySetsOff() {
         rowIs();
 

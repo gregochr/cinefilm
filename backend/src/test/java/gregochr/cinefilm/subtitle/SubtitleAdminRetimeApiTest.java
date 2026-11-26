@@ -134,6 +134,20 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
     }
 
     @Test
+    void aDontRetimeOnAFitsAsItIsRowKeepsItAndItsRateLineInTheDatabase() {
+        SubtitleSidecar fits = statedDownload("Taken", 2001, 25.0, 23.976);
+        fits.setRetime(RetimeChoice.OFF_FITS);
+        sidecars.saveAndFlush(fits);
+
+        SidecarDto dto = admin.retime(fits.getId(), new RetimeRequest(false));
+
+        assertThat(dto.retime()).isEqualTo("OFF_FITS");
+        assertThat(dto.rateLine()).isEqualTo("Fits this copy as it is");
+        assertThat(reread(fits.getId()).getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
+        assertThat(listed(fits.getId()).rateLine()).isEqualTo("Fits this copy as it is");
+    }
+
+    @Test
     void aFullDownloadListsItsRateFactsToo() {
         SubtitleSidecar full = statedDownload("Taken", 2101, 25.0, 23.976, SubtitleKind.FULL);
 
@@ -161,7 +175,7 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
 
         assertThat(off.retime()).isEqualTo("OFF");
         assertThat(off.retimedBy()).isNull();
-        assertThat(off.rateLine()).isEqualTo("Not retimed (you chose this); it may drift");
+        assertThat(off.rateLine()).isEqualTo("Not retimed; it may drift");
         assertThat(reread(id).getCuesText()).isEqualTo(CUES);
         assertThat(reread(id).getOriginalCuesText()).isNull();
     }

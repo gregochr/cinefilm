@@ -76,7 +76,7 @@ class RateLineTest {
     void aFileTheOwnerChoseNotToRetimeWarnsItMayDrift() {
         RateLine rate = RateLine.of(download(23.976, RetimeChoice.OFF, null), 25.0);
 
-        assertThat(rate.line()).isEqualTo("Not retimed (you chose this); it may drift");
+        assertThat(rate.line()).isEqualTo("Not retimed; it may drift");
         assertThat(rate.retime()).isEqualTo("OFF");
         assertThat(rate.retimedBy()).isNull();
     }

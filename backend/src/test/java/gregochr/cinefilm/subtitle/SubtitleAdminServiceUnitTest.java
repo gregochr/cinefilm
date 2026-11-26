@@ -584,7 +584,7 @@ class SubtitleAdminServiceUnitTest {
         verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(8L)));
         assertThat(dto.retime()).isEqualTo("OFF");
         assertThat(dto.retimedBy()).isNull();
-        assertThat(dto.rateLine()).isEqualTo("Not retimed (you chose this); it may drift");
+        assertThat(dto.rateLine()).isEqualTo("Not retimed; it may drift");
     }
 
     @Test

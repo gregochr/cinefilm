@@ -106,6 +106,11 @@ public class SubtitleRetimeService {
      * @return what was done
      */
     public Outcome applyChoice(SubtitleSidecar row, boolean on) {
+        if (!on && row.getRetime() == RetimeChoice.OFF_FITS) {
+            // The file already fits this copy as it is: "don't retime" has nothing to add, and nothing would set
+            // OFF_FITS back once it was overwritten.
+            return Outcome.UNCHANGED;
+        }
         row.setRetime(on ? RetimeChoice.AUTO : RetimeChoice.OFF);
         return processLocked(row.getId(), RetimeMode.ON);
     }

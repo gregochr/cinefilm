@@ -61,7 +61,7 @@ record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy
             return "Not retimed: its timing was set by hand; it may drift";
         }
         if (choice == RetimeChoice.OFF) {
-            return "Not retimed (you chose this); it may drift";
+            return "Not retimed; it may drift";
         }
         return timedFor + ", so it is not retimed yet";
     }
