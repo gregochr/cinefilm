@@ -259,8 +259,8 @@ public class SidecarTimingService {
      * count for an edition: present, with cues, made for it, of the film's current IMDb id),
      * {@link TimingKeys#fittable}, the switch, and whether its read and its fit are current for the file's present
      * fingerprint.
-     * {@link OffFitsState.Kind#NEVER} when the check is off, does not serve the download, cannot fit it, or the film
-     * file's read failed as it is now; {@link OffFitsState.Kind#PENDING} when a read or a fit is missing, outdated or
+     * {@link OffFitsState.Kind#NEVER} when the check is off, does not serve the download, or the film file's read
+     * failed as it is now, repeatedly; {@link OffFitsState.Kind#PENDING} when a read or a fit is missing, outdated or
      * stale; {@link OffFitsState.Kind#READY} with what the read found when both are current.
      *
      * @param filmId the film
@@ -280,7 +280,9 @@ public class SidecarTimingService {
         Map<Long, EmbeddedCueStarts> reads = reads(served);
         State state = state(s, reads, osRefs(served, reads), fits(served).get(sidecarId));
         if (state == State.SKIP) {
-            return OffFitsState.NEVER;
+            // Not fittable yet, and every cause clears on its own: a file not present (a share unmounted during a
+            // scan), no fingerprint, a part length or timeline not known yet. The rates must not decide meanwhile.
+            return OffFitsState.PENDING;
         }
         if (state == State.NEEDS_READ) {
             boolean failed = TimingKeys.referenceFiles(s.edition(), s.sidecar()).stream()

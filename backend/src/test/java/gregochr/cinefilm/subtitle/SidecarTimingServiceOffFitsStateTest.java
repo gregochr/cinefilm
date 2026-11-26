@@ -14,6 +14,7 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
+import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
@@ -279,11 +280,28 @@ class SidecarTimingServiceOffFitsStateTest {
     }
 
     @Test
-    void aDownloadTheCheckCannotFitBecauseTheFilmFileHasNoFingerprintIsNever() {
+    void aFilmFileWithNoFingerprintYetIsPendingBecauseThatClearsOnItsOwn() {
         served();
         part.setSizeBytes(null);
 
-        assertThat(state()).isEqualTo(OffFitsState.NEVER);
+        assertThat(state()).isEqualTo(OffFitsState.PENDING);
+    }
+
+    @Test
+    void aFilmFileThatIsMissingForNowIsPending() {
+        served();
+        part.setPresence(Presence.MISSING);
+
+        assertThat(state()).isEqualTo(OffFitsState.PENDING);
+    }
+
+    @Test
+    void aWholeEditionWhosePartLengthIsNotKnownYetIsPending() {
+        served();
+        download.setWholeEdition(true);
+        part.setDurationMs(null);
+
+        assertThat(state()).isEqualTo(OffFitsState.PENDING);
     }
 
     @Test

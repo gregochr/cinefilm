@@ -19,7 +19,7 @@ public record OffFitsState(Kind kind, List<Long> starts, String noReference) {
         READY,
         /** The check will fit the download but has not yet, on the film file as it is now. */
         PENDING,
-        /** The check will not fit the download (off, not a download it fits, no file it can read, a failed read). */
+        /** The check will not fit the download: it is off, does not serve it, or the film file's read keeps failing. */
         NEVER
     }
 
