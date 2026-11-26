@@ -228,9 +228,10 @@ class FullFitProbeTest {
     }
 
     @Test
-    void aFillThatThrowsIsLoggedAndTheMeasurementGoesOnWithoutTheRate() {
+    void aFillThatThrowsIsLoggedAndTheNextPassFillsAndMeasures() {
         OpenSubtitlesReference reference = stored(5012, lines(300, 0));
-        doThrow(new IllegalStateException("boom")).when(references).fillTimedFps(5012L, 23.976);
+        // The first fill fails, the second works.
+        doThrow(new IllegalStateException("boom")).doReturn(1).when(references).fillTimedFps(5012L, 23.976);
         serving(retimedJob(reference));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
 
@@ -238,6 +239,33 @@ class FullFitProbeTest {
 
         assertThat(logged.list).extracting(ILoggingEvent::getFormattedMessage)
             .contains("Could not fill the stated frame rate of OpenSubtitles file 5012: IllegalStateException");
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "UNKNOWN_RATE (sidecar 7, reference 5012)");
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+
+        assertThat(reference.getTimedFps()).isEqualTo(23.976);
+        assertThat(infoLines()).hasSize(2);
+    }
+
+    @Test
+    void aForgottenSidecarWritesItsUnsettledNoVerdictLineAgain() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        OpenSubtitlesResult noRate = new OpenSubtitlesResult(4012, 5012, "Release 5012", null, 10, true, false, null,
+            null);
+        serving(retimedJob(reference, noRate));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+        String line = "Full subtitle fit of edition 10 (film 1): not measured, no verdict: UNKNOWN_RATE (sidecar 7, "
+            + "reference 5012)";
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(infoLines()).containsExactly(line);
+
+        probe.forget(List.of(7L));
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(infoLines()).containsExactly(line, line);
     }
 
     @Test
