@@ -58,6 +58,20 @@ public class SidecarTimingRefresher {
     private final AtomicBoolean deferred = new AtomicBoolean();
     private final ReadFailures failures;
 
+    /** What {@link #fitFilm} did. */
+    public enum Fit {
+        /** Nothing was left to fit (or the timing check is off): its checks need not wait. */
+        DONE,
+        /** At least one fit was saved now: its checks need not wait, and the pass that follows should be announced. */
+        FITTED,
+        /** A pass is booked or going and will fit it, after the caller's thread is free: its checks wait for it. */
+        LEFT_TO_PASS,
+        /** A scan, an edit or an encoding session stopped it; asking again may work. */
+        BUSY,
+        /** It failed. */
+        FAILED
+    }
+
     /** Why a run ends early: playback is encoding, or the library lock is taken. Not an error. */
     private static final class Wait extends RuntimeException {
         private static final long serialVersionUID = 1L;
@@ -112,6 +126,15 @@ public class SidecarTimingRefresher {
     }
 
     /**
+     * Fits again after some downloads' cues were rewritten or restored (by the retime job or an Admin retime): their
+     * fits are marked stale. The pass that follows announces itself, which starts the checks.
+     */
+    @EventListener
+    public void onCuesRewritten(SubtitleCuesRewritten event) {
+        startDue();
+    }
+
+    /**
      * Asks for a check run in the background, unless the check is off. When one is already running the request is not
      * lost: the running one goes round again before it finishes.
      *
@@ -134,6 +157,50 @@ public class SidecarTimingRefresher {
         if (deferred.get()) {
             startDue();
         }
+    }
+
+    /**
+     * The re-check after the retime job rewrote or restored cues (docs/engineering/subtitle-frame-rate-plan.md, "The
+     * re-check runs at once"): reads and fits one film now, on the calling thread (this service's own executor). It
+     * does not announce {@link SidecarTimingFinished}: that would start a full check pass in the middle of the
+     * caller's walk. When a pass is already booked or going, that pass is asked to go round once more and this
+     * returns at once.
+     *
+     * @param filmId the film
+     * @return what happened, see {@link Fit}
+     */
+    public Fit fitFilm(Long filmId) {
+        if (!enabled) {
+            return Fit.DONE;
+        }
+        if (!running.compareAndSet(false, true)) {
+            pending.set(true);
+            return Fit.LEFT_TO_PASS;
+        }
+        Fit result = Fit.DONE;
+        try {
+            if (sessions.isEncoding()) {
+                throw new Wait("a film is being transcoded");
+            }
+            int[] counts = new int[4];
+            film(filmId, counts);
+            LOG.info("Subtitle timing of film {} after a retime: {} files read, {} fitted ({} offsets set), "
+                + "{} failed", filmId, counts[0], counts[1], counts[2], counts[3]);
+            result = counts[1] > 0 ? Fit.FITTED : Fit.DONE;
+        } catch (Wait e) {
+            deferred.set(true);
+            result = Fit.BUSY;
+            LOG.info("Subtitle timing of film {} waits: {}", filmId, e.getMessage());
+        } catch (RuntimeException e) {
+            result = Fit.FAILED;
+            LOG.warn("Could not check the subtitle timing of film {}: {}", filmId, e.getClass().getSimpleName());
+        } finally {
+            running.set(false);
+        }
+        if (pending.get()) {
+            launch();
+        }
+        return result;
     }
 
     private boolean launch() {
@@ -196,7 +263,7 @@ public class SidecarTimingRefresher {
     }
 
     /** Says something was fitted, so a download that could not be proven by timing can be compared instead. */
-    private void announce() {
+    public void announce() {
         try {
             events.publishEvent(new SidecarTimingFinished());
         } catch (RuntimeException e) {

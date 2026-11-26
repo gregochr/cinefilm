@@ -23,9 +23,11 @@ import org.springframework.stereotype.Service;
  * have arrived), one download at a time and one run at a time, in the background. {@code cinefilm.subtitles.retime} is
  * {@code off} (the default: nothing is read or written), {@code on}, or {@code restore} (the rollback: every retimed
  * download is put back). Each download is visited by {@link SubtitleRetimeService#process}, which takes the library
- * lock for that one row; a row whose lock was busy is visited again on the next run. A run that rewrote or restored
- * something publishes {@link SubtitleCuesRewritten}. A request that arrives while a run is going makes it go round
- * once more. Nothing here throws to its caller.
+ * lock for that one row; a row whose lock stays busy through {@link BusyRetry} is visited again on the next run. A run
+ * that rewrote or restored something publishes {@link SubtitleCuesRewritten} and then fits and checks the touched
+ * editions at once ({@link SubtitleRetimeRecheck}). A request that arrives while a run is going makes it go round once
+ * more. The line "Subtitle retime (mode) finished" is logged last, after the re-check. Nothing here throws to its
+ * caller.
  */
 @Service
 public class SubtitleRetimeJob {
@@ -33,6 +35,8 @@ public class SubtitleRetimeJob {
     private static final Logger LOG = LoggerFactory.getLogger(SubtitleRetimeJob.class);
 
     private final SubtitleRetimeService service;
+    private final SubtitleRetimeRecheck recheck;
+    private final BusyRetry retry;
     private final Executor executor;
     private final RetimeMode mode;
     private final ApplicationEventPublisher events;
@@ -40,11 +44,13 @@ public class SubtitleRetimeJob {
     private final AtomicBoolean pending = new AtomicBoolean();
 
     /** Creates the job; the executor is {@code timingCheckExecutor}, so a run never overlaps a timing check. */
-    public SubtitleRetimeJob(SubtitleRetimeService service,
+    public SubtitleRetimeJob(SubtitleRetimeService service, SubtitleRetimeRecheck recheck, BusyRetry retry,
                              @Qualifier("timingCheckExecutor") Executor executor,
                              @Value("${cinefilm.subtitles.retime:off}") String setting,
                              ApplicationEventPublisher events) {
         this.service = service;
+        this.recheck = recheck;
+        this.retry = retry;
         this.executor = executor;
         this.mode = RetimeMode.parse(setting);
         this.events = events;
@@ -126,10 +132,15 @@ public class SubtitleRetimeJob {
         try {
             for (Long id : service.candidateIds()) {
                 try {
-                    Outcome outcome = service.process(id, mode);
+                    Outcome outcome = visit(id);
                     counts.merge(outcome, 1, Integer::sum);
                     if (outcome == Outcome.REWRITTEN || outcome == Outcome.RESTORED) {
                         changed.add(id);
+                    }
+                    if (outcome == Outcome.BUSY) {
+                        // A scan or an edit holds the lock: the rest would wait as long, so the next run has them.
+                        LOG.info("Subtitle retime stops: the library is busy");
+                        break;
                     }
                 } catch (RuntimeException e) {
                     failed++;
@@ -137,7 +148,17 @@ public class SubtitleRetimeJob {
                 }
             }
             if (!changed.isEmpty()) {
-                events.publishEvent(new SubtitleCuesRewritten(Set.copyOf(changed)));
+                // Re-check, publish, then announce the fits; do not reorder. The event goes after the re-check: its
+                // listener books a timing pass on this thread that would hold the refresher's run flag, so every fit
+                // of the re-check would be left to it. The event also makes the probes forget. Announcing goes last:
+                // it starts a check pass, which would otherwise measure a sidecar before the forget and again after.
+                // A pass already running meanwhile may still measure one twice: accepted (the probes only log).
+                Set<Long> ids = Set.copyOf(changed);
+                boolean fitted = recheck.run(ids);
+                events.publishEvent(new SubtitleCuesRewritten(ids));
+                if (fitted) {
+                    recheck.announceFits();
+                }
             }
         } catch (RuntimeException e) {
             LOG.error("Subtitle retime failed", e);
@@ -147,6 +168,16 @@ public class SubtitleRetimeJob {
             count(counts, Outcome.REWRITTEN), count(counts, Outcome.RESTORED), count(counts, Outcome.DECIDED_OFF),
             count(counts, Outcome.DECIDED_FITS), count(counts, Outcome.UNCHANGED), count(counts, Outcome.BUSY),
             failed);
+    }
+
+    /** One download: a busy library is tried again a bounded number of times, then left for the next run. */
+    private Outcome visit(Long id) {
+        Outcome[] outcome = new Outcome[1];
+        retry.until("Retime of download " + id, () -> {
+            outcome[0] = service.process(id, mode);
+            return outcome[0] != Outcome.BUSY;
+        });
+        return outcome[0];
     }
 
     private static int count(Map<Outcome, Integer> counts, Outcome outcome) {

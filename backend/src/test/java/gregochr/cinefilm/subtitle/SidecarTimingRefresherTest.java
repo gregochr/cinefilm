@@ -19,6 +19,7 @@ import gregochr.cinefilm.library.LibraryRoot;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.subtitle.EmbeddedCueReader.ReadException;
 import gregochr.cinefilm.subtitle.EmbeddedCueReader.Reading;
+import gregochr.cinefilm.subtitle.SidecarTimingRefresher.Fit;
 import gregochr.cinefilm.subtitle.SidecarTimingService.FitJob;
 import gregochr.cinefilm.subtitle.SidecarTimingService.ReferenceRead;
 import gregochr.cinefilm.subtitle.SidecarTimingService.SaveOutcome;
@@ -564,6 +565,99 @@ class SidecarTimingRefresherTest {
         assertThat(messages()).isEmpty();
         queued.get(0).run();
         verify(service, times(1)).dueFilmIds();
+    }
+
+    @Test
+    void rewrittenCuesBookATimingPassSoTheirStaleFitsAreMadeAgain() {
+        refresher.onCuesRewritten(new SubtitleCuesRewritten(java.util.Set.of(5L)));
+
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
+    void fitFilmReadsAndFitsOneFilmOnTheCallingThreadAndAnnouncesNothing() {
+        when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
+        when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
+        when(reader.read(FILE)).thenReturn(usable());
+        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(SaveOutcome.SAVED);
+        when(service.fitJobs(7L)).thenReturn(List.of(job(7L, 5L)));
+        when(service.save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW)).thenReturn(SaveOutcome.APPLIED);
+
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.FITTED);
+
+        verifyNoInteractions(events);
+        assertThat(queued).isEmpty();
+        assertThat(refresher.isRunning()).isFalse();
+        assertThat(messages()).containsExactly(
+            "Subtitle timing of film 7 after a retime: 1 files read, 1 fitted (1 offsets set), 0 failed");
+    }
+
+    @Test
+    void fitFilmWhoseSaveFindsTheLibraryBusyIsNotSettledAndIsLeftToBeAskedForAgain() {
+        when(service.readsFor(7L)).thenReturn(List.of());
+        when(service.fitJobs(7L)).thenReturn(List.of(job(7L, 5L)));
+        when(service.save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW)).thenReturn(SaveOutcome.BUSY);
+
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.BUSY);
+
+        assertThat(refresher.isRunning()).isFalse();
+        queued.clear();
+        refresher.startIfDeferred();
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
+    void fitFilmWithNothingToFitIsDoneAndAPassRequestedMeanwhileIsBooked() {
+        when(service.readsFor(7L)).thenAnswer(call -> {
+            refresher.startDue();
+            return List.of();
+        });
+        when(service.fitJobs(7L)).thenReturn(List.of());
+
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.DONE);
+
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
+    void fitFilmWhilePlaybackIsEncodingIsNotSettled() {
+        when(sessions.isEncoding()).thenReturn(true);
+
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.BUSY);
+
+        verifyNoInteractions(service);
+        assertThat(refresher.isRunning()).isFalse();
+    }
+
+    @Test
+    void fitFilmWhileAPassIsBookedLeavesTheFilmToThatPassAndReturnsAtOnce() {
+        refresher.onScanFinished(new ScanFinished("nightly"));
+
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.LEFT_TO_PASS);
+
+        verifyNoInteractions(service, reader);
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
+    void fitFilmThatFailsIsLoggedAndGivesTheRunBack() {
+        when(service.readsFor(7L)).thenThrow(new IllegalStateException("db down"));
+
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.FAILED);
+
+        assertThat(refresher.isRunning()).isFalse();
+        assertThat(messages()).containsExactly("Could not check the subtitle timing of film 7: "
+            + "IllegalStateException");
+    }
+
+    @Test
+    void fitFilmDoesNothingWhileTheTimingCheckIsOff() {
+        SidecarTimingRefresher off = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add,
+            false, events, failures);
+
+        assertThat(off.fitFilm(7L)).isEqualTo(Fit.DONE);
+
+        verifyNoInteractions(service, reader);
     }
 
     @Test

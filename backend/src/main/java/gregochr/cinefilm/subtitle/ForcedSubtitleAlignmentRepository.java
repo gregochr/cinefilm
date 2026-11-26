@@ -13,4 +13,7 @@ public interface ForcedSubtitleAlignmentRepository extends JpaRepository<ForcedS
 
     /** The current alignments of some sidecars. */
     List<ForcedSubtitleAlignment> findBySidecarIdIn(Collection<Long> sidecarIds);
+
+    /** The alignments of some sidecars that were made outdated by a retime and not yet fitted again. */
+    List<ForcedSubtitleAlignment> findBySidecarIdInAndStaleSinceIsNotNull(Collection<Long> sidecarIds);
 }

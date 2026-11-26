@@ -5,8 +5,13 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.library.LibraryLock;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -264,5 +269,34 @@ public class SubtitleRetimeService {
         String original = row.getOriginalCuesText() != null ? row.getOriginalCuesText() : row.getCuesText();
         List<Long> starts = SrtParser.cues(original).stream().map(SubtitleCue::startMs).toList();
         return OffFitsRule.decide(state, starts);
+    }
+
+    /** The editions and films the given downloads were made for, in id order of the downloads, each edition once. */
+    public List<TouchedEdition> touchedEditions(Set<Long> sidecarIds) {
+        return tx.execute(status -> {
+            List<SubtitleSidecar> rows = sidecars.findAllById(sidecarIds).stream().filter(SubtitleSidecar::isDownload)
+                .sorted(Comparator.comparing(SubtitleSidecar::getId)).toList();
+            Map<Long, Edition> found = new HashMap<>();
+            editions.findWithFilesByIdIn(rows.stream().map(Downloads::madeForEditionId).collect(Collectors.toSet()))
+                .forEach(edition -> found.put(edition.getId(), edition));
+            Map<Long, TouchedEdition> touched = new LinkedHashMap<>();
+            for (SubtitleSidecar row : rows) {
+                Edition edition = found.get(Downloads.madeForEditionId(row));
+                if (edition != null) {
+                    touched.putIfAbsent(edition.getId(),
+                        new TouchedEdition(edition.getId(), edition.getFilm().getId()));
+                }
+            }
+            return List.copyOf(touched.values());
+        });
+    }
+
+    /**
+     * An edition whose downloads were rewritten or restored.
+     *
+     * @param editionId the edition
+     * @param filmId its film
+     */
+    public record TouchedEdition(Long editionId, Long filmId) {
     }
 }

@@ -12,8 +12,11 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.ForcedResolver.DownloadState;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import gregochr.cinefilm.subtitle.SidecarTrust.Trust;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,6 +44,11 @@ public class SidecarCheckService {
     private final ForcedDownloadCheckRepository downloadChecks;
     private final ForcedCheckCandidateRepository candidates;
     private final boolean timingCheckEnabled;
+    private final ForcedSubtitleAlignmentRepository alignments;
+    private final Clock clock;
+
+    /** How long a download waits for the timing fit a retime made outdated before it is checked as it would be. */
+    static final Duration STALE_FIT_WAIT = Duration.ofHours(24);
 
     /** The longest reasons text the column holds. */
     static final int MAX_REASONS_CHARS = 1000;
@@ -50,7 +58,8 @@ public class SidecarCheckService {
                                ForcedResolver resolver, ForcedSubtitleCheckRepository checks,
                                ForcedDownloadCheckRepository downloadChecks,
                                ForcedCheckCandidateRepository candidates,
-                               @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean timingCheckEnabled) {
+                               @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean timingCheckEnabled,
+                               ForcedSubtitleAlignmentRepository alignments, Clock clock) {
         this.films = films;
         this.sidecars = sidecars;
         this.editions = editions;
@@ -59,6 +68,13 @@ public class SidecarCheckService {
         this.downloadChecks = downloadChecks;
         this.candidates = candidates;
         this.timingCheckEnabled = timingCheckEnabled;
+        this.alignments = alignments;
+        this.clock = clock;
+    }
+
+    /** True when the timing check is on: a download then waits for its fit, whose pass announces itself. */
+    public boolean isTimingCheckEnabled() {
+        return timingCheckEnabled;
     }
 
     /**
@@ -82,6 +98,17 @@ public class SidecarCheckService {
      */
     @Transactional(readOnly = true)
     public List<DueCheck> due() {
+        return due(null);
+    }
+
+    /**
+     * The same, for some editions only: the filter is applied before any per-edition or per-download work.
+     *
+     * @param editionIds the editions to look at, or null for every edition
+     * @return the due checks in the order to make them
+     */
+    @Transactional(readOnly = true)
+    public List<DueCheck> due(Collection<Long> editionIds) {
         Map<Long, OsBestRef> best = new HashMap<>();
         for (OsBestRef ref : films.findOpenSubtitlesBest()) {
             best.put(ref.id(), ref);
@@ -91,7 +118,10 @@ public class SidecarCheckService {
         if (filmIds.isEmpty()) {
             return List.of();
         }
-        List<Edition> fetched = editions.findWithFilesByFilmIdIn(filmIds);
+        List<Edition> fetched = editionIds == null ? editions.findWithFilesByFilmIdIn(filmIds)
+            // The same editions as the film query returns: it joins the files, so an edition with none drops out.
+            : editions.findWithFilesByIdIn(editionIds).stream()
+                .filter(e -> !e.getMediaFiles().isEmpty() && filmIds.contains(e.getFilm().getId())).toList();
         Map<Long, Resolution> resolved = resolver.resolve(fetched);
         List<ForcedCheckCandidate> ledger = candidates.findByEditionIdInAndKind(resolved.keySet(), SubtitleKind.FORCED);
         Set<Long> staleFiles = new HashSet<>();
@@ -103,6 +133,11 @@ public class SidecarCheckService {
         if (!downloadIds.isEmpty()) {
             downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(downloadIds)
                 .forEach(c -> staleDownloads.add(c.getSidecarId()));
+        }
+        Map<Long, Instant> staleFits = new HashMap<>();
+        if (timingCheckEnabled && !downloadIds.isEmpty()) {
+            alignments.findBySidecarIdInAndStaleSinceIsNotNull(downloadIds)
+                .forEach(a -> staleFits.put(a.getSidecarId(), a.getStaleSince()));
         }
         List<DueCheck> due = new ArrayList<>();
         for (Edition edition : fetched) {
@@ -121,7 +156,7 @@ public class SidecarCheckService {
                 staleFiles.contains(edition.getId()));
             for (DownloadState download : resolution.downloads()) {
                 addDownloadCheck(due, edition, download, ref, filmCandidates, Set.copyOf(tried),
-                    staleDownloads.contains(download.sidecar().getId()));
+                    staleDownloads.contains(download.sidecar().getId()), staleFits.get(download.sidecar().getId()));
             }
         }
         due.sort(Comparator.comparing(DueCheck::ownerVerified).thenComparing(DueCheck::filmId)
@@ -148,13 +183,19 @@ public class SidecarCheckService {
     }
 
     private void addDownloadCheck(List<DueCheck> due, Edition edition, DownloadState download, OsBestRef ref,
-                                  List<OpenSubtitlesResult> filmCandidates, Set<Long> tried, boolean stale) {
+                                  List<OpenSubtitlesResult> filmCandidates, Set<Long> tried, boolean stale,
+                                  Instant fitStaleSince) {
         SubtitleSidecar sidecar = download.sidecar();
-        // A stale alignment counts as "the fit exists" on purpose: treating it as waiting would hold back, for good,
-        // a download whose fit cannot land (NEEDS_READ or SKIP). The retime job fits first anyway.
-        boolean waiting = download.alignment() == null && timingCheckEnabled;
         // An outdated row is due whatever the file's trust or the row's verdict, and it still decides until replaced.
-        if (download.assessment().trust() != Trust.UNCHECKED && !stale || waiting) {
+        if (download.assessment().trust() != Trust.UNCHECKED && !stale) {
+            return;
+        }
+        // A download waits for its timing fit while it has none (as before this change) and, new, while its fit was
+        // made outdated by a rewrite or restore of its cues less than a day ago (the retime job or an Admin retime
+        // sets stale_since): a check now would count that fit as "the fit exists" and compare and download before
+        // the fit that may prove the file. Later it is checked as it would be.
+        boolean fitStillToCome = fitStaleSince != null && fitStaleSince.isAfter(clock.instant().minus(STALE_FIT_WAIT));
+        if (timingCheckEnabled && (download.alignment() == null || fitStillToCome)) {
             return;
         }
         // A file cannot be the second opinion on itself.

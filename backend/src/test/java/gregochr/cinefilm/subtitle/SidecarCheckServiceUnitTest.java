@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
@@ -36,6 +37,8 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -74,6 +77,9 @@ class SidecarCheckServiceUnitTest {
     @Mock
     private ForcedCheckCandidateRepository candidates;
 
+    @Mock
+    private ForcedSubtitleAlignmentRepository alignments;
+
     private SidecarCheckService service;
     private Film film;
     private Edition edition;
@@ -83,7 +89,7 @@ class SidecarCheckServiceUnitTest {
     @BeforeEach
     void setUp() {
         service = new SidecarCheckService(films, sidecars, editions, resolver, checks, downloadChecks, candidates,
-            true);
+            true, alignments, CLOCK);
         film = film(1L, "Taken", 2008, NOW);
         film.setImdbId("tt1");
         edition = edition(film, 40L, "Original", 90 * MIN, null);
@@ -196,6 +202,27 @@ class SidecarCheckServiceUnitTest {
     }
 
     @Test
+    void dueForEditionsGivesWhatDueGivesForThemAndDropsWhatDueDrops() {
+        // As the film query returns them: an edition with no file and the film with no search result are not there.
+        Film other = film(2L, "Other", 2010, NOW);
+        other.setImdbId("tt2");
+        Edition noSearch = edition(other, 41L, "Original", 90 * MIN, null);
+        file(noSearch, "Other.m4v");
+        Edition noFiles = edition(film, 42L, "Extended", 90 * MIN, null);
+        when(films.findOpenSubtitlesBest()).thenReturn(List.of(new OsBestRef(1L, "tt1", film.getOsBest(),
+            film.getOsCandidates())));
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L, 2L));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
+        when(editions.findWithFilesByIdIn(List.of(40L, 41L, 42L))).thenReturn(List.of(edition, noSearch, noFiles));
+        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L,
+            resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, fit())))));
+        when(candidates.findByEditionIdInAndKind(Set.of(40L), SubtitleKind.FORCED)).thenReturn(List.of());
+
+        assertThat(service.due(List.of(40L, 41L, 42L))).isEqualTo(service.due())
+            .extracting(DueCheck::editionId).containsExactly(40L);
+    }
+
+    @Test
     void aProvenDownloadWithNoStaleRowIsNotDue() {
         resolved(resolution(null, List.of(downloadState(Trust.PROVEN, Proof.AGREES, check("AGREES"), fit()))));
 
@@ -221,6 +248,28 @@ class SidecarCheckServiceUnitTest {
             .thenReturn(List.of(downloadRow(STALE)));
 
         assertThat(service.due()).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
+    }
+
+    private ForcedSubtitleAlignment staleFit(Instant staleSince) {
+        ForcedSubtitleAlignment fit = new ForcedSubtitleAlignment();
+        fit.setSidecarId(7L);
+        fit.setStaleSince(staleSince);
+        when(alignments.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L))).thenReturn(List.of(fit));
+        return fit;
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1, false", "0, true", "-1, true"})
+    void aFitMadeOutdatedByARetimeHoldsTheDownloadBackForADayAndNotAMillisecondLonger(long msToTheBoundary,
+                                                                                  boolean due) {
+        resolved(resolution(null, List.of(downloadState(Trust.FAILED, Proof.NONE, check("CHECK"), fit()))));
+        when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L)))
+            .thenReturn(List.of(downloadRow(STALE)));
+        // 1: a millisecond short of 24 h ago (waits); 0: exactly 24 h ago; -1: a millisecond over (due).
+        staleFit(NOW.minus(SidecarCheckService.STALE_FIT_WAIT).plusMillis(msToTheBoundary));
+
+        assertThat(service.due().stream().map(DueCheck::downloadSidecarId).toList())
+            .isEqualTo(due ? List.of(7L) : List.of());
     }
 
     @Test
