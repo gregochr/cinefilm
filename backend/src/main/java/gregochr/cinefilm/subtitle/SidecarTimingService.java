@@ -259,9 +259,11 @@ public class SidecarTimingService {
      * count for an edition: present, with cues, made for it, of the film's current IMDb id),
      * {@link TimingKeys#fittable}, the switch, and whether its read and its fit are current for the file's present
      * fingerprint.
-     * {@link OffFitsState.Kind#NEVER} when the check is off, does not serve the download, or the film file's read
-     * failed as it is now, repeatedly; {@link OffFitsState.Kind#PENDING} when a read or a fit is missing, outdated or
-     * stale; {@link OffFitsState.Kind#READY} with what the read found when both are current.
+     * {@link OffFitsState.Kind#NEVER} when the check is off, does not serve the download, the film file's read failed
+     * as it is now, repeatedly (a file that cannot be found does not count), or it is a whole-edition sidecar whose
+     * edition timeline is unknown (a part with no length is not probed again);
+     * {@link OffFitsState.Kind#PENDING} when a file is not present or has no fingerprint yet, or a read or a fit is
+     * missing, outdated or stale; {@link OffFitsState.Kind#READY} with what the read found when both are current.
      *
      * @param filmId the film
      * @param sidecarId the download
