@@ -215,32 +215,26 @@ describe('wrongProblem', () => {
 });
 
 describe('retimeTool', () => {
-  const dl = (over = {}) => row({ retime: 'AUTO', retimedBy: 0.95904, ...over });
-  const undecided = (over = {}) => dl({ retime: null, retimedBy: null, ...over });
-
-  it('is "dont" for a retimed download and "retime" for one switched off', () => {
-    expect(retimeTool(dl())).toBe('dont');
-    expect(retimeTool(dl({ retime: 'OFF', retimedBy: null }))).toBe('retime');
-    expect(retimeTool(dl({ retime: 'OFF' }))).toBe('retime');
+  it('maps the server’s action: DONT to "dont", RETIME to "retime"', () => {
+    expect(retimeTool(row({ retimeAction: 'DONT' }))).toBe('dont');
+    expect(retimeTool(row({ retimeAction: 'RETIME' }))).toBe('retime');
   });
 
-  it('is "dont" for an undecided download whose rates sit on either side of the speed-up', () => {
-    expect(retimeTool(undecided({ timedFps: 23.976, filmFps: 25 }))).toBe('dont');
-    expect(retimeTool(undecided({ timedFps: 25, filmFps: 24 }))).toBe('dont');
+  it('is "retime" for a hand-timed file the server says is not retimed', () => {
+    const handTimed = row({
+      retime: null,
+      retimedBy: null,
+      offsetSource: 'OWNER',
+      rateLine: 'Not retimed: its timing was set by hand; it may drift',
+      retimeAction: 'RETIME',
+    });
+
+    expect(retimeTool(handTimed)).toBe('retime');
   });
 
-  it('is null for an owner’s file and a file that fits', () => {
-    expect(retimeTool(dl({ origin: 'FILE' }))).toBeNull();
-    expect(retimeTool(dl({ retime: 'OFF_FITS', retimedBy: null }))).toBeNull();
-  });
-
-  it.each([
-    ['an unknown rate', { timedFps: null, filmFps: 25 }],
-    ['an unknown film rate', { timedFps: 25, filmFps: null }],
-    ['the same rate', { timedFps: 25, filmFps: 25 }],
-    ['a rate outside the speed-up', { timedFps: 29.97, filmFps: 25 }],
-    ['a factor of 1', { timedFps: 25, filmFps: 25, retime: 'AUTO', retimedBy: 1 }],
-  ])('is null for %s', (_name, over) => {
-    expect(retimeTool(undecided(over))).toBeNull();
+  it('is null when the server offers nothing, and for an owner’s file', () => {
+    expect(retimeTool(row({ retimeAction: null }))).toBeNull();
+    expect(retimeTool(row({}))).toBeNull();
+    expect(retimeTool(row({ origin: 'FILE', retimeAction: 'DONT' }))).toBeNull();
   });
 });

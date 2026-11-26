@@ -60,6 +60,9 @@ public final class SubtitleDtos {
      *     retimed
      * @param rateLine one plain sentence on all of that, for the Admin to show as it is (for example "Timed for 23.976
      *     fps; this film is 25 fps, so it is sped up 4%"); null for an owner's file
+     * @param retimeAction the control to offer for a download: {@code DONT} (it is retimed now), {@code RETIME} (it is
+     *     not, and pressing retimes it at once), or null for none (an owner's file, a file that fits as it is, an
+     *     unknown rate, or a factor of 1)
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
@@ -68,7 +71,8 @@ public final class SubtitleDtos {
                              String offsetSource, AlignmentDto alignment, String origin, String release,
                              Long openSubtitlesFileId, String servedReason,
                              boolean replacedByDownload, String kind, Double timedFps,
-                             Double filmFps, String retime, Double retimedBy, String rateLine) {
+                             Double filmFps, String retime, Double retimedBy, String rateLine,
+                             String retimeAction) {
     }
 
     /**

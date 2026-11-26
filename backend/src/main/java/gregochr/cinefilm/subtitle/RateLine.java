@@ -12,11 +12,14 @@ import java.math.RoundingMode;
  * @param retime {@code AUTO}, {@code OFF}, {@code OFF_FITS}, or null while undecided
  * @param retimedBy the factor the stored cues were scaled by, or null when never retimed
  * @param line the sentence the Admin shows as it is
+ * @param retimeAction the one per-file control that applies: {@code DONT} (retimed now), {@code RETIME}, or null for
+ *     none (an owner's file, a file that fits as it is, an unknown rate, or a factor of 1)
  */
-record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy, String line) {
+record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy, String line,
+                String retimeAction) {
 
     /** The facts of a file that is not a download. */
-    static final RateLine NONE = new RateLine(null, null, null, null, null);
+    static final RateLine NONE = new RateLine(null, null, null, null, null, null);
 
     /**
      * The facts of one row.
@@ -31,7 +34,22 @@ record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy
         }
         RetimeChoice choice = row.getRetime();
         return new RateLine(row.getTimedFps(), filmFps, choice == null ? null : choice.name(), row.getRetimedBy(),
-            sentence(row, filmFps));
+            sentence(row, filmFps), action(row, filmFps));
+    }
+
+    /**
+     * Which control the Admin offers. None when the file fits as it is, or when a rate is unknown or the factor is 1
+     * (there is nothing to apply, whatever the choice); otherwise {@code DONT} while the file is retimed now, and
+     * {@code RETIME} for any other (off, or not yet retimed: a hand-timed file, a film waiting for its English-track
+     * fit, or the switch off), which retimes at once when pressed.
+     */
+    private static String action(SubtitleSidecar row, Double film) {
+        Double timed = row.getTimedFps();
+        if (row.getRetime() == RetimeChoice.OFF_FITS || timed == null || film == null
+            || FrameRateRetime.factor(timed, film) == 1.0) {
+            return null;
+        }
+        return row.getRetimedBy() != null ? "DONT" : "RETIME";
     }
 
     private static String sentence(SubtitleSidecar row, Double film) {

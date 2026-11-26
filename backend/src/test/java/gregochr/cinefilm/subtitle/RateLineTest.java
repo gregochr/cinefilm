@@ -163,4 +163,43 @@ class RateLineTest {
             .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed");
         assertThat(RateLine.of(download(23.976, RetimeChoice.AUTO, null), 25.0).retime()).isEqualTo("AUTO");
     }
+
+    @Test
+    void aRetimedFileOffersDont() {
+        assertThat(RateLine.of(download(23.976, RetimeChoice.AUTO, K_UP), 25.0).retimeAction()).isEqualTo("DONT");
+    }
+
+    @Test
+    void aFileNotRetimedYetOffersRetimeWhetherOffUndecidedOrAuto() {
+        assertThat(RateLine.of(download(23.976, RetimeChoice.OFF, null), 25.0).retimeAction()).isEqualTo("RETIME");
+        assertThat(RateLine.of(download(23.976, null, null), 25.0).retimeAction()).isEqualTo("RETIME");
+        assertThat(RateLine.of(download(23.976, RetimeChoice.AUTO, null), 25.0).retimeAction()).isEqualTo("RETIME");
+    }
+
+    @Test
+    void aHandTimedFileNotRetimedOffersRetime() {
+        SubtitleSidecar row = download(23.976, null, null);
+        row.setOffsetMs(1500);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+
+        RateLine rate = RateLine.of(row, 25.0);
+
+        assertThat(rate.line()).isEqualTo("Not retimed: its timing was set by hand; it may drift");
+        assertThat(rate.retimeAction()).isEqualTo("RETIME");
+    }
+
+    @Test
+    void anOwnersFileAndAFileThatFitsOfferNothing() {
+        assertThat(RateLine.NONE.retimeAction()).isNull();
+        assertThat(RateLine.of(download(23.976, RetimeChoice.OFF_FITS, null), 25.0).retimeAction()).isNull();
+    }
+
+    @Test
+    void anUnknownRateOrAFactorOfOneOffersNothingWhateverTheChoice() {
+        assertThat(RateLine.of(download(null, RetimeChoice.OFF, null), 25.0).retimeAction()).isNull();
+        assertThat(RateLine.of(download(23.976, RetimeChoice.OFF, null), null).retimeAction()).isNull();
+        assertThat(RateLine.of(download(25.0, RetimeChoice.OFF, null), 25.0).retimeAction()).isNull();
+        assertThat(RateLine.of(download(29.97, null, null), 25.0).retimeAction()).isNull();
+        assertThat(RateLine.of(download(25.0, RetimeChoice.AUTO, K_UP), 25.0).retimeAction()).isNull();
+    }
 }

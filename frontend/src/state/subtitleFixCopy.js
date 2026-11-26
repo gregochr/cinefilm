@@ -51,7 +51,10 @@ export const subtitlesWrong = {
 /** The per-download retime control (frame-rate plan, 4b). The rate line itself is the server's wording. */
 export const fixRetime = {
   dont: { label: 'Don’t retime', hint: 'Plays it as it was timed; it may drift.' },
-  retime: { label: 'Retime', hint: 'Puts it on this film’s timeline again.' },
+  retime: { label: 'Retime', hint: 'Puts it on this film’s timeline.' },
+  // The server resets both when it retimes a file the owner has timed or checked.
+  retimeResets:
+    'Puts it on this film’s timeline. This resets its timing change and its “Looks right” check.',
   spoken: (label, name) => `${label}: ${name}`,
 };
 

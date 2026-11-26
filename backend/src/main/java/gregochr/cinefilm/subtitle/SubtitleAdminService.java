@@ -585,7 +585,8 @@ public class SubtitleAdminService {
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
                 false, s.getUpdatedAt().toEpochMilli(), false, null, source, null, s.getOrigin().name(),
                 s.getRelease(), s.getOpenSubtitlesFileId(), "Not used: it is not attached to a film", false,
-                s.getKind().name(), rate.timedFps(), rate.filmFps(), rate.retime(), rate.retimedBy(), rate.line());
+                s.getKind().name(), rate.timedFps(), rate.filmFps(), rate.retime(), rate.retimedBy(), rate.line(),
+                rate.retimeAction());
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -598,7 +599,8 @@ public class SubtitleAdminService {
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
             endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check, source, alignment, s.getOrigin().name(),
             s.getRelease(), s.getOpenSubtitlesFileId(), reason, replaced, s.getKind().name(), rate.timedFps(),
-            rate.filmFps(), rate.retime(), rate.retimedBy(), rate.line());
+            rate.filmFps(), rate.retime(), rate.retimedBy(), rate.line(),
+                rate.retimeAction());
     }
 
     private static List<Long> partIds(Edition edition) {

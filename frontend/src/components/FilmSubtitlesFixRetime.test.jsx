@@ -24,9 +24,11 @@ const download = (over = {}) => ({
   retime: 'AUTO',
   retimedBy: 0.95904,
   rateLine: SPED_UP,
+  retimeAction: 'DONT',
   ...over,
 });
-const off = (over = {}) => download({ retime: 'OFF', retimedBy: null, rateLine: DRIFT, ...over });
+const off = (over = {}) =>
+  download({ retime: 'OFF', retimedBy: null, rateLine: DRIFT, retimeAction: 'RETIME', ...over });
 
 const owner = {
   ...base,
@@ -127,7 +129,14 @@ describe('FilmSubtitlesFix: retime', () => {
 
   it('offers no control for a file that fits as it is', async () => {
     serve(
-      [download({ retime: 'OFF_FITS', retimedBy: null, rateLine: 'Fits this copy as it is' })],
+      [
+        download({
+          retime: 'OFF_FITS',
+          retimedBy: null,
+          rateLine: 'Fits this copy as it is',
+          retimeAction: null,
+        }),
+      ],
       () => null,
     );
     const dialog = await open();

@@ -44,27 +44,15 @@ export function fileTools(item) {
   };
 }
 
-// The film-rate bands of the retime (`subtitle-frame-rate-plan.md`): "about 24" and "25". A download retimed across
-// them has a factor other than 1.
-const inBand = (fps, low, high) => typeof fps === 'number' && fps >= low && fps <= high;
-const aboutTwentyFour = (fps) => inBand(fps, 23.9, 24.1);
-const twentyFive = (fps) => inBand(fps, 24.85, 25.15);
-
 /**
- * The one retime control a download has: `'dont'` ("Don't retime") when it is retimed or will be, `'retime'`
- * ("Retime") when the owner (or the job) switched it off, or null: an owner's file, a file that already fits as it is
- * (`OFF_FITS`, the rate line says so), or one with no factor to apply (an unknown rate, or the same rate). "Will be"
- * is the DTO's `retimedBy`, or, while undecided or `AUTO`, a stated rate and a film rate on either side of the
- * 24 to 25 fps speed-up.
+ * The one retime control a download has, as the server says (`retimeAction`, worked out beside the rate line): `'dont'`
+ * ("Don't retime") for `DONT`, `'retime'` ("Retime") for `RETIME`, else null. Nothing is guessed here.
  */
 export function retimeTool(item) {
-  if (!isDownload(item) || item.retime === 'OFF_FITS') return null;
-  if (item.retime === 'OFF') return 'retime';
-  if (item.retimedBy != null && item.retimedBy !== 1) return 'dont';
-  const across =
-    (aboutTwentyFour(item.timedFps) && twentyFive(item.filmFps)) ||
-    (twentyFive(item.timedFps) && aboutTwentyFour(item.filmFps));
-  return across ? 'dont' : null;
+  if (!isDownload(item)) return null;
+  if (item.retimeAction === 'DONT') return 'dont';
+  if (item.retimeAction === 'RETIME') return 'retime';
+  return null;
 }
 
 /**

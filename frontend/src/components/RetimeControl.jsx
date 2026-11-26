@@ -11,7 +11,9 @@ import { ActionWithHint } from './ActionWithHint.jsx';
 export default function RetimeControl({ item, name, busy, actions }) {
   const tool = retimeTool(item);
   if (!tool) return null;
-  const { label, hint } = copy[tool];
+  const { label } = copy[tool];
+  const hand = item.offsetSource === 'OWNER' || item.verified === true;
+  const hint = tool === 'retime' && hand ? copy.retimeResets : copy[tool].hint;
   return (
     <ActionWithHint
       layout="line"

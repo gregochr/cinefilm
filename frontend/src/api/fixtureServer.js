@@ -551,6 +551,7 @@ function retimeSubtitle(id, body) {
     ...attachedSubtitles.get(id),
     retime: body.retime ? 'AUTO' : 'OFF',
     rateLine: body.retime ? 'Retimed' : 'Not retimed; it may drift',
+    retimeAction: body.retime ? 'DONT' : 'RETIME',
   });
   return listedSubtitle(id);
 }
