@@ -448,6 +448,28 @@ class SidecarTimingRefresherTest {
     }
 
     @Test
+    void aFileThatCannotBeFoundNeverCountsTowardsGivingItUpButRealFailuresDo() {
+        when(service.dueFilmIds()).thenReturn(List.of(7L));
+        when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
+        when(service.fitJobs(7L)).thenReturn(List.of());
+        when(root.resolveFile("Taken.m4v")).thenReturn(Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.of(FILE), Optional.of(FILE), Optional.of(FILE));
+        when(reader.read(FILE)).thenThrow(new ReadException("ffprobe failed"));
+
+        for (int i = 0; i < ReadFailures.GIVE_UP; i++) {
+            refresher.run();
+        }
+        assertThat(failures.failedFor(70L, "1000:1")).isFalse();
+
+        for (int i = 0; i < ReadFailures.GIVE_UP; i++) {
+            // Past the back-off of the last failed read.
+            now = now.plus(SidecarTimingRefresher.BACKOFF).plusSeconds(1);
+            refresher.run();
+        }
+        assertThat(failures.failedFor(70L, "1000:1")).isTrue();
+    }
+
+    @Test
     void aFilmThatFailsIsCountedAndTheNextFilmIsStillDone() {
         when(service.dueFilmIds()).thenReturn(List.of(7L, 8L));
         when(service.readsFor(7L)).thenThrow(new IllegalStateException("boom"));

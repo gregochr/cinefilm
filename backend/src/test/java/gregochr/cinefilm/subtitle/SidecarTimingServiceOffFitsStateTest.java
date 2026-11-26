@@ -306,6 +306,7 @@ class SidecarTimingServiceOffFitsStateTest {
     void aDownloadWithNoCuesIsNever() {
         served();
         download.setCueCount(0);
+        when(sidecars.findById(5L)).thenReturn(java.util.Optional.of(download));
 
         assertThat(state()).isEqualTo(OffFitsState.NEVER);
     }
@@ -327,12 +328,12 @@ class SidecarTimingServiceOffFitsStateTest {
     }
 
     @Test
-    void aWholeEditionWhosePartLengthIsNotKnownYetIsPending() {
+    void aWholeEditionWhosePartLengthIsUnknownIsNeverBecauseItIsNotProbedAgain() {
         served();
         download.setWholeEdition(true);
         part.setDurationMs(null);
 
-        assertThat(state()).isEqualTo(OffFitsState.PENDING);
+        assertThat(state()).isEqualTo(OffFitsState.NEVER);
     }
 
     @Test
@@ -347,9 +348,17 @@ class SidecarTimingServiceOffFitsStateTest {
     }
 
     @Test
+    void aSidecarThatDoesNotExistIsNever() {
+        served();
+
+        assertThat(service.offFitsState(1L, 99L)).isEqualTo(OffFitsState.NEVER);
+    }
+
+    @Test
     void aSidecarTheCheckDoesNotServeIsNever() {
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
         when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of());
+        when(sidecars.findById(5L)).thenReturn(java.util.Optional.of(download));
 
         assertThat(service.offFitsState(1L, 5L)).isEqualTo(OffFitsState.NEVER);
     }

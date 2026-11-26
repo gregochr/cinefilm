@@ -280,9 +280,12 @@ public class SidecarTimingService {
         Map<Long, EmbeddedCueStarts> reads = reads(served);
         State state = state(s, reads, osRefs(served, reads), fits(served).get(sidecarId));
         if (state == State.SKIP) {
-            // Not fittable yet, and every cause clears on its own: a file not present (a share unmounted during a
-            // scan), no fingerprint, a part length or timeline not known yet. The rates must not decide meanwhile.
-            return OffFitsState.PENDING;
+            // A file not present (a share unmounted during a scan) or with no fingerprint yet clears on its own: the
+            // rates must not decide meanwhile. A timeline that stays unknown (a part with no length, which is not
+            // probed again) never will: the check will never fit it, so the rates decide.
+            List<MediaFile> files = TimingKeys.referenceFiles(s.edition(), s.sidecar());
+            boolean clears = files.isEmpty() || files.stream().anyMatch(f -> TimingKeys.fingerprint(f) == null);
+            return clears ? OffFitsState.PENDING : OffFitsState.NEVER;
         }
         if (state == State.NEEDS_READ) {
             boolean failed = TimingKeys.referenceFiles(s.edition(), s.sidecar()).stream()

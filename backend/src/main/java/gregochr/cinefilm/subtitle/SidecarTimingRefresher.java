@@ -213,9 +213,15 @@ public class SidecarTimingRefresher {
             if (failures.backedOff(read.mediaFileId(), read.fingerprint(), clock.instant(), BACKOFF)) {
                 continue;
             }
+            Path file = root.resolveFile(read.path()).orElse(null);
+            if (file == null) {
+                // Not a failed read: a mount outage must not count towards giving the file up (ReadFailures).
+                counts[3]++;
+                LOG.warn("Could not read the embedded subtitles of film file {}: The film file cannot be found",
+                    read.mediaFileId());
+                continue;
+            }
             try {
-                Path file = root.resolveFile(read.path())
-                    .orElseThrow(() -> new EmbeddedCueReader.ReadException("The film file cannot be found"));
                 EmbeddedCueReader.Reading reading = reader.read(file);
                 failures.clear(read.mediaFileId());
                 SaveOutcome saved = service.saveReference(read, reading, clock.instant());
