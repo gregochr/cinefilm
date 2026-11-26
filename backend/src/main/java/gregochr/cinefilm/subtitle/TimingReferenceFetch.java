@@ -114,7 +114,12 @@ final class TimingReferenceFetch {
         for (Target target : service.targets()) {
             Shared shared = films.computeIfAbsent(List.of(target.filmId(), target.imdbId()),
                 key -> new Shared(target));
-            fillRates(target, shared);
+            try {
+                fillRates(target, shared);
+            } catch (RuntimeException e) {
+                LOG.warn("Could not fill the stated frame rates of the references of edition {}: {}",
+                    target.editionId(), e.getClass().getSimpleName());
+            }
             try {
                 if (!stopped) {
                     fetchFor(target, shared, checkLimit, fetchesLeft);

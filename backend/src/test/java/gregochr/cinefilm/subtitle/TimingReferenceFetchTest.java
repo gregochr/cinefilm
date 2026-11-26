@@ -4,6 +4,7 @@ import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -441,6 +442,8 @@ class TimingReferenceFetchTest {
 
         verify(api).download(5012);
         verify(api).download(5013);
+        // Only a final row is filled; this one is not final, so the fetch (not the fill) is what touches it.
+        verify(references, never()).fillTimedFps(5012L, 23.976);
         assertThat(saved).containsOnlyKeys(5012L, 5013L);
         assertThat(lines(Level.INFO).get(0)).contains("fetched file 5012").contains("299 lines, usable false");
         assertThat(lines(Level.INFO).get(1)).contains("fetched file 5013").contains("usable true, best match 100%");
@@ -1050,5 +1053,29 @@ class TimingReferenceFetchTest {
 
         assertThat(written).isEqualTo(1);
         verify(references).fillTimedFps(5012L, 23.976);
+    }
+
+    @Test
+    void aFillThatThrowsDoesNotEndThePassSoTheOtherRowsAndTheNextTargetAreStillMeasured() {
+        OpenSubtitlesReference withRate = stored(5011, scatteredReference());
+        withRate.setTimedFps(23.976);
+        OpenSubtitlesReference rateless = stored(5012, scatteredReference());
+        OpenSubtitlesReference other = stored(6011, scatteredReference());
+        other.setTimedFps(23.976);
+        doThrow(new IllegalStateException("boom")).when(references).fillTimedFps(5012L, 23.976);
+        when(service.targets()).thenReturn(List.of(
+            target(1, 2, null, List.of(retimedShifted()), List.of(candidate(5012), candidate(5011)),
+                Map.of(5011L, withRate, 5012L, rateless)),
+            target(2, 1, null, List.of(retimedShifted()), List.of(candidate(6011)), Map.of(6011L, other))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+        when(filmRates.forEdition(20L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(lines(Level.WARN)).contains("Could not fill the stated frame rates of the references of edition "
+            + "10: IllegalStateException");
+        assertThat(written).isEqualTo(2);
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5011"));
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 6011"));
     }
 }
