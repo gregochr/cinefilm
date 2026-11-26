@@ -24,7 +24,7 @@ public class RetimeOnArrival {
 
     /** Creates the hook. */
     public RetimeOnArrival(SubtitleRetimeService downloads, ReferenceRetimeService references,
-                           @Value("${cinefilm.subtitles.retime:off}") String setting) {
+                           @Value("${cinefilm.subtitles.retime:on}") String setting) {
         this.downloads = downloads;
         this.references = references;
         this.mode = RetimeMode.parse(setting);
