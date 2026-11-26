@@ -192,9 +192,7 @@ class FullFitProbeTest {
     void aRetimedDownloadIsComparedWithARawReferenceOfTheSameRateOnTheirOriginals() {
         serving(retimedJob(rated(5012, 23.976)));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
-
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
-
         // Both directions and the download's last cue are those of the original cues (0:50:01), not the film's.
         assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): download file 5011 "
             + "(300 cues, last cue 0:50:01) against reference file 5012 (300 cues, last cue 0:50:01); "
@@ -208,9 +206,7 @@ class FullFitProbeTest {
         OpenSubtitlesReference reference = rated(5012, null);
         serving(retimedJob(reference));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
-
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
-
         verify(references).fillTimedFps(5012L, 23.976);
         assertThat(reference.getTimedFps()).isEqualTo(23.976);
         assertThat(infoLines()).singleElement().asString()
@@ -223,20 +219,16 @@ class FullFitProbeTest {
         serving(retimedJobOf(RETIMED, List.of(noRate(5012)), reference));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
         String line = NO_VERDICT + "UNKNOWN_RATE (sidecar 7, reference 5012)";
-
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         // Still no rate: tried again, and its line is not written a second time. Nothing is filled: no rate stated.
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         assertThat(infoLines()).containsExactly(line);
         verify(references, never()).fillTimedFps(5012L, 23.976);
-
         // A forgotten sidecar writes its line again.
         probe.forget(List.of(7L));
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         assertThat(infoLines()).containsExactly(line, line);
-
         reference.setTimedFps(23.976);
-
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
         assertThat(infoLines()).hasSize(3);
         // And once measured it is not measured again.
@@ -250,15 +242,11 @@ class FullFitProbeTest {
         doThrow(new IllegalStateException("boom")).doReturn(1).when(references).fillTimedFps(5012L, 23.976);
         serving(retimedJob(reference));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
-
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
-
         assertThat(logged.list).extracting(ILoggingEvent::getFormattedMessage)
             .contains("Could not fill the stated frame rate of OpenSubtitles file 5012: IllegalStateException");
         assertThat(infoLines()).containsExactly(NO_VERDICT + "UNKNOWN_RATE (sidecar 7, reference 5012)");
-
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
-
         assertThat(reference.getTimedFps()).isEqualTo(23.976);
         assertThat(infoLines()).hasSize(2);
     }
@@ -475,11 +463,9 @@ class FullFitProbeTest {
         serving(retimedJobWith(java.util.stream.IntStream.range(0, count).mapToObj(i -> rated(5012 + i, 25.0))
             .toArray(OpenSubtitlesReference[]::new)));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
-
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         // A conflict is never changed by indexing: the pair is not judged again and its line is not repeated.
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
-
         assertThat(infoLines()).containsExactly(NO_VERDICT + "RATE_CONFLICT (sidecar 7, reference 5012)");
         verifyNoInteractions(api, budget);
     }
@@ -499,10 +485,8 @@ class FullFitProbeTest {
         if (!download) {
             when(filmRates.forEdition(10L)).thenReturn(25.0);
         }
-
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
-
         // The download's own gap is said without a reference; a reference's is judged once, with the film rate.
         assertThat(infoLines()).containsExactly(none ? "Full subtitle fit of edition 10 (film 1): not measured, "
             + "OpenSubtitles has no second full file to compare with" : download
@@ -517,9 +501,7 @@ class FullFitProbeTest {
         String reason, Double firstRate) {
         serving(retimedJobWith(rated(5012, firstRate), rated(5013, 23.976)));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
-
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
-
         assertThat(infoLines()).hasSize(2);
         assertThat(infoLines().get(0)).isEqualTo(NO_VERDICT + reason + " (sidecar 7, reference 5012)");
         assertThat(infoLines().get(1)).contains("against reference file 5013 (300 cues, last cue 0:50:01); "
@@ -551,9 +533,7 @@ class FullFitProbeTest {
         fetching5013();
         serving(retimedJobOf(RETIMED, List.of(noRate(5012), candidate(5013)), rated(5012, storedRate)));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
-
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
-
         assertThat(infoLines()).hasSize(2);
         assertThat(infoLines().get(0)).isEqualTo(NO_VERDICT + reason + " (sidecar 7, reference 5012)");
         assertThat(infoLines().get(1)).contains("against reference file 5013 (300 cues, last cue 0:50:01)");
@@ -569,16 +549,13 @@ class FullFitProbeTest {
         Job job = retimedJobOf(RETIMED, List.of(noRate(5012), noRate(5013)), rated(5012, 25.0));
         serving(job);
         when(filmRates.forEdition(10L)).thenReturn(25.0);
-
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         // The next job read finds the fetched reference stored.
         job.stored().put(5013L, saved.get(5013L));
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
-
         // Only the first no-verdict line is written, and there was no second fetch.
         assertThat(infoLines()).containsExactly(NO_VERDICT + "RATE_CONFLICT (sidecar 7, reference 5012)");
         verify(api).download(5013);
-
         // Not done: once the fetched reference's rate is known the pair is measured.
         saved.get(5013L).setTimedFps(23.976);
         assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
@@ -596,10 +573,8 @@ class FullFitProbeTest {
             return reference;
         });
         when(filmRates.forEdition(10L)).thenReturn(25.0);
-
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         assertThat(infoLines()).containsExactly(NO_VERDICT + "UNKNOWN_RATE (sidecar 7, reference 5012)");
-
         // A second pass makes no second fetch: one new reference per download.
         assertThat(probe.measure(CHECK_LIMIT)).isZero();
         verify(api).download(5012);
@@ -608,7 +583,6 @@ class FullFitProbeTest {
     @Test
     void aJobGivenNoSideIsADownloadOfNoKnownRateNeverTheOwnersFile() {
         Job job = new Job(1L, 40L, "tt1", 7L, 5011L, List.of(), 0, null, List.of(), Map.of());
-
         assertThat(job.rateSide()).isEqualTo(RateComparison.Side.download());
     }
 }
