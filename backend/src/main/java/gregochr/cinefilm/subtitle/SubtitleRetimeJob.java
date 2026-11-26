@@ -63,6 +63,15 @@ public class SubtitleRetimeJob {
     }
 
     /**
+     * Runs after the timing check fitted something: a download that waited for its fit (the OFF_FITS decision) is
+     * looked at again. A run that changes nothing publishes nothing, so this cannot loop.
+     */
+    @EventListener
+    public void onTimingFinished(SidecarTimingFinished event) {
+        start();
+    }
+
+    /**
      * Asks for a run in the background. When one is going it goes round once more before it finishes, so a request
      * (a rate that arrived during the run) is not lost.
      *

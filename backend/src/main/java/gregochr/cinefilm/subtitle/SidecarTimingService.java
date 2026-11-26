@@ -289,10 +289,12 @@ public class SidecarTimingService {
                 .anyMatch(f -> !isRead(f, reads) && failures.failedFor(f.getId(), TimingKeys.fingerprint(f)));
             return failed ? OffFitsState.NEVER : OffFitsState.PENDING;
         }
-        if (state == State.NEEDS_FIT) {
+        TimingKeys.EmbeddedReference reference = TimingKeys.embeddedReference(s.edition(), s.sidecar(), reads);
+        if (state == State.NEEDS_FIT && reference.noReference() == null) {
             return OffFitsState.PENDING;
         }
-        TimingKeys.EmbeddedReference reference = TimingKeys.embeddedReference(s.edition(), s.sidecar(), reads);
+        // Every read is current. A film with no English track has nothing to fit the original cues to: the fit that
+        // is still to come (to OpenSubtitles files, whose key changes whenever one is stored) cannot change that.
         return OffFitsState.ready(reference.starts(), reference.noReference());
     }
 

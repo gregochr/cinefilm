@@ -71,6 +71,16 @@ class SubtitleRetimeJobTest {
     }
 
     @Test
+    void aTimingCheckThatFittedSomethingStartsARunAndDoesNothingWhileOff() {
+        job("on").onTimingFinished(new SidecarTimingFinished());
+        assertThat(queued).hasSize(1);
+
+        queued.clear();
+        job("off").onTimingFinished(new SidecarTimingFinished());
+        assertThat(queued).isEmpty();
+    }
+
+    @Test
     void anUnknownSettingIsOff() {
         assertThat(job("sometimes").start()).isFalse();
         assertThat(job(null).start()).isFalse();

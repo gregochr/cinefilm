@@ -227,6 +227,22 @@ class SidecarTimingServiceOffFitsStateTest {
     }
 
     @Test
+    void aFilmWithNoEnglishTrackIsReadyAtOnceWhateverTheOpenSubtitlesFitIsDoing() {
+        served();
+        EmbeddedCueStarts none = read(TimingKeys.fingerprint(part));
+        none.setStatus(EmbeddedCueStarts.Status.NO_REFERENCE);
+        none.setReason("No English track");
+        none.setStartsMs(List.of());
+        // The fit was made on an older set of stored OpenSubtitles files: outdated, and it will be made again.
+        fit(key() + "|os" + DownloadedFit.RULES_VERSION + ":" + IMDB + ":4999", null);
+
+        OffFitsState state = state();
+
+        assertThat(state.kind()).isEqualTo(Kind.READY);
+        assertThat(state.noReference()).isEqualTo("No English track");
+    }
+
+    @Test
     void aFilmFittedToOpenSubtitlesFilesIsReadyAndTheRatesDecide() {
         served();
         edition.getFilm().setOsFullSearchedImdbId(IMDB);
