@@ -98,7 +98,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     @BeforeEach
     void setUp() {
         service = new SidecarTimingService(sidecars, editions, files, cache, alignments, references, credits,
-            new LibraryLock(), transactions, filmRates);
+            new LibraryLock(), transactions, filmRates, new ReadFailures(), true);
         Film film = film(1L, "Taken", 2008, NOW);
         film.setImdbId(IMDB);
         film.setOsFullSearchedImdbId(IMDB);
@@ -468,7 +468,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         LibraryLock busy = new LibraryLock();
         assertThat(busy.tryAcquire(LibraryLock.SCAN)).isTrue();
         return new SidecarTimingService(sidecars, editions, files, cache, alignments, references, credits, busy,
-            transactions, filmRates);
+            transactions, filmRates, new ReadFailures(), true);
     }
 
     /** The fit is current (as made without the file), so only a backfill can make the film due. */

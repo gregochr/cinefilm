@@ -22,6 +22,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
@@ -81,18 +82,38 @@ public class SidecarCheckRefresher {
     private volatile Instant lastFinishedAt;
 
     /** Creates the service; the executor is {@code sidecarCheckExecutor}. */
+    @Autowired
     public SidecarCheckRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,
                                  OpenSubtitlesReferenceRepository references, SidecarCheckService service,
                                  FullFitService fullFit, TimingReferenceService timingReferences, Clock clock,
                                  @Qualifier("sidecarCheckExecutor") Executor executor,
                                  DailyDownloadLimit limits,
                                  ApplicationEventPublisher events, FilmRates filmRates) {
+        this(api, budget, new ReferenceFetcher(api, budget, references, clock, limits), service, fullFit,
+            timingReferences, clock, executor, limits, events, filmRates);
+    }
+
+    private SidecarCheckRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget, ReferenceFetcher fetcher,
+                                  SidecarCheckService service, FullFitService fullFit,
+                                  TimingReferenceService timingReferences, Clock clock, Executor executor,
+                                  DailyDownloadLimit limits, ApplicationEventPublisher events,
+                                  FilmRates filmRates) {
+        this(api, budget, fetcher, service, new FullFitProbe(fetcher, fullFit),
+            new TimingReferenceFetch(fetcher, timingReferences, clock, filmRates), clock, executor, limits, events,
+            filmRates);
+    }
+
+    /** For tests: the probe and the timing reference are given, so what is forgotten can be seen. */
+    SidecarCheckRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget, ReferenceFetcher fetcher,
+                          SidecarCheckService service, FullFitProbe probe, TimingReferenceFetch timingReference,
+                          Clock clock, Executor executor, DailyDownloadLimit limits, ApplicationEventPublisher events,
+                          FilmRates filmRates) {
         this.api = api;
         this.budget = budget;
-        this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
+        this.fetcher = fetcher;
         this.service = service;
-        this.probe = new FullFitProbe(fetcher, fullFit);
-        this.timingReference = new TimingReferenceFetch(fetcher, timingReferences, clock, filmRates);
+        this.probe = probe;
+        this.timingReference = timingReference;
         this.clock = clock;
         this.executor = executor;
         // The comparisons may bring the day's total only to their share, so downloads of missing and replacement
@@ -136,6 +157,16 @@ public class SidecarCheckRefresher {
     @EventListener
     public void onTimingFinished(SidecarTimingFinished event) {
         startDue();
+    }
+
+    /**
+     * The retime job rewrote or restored some downloads' cues: the full-file probe and the timing references forget
+     * that they measured these sidecars, so the next pass measures them again.
+     */
+    @EventListener
+    public void onCuesRewritten(SubtitleCuesRewritten event) {
+        probe.forget(event.sidecarIds());
+        timingReference.forget(event.sidecarIds());
     }
 
     /**

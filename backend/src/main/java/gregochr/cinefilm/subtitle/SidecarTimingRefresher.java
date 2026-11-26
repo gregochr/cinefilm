@@ -9,9 +9,6 @@ import gregochr.cinefilm.transcode.SessionManager;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -59,11 +56,7 @@ public class SidecarTimingRefresher {
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
     private final AtomicBoolean deferred = new AtomicBoolean();
-    private final Map<Long, Failure> failedAt = new ConcurrentHashMap<>();
-
-    /** A read that failed: of which version of the file, and when. A changed file is not held back by it. */
-    private record Failure(String fingerprint, Instant at) {
-    }
+    private final ReadFailures failures;
 
     /** Why a run ends early: playback is encoding, or the library lock is taken. Not an error. */
     private static final class Wait extends RuntimeException {
@@ -79,7 +72,7 @@ public class SidecarTimingRefresher {
                                   SessionManager sessions, Clock clock,
                                   @Qualifier("timingCheckExecutor") Executor executor,
                                   @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean enabled,
-                                  ApplicationEventPublisher events) {
+                                  ApplicationEventPublisher events, ReadFailures failures) {
         this.service = service;
         this.reader = reader;
         this.root = root;
@@ -88,6 +81,7 @@ public class SidecarTimingRefresher {
         this.executor = executor;
         this.enabled = enabled;
         this.events = events;
+        this.failures = failures;
     }
 
     /** True while a run is going. */
@@ -216,16 +210,20 @@ public class SidecarTimingRefresher {
             if (sessions.isEncoding()) {
                 throw new Wait("a film is being transcoded");
             }
-            Failure failed = failedAt.get(read.mediaFileId());
-            if (failed != null && failed.fingerprint().equals(read.fingerprint())
-                && clock.instant().isBefore(failed.at().plus(BACKOFF))) {
+            if (failures.backedOff(read.mediaFileId(), read.fingerprint(), clock.instant(), BACKOFF)) {
+                continue;
+            }
+            Path file = root.resolveFile(read.path()).orElse(null);
+            if (file == null) {
+                // Not a failed read: a mount outage must not count towards giving the file up (ReadFailures).
+                counts[3]++;
+                LOG.warn("Could not read the embedded subtitles of film file {}: The film file cannot be found",
+                    read.mediaFileId());
                 continue;
             }
             try {
-                Path file = root.resolveFile(read.path())
-                    .orElseThrow(() -> new EmbeddedCueReader.ReadException("The film file cannot be found"));
                 EmbeddedCueReader.Reading reading = reader.read(file);
-                failedAt.remove(read.mediaFileId());
+                failures.clear(read.mediaFileId());
                 SaveOutcome saved = service.saveReference(read, reading, clock.instant());
                 if (saved == SaveOutcome.BUSY) {
                     throw new Wait("a scan or an edit is using the library");
@@ -234,7 +232,7 @@ public class SidecarTimingRefresher {
                     counts[0]++;
                 }
             } catch (EmbeddedCueReader.ReadException e) {
-                failedAt.put(read.mediaFileId(), new Failure(read.fingerprint(), clock.instant()));
+                failures.record(read.mediaFileId(), read.fingerprint(), clock.instant());
                 counts[3]++;
                 LOG.warn("Could not read the embedded subtitles of film file {}: {}", read.mediaFileId(),
                     e.getMessage());

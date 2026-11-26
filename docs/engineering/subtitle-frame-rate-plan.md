@@ -239,7 +239,8 @@ the switch says, because rewritten rows outlive it:
     `ALIGNED`. That fit proves they are already on this copy's timeline, so its stated rate is wrong. Such a
     file counts as on the film's timeline in every comparison, like an owner's file. On a film with an English
     embedded track, the decision waits until a fit of the original cues has been tried, at arrival too. Only 3
-    forced files have one today;
+    forced files have one today. Only forced downloads wait for this fit: the timing check fits forced files only,
+    so a full download is decided by the rates at once;
   - **on** otherwise, including a download that arrives while the switch is on.
 - Once decided, the job never decides it again. A later verify or offset nudge on a retimed file leaves it retimed.
 - The Admin says when the file may drift because retime is off. The owner can turn it on. That retimes the file,

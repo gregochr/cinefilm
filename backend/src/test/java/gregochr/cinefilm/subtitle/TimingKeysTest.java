@@ -188,6 +188,77 @@ class TimingKeysTest {
         assertThat(TimingKeys.referenceKey(edition, sidecar(11L, false, "x"), reads)).isNull();
     }
 
+    private static Map<Long, EmbeddedCueStarts> readsOf(EmbeddedCueStarts... reads) {
+        Map<Long, EmbeddedCueStarts> byFile = new HashMap<>();
+        for (EmbeddedCueStarts read : reads) {
+            byFile.put(read.getMediaFileId(), read);
+        }
+        return byFile;
+    }
+
+    private static EmbeddedCueStarts usable(MediaFile file, Long... starts) {
+        EmbeddedCueStarts read = read(file);
+        read.setStatus(EmbeddedCueStarts.Status.USABLE);
+        read.setStartsMs(java.util.List.of(starts));
+        return read;
+    }
+
+    @Test
+    void theEmbeddedReferenceOfAWholeEditionShiftsEachPartToWhereItStarts() {
+        Edition edition = split();
+        MediaFile one = edition.originalParts().get(0);
+        MediaFile two = edition.originalParts().get(1);
+        Map<Long, EmbeddedCueStarts> reads = readsOf(usable(one, 1_000L, 2_000L), usable(two, 500L));
+
+        TimingKeys.EmbeddedReference reference = TimingKeys.embeddedReference(edition, sidecar(11L, true, "x"), reads);
+
+        assertThat(reference.noReference()).isNull();
+        assertThat(reference.starts()).containsExactly(1_000L, 2_000L, 60 * MIN + 500L);
+    }
+
+    @Test
+    void theEmbeddedReferenceOfAPartSidecarIsThatPartsStartsUnshifted() {
+        Edition edition = split();
+        MediaFile two = edition.originalParts().get(1);
+        Map<Long, EmbeddedCueStarts> reads = readsOf(usable(two, 500L));
+
+        TimingKeys.EmbeddedReference reference = TimingKeys.embeddedReference(edition, sidecar(12L, false, "x"), reads);
+
+        assertThat(reference.starts()).containsExactly(500L);
+    }
+
+    @Test
+    void aPartWithNoUsableTrackGivesNoReferenceAndSaysWhichPart() {
+        Edition edition = split();
+        MediaFile one = edition.originalParts().get(0);
+        MediaFile two = edition.originalParts().get(1);
+        EmbeddedCueStarts none = read(two);
+        none.setStatus(EmbeddedCueStarts.Status.NO_REFERENCE);
+        none.setReason("No English track");
+        Map<Long, EmbeddedCueStarts> reads = readsOf(usable(one, 1_000L), none);
+
+        TimingKeys.EmbeddedReference whole = TimingKeys.embeddedReference(edition, sidecar(11L, true, "x"), reads);
+        TimingKeys.EmbeddedReference partOnly = TimingKeys.embeddedReference(edition, sidecar(12L, false, "x"), reads);
+
+        assertThat(whole.starts()).isEmpty();
+        assertThat(whole.noReference()).isEqualTo("Part 2: No English track");
+        assertThat(partOnly.noReference()).isEqualTo("No English track");
+    }
+
+    @Test
+    void theTimingCheckCanFitASidecarOnlyWithPresentFingerprintedFilesAndATimelineWhenWhole() {
+        Edition edition = split();
+        MediaFile one = edition.originalParts().get(0);
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, false, "x"))).isTrue();
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, true, "x"))).isTrue();
+        assertThat(TimingKeys.fittable(edition, sidecar(99L, false, "x"))).isFalse();
+        edition.originalParts().get(1).setDurationMs(null);
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, true, "x"))).isFalse();
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, false, "x"))).isTrue();
+        one.setSizeBytes(null);
+        assertThat(TimingKeys.fittable(edition, sidecar(11L, false, "x"))).isFalse();
+    }
+
     @Test
     void theTimelineIsNullWhenAPartHasNoLength() {
         Edition edition = split();

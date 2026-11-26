@@ -2,6 +2,7 @@ package gregochr.cinefilm.transcode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -20,14 +21,16 @@ import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.context.ApplicationEventPublisher;
 
 class IndexJobTest {
 
     private final MediaFileRepository files = mock(MediaFileRepository.class);
     private final MediaKeyframesRepository rows = mock(MediaKeyframesRepository.class);
     private final KeyframeIndexService service = mock(KeyframeIndexService.class);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final List<Runnable> queued = new ArrayList<>();
-    private final IndexJob job = new IndexJob(files, rows, service, queued::add, true);
+    private final IndexJob job = new IndexJob(files, rows, service, queued::add, true, events);
 
     private static MediaFile media(long id, String path) {
         MediaFile file = new MediaFile();
@@ -131,11 +134,30 @@ class IndexJobTest {
     void anExecutorThatRefusesDoesNotLeaveTheJobStuckRunning() {
         IndexJob refusing = new IndexJob(files, rows, service, command -> {
             throw new RejectedExecutionException("shutting down");
-        }, true);
+        }, true, events);
 
         assertThatThrownBy(refusing::start).isInstanceOf(RejectedExecutionException.class);
 
         assertThat(refusing.isRunning()).isFalse();
+    }
+
+    @Test
+    void aFinishedPassAnnouncesItSoTheSubtitleRetimeCanWorkTheFilmRatesOutAgain() {
+        when(files.findOriginals(Presence.PRESENT, Playability.PLAYABLE)).thenReturn(List.of());
+
+        job.run();
+
+        verify(events).publishEvent(new KeyframeIndexPassFinished());
+    }
+
+    @Test
+    void aListenerThatFailsDoesNotFailThePass() {
+        when(files.findOriginals(Presence.PRESENT, Playability.PLAYABLE)).thenReturn(List.of());
+        doThrow(new IllegalStateException("listener")).when(events).publishEvent(new KeyframeIndexPassFinished());
+
+        job.run();
+
+        verify(events).publishEvent(new KeyframeIndexPassFinished());
     }
 
     @Test
@@ -148,7 +170,7 @@ class IndexJobTest {
     @Test
     void startupStartsTheJobOnlyWhenEnabled() {
         job.onStartup();
-        IndexJob disabled = new IndexJob(files, rows, service, queued::add, false);
+        IndexJob disabled = new IndexJob(files, rows, service, queued::add, false, events);
         disabled.onStartup();
 
         assertThat(queued).hasSize(1);

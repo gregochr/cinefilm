@@ -36,6 +36,8 @@ public class SubtitleRetimeService {
         RESTORED,
         /** The owner's hand-set timing was found, so retime was set off for the file. */
         DECIDED_OFF,
+        /** The original cues fit the film's own English track as they are, so retime was set to fit-as-is. */
+        DECIDED_FITS,
         /** Nothing needed to change. */
         UNCHANGED,
         /** The library lock was taken by someone else; the row is left for the next run. */
@@ -47,6 +49,7 @@ public class SubtitleRetimeService {
     private final FilmRates rates;
     private final ForcedDownloadCheckRepository downloadChecks;
     private final ForcedSubtitleAlignmentRepository alignments;
+    private final SidecarTimingService timing;
     private final LibraryLock lock;
     private final Clock clock;
     private final TransactionTemplate tx;
@@ -54,13 +57,14 @@ public class SubtitleRetimeService {
     /** Creates the service. */
     public SubtitleRetimeService(SubtitleSidecarRepository sidecars, EditionRepository editions, FilmRates rates,
                                  ForcedDownloadCheckRepository downloadChecks,
-                                 ForcedSubtitleAlignmentRepository alignments, LibraryLock lock, Clock clock,
-                                 PlatformTransactionManager transactions) {
+                                 ForcedSubtitleAlignmentRepository alignments, SidecarTimingService timing,
+                                 LibraryLock lock, Clock clock, PlatformTransactionManager transactions) {
         this.sidecars = sidecars;
         this.editions = editions;
         this.rates = rates;
         this.downloadChecks = downloadChecks;
         this.alignments = alignments;
+        this.timing = timing;
         this.lock = lock;
         this.clock = clock;
         this.tx = new TransactionTemplate(transactions);
@@ -143,10 +147,19 @@ public class SubtitleRetimeService {
                 sidecars.save(row);
                 return Outcome.DECIDED_OFF;
             }
-            // Wait for the decision on a film with an English track of its own: 2a-3b tries a fit of the original
-            // cues first, and a file that fits as it is must not have been rewritten before that.
-            if (hasEnglishTrack(edition)) {
+            // A file whose original cues fit the film's own English track as they are is left alone (OFF_FITS); a
+            // forced download waits until the timing check has settled it.
+            OffFitsRule.Decision decision = decide(row, edition);
+            if (decision == OffFitsRule.Decision.WAIT) {
                 return Outcome.UNCHANGED;
+            }
+            if (decision == OffFitsRule.Decision.FITS_AS_IS) {
+                row.setRetime(RetimeChoice.OFF_FITS);
+                if (retimed) {
+                    return restore(row, edition);
+                }
+                sidecars.save(row);
+                return Outcome.DECIDED_FITS;
             }
             row.setRetime(RetimeChoice.AUTO);
         }
@@ -240,10 +253,16 @@ public class SubtitleRetimeService {
             .orElse(null);
     }
 
-    private static boolean hasEnglishTrack(Edition edition) {
-        return edition.originalParts().stream()
-            .flatMap(part -> part.getSubtitleStreams().stream())
-            .anyMatch(stream -> !stream.isForced() && stream.getLanguage() != null
-                && gregochr.cinefilm.film.SubtitleStream.isEnglishOrUnlabelled(stream.getLanguage()));
+    /**
+     * The decision for a download that would be retimed, from what the timing check says about it
+     * ({@link SidecarTimingService#offFitsState}): it waits while the check will fit the download and has not yet, on
+     * the film file as it is now; where the check never will, the rates decide; once it has, the original cues are
+     * fitted to the embedded starts the check read, by the check's own rule.
+     */
+    private OffFitsRule.Decision decide(SubtitleSidecar row, Edition edition) {
+        OffFitsState state = timing.offFitsState(edition.getFilm().getId(), row.getId());
+        String original = row.getOriginalCuesText() != null ? row.getOriginalCuesText() : row.getCuesText();
+        List<Long> starts = SrtParser.cues(original).stream().map(SubtitleCue::startMs).toList();
+        return OffFitsRule.decide(state, starts);
     }
 }

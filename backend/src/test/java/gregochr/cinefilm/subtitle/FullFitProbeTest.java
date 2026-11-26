@@ -206,6 +206,42 @@ class FullFitProbeTest {
     }
 
     @Test
+    void aForgetThatLandsAfterTheDueListWasReadLeavesTheDownloadToBeMeasuredAgain() {
+        Job job = job(7L, null, List.of(candidate(5012)), Map.of(5012L, stored(5012, lines(300, 0))));
+        boolean[] forgotten = {false};
+        when(fullFit.due(any())).thenAnswer(call -> {
+            Set<Long> measured = call.getArgument(0);
+            if (!forgotten[0]) {
+                // The cues of sidecar 7 are rewritten after the list was read, before its measurement starts.
+                forgotten[0] = true;
+                probe.forget(List.of(7L));
+            }
+            return measured.contains(7L) ? List.of() : List.of(job);
+        });
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        // It was not marked done on its old cues, so the next pass measures it again; that one is marked.
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+    }
+
+    @Test
+    void aMarkIsTakenBackWhenAForgetLandsBetweenTheEpochCheckAndTheAdd() {
+        Set<Long> marks = new java.util.HashSet<>() {
+            @Override
+            public boolean add(Long id) {
+                // The forget lands after the epoch was compared and before the mark is in the set.
+                probe.forget(List.of(id));
+                return super.add(id);
+            }
+        };
+
+        assertThat(probe.markUnlessForgotten(marks, 7L, 0)).isTrue();
+
+        assertThat(marks).isEmpty();
+    }
+
+    @Test
     void aSecondFileNotStoredIsFetchedWithinTheComparisonCeilingAndNothingElseIsStored() {
         serving(job(7L, null, List.of(candidate(5012)), Map.of()));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.empty());

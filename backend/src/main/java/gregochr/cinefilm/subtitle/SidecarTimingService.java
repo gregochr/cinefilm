@@ -3,7 +3,6 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
-import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.Presence;
@@ -31,6 +30,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,6 +70,8 @@ public class SidecarTimingService {
     private final LibraryLock lock;
     private final TransactionTemplate tx;
     private final FilmRates filmRates;
+    private final ReadFailures failures;
+    private final boolean enabled;
 
     /** A film file whose embedded track must be read (it has no read, or its file changed since). */
     public record ReferenceRead(Long mediaFileId, String path, String fingerprint) {
@@ -134,7 +136,8 @@ public class SidecarTimingService {
                                 ForcedSubtitleAlignmentRepository alignments,
                                 OpenSubtitlesReferenceRepository references, CreditsDetectionRepository credits,
                                 LibraryLock lock, PlatformTransactionManager transactions,
-                                FilmRates filmRates) {
+                                FilmRates filmRates, ReadFailures failures,
+                                @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean enabled) {
         this.sidecars = sidecars;
         this.editions = editions;
         this.files = files;
@@ -145,6 +148,8 @@ public class SidecarTimingService {
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
         this.filmRates = filmRates;
+        this.failures = failures;
+        this.enabled = enabled;
     }
 
     /**
@@ -246,6 +251,71 @@ public class SidecarTimingService {
         row.setReadAt(now);
         cache.save(row);
         return SaveOutcome.SAVED;
+    }
+
+    /**
+     * What the check says about one download, for the retime job: whether the check will fit it, and whether it has on
+     * the film file as it is now. Built from the check's own rules: the sidecars it serves and fits (the downloads that
+     * count for an edition: present, with cues, made for it, of the film's current IMDb id),
+     * {@link TimingKeys#fittable}, the switch, and whether its read and its fit are current for the file's present
+     * fingerprint.
+     * {@link OffFitsState.Kind#NEVER} when the check is off, does not serve the download, the film file's read failed
+     * as it is now, repeatedly (a file that cannot be found does not count), or it is a whole-edition sidecar whose
+     * edition timeline is unknown (a part with no length is not probed again);
+     * {@link OffFitsState.Kind#PENDING} when a file is not present or has no fingerprint yet, or a read or a fit is
+     * missing, outdated or stale; {@link OffFitsState.Kind#READY} with what the read found when both are current.
+     *
+     * @param filmId the film
+     * @param sidecarId the download
+     * @return the state
+     */
+    public OffFitsState offFitsState(Long filmId, Long sidecarId) {
+        if (!enabled) {
+            return OffFitsState.NEVER;
+        }
+        List<Served> served = served(Set.of(filmId)).stream().filter(s -> s.sidecar().getId().equals(sidecarId))
+            .toList();
+        if (served.isEmpty()) {
+            return notServed(filmId, sidecarId);
+        }
+        Served s = served.get(0);
+        Map<Long, EmbeddedCueStarts> reads = reads(served);
+        State state = state(s, reads, osRefs(served, reads), fits(served).get(sidecarId));
+        if (state == State.SKIP) {
+            // A file not present (a share unmounted during a scan) or with no fingerprint yet clears on its own: the
+            // rates must not decide meanwhile. A timeline that stays unknown (a part with no length, which is not
+            // probed again) never will: the check will never fit it, so the rates decide.
+            List<MediaFile> files = TimingKeys.referenceFiles(s.edition(), s.sidecar());
+            boolean clears = files.isEmpty() || files.stream().anyMatch(f -> TimingKeys.fingerprint(f) == null);
+            return clears ? OffFitsState.PENDING : OffFitsState.NEVER;
+        }
+        if (state == State.NEEDS_READ) {
+            boolean failed = TimingKeys.referenceFiles(s.edition(), s.sidecar()).stream()
+                .anyMatch(f -> !isRead(f, reads) && failures.failedFor(f.getId(), TimingKeys.fingerprint(f)));
+            return failed ? OffFitsState.NEVER : OffFitsState.PENDING;
+        }
+        TimingKeys.EmbeddedReference reference = TimingKeys.embeddedReference(s.edition(), s.sidecar(), reads);
+        if (state == State.NEEDS_FIT && reference.noReference() == null) {
+            return OffFitsState.PENDING;
+        }
+        // Every read is current. A film with no English track has nothing to fit the original cues to: the fit that
+        // is still to come (to OpenSubtitles files, whose key changes whenever one is stored) cannot change that.
+        return OffFitsState.ready(reference.starts(), reference.noReference());
+    }
+
+    /**
+     * A download the check does not serve is never fitted, except while the owner has marked the film's forced
+     * subtitles NOT_NEEDED: that may be undone, and the rates must not decide for good meanwhile.
+     */
+    private OffFitsState notServed(Long filmId, Long sidecarId) {
+        SubtitleSidecar row = sidecars.findById(sidecarId).orElse(null);
+        if (row == null || !row.isDownload() || row.getKind() != SubtitleKind.FORCED) {
+            return OffFitsState.NEVER;
+        }
+        boolean notNeeded = editions.findWithFilesByFilmIdIn(Set.of(filmId)).stream()
+            .filter(e -> e.getId().equals(Downloads.madeForEditionId(row)))
+            .anyMatch(e -> Downloads.isNotNeeded(e, SubtitleKind.FORCED));
+        return notNeeded ? OffFitsState.PENDING : OffFitsState.NEVER;
     }
 
     /**
@@ -373,22 +443,9 @@ public class SidecarTimingService {
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
                 List.copyOf(starts), List.of(), null, fitTo);
         }
-        List<MediaFile> refFiles = TimingKeys.referenceFiles(s.edition(), sidecar);
-        EditionTimeline timeline = sidecar.isWholeEdition() ? TimingKeys.timelineOrNull(s.edition()) : null;
-        List<Long> reference = new ArrayList<>();
-        String noReference = null;
-        for (int i = 0; i < refFiles.size() && noReference == null; i++) {
-            EmbeddedCueStarts read = reads.get(refFiles.get(i).getId());
-            if (read.getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE) {
-                noReference = (sidecar.isWholeEdition() ? "Part " + (i + 1) + ": " : "") + read.getReason();
-            } else {
-                long shift = timeline == null ? 0 : timeline.partStartMs(i);
-                read.getStartsMs().forEach(start -> reference.add(start + shift));
-            }
-        }
+        TimingKeys.EmbeddedReference embedded = TimingKeys.embeddedReference(s.edition(), sidecar, reads);
         return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar),
-            referenceKey(s, reads, os), List.copyOf(starts),
-            noReference == null ? List.copyOf(reference) : List.of(), noReference);
+            referenceKey(s, reads, os), List.copyOf(starts), embedded.starts(), embedded.noReference());
     }
 
     /**
@@ -603,8 +660,7 @@ public class SidecarTimingService {
     private State state(Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os,
                          ForcedSubtitleAlignment fit) {
         List<MediaFile> refFiles = TimingKeys.referenceFiles(s.edition(), s.sidecar());
-        if (refFiles.isEmpty() || refFiles.stream().anyMatch(f -> TimingKeys.fingerprint(f) == null)
-            || s.sidecar().isWholeEdition() && TimingKeys.timelineOrNull(s.edition()) == null) {
+        if (!TimingKeys.fittable(s.edition(), s.sidecar())) {
             return State.SKIP;
         }
         if (!refFiles.stream().allMatch(f -> isRead(f, reads))) {

@@ -93,11 +93,13 @@ class SidecarTimingRefresherTest {
             return now;
         }
     };
+    private final ReadFailures failures = new ReadFailures();
     private SidecarTimingRefresher refresher;
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add, true, events);
+        refresher = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add, true, events,
+            failures);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -446,6 +448,28 @@ class SidecarTimingRefresherTest {
     }
 
     @Test
+    void aFileThatCannotBeFoundNeverCountsTowardsGivingItUpButRealFailuresDo() {
+        when(service.dueFilmIds()).thenReturn(List.of(7L));
+        when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
+        when(service.fitJobs(7L)).thenReturn(List.of());
+        when(root.resolveFile("Taken.m4v")).thenReturn(Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.of(FILE), Optional.of(FILE), Optional.of(FILE));
+        when(reader.read(FILE)).thenThrow(new ReadException("ffprobe failed"));
+
+        for (int i = 0; i < ReadFailures.GIVE_UP; i++) {
+            refresher.run();
+        }
+        assertThat(failures.failedFor(70L, "1000:1")).isFalse();
+
+        for (int i = 0; i < ReadFailures.GIVE_UP; i++) {
+            // Past the back-off of the last failed read.
+            now = now.plus(SidecarTimingRefresher.BACKOFF).plusSeconds(1);
+            refresher.run();
+        }
+        assertThat(failures.failedFor(70L, "1000:1")).isTrue();
+    }
+
+    @Test
     void aFilmThatFailsIsCountedAndTheNextFilmIsStillDone() {
         when(service.dueFilmIds()).thenReturn(List.of(7L, 8L));
         when(service.readsFor(7L)).thenThrow(new IllegalStateException("boom"));
@@ -507,7 +531,7 @@ class SidecarTimingRefresherTest {
         SidecarTimingRefresher refusing = new SidecarTimingRefresher(service, reader, root, sessions, clock,
             task -> {
                 throw new RejectedExecutionException("full");
-            }, true, events);
+            }, true, events, failures);
 
         assertThatThrownBy(refusing::startDue).isInstanceOf(RejectedExecutionException.class);
 
@@ -517,7 +541,7 @@ class SidecarTimingRefresherTest {
     @Test
     void whenItIsSwitchedOffNothingStartsAndStartUpSaysWhy() {
         SidecarTimingRefresher off = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add,
-            false, events);
+            false, events, failures);
 
         assertThat(off.startDue()).isFalse();
         off.startIfDeferred();
