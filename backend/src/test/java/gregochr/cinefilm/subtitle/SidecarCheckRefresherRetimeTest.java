@@ -103,7 +103,7 @@ class SidecarCheckRefresherRetimeTest {
     @Test
     void theRetimeChecksStampTheTimeTheyEndSoAdminReadsTheFilesAgain() {
         when(api.downloadsEnabled()).thenReturn(true);
-        when(service.due()).thenReturn(List.of());
+        when(service.due(List.of(10L))).thenReturn(List.of());
         assertThat(refresher.lastFinishedAt()).isNull();
 
         refresher.checkEditions(List.of(10L));
@@ -125,11 +125,10 @@ class SidecarCheckRefresherRetimeTest {
     void onlyTheNamedEditionsAreCheckedInTheOrderGiven() {
         DueCheck first = due(1, 10, 5011);
         DueCheck second = due(2, 20, 5022);
-        DueCheck other = due(3, 30, 5033);
         OpenSubtitlesReference secondReference = reference(8, 2, 5022);
         OpenSubtitlesReference firstReference = reference(9, 1, 5011);
         when(api.downloadsEnabled()).thenReturn(true);
-        when(service.due()).thenReturn(List.of(first, second, other));
+        when(service.due(List.of(20L, 10L))).thenReturn(List.of(first, second));
         when(fetcher.fetch(1L, "tt1", candidate(5011), 6)).thenReturn(firstReference);
         when(fetcher.fetch(2L, "tt2", candidate(5022), 6)).thenReturn(secondReference);
         when(service.save(any(DueCheck.class), any(OpenSubtitlesReference.class), any(Result.class),
@@ -156,12 +155,12 @@ class SidecarCheckRefresherRetimeTest {
     @Test
     void aFailureIsLoggedNotThrownAndTheRunIsGivenBack() {
         when(api.downloadsEnabled()).thenReturn(true);
-        when(service.due()).thenThrow(new IllegalStateException("db down"));
+        when(service.due(List.of(10L))).thenThrow(new IllegalStateException("db down"));
 
         assertThat(refresher.checkEditions(List.of(10L))).isTrue();
         assertThat(refresher.checkEditions(List.of(10L))).isTrue();
 
-        verify(service, times(2)).due();
+        verify(service, times(2)).due(List.of(10L));
         assertThat(refresher.lastFinishedAt()).isEqualTo(NOW);
     }
 
@@ -169,7 +168,7 @@ class SidecarCheckRefresherRetimeTest {
     void aRequestDuringTheRetimeChecksIsNotLostAndTheCheckPassGoesRoundOnceMore() {
         when(api.downloadsEnabled()).thenReturn(true);
         List<Boolean> asked = new ArrayList<>();
-        when(service.due()).thenAnswer(call -> {
+        when(service.due(List.of(10L))).thenAnswer(call -> {
             if (asked.isEmpty()) {
                 // The nightly pass asks while the retime's checks are going.
                 asked.add(refresher.startDue());

@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,7 +29,7 @@ class SidecarCheckDownloadsTest extends ForcedDownloadTestBase {
     private SidecarCheckService service;
 
     @Autowired
-    private SidecarTimingService timing;
+    private ForcedSubtitleAlignmentRepository alignments;
 
     private Film film() {
         return searchedFilm("Taken", 1, result(5011, "Taken.2008.BluRay"), result(5012, "Taken.2008.WEB"),
@@ -37,7 +38,7 @@ class SidecarCheckDownloadsTest extends ForcedDownloadTestBase {
 
     private SidecarCheckService enabledTimingService() {
         return new SidecarCheckService(films, sidecars, editionRepository, resolver, checks,
-            downloadChecks, ledger, true, timing);
+            downloadChecks, ledger, true, alignments, CLOCK);
     }
 
     @Test

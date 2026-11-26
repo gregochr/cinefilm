@@ -4,7 +4,6 @@ import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -75,13 +74,11 @@ class SubtitleRetimeRecheckFlowTest {
     private final List<Integer> checkQueueDuringTheWalk = new ArrayList<>();
     private final List<Runnable> checkQueue = new ArrayList<>();
     private final List<Runnable> timingQueue = new ArrayList<>();
-    private SidecarCheckRefresher checkRefresher;
     private SubtitleRetimeRecheck recheck;
-    private Runnable afterFirstFit = () -> { };
 
     @BeforeEach
     void setUp() {
-        checkRefresher = new SidecarCheckRefresher(api, budget, references, checkService,
+        SidecarCheckRefresher checkRefresher = new SidecarCheckRefresher(api, budget, references, checkService,
             fullFit, timingReferences, CLOCK, checkQueue::add, new FakeDailyLimit(20), event -> { }, filmRates);
         SidecarTimingRefresher timingRefresher = new SidecarTimingRefresher(timingService, reader, root, sessions,
             CLOCK, timingQueue::add, true, event -> {
@@ -126,9 +123,6 @@ class SubtitleRetimeRecheckFlowTest {
         when(timingService.save(job, TimingFit.fit(STARTS, TRACK), NOW)).thenAnswer(call -> {
             happened.add("fit film " + filmId);
             checkQueueDuringTheWalk.add(checkQueue.size());
-            if (filmId == 1L) {
-                afterFirstFit.run();
-            }
             return SaveOutcome.APPLIED;
         });
     }
@@ -151,7 +145,8 @@ class SubtitleRetimeRecheckFlowTest {
         when(api.downloadsEnabled()).thenReturn(true);
         filmFits(1L, 5L);
         filmFits(2L, 6L);
-        when(checkService.due()).thenReturn(List.of(due10, due20));
+        when(checkService.due(List.of(10L))).thenReturn(List.of(due10));
+        when(checkService.due(List.of(20L))).thenReturn(List.of(due20));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(ref11));
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5021)).thenReturn(Optional.empty());
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.of(ref22));
@@ -167,7 +162,8 @@ class SubtitleRetimeRecheckFlowTest {
         assertThat(checkQueue).hasSize(1);
         assertThat(timingQueue).isEmpty();
         // The stored reference of edition B was compared, and the one that would be downloaded was not touched.
-        verify(checkService, times(2)).due();
+        verify(checkService).due(List.of(10L));
+        verify(checkService).due(List.of(20L));
         verify(checkService).markTried(10L, "tt1", 5011, NOW);
         verify(checkService).markTried(20L, "tt2", 5022, NOW);
         verify(checkService).save(due10, ref11, AGREES, NOW);
@@ -175,38 +171,5 @@ class SubtitleRetimeRecheckFlowTest {
         verifyNoMoreInteractions(checkService);
         verify(api, atLeastOnce()).downloadsEnabled();
         verifyNoMoreInteractions(api);
-    }
-
-    @Test
-    void aFullPassStartedBySomethingElseDuringTheWalkDoesNotCheckAnEditionBeforeItsFilmsFit() {
-        DueCheck due10 = due(1, 10, 5011);
-        DueCheck due20 = due(2, 20, 5021, 5022);
-        OpenSubtitlesReference ref11 = stored(1, 5011);
-        OpenSubtitlesReference ref22 = stored(2, 5022);
-        when(retimeService.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
-            new TouchedEdition(20L, 2L)));
-        when(api.downloadsEnabled()).thenReturn(true);
-        filmFits(1L, 5L);
-        filmFits(2L, 6L);
-        // The check service's rule: a download whose fit is still to come is not due (tested in its own class).
-        when(checkService.due()).thenAnswer(call ->
-            happened.contains("fit film 2") ? List.of(due10, due20) : List.of(due10));
-        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(ref11));
-        when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5021)).thenReturn(Optional.empty());
-        when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.of(ref22));
-        checkSaves(due10, ref11);
-        checkSaves(due20, ref22);
-        // Something else (start-up, a finished download) runs a full pass in the middle of the walk.
-        afterFirstFit = () -> {
-            checkRefresher.startDue();
-            checkQueue.remove(0).run();
-        };
-
-        recheck.run(IDS);
-
-        // The full pass checked edition A (its fit was made) and, with the walk, edition A again; edition B only
-        // after film 2's fit.
-        assertThat(happened).containsExactly("fit film 1", "check edition 10", "check edition 10", "fit film 2",
-            "check edition 20");
     }
 }

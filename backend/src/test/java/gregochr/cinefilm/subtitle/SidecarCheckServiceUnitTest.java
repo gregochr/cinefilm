@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
@@ -75,7 +76,7 @@ class SidecarCheckServiceUnitTest {
     private ForcedCheckCandidateRepository candidates;
 
     @Mock
-    private SidecarTimingService timing;
+    private ForcedSubtitleAlignmentRepository alignments;
 
     private SidecarCheckService service;
     private Film film;
@@ -86,7 +87,7 @@ class SidecarCheckServiceUnitTest {
     @BeforeEach
     void setUp() {
         service = new SidecarCheckService(films, sidecars, editions, resolver, checks, downloadChecks, candidates,
-            true, timing);
+            true, alignments, CLOCK);
         film = film(1L, "Taken", 2008, NOW);
         film.setImdbId("tt1");
         edition = edition(film, 40L, "Original", 90 * MIN, null);
@@ -199,6 +200,19 @@ class SidecarCheckServiceUnitTest {
     }
 
     @Test
+    void dueForSomeEditionsReadsOnlyThoseEditionsInsteadOfEveryEditionOfTheFilms() {
+        when(films.findOpenSubtitlesBest()).thenReturn(List.of(new OsBestRef(1L, "tt1", film.getOsBest(),
+            film.getOsCandidates())));
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        when(editions.findWithFilesByIdIn(List.of(40L))).thenReturn(List.of(edition));
+        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L,
+            resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, fit())))));
+        when(candidates.findByEditionIdInAndKind(Set.of(40L), SubtitleKind.FORCED)).thenReturn(List.of());
+
+        assertThat(service.due(List.of(40L))).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
+    }
+
+    @Test
     void aProvenDownloadWithNoStaleRowIsNotDue() {
         resolved(resolution(null, List.of(downloadState(Trust.PROVEN, Proof.AGREES, check("AGREES"), fit()))));
 
@@ -210,7 +224,6 @@ class SidecarCheckServiceUnitTest {
         resolved(resolution(null, List.of(downloadState(Trust.PROVEN, Proof.AGREES, check("AGREES"), fit()))));
         when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L)))
             .thenReturn(List.of(downloadRow(STALE)));
-        when(timing.offFitsState(1L, 7L)).thenReturn(OffFitsState.ready(List.of(), null));
 
         assertThat(service.due()).singleElement().satisfies(due -> {
             assertThat(due.downloadSidecarId()).isEqualTo(7L);
@@ -223,21 +236,36 @@ class SidecarCheckServiceUnitTest {
         resolved(resolution(null, List.of(downloadState(Trust.FAILED, Proof.NONE, check("CHECK"), fit()))));
         when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L)))
             .thenReturn(List.of(downloadRow(STALE)));
-        // The timing check will never fit it (switched off, cannot fit, read failed): nothing waits for good.
-        when(timing.offFitsState(1L, 7L)).thenReturn(OffFitsState.NEVER);
 
         assertThat(service.due()).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
     }
 
+    private ForcedSubtitleAlignment staleFit(Instant staleSince) {
+        ForcedSubtitleAlignment fit = new ForcedSubtitleAlignment();
+        fit.setSidecarId(7L);
+        fit.setStaleSince(staleSince);
+        when(alignments.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L))).thenReturn(List.of(fit));
+        return fit;
+    }
+
     @Test
-    void aStaleDownloadWhoseFitTheTimingCheckWillStillMakeWaitsForIt() {
+    void aDownloadWhoseFitWasMadeOutdatedByARetimeLessThanADayAgoWaitsForTheFit() {
         resolved(resolution(null, List.of(downloadState(Trust.FAILED, Proof.NONE, check("CHECK"), fit()))));
         when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L)))
             .thenReturn(List.of(downloadRow(STALE)));
-        // A stale fit would count as "the fit exists": the check waits for the fit the timing check will make.
-        when(timing.offFitsState(1L, 7L)).thenReturn(OffFitsState.PENDING);
+        staleFit(NOW.minus(SidecarCheckService.STALE_FIT_WAIT).plusSeconds(1));
 
         assertThat(service.due()).isEmpty();
+    }
+
+    @Test
+    void aFitOutdatedForADayOrMoreNoLongerHoldsTheDownloadBack() {
+        resolved(resolution(null, List.of(downloadState(Trust.FAILED, Proof.NONE, check("CHECK"), fit()))));
+        when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L)))
+            .thenReturn(List.of(downloadRow(STALE)));
+        staleFit(NOW.minus(SidecarCheckService.STALE_FIT_WAIT));
+
+        assertThat(service.due()).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
     }
 
     @Test
@@ -305,7 +333,6 @@ class SidecarCheckServiceUnitTest {
 
     @Test
     void aResultDroppedBecauseTheCuesChangedAgainWritesNothingAndTheStaleRowStaysDue() {
-        when(timing.offFitsState(1L, 7L)).thenReturn(OffFitsState.NEVER);
         DownloadState state = downloadState(Trust.FAILED, Proof.NONE, check("CHECK"), fit());
         readyToSave(resolution(null, List.of(state)));
         ForcedDownloadCheck stale = downloadRow(STALE);
@@ -330,7 +357,6 @@ class SidecarCheckServiceUnitTest {
 
     @Test
     void aDownloadsDueCheckCarriesItsRateSideAndItsOriginalCuesOnTheEditionsTimeline() {
-        when(timing.offFitsState(1L, 7L)).thenReturn(OffFitsState.NEVER);
         String original = "1\n00:01:40,000 --> 00:01:42,000\nHello\n\n";
         download.setTimedFps(23.976);
         download.setRetime(RetimeChoice.AUTO);
@@ -350,7 +376,6 @@ class SidecarCheckServiceUnitTest {
 
     @Test
     void aDownloadThatIsNotRetimedCarriesItsSideAndNoOriginalCues() {
-        when(timing.offFitsState(1L, 7L)).thenReturn(OffFitsState.NEVER);
         download.setTimedFps(25.0);
         resolved(resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, fit()))));
 
@@ -363,7 +388,6 @@ class SidecarCheckServiceUnitTest {
 
     @Test
     void aRetimedDownloadWithNoOriginalCuesCarriesNoOriginalCues() {
-        when(timing.offFitsState(1L, 7L)).thenReturn(OffFitsState.NEVER);
         download.setTimedFps(23.976);
         download.setRetime(RetimeChoice.AUTO);
         download.setRetimedBy(0.959);
@@ -377,7 +401,6 @@ class SidecarCheckServiceUnitTest {
 
     @Test
     void aRetimedDownloadWaitsForItsTimingFitUntilAFitRowExistsAndThenIsDueEvenWhenTheRowSaysNoFile() {
-        when(timing.offFitsState(1L, 7L)).thenReturn(OffFitsState.NEVER);
         download.setTimedFps(23.976);
         download.setRetime(RetimeChoice.AUTO);
         download.setRetimedBy(0.959);

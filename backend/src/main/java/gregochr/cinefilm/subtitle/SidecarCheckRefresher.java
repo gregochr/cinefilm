@@ -308,8 +308,7 @@ public class SidecarCheckRefresher {
                 return;
             }
             checkLimit = DownloadShares.forChecks(limits.today());
-            Set<Long> wanted = new HashSet<>(editionIds);
-            List<DueCheck> due = service.due().stream().filter(d -> wanted.contains(d.editionId()))
+            List<DueCheck> due = service.due(editionIds).stream()
                 .sorted(Comparator.comparingInt(d -> editionIds.indexOf(d.editionId()))).toList();
             checkDue(due, true, tally);
             LOG.info("Subtitle file checks of the retimed files finished: {} saved, {} changed meanwhile, {} "
