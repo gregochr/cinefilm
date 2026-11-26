@@ -115,6 +115,43 @@ class RateLineTest {
     }
 
     @Test
+    void aRetimedFileIsWordedFromTheRateItWasRetimedForNotTheCopyItHasNow() {
+        SubtitleSidecar retimed = download(23.976, RetimeChoice.AUTO, K_UP);
+        retimed.setRetimedForFps(25.0);
+
+        assertThat(RateLine.of(retimed, 23.976).line())
+            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
+    }
+
+    @Test
+    void aFileWithTheOwnersTimingIsNeverRetimedWhetherOffOrUndecided() {
+        SubtitleSidecar nudgedOff = download(23.976, RetimeChoice.OFF, null);
+        nudgedOff.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+        SubtitleSidecar verifiedUndecided = download(23.976, null, null);
+        verifiedUndecided.setOwnerVerifiedAt(java.time.Instant.parse("2026-01-01T00:00:00Z"));
+        SubtitleSidecar nudgedUndecided = download(23.976, null, null);
+        nudgedUndecided.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+
+        for (SubtitleSidecar row : java.util.List.of(nudgedOff, verifiedUndecided, nudgedUndecided)) {
+            assertThat(RateLine.of(row, 25.0).line())
+                .isEqualTo("Not retimed: its timing was set by hand; it may drift");
+        }
+    }
+
+    @Test
+    void anAutoTimedOffsetDoesNotCountAsSetByHandAndAnAutoRowIsStillDue() {
+        SubtitleSidecar autoOffset = download(23.976, null, null);
+        autoOffset.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+        SubtitleSidecar autoChoice = download(23.976, RetimeChoice.AUTO, null);
+        autoChoice.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+
+        assertThat(RateLine.of(autoOffset, 25.0).line())
+            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+        assertThat(RateLine.of(autoChoice, 25.0).line())
+            .isEqualTo("Timed for 23.976 fps; this film is 25 fps, so it is not retimed yet");
+    }
+
+    @Test
     void aRetimedFileWithNoKnownRateAtAllStillSaysWhatWasDone() {
         assertThat(RateLine.of(download(null, RetimeChoice.AUTO, K_UP), null).line())
             .isEqualTo("Timed for an unknown frame rate; this film's frame rate is unknown, so it is sped up 4%");

@@ -732,6 +732,30 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
+    void aVerifyOrNudgeAfterTheOwnersOnLeavesTheRowRetimedAndTheNextRunChangesNothing() {
+        // Turn on, then the next run: the owner turned it on, it was retimed, then verified and nudged it.
+        retimedAlready();
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+        row.setOwnerVerifiedAt(NOW.minusSeconds(5));
+        row.setVerifiedParts("10");
+        rowIs();
+        filmRateIs(25.0);
+
+        Outcome outcome = service.process(5L, RetimeMode.ON);
+
+        assertThat(outcome).isEqualTo(Outcome.UNCHANGED);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(row.getCuesText()).isEqualTo(SCALED);
+        assertThat(row.getOriginalCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getRetimedBy()).isEqualTo(K);
+        assertThat(row.getOffsetMs()).isEqualTo(900);
+        assertThat(row.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.OWNER);
+        assertThat(row.isVerifiedFor(List.of(10L))).isTrue();
+        assertThat(row.getUpdatedAt()).isEqualTo(NOW.minusSeconds(60));
+    }
+
+    @Test
     void aJobRunAfterTheOwnersOffFindsTheChoiceAndNeverRetimesTheRowAgain() {
         // The job reads the row again under the lock: the owner's OFF is there to be seen, so it rewrites nothing,
         // even with the rates saying k is not 1.

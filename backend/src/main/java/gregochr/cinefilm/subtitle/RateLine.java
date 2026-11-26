@@ -41,8 +41,10 @@ record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy
             return "Fits this copy as it is";
         }
         if (row.getRetimedBy() != null) {
-            // Retimed for the film rate it was retimed for, even when that rate is unknown now or k is 1 now.
-            return retimed(timed, film != null ? film : row.getRetimedForFps(), row.getRetimedBy());
+            // Worded from the film rate it was retimed for, not the film's rate now (a replaced copy, k now 1, or
+            // an unknown rate): the file's cues are still scaled by that k.
+            Double retimedFor = row.getRetimedForFps() != null ? row.getRetimedForFps() : film;
+            return retimed(timed, retimedFor, row.getRetimedBy());
         }
         if (timed == null || film == null) {
             return "Frame rate unknown";
@@ -53,6 +55,10 @@ record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy
         String timedFor = "Timed for " + fps(timed) + " fps; this film is " + fps(film) + " fps";
         if (FrameRateRetime.factor(timed, film) == 1.0) {
             return timedFor + "; only the 24 to 25 fps speed-up is retimed";
+        }
+        if ((choice == null || choice == RetimeChoice.OFF) && SubtitleRetimeService.timingSetByHand(row)) {
+            // The job decides such a row off itself, so it is never retimed, whatever the owner chose.
+            return "Not retimed: its timing was set by hand; it may drift";
         }
         if (choice == RetimeChoice.OFF) {
             return "Not retimed (you chose this); it may drift";

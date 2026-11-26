@@ -113,6 +113,27 @@ class SubtitleAdminRetimeApiTest extends ForcedDownloadTestBase {
     }
 
     @Test
+    void aChoiceThatChangesNoCuesIsStillWrittenToTheDatabase() {
+        SubtitleSidecar neverRetimed = statedDownload("Taken", 2001, 25.0, 23.976);
+        SubtitleSidecar matching = statedDownload("Alien", 2002, 25.0, 25.0);
+        Film unrated = searchedFilm("Heat", 1, result(2003, "Heat.1995"));
+        SubtitleSidecar unknown = download(unrated, 2003);
+        unknown.setTimedFps(23.976);
+        unknown = sidecars.saveAndFlush(unknown);
+
+        admin.retime(neverRetimed.getId(), new RetimeRequest(false));
+        admin.retime(matching.getId(), new RetimeRequest(true));
+        admin.retime(unknown.getId(), new RetimeRequest(true));
+
+        assertThat(reread(neverRetimed.getId()).getRetime()).isEqualTo(RetimeChoice.OFF);
+        assertThat(reread(neverRetimed.getId()).getCuesText()).isEqualTo(CUES);
+        assertThat(reread(matching.getId()).getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(reread(matching.getId()).getCuesText()).isEqualTo(CUES);
+        assertThat(reread(unknown.getId()).getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(reread(unknown.getId()).getCuesText()).isEqualTo(CUES);
+    }
+
+    @Test
     void aFullDownloadListsItsRateFactsToo() {
         SubtitleSidecar full = statedDownload("Taken", 2101, 25.0, 23.976, SubtitleKind.FULL);
 

@@ -133,7 +133,7 @@ public class SubtitleRetimeService {
             if (k == 1.0) {
                 return Outcome.UNCHANGED;
             }
-            if (row.getOffsetSource() == SubtitleSidecar.OffsetSource.OWNER || row.getOwnerVerifiedAt() != null) {
+            if (timingSetByHand(row)) {
                 row.setRetime(RetimeChoice.OFF);
                 sidecars.save(row);
                 return Outcome.DECIDED_OFF;
@@ -152,6 +152,17 @@ public class SubtitleRetimeService {
             return Outcome.UNCHANGED;
         }
         return rewrite(row, edition, k, film);
+    }
+
+    /**
+     * True when the owner set the row's timing by hand (an OWNER offset or a verification): the job then decides
+     * {@code retime} off for it and never retimes it.
+     *
+     * @param row the download
+     * @return whether its timing is the owner's
+     */
+    static boolean timingSetByHand(SubtitleSidecar row) {
+        return row.getOffsetSource() == SubtitleSidecar.OffsetSource.OWNER || row.getOwnerVerifiedAt() != null;
     }
 
     private Outcome rewrite(SubtitleSidecar row, Edition edition, double k, double film) {
