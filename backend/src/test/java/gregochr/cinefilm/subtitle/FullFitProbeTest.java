@@ -525,6 +525,99 @@ class FullFitProbeTest {
         verify(filmRates).forEdition(10L);
     }
 
+    /** A retimed 23.976 download with several stored full references to try, in this order. */
+    private static Job retimedJobWith(OpenSubtitlesReference... references) {
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, SrtParser.format(lines(300, 0)));
+        List<OpenSubtitlesResult> others = new ArrayList<>();
+        Map<Long, OpenSubtitlesReference> byFile = new java.util.LinkedHashMap<>();
+        for (OpenSubtitlesReference reference : references) {
+            // The candidates state no rate: each stored row's own rate is what the rule sees.
+            others.add(new OpenSubtitlesResult(reference.getOsFileId() - 1000, reference.getOsFileId(),
+                "Release " + reference.getOsFileId(), null, 10, true, false, null, null));
+            byFile.put(reference.getOsFileId(), reference);
+        }
+        return new Job(1L, 10L, "tt1", 7L, 5011L, lines(300, 90_000), 3 * HOUR + 125_000, null, others, byFile, side);
+    }
+
+    private static OpenSubtitlesReference rated(long fileId, double fps) {
+        OpenSubtitlesReference reference = stored(fileId, lines(300, 0));
+        reference.setTimedFps(fps);
+        return reference;
+    }
+
+    @Test
+    void aFirstStoredReferenceOfUnknownRateIsPassedOverAndTheSecondIsMeasuredWithNoFetch() {
+        serving(retimedJobWith(stored(5012, lines(300, 0)), rated(5013, 23.976)));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+
+        verifyNoInteractions(api, budget);
+        assertThat(infoLines()).hasSize(2);
+        assertThat(infoLines().get(0)).isEqualTo("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "UNKNOWN_RATE (sidecar 7, reference 5012)");
+        assertThat(infoLines().get(1)).contains("against reference file 5013 (300 cues, last cue 0:50:01); "
+            + "download to reference ALIGNED at 0 ms");
+    }
+
+    @Test
+    void aFirstReferenceThatIsARateConflictIsPassedOverAndTheSecondIsMeasuredAndTheDownloadIsDone() {
+        serving(retimedJobWith(rated(5012, 25.0), rated(5013, 23.976)));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        assertThat(infoLines()).hasSize(2);
+        assertThat(infoLines().get(0)).isEqualTo("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "RATE_CONFLICT (sidecar 7, reference 5012)");
+        assertThat(infoLines().get(1)).contains("against reference file 5013");
+
+        // Done: not judged again.
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(infoLines()).hasSize(2);
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void everyStoredReferenceBeingARateConflictMarksTheDownloadDoneWithOneLineAndNoFetch() {
+        serving(retimedJobWith(rated(5012, 25.0), rated(5013, 25.0)));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "RATE_CONFLICT (sidecar 7, reference 5012)");
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
+    void aFetchedReferenceOfUnknownRateGivesNoVerdictAndIsFetchedOnlyOncePerDownload() {
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, SrtParser.format(lines(300, 0)));
+        OpenSubtitlesResult noRate = new OpenSubtitlesResult(4012, 5012, "Release 5012", null, 10, true, false, null,
+            null);
+        serving(new Job(1L, 10L, "tt1", 7L, 5011L, lines(300, 90_000), 3 * HOUR + 125_000, null, List.of(noRate),
+            Map.of(), side));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5012)).thenReturn(downloaded(lines(300, 0)));
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
+            OpenSubtitlesReference reference = call.getArgument(0);
+            reference.setId(reference.getOsFileId());
+            return reference;
+        });
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, no verdict: "
+            + "UNKNOWN_RATE (sidecar 7, reference 5012)");
+
+        // A second pass makes no second fetch: one new reference per download.
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        verify(api).download(5012);
+    }
+
     @Test
     void aJobGivenNoSideIsADownloadOfNoKnownRateNeverTheOwnersFile() {
         Job job = new Job(1L, 40L, "tt1", 7L, 5011L, List.of(), 0, null, List.of(), Map.of());

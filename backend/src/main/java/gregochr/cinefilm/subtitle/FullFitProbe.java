@@ -43,6 +43,8 @@ final class FullFitProbe {
     private final Set<Long> done = ConcurrentHashMap.newKeySet();
     /** The sidecars whose "no verdict for want of a rate" line has been written: it is written once, not every pass. */
     private final Set<Long> noted = ConcurrentHashMap.newKeySet();
+    /** The sidecars a new reference has been fetched for: at most one fetch per download per process. */
+    private final Set<Long> fetched = ConcurrentHashMap.newKeySet();
 
     /** Creates the probe over the check job's fetcher, so every fetch goes through its lock and ceilings. */
     FullFitProbe(ReferenceFetcher fetcher, FullFitService service, FilmRates filmRates) {
@@ -59,6 +61,7 @@ final class FullFitProbe {
     void forget(Collection<Long> sidecarIds) {
         done.removeAll(sidecarIds);
         noted.removeAll(sidecarIds);
+        fetched.removeAll(sidecarIds);
     }
 
     /**
@@ -88,14 +91,45 @@ final class FullFitProbe {
         return measured;
     }
 
+    /** What the references tried for one download came to. */
+    private static final class Tried {
+        private int references;
+        private boolean allPermanent = true;
+    }
+
+    /**
+     * Measures a download against the first stored full reference the rate rule can judge, trying each in order (a
+     * rateless final row is filled first). Only when none gives a verdict is one new reference fetched (once per
+     * download), and judged the same way. A reference with a rate conflict or an unknown rate is passed over.
+     */
     private boolean measure(Job job, int checkLimit) {
-        OpenSubtitlesReference second = second(job, checkLimit);
-        if (second == null) {
+        Tried tried = new Tried();
+        for (OpenSubtitlesResult candidate : job.others()) {
+            OpenSubtitlesReference stored = job.stored().get(candidate.fileId());
+            if (stored != null && isFull(stored)) {
+                fillRate(stored, candidate);
+                if (judge(job, stored, tried)) {
+                    return true;
+                }
+            }
+        }
+        OpenSubtitlesReference extra = fetchOne(job, checkLimit);
+        if (extra != null && judge(job, extra, tried)) {
+            return true;
+        }
+        if (tried.references == 0) {
             done.add(job.sidecarId());
             LOG.info("Full subtitle fit of edition {} (film {}): not measured, OpenSubtitles has no second full file "
                 + "to compare with", job.editionId(), job.filmId());
-            return false;
+        } else if (tried.allPermanent) {
+            // Indexing changes none of them: there is nothing to wait for.
+            done.add(job.sidecarId());
         }
+        return false;
+    }
+
+    /** Judges the download against one reference and writes the line; false (and a line, once) when no verdict. */
+    private boolean judge(Job job, OpenSubtitlesReference second, Tried tried) {
         RateComparison.Side referenceSide = RateComparison.Side.of(second);
         RateComparison.Judged<Result> judged = RateComparison.judge(job.rateSide(), referenceSide,
             () -> filmRates.forEdition(job.editionId()), job.download(), RateComparison.originalOf(job.rateSide()),
@@ -103,14 +137,13 @@ final class FullFitProbe {
             (a, b) -> TimingFit.fit(starts(a), starts(b)), r -> TimingFit.Verdict.CHECK.equals(r.verdict()),
             r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
         if (!judged.hasVerdict()) {
-            // Indexing never changes a conflict or a missing original; any other unknown rate may be settled later, so
-            // it is tried again, with its line written once.
-            boolean permanent = judged.reason() == RateComparison.Reason.RATE_CONFLICT
-                || lacksOriginal(job.rateSide()) || lacksOriginal(referenceSide);
-            if (permanent) {
-                done.add(job.sidecarId());
+            // Indexing never changes a conflict or a missing original; any other unknown rate may be settled later.
+            tried.references++;
+            if (judged.reason() != RateComparison.Reason.RATE_CONFLICT && !lacksOriginal(job.rateSide())
+                && !lacksOriginal(referenceSide)) {
+                tried.allPermanent = false;
             }
-            if (permanent || noted.add(job.sidecarId())) {
+            if (noted.add(job.sidecarId())) {
                 LOG.info("Full subtitle fit of edition {} (film {}): not measured, no verdict: {} (sidecar {}, "
                     + "reference {})", job.editionId(), job.filmId(), judged.reason(), job.sidecarId(),
                     second.getId());
@@ -132,32 +165,34 @@ final class FullFitProbe {
     }
 
     /**
-     * The second file: a full reference already stored for the film (best candidate first), else the first other
-     * candidate not stored yet, fetched within the ceiling. A candidate stored as unusable or not full is passed over.
-     * Null when there is none: a candidate that came back not full is the one try this download gets.
+     * A final row stored before rates were kept gets the candidate's stated one (the fetcher's own fill, no
+     * download), or the rate rule would reject it as of unknown rate. A failed fill leaves the row unrated.
      */
-    private OpenSubtitlesReference second(Job job, int checkLimit) {
-        for (OpenSubtitlesResult candidate : job.others()) {
-            OpenSubtitlesReference stored = job.stored().get(candidate.fileId());
-            if (stored != null && isFull(stored)) {
-                // A final row stored before rates were kept gets the candidate's stated one (the fetcher's own fill, no
-                // download), or the rate rule would reject it as of unknown rate.
-                try {
-                    fetcher.fillRate(stored, candidate);
-                } catch (RuntimeException e) {
-                    LOG.warn("Could not fill the stated frame rate of OpenSubtitles file {}: {}", candidate.fileId(),
-                        e.getClass().getSimpleName());
-                }
-                return stored;
-            }
+    private void fillRate(OpenSubtitlesReference stored, OpenSubtitlesResult candidate) {
+        try {
+            fetcher.fillRate(stored, candidate);
+        } catch (RuntimeException e) {
+            LOG.warn("Could not fill the stated frame rate of OpenSubtitles file {}: {}", candidate.fileId(),
+                e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * The first other candidate not stored yet, fetched within the ceiling, at most once per download per process;
+     * null when there is none, when it has been tried, or when it came back not full (the one try this download gets).
+     */
+    private OpenSubtitlesReference fetchOne(Job job, int checkLimit) {
+        if (fetched.contains(job.sidecarId()) || lacksOriginal(job.rateSide())) {
+            return null;
         }
         for (OpenSubtitlesResult candidate : job.others()) {
             OpenSubtitlesReference known = job.stored().get(candidate.fileId());
             // A final reference was judged above (usable and full) or is spent (permanent failure, not full); one that
             // is not final is a charged transient failure the fetcher retries, and which throws again while it fails.
             if (known == null || !known.isFinal()) {
-                OpenSubtitlesReference fetched = fetcher.fetch(job.filmId(), job.imdbId(), candidate, checkLimit);
-                return isFull(fetched) ? fetched : null;
+                OpenSubtitlesReference got = fetcher.fetch(job.filmId(), job.imdbId(), candidate, checkLimit);
+                fetched.add(job.sidecarId());
+                return isFull(got) ? got : null;
             }
         }
         return null;
