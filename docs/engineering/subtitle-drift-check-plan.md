@@ -64,7 +64,7 @@ Each answer is recorded here. Files 1 and 2 pass only if the line is heard near 
 2:46:10). If either plays right as it is, or is wrong but not near that position (another cause, such as a
 different cut), the flag is wrong on design data and this plan ends. File 3 is reported, not judged.
 
-### Step 2: half B, held out
+### Step 2: the held-out set (half B and the evaluation list)
 
 Half B was never scored by 3e or by the 25 Nov check. 34 of its forced files have maps on the server already (the
 kit's `run2/maps`). Half A gave only 2 flags as played in 26 files, so half B alone is likely to give too few for
