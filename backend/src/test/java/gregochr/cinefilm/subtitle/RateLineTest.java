@@ -195,11 +195,32 @@ class RateLineTest {
     }
 
     @Test
-    void anUnknownRateOrAFactorOfOneOffersNothingWhateverTheChoice() {
+    void anUnknownRateOrAFactorOfOneOffersNothingForAFileNotRetimed() {
         assertThat(RateLine.of(download(null, RetimeChoice.OFF, null), 25.0).retimeAction()).isNull();
         assertThat(RateLine.of(download(23.976, RetimeChoice.OFF, null), null).retimeAction()).isNull();
         assertThat(RateLine.of(download(25.0, RetimeChoice.OFF, null), 25.0).retimeAction()).isNull();
         assertThat(RateLine.of(download(29.97, null, null), 25.0).retimeAction()).isNull();
-        assertThat(RateLine.of(download(25.0, RetimeChoice.AUTO, K_UP), 25.0).retimeAction()).isNull();
+    }
+
+    @Test
+    void aRetimedFileKeepsDontWhateverTheRatesAreNow() {
+        assertThat(RateLine.of(download(23.976, RetimeChoice.AUTO, K_UP), null).retimeAction()).isEqualTo("DONT");
+        assertThat(RateLine.of(download(25.0, RetimeChoice.AUTO, K_UP), 25.0).retimeAction()).isEqualTo("DONT");
+        assertThat(RateLine.of(download(null, RetimeChoice.OFF, K_UP), 25.0).retimeAction()).isEqualTo("DONT");
+    }
+
+    @Test
+    void aFileThatFitsOffersNothingEvenIfCuesWereScaled() {
+        assertThat(RateLine.of(download(23.976, RetimeChoice.OFF_FITS, K_UP), 25.0).retimeAction()).isNull();
+    }
+
+    @Test
+    void whileTheServerRefusesAnOnNoRetimeIsOfferedButDontStays() {
+        assertThat(RateLine.of(download(23.976, RetimeChoice.OFF, null), 25.0, false).retimeAction()).isNull();
+        assertThat(RateLine.of(download(23.976, null, null), 25.0, false).retimeAction()).isNull();
+        assertThat(RateLine.of(download(23.976, RetimeChoice.AUTO, K_UP), 25.0, false).retimeAction())
+            .isEqualTo("DONT");
+        assertThat(RateLine.of(download(23.976, RetimeChoice.OFF, null), 25.0, true).retimeAction())
+            .isEqualTo("RETIME");
     }
 }

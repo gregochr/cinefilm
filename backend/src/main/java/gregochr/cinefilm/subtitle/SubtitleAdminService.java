@@ -484,8 +484,10 @@ public class SubtitleAdminService {
         return editionIds.isEmpty() ? Map.of() : filmRates.forEditions(editionIds);
     }
 
-    private static RateLine rateOf(SubtitleSidecar sidecar, Map<Long, Double> rates) {
-        return RateLine.of(sidecar, sidecar.isDownload() ? rates.get(Downloads.madeForEditionId(sidecar)) : null);
+    private RateLine rateOf(SubtitleSidecar sidecar, Map<Long, Double> rates) {
+        // An "on" is refused while the setting is restore, so no "Retime" is offered then.
+        return RateLine.of(sidecar, sidecar.isDownload() ? rates.get(Downloads.madeForEditionId(sidecar)) : null,
+            retimeMode != RetimeMode.RESTORE);
     }
 
     /**

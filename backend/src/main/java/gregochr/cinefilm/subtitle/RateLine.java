@@ -12,8 +12,9 @@ import java.math.RoundingMode;
  * @param retime {@code AUTO}, {@code OFF}, {@code OFF_FITS}, or null while undecided
  * @param retimedBy the factor the stored cues were scaled by, or null when never retimed
  * @param line the sentence the Admin shows as it is
- * @param retimeAction the one per-file control that applies: {@code DONT} (retimed now), {@code RETIME}, or null for
- *     none (an owner's file, a file that fits as it is, an unknown rate, or a factor of 1)
+ * @param retimeAction the one per-file control that applies: {@code DONT} (retimed now, whatever the rates are now),
+ *     {@code RETIME}, or null for none (an owner's file, a file that fits as it is, a file not retimed with an
+ *     unknown rate or a factor of 1, or no retime while the setting is {@code restore})
  */
 record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy, String line,
                 String retimeAction) {
@@ -29,27 +30,45 @@ record RateLine(Double timedFps, Double filmFps, String retime, Double retimedBy
      * @return {@link #NONE} for an owner's file
      */
     static RateLine of(SubtitleSidecar row, Double filmFps) {
+        return of(row, filmFps, true);
+    }
+
+    /**
+     * The facts of one row.
+     *
+     * @param row the subtitle
+     * @param filmFps the film's rate for the row's edition, or null when unknown
+     * @param mayRetime false while the server refuses an "on" (the setting is {@code restore}): no "Retime" is offered
+     * @return {@link #NONE} for an owner's file
+     */
+    static RateLine of(SubtitleSidecar row, Double filmFps, boolean mayRetime) {
         if (!row.isDownload()) {
             return NONE;
         }
         RetimeChoice choice = row.getRetime();
         return new RateLine(row.getTimedFps(), filmFps, choice == null ? null : choice.name(), row.getRetimedBy(),
-            sentence(row, filmFps), action(row, filmFps));
+            sentence(row, filmFps), action(row, filmFps, mayRetime));
     }
 
     /**
-     * Which control the Admin offers. None when the file fits as it is, or when a rate is unknown or the factor is 1
-     * (there is nothing to apply, whatever the choice); otherwise {@code DONT} while the file is retimed now, and
-     * {@code RETIME} for any other (off, or not yet retimed: a hand-timed file, a film waiting for its English-track
-     * fit, or the switch off), which retimes at once when pressed.
+     * Which control the Admin offers. None when the file fits as it is. {@code DONT} for any file that is retimed now,
+     * whatever the rates are now (turning it off restores it, so the owner can always undo a retime). For a file that
+     * is not retimed: none when a rate is unknown or the factor is 1 (nothing to apply), and none while the server
+     * refuses an "on" ({@code mayRetime} false); otherwise {@code RETIME} (off, or not yet retimed: a hand-timed
+     * file, a film waiting for its English-track fit, or the switch off), which retimes at once when pressed.
      */
-    private static String action(SubtitleSidecar row, Double film) {
-        Double timed = row.getTimedFps();
-        if (row.getRetime() == RetimeChoice.OFF_FITS || timed == null || film == null
-            || FrameRateRetime.factor(timed, film) == 1.0) {
+    private static String action(SubtitleSidecar row, Double film, boolean mayRetime) {
+        if (row.getRetime() == RetimeChoice.OFF_FITS) {
             return null;
         }
-        return row.getRetimedBy() != null ? "DONT" : "RETIME";
+        if (row.getRetimedBy() != null) {
+            return "DONT";
+        }
+        Double timed = row.getTimedFps();
+        if (!mayRetime || timed == null || film == null || FrameRateRetime.factor(timed, film) == 1.0) {
+            return null;
+        }
+        return "RETIME";
     }
 
     private static String sentence(SubtitleSidecar row, Double film) {
