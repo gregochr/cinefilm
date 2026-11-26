@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
  * ({@link BusyRetry}); the first film whose fit stays busy stops the walk. The checks of an edition run only when its
  * film was fitted here: a fit left to a booked timing pass (it runs on this thread after the job) or a busy one leaves
  * them to the pass that follows the timing pass; a failed fit is retried by the timing pass the event books straight
- * after the job, then by the daily pass. {@link #run} says whether every film was fitted, which is when the caller may
- * start a full check pass. Nothing here throws to its caller.
+ * after the job, then by the daily pass. {@link #run} says whether any fit was saved: the caller then announces it
+ * ({@link #announceFits}). Nothing here throws to its caller.
  */
 @Component
 public class SubtitleRetimeRecheck {
@@ -53,8 +53,7 @@ public class SubtitleRetimeRecheck {
      * Fits and checks the editions the given downloads were made for.
      *
      * @param sidecarIds the downloads whose cues were rewritten or restored
-     * @return true when every touched film was fitted here, so a full check pass may be started
-     *     ({@link #startFullPass}); false when a fit is still to come or the re-check failed
+     * @return true when at least one fit was saved, so the caller should announce it ({@link #announceFits})
      */
     public boolean run(Set<Long> sidecarIds) {
         try {
@@ -71,32 +70,22 @@ public class SubtitleRetimeRecheck {
                 }
             }
             LOG.info("Subtitle retime: {} touched editions looked at", touched.size());
-            // A full pass may follow only when no film's fit is still to come (a stale fit would let the pass compare
-            // and download before it): the timing pass that fits it announces its end, which starts the checks.
-            return fitted.values().stream().allMatch(fit -> fit == Fit.DONE);
+            return fitted.containsValue(Fit.FITTED);
         } catch (RuntimeException e) {
             LOG.error("Subtitle retime re-check failed", e);
             return false;
         }
     }
 
-    /** True when the timing check is on; with it off, the event's listener has already asked for a check pass. */
-    public boolean timingCheckOn() {
-        return checks.timingCheckOn();
-    }
-
-    /**
-     * One request for a full check pass, so whatever the re-check left is caught. The caller makes it after the
-     * rewritten sidecars were forgotten and the event published, so the pass measures each of them once.
-     */
-    public void startFullPass() {
-        checks.startDue();
+    /** Announces the fits the re-check saved. */
+    public void announceFits() {
+        timing.announce();
     }
 
     private void recheck(TouchedEdition edition, Map<Long, Fit> fitted) {
         try {
             Fit fit = fitted.computeIfAbsent(edition.filmId(), this::fit);
-            if (fit == Fit.DONE) {
+            if (fit == Fit.DONE || fit == Fit.FITTED) {
                 checks.checkEditions(List.of(edition.editionId()));
             } else {
                 // A stale fit would count as "the fit exists" and let the check compare and download before the fit

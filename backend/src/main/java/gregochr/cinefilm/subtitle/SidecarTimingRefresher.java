@@ -60,8 +60,10 @@ public class SidecarTimingRefresher {
 
     /** What {@link #fitFilm} did. */
     public enum Fit {
-        /** The film was fitted now, or the timing check is off: its checks need not wait for a fit. */
+        /** Nothing was left to fit (or the timing check is off): its checks need not wait. */
         DONE,
+        /** At least one fit was saved now: its checks need not wait, and the pass that follows should be announced. */
+        FITTED,
         /** A pass is booked or going and will fit it, after the caller's thread is free: its checks wait for it. */
         LEFT_TO_PASS,
         /** A scan, an edit or an encoding session stopped it; asking again may work. */
@@ -186,6 +188,7 @@ public class SidecarTimingRefresher {
             film(filmId, counts);
             LOG.info("Subtitle timing of film {} after a retime: {} files read, {} fitted ({} offsets set), "
                 + "{} failed", filmId, counts[0], counts[1], counts[2], counts[3]);
+            result = counts[1] > 0 ? Fit.FITTED : Fit.DONE;
         } catch (Wait e) {
             deferred.set(true);
             result = Fit.BUSY;
@@ -262,7 +265,7 @@ public class SidecarTimingRefresher {
     }
 
     /** Says something was fitted, so a download that could not be proven by timing can be compared instead. */
-    private void announce() {
+    public void announce() {
         try {
             events.publishEvent(new SidecarTimingFinished());
         } catch (RuntimeException e) {

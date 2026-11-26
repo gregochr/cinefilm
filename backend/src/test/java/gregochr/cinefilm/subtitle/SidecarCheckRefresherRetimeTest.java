@@ -97,7 +97,6 @@ class SidecarCheckRefresherRetimeTest {
         when(service.isTimingCheckEnabled()).thenReturn(true);
 
         refresher.onCuesRewritten(new SubtitleCuesRewritten(Set.of(5L, 12L)));
-        assertThat(refresher.timingCheckOn()).isTrue();
 
         verify(probe).forget(Set.of(5L, 12L));
         verify(timingReference).forget(Set.of(5L, 12L));

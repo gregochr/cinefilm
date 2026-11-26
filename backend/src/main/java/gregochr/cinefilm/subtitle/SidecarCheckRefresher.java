@@ -170,14 +170,9 @@ public class SidecarCheckRefresher {
     public void onCuesRewritten(SubtitleCuesRewritten event) {
         probe.forget(event.sidecarIds());
         timingReference.forget(event.sidecarIds());
-        if (!timingCheckOn()) {
+        if (!service.isTimingCheckEnabled()) {
             startDue();
         }
-    }
-
-    /** True when the timing check is on (a download then waits for its fit). */
-    public boolean timingCheckOn() {
-        return service.isTimingCheckEnabled();
     }
 
     /**

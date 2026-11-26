@@ -187,11 +187,44 @@ class SubtitleRetimeRecheckFlowTest {
         job.run();
 
         // The film was fitted by the re-check itself (not left to a booked pass) and its edition was checked in the
-        // run; only then was the event announced, and it booked the timing pass and the full check pass.
-        assertThat(happened).containsExactly("fit film 1", "check edition 10", "cues rewritten announced");
+        // run; then the event, then the announcement of the fit, which asks for the check pass.
+        assertThat(happened).containsExactly("fit film 1", "check edition 10", "cues rewritten announced",
+            "timing announced");
         assertThat(timingQueue).hasSize(1);
-        // One request for a full check pass, from the job after the event; the event's own listener only forgets.
         assertThat(checkQueue).hasSize(1);
+    }
+
+    @Test
+    void aFitSavedForADownloadOutsideTheTouchedEditionsIsAnnouncedAndItsEditionIsCheckedByThePassThatFollows() {
+        DueCheck due10 = due(1, 10, 5011);
+        DueCheck due11 = due(1, 11, 5011);
+        OpenSubtitlesReference ref11 = reference(5011, 1, 5011);
+        FitJob touched = new FitJob(1L, 5L, "id5", "key5", STARTS, TRACK, null);
+        FitJob other = new FitJob(1L, 7L, "id7", "key7", STARTS, TRACK, null);
+        when(retimeService.candidateIds()).thenReturn(List.of(5L));
+        when(retimeService.process(5L, RetimeMode.ON)).thenReturn(SubtitleRetimeService.Outcome.REWRITTEN);
+        when(retimeService.touchedEditions(Set.of(5L))).thenReturn(List.of(new TouchedEdition(10L, 1L)));
+        when(api.downloadsEnabled()).thenReturn(true);
+        when(checkService.isTimingCheckEnabled()).thenReturn(true);
+        when(timingService.fitJobs(1L)).thenReturn(List.of(touched, other));
+        for (FitJob fit : List.of(touched, other)) {
+            when(timingService.save(fit, TimingFit.fit(STARTS, TRACK), NOW)).thenAnswer(call -> {
+                happened.add("fit sidecar " + fit.sidecarId());
+                return SaveOutcome.APPLIED;
+            });
+        }
+        when(checkService.due(List.of(10L))).thenReturn(List.of(due10));
+        when(checkService.due()).thenReturn(List.of(due11));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(ref11));
+        checkSaves(due10, ref11);
+        checkSaves(due11, ref11);
+        checksInline = true;
+
+        job.run();
+
+        // The film's other download was fitted too, which was announced, and its edition was checked by that pass.
+        assertThat(happened).containsExactly("fit sidecar 5", "fit sidecar 7", "check edition 10",
+            "cues rewritten announced", "timing announced", "check edition 11");
     }
 
     @Test

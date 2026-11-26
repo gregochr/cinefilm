@@ -584,7 +584,7 @@ class SidecarTimingRefresherTest {
         when(service.save(any(FitJob.class), any(TimingFit.Result.class), any(Instant.class)))
             .thenReturn(SaveOutcome.APPLIED);
 
-        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.DONE);
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.FITTED);
 
         InOrder order = inOrder(service, reader);
         order.verify(service).readsFor(7L);

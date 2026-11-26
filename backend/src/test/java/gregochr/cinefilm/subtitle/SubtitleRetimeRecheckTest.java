@@ -47,7 +47,7 @@ class SubtitleRetimeRecheckTest {
     void aFitThatComesBackBusyIsTriedAgainAndTheChecksFollowOnceItIsMade() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(11L, 1L)));
-        when(timing.fitFilm(1L)).thenReturn(Fit.BUSY, Fit.BUSY, Fit.DONE);
+        when(timing.fitFilm(1L)).thenReturn(Fit.BUSY, Fit.BUSY, Fit.FITTED);
 
         assertThat(recheck.run(IDS)).isTrue();
 
@@ -78,10 +78,11 @@ class SubtitleRetimeRecheckTest {
     void afterTheFirstFilmWhoseFitStaysBusyTheRestAreNotFittedAndTheDeferredPassIsLeftToCheckThem() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(20L, 2L), new TouchedEdition(30L, 3L)));
-        when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
+        when(timing.fitFilm(1L)).thenReturn(Fit.FITTED);
         when(timing.fitFilm(2L)).thenReturn(Fit.BUSY);
 
-        assertThat(recheck.run(IDS)).isFalse();
+        // Film 1's fit was saved, so it is announced although the walk stopped at film 2.
+        assertThat(recheck.run(IDS)).isTrue();
 
         verify(checks).checkEditions(List.of(10L));
         verify(timing, times(BusyRetry.ATTEMPTS)).fitFilm(2L);
@@ -127,16 +128,9 @@ class SubtitleRetimeRecheckTest {
         when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
         when(checks.checkEditions(List.of(10L))).thenThrow(new IllegalStateException("db down"));
 
-        recheck.run(IDS);
+        assertThat(recheck.run(IDS)).isFalse();
 
         verify(checks).checkEditions(List.of(20L));
-    }
-
-    @Test
-    void theFullPassIsRequestedFromTheCheckRefresherOnlyWhenTheCallerAsks() {
-        recheck.startFullPass();
-
-        verify(checks).startDue();
     }
 
     @Test
