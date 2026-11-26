@@ -3,7 +3,6 @@ package gregochr.cinefilm.subtitle;
 import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -16,7 +15,6 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.SubtitleComparison.Result;
 import gregochr.cinefilm.subtitle.SubtitleComparison.Verdict;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -145,8 +143,8 @@ class SidecarCheckRefresherRetimeTest {
         when(service.due(List.of(20L, 10L))).thenReturn(List.of(first, second));
         when(fetcher.fetch(1L, "tt1", candidate(5011), 6)).thenReturn(firstReference);
         when(fetcher.fetch(2L, "tt2", candidate(5022), 6)).thenReturn(secondReference);
-        when(service.save(any(DueCheck.class), any(OpenSubtitlesReference.class), any(Result.class),
-            any(Instant.class))).thenReturn(true);
+        when(service.save(first, firstReference, AGREES, NOW)).thenReturn(true);
+        when(service.save(second, secondReference, AGREES, NOW)).thenReturn(true);
 
         assertThat(refresher.checkEditions(List.of(20L, 10L))).isTrue();
 

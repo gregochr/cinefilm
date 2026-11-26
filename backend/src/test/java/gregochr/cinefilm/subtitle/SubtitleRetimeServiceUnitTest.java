@@ -495,10 +495,7 @@ class SubtitleRetimeServiceUnitTest {
         file.setId(7L);
         file.setPath("movie.srt");
         file.setOrigin(SubtitleSidecar.Origin.FILE);
-        when(sidecars.findById(5L)).thenReturn(Optional.of(row));
-        when(sidecars.findById(6L)).thenReturn(Optional.of(other));
-        when(sidecars.findById(7L)).thenReturn(Optional.of(file));
-        when(sidecars.findById(8L)).thenReturn(Optional.empty());
+        when(sidecars.findAllById(Set.of(8L, 7L, 6L, 5L))).thenReturn(List.of(file, other, row));
         when(editions.findWithFilesByIdIn(Set.of(EDITION_ID))).thenReturn(List.of(edition));
 
         assertThat(service.touchedEditions(Set.of(8L, 7L, 6L, 5L)))

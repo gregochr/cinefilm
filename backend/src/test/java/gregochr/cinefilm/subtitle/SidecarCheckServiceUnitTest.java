@@ -37,6 +37,8 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -256,24 +258,18 @@ class SidecarCheckServiceUnitTest {
         return fit;
     }
 
-    @Test
-    void aDownloadWhoseFitWasMadeOutdatedByARetimeLessThanADayAgoWaitsForTheFit() {
+    @ParameterizedTest
+    @CsvSource({"1, false", "0, true", "-1, true"})
+    void aFitMadeOutdatedByARetimeHoldsTheDownloadBackForADayAndNotAMillisecondLonger(long msToTheBoundary,
+                                                                                  boolean due) {
         resolved(resolution(null, List.of(downloadState(Trust.FAILED, Proof.NONE, check("CHECK"), fit()))));
         when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L)))
             .thenReturn(List.of(downloadRow(STALE)));
-        staleFit(NOW.minus(SidecarCheckService.STALE_FIT_WAIT).plusSeconds(1));
+        // 1: a millisecond short of 24 h ago (waits); 0: exactly 24 h ago; -1: a millisecond over (due).
+        staleFit(NOW.minus(SidecarCheckService.STALE_FIT_WAIT).plusMillis(msToTheBoundary));
 
-        assertThat(service.due()).isEmpty();
-    }
-
-    @Test
-    void aFitOutdatedForADayOrMoreNoLongerHoldsTheDownloadBack() {
-        resolved(resolution(null, List.of(downloadState(Trust.FAILED, Proof.NONE, check("CHECK"), fit()))));
-        when(downloadChecks.findBySidecarIdInAndStaleSinceIsNotNull(List.of(7L)))
-            .thenReturn(List.of(downloadRow(STALE)));
-        staleFit(NOW.minus(SidecarCheckService.STALE_FIT_WAIT));
-
-        assertThat(service.due()).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
+        assertThat(service.due().stream().map(DueCheck::downloadSidecarId).toList())
+            .isEqualTo(due ? List.of(7L) : List.of());
     }
 
     @Test

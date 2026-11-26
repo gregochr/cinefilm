@@ -92,7 +92,11 @@ class SubtitleRetimeRecheckFlowTest {
                 } else {
                     checkQueue.add(task);
                 }
-            }, new FakeDailyLimit(20), event -> { }, filmRates);
+            }, new FakeDailyLimit(20), event -> {
+                if (event instanceof SidecarChecksFinished) {
+                    happened.add("checks announced");
+                }
+            }, filmRates);
         timingRefresher = new SidecarTimingRefresher(timingService, reader, root, sessions,
             CLOCK, timingQueue::add, true, event -> {
                 if (event instanceof SidecarTimingFinished finished) {
@@ -140,8 +144,7 @@ class SubtitleRetimeRecheckFlowTest {
         when(api.downloadsEnabled()).thenReturn(true);
         filmFits(1L, 5L);
         filmFits(2L, 6L);
-        when(checkService.due(List.of(10L))).thenReturn(List.of(due10));
-        when(checkService.due(List.of(20L))).thenReturn(List.of(due20));
+        when(checkService.due(List.of(10L, 20L))).thenReturn(List.of(due10, due20));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(ref11));
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5021)).thenReturn(Optional.empty());
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.of(ref22));
@@ -151,10 +154,11 @@ class SubtitleRetimeRecheckFlowTest {
         assertThat(recheck.run(IDS)).isTrue();
 
         // Edition B's check is saved only after film 2's fit, edition A's after film 1's.
-        assertThat(happened).containsExactly("fit film 1", "check edition 10", "fit film 2", "check edition 20");
+        // Every film is fitted before anything is checked, then one walk checks both editions and announces once.
+        assertThat(happened).containsExactly("fit film 1", "fit film 2", "check edition 10", "check edition 20",
+            "checks announced");
         assertThat(checkQueue).isEmpty();
-        verify(checkService).due(List.of(10L));
-        verify(checkService).due(List.of(20L));
+        verify(checkService).due(List.of(10L, 20L));
         verify(checkService).markTried(10L, "tt1", 5011, NOW);
         verify(checkService).markTried(20L, "tt2", 5022, NOW);
         verify(checkService).save(due10, ref11, AGREES, NOW);
@@ -182,8 +186,8 @@ class SubtitleRetimeRecheckFlowTest {
 
         // The film was fitted by the re-check itself (not left to a booked pass) and its edition was checked in the
         // run; then the event, then the announcement of the fit, which asks for the check pass.
-        assertThat(happened).containsExactly("fit film 1", "check edition 10", "cues rewritten announced",
-            "timing announced");
+        assertThat(happened).containsExactly("fit film 1", "check edition 10", "checks announced",
+            "cues rewritten announced", "timing announced");
         assertThat(timingQueue).hasSize(1);
         assertThat(checkQueue).hasSize(1);
     }
@@ -217,8 +221,8 @@ class SubtitleRetimeRecheckFlowTest {
         job.run();
 
         // The film's other download was fitted too, which was announced, and its edition was checked by that pass.
-        assertThat(happened).containsExactly("fit sidecar 5", "fit sidecar 7", "check edition 10",
-            "cues rewritten announced", "timing announced", "check edition 11");
+        assertThat(happened).containsExactly("fit sidecar 5", "fit sidecar 7", "check edition 10", "checks announced",
+            "cues rewritten announced", "timing announced", "check edition 11", "checks announced");
     }
 
     @Test

@@ -581,16 +581,10 @@ class SidecarTimingRefresherTest {
         when(reader.read(FILE)).thenReturn(usable());
         when(service.saveReference(read(70L), usable(), NOW)).thenReturn(SaveOutcome.SAVED);
         when(service.fitJobs(7L)).thenReturn(List.of(job(7L, 5L)));
-        when(service.save(any(FitJob.class), any(TimingFit.Result.class), any(Instant.class)))
-            .thenReturn(SaveOutcome.APPLIED);
+        when(service.save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW)).thenReturn(SaveOutcome.APPLIED);
 
         assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.FITTED);
 
-        InOrder order = inOrder(service, reader);
-        order.verify(service).readsFor(7L);
-        order.verify(reader).read(FILE);
-        order.verify(service).fitJobs(7L);
-        order.verify(service).save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW);
         verifyNoInteractions(events);
         assertThat(queued).isEmpty();
         assertThat(refresher.isRunning()).isFalse();

@@ -53,8 +53,7 @@ class SubtitleRetimeRecheckTest {
 
         // The film is fitted once, and both of its touched editions are checked.
         verify(timing, times(3)).fitFilm(1L);
-        verify(checks).checkEditions(List.of(10L));
-        verify(checks).checkEditions(List.of(11L));
+        verify(checks).checkEditions(List.of(10L, 11L));
         // The full pass is the caller's to start, after its own steps.
         verifyNoMoreInteractions(checks);
         assertThat(pauses).hasSize(2);
@@ -121,16 +120,15 @@ class SubtitleRetimeRecheckTest {
     }
 
     @Test
-    void anEditionWhoseChecksThrowDoesNotStopTheNext() {
+    void aFailureOfTheChecksIsLoggedNotThrown() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(20L, 2L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
         when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
-        when(checks.checkEditions(List.of(10L))).thenThrow(new IllegalStateException("db down"));
+        when(checks.checkEditions(List.of(10L, 20L))).thenThrow(new IllegalStateException("db down"));
 
+        // Nothing was left to fit, so nothing is announced.
         assertThat(recheck.run(IDS)).isFalse();
-
-        verify(checks).checkEditions(List.of(20L));
     }
 
     @Test

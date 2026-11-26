@@ -2,6 +2,7 @@ package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.subtitle.SidecarTimingRefresher.Fit;
 import gregochr.cinefilm.subtitle.SubtitleRetimeService.TouchedEdition;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,16 +58,29 @@ public class SubtitleRetimeRecheck {
     public boolean run(Set<Long> sidecarIds) {
         try {
             Map<Long, Fit> fitted = new HashMap<>();
+            List<Long> fittedEditions = new ArrayList<>();
             List<TouchedEdition> touched = service.touchedEditions(sidecarIds);
             for (TouchedEdition edition : touched) {
-                recheck(edition, fitted);
-                if (fitted.containsValue(Fit.BUSY)) {
+                Fit fit = fitted.computeIfAbsent(edition.filmId(), this::fit);
+                if (fit == Fit.DONE || fit == Fit.FITTED) {
+                    fittedEditions.add(edition.editionId());
+                } else {
+                    // A stale fit would count as "the fit exists" and let the check compare and download before the
+                    // fit that may prove the file: the checks follow the timing pass that is booked.
+                    LOG.info("Edition {} not checked yet: the timing fit of film {} is {}", edition.editionId(),
+                        edition.filmId(), fit);
+                }
+                if (fit == Fit.BUSY) {
                     // Each busy film costs its whole retry; the rest would wait as long. The deferred timing pass is
                     // already booked and fits them, and its end starts the checks.
                     LOG.info("Subtitle retime re-check stops: the library stayed busy, the rest is left to the "
                         + "deferred timing pass");
                     break;
                 }
+            }
+            // One walk for every edition whose film was fitted: one due query, one announcement at its end.
+            if (!fittedEditions.isEmpty()) {
+                checks.checkEditions(fittedEditions);
             }
             LOG.info("Subtitle retime: {} touched editions looked at", touched.size());
             return fitted.containsValue(Fit.FITTED);
@@ -79,22 +93,5 @@ public class SubtitleRetimeRecheck {
     /** Announces the fits the re-check saved. */
     public void announceFits() {
         timing.announce();
-    }
-
-    private void recheck(TouchedEdition edition, Map<Long, Fit> fitted) {
-        try {
-            Fit fit = fitted.computeIfAbsent(edition.filmId(), this::fit);
-            if (fit == Fit.DONE || fit == Fit.FITTED) {
-                checks.checkEditions(List.of(edition.editionId()));
-            } else {
-                // A stale fit would count as "the fit exists" and let the check compare and download before the fit
-                // that may prove the file: the checks follow the timing pass that is booked (it announces them).
-                LOG.info("Edition {} not checked yet: the timing fit of film {} is {}", edition.editionId(),
-                    edition.filmId(), fit);
-            }
-        } catch (RuntimeException e) {
-            LOG.warn("Could not fit and check edition {} again: {}", edition.editionId(),
-                e.getClass().getSimpleName());
-        }
     }
 }
