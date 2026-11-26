@@ -287,6 +287,8 @@ public class SidecarCheckRefresher {
         try {
             checkOwnEditions(editionIds);
         } finally {
+            // Stamped as worker() does, however the checks end: Admin reads the files again when this changes.
+            lastFinishedAt = clock.instant();
             running.set(false);
         }
         // A request that arrived while this ran would otherwise wait for the next one.

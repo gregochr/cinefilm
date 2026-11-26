@@ -101,6 +101,35 @@ class SidecarCheckRefresherRetimeTest {
     }
 
     @Test
+    void theRetimeChecksStampTheTimeTheyEndSoAdminReadsTheFilesAgain() {
+        when(api.downloadsEnabled()).thenReturn(true);
+        when(service.due()).thenReturn(List.of());
+        assertThat(refresher.lastFinishedAt()).isNull();
+
+        refresher.checkEditions(List.of(10L));
+
+        assertThat(refresher.lastFinishedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void theRetimeChecksStampTheTimeEvenWhenTheyFail() {
+        when(api.downloadsEnabled()).thenReturn(true);
+        when(service.due()).thenThrow(new IllegalStateException("db down"));
+
+        refresher.checkEditions(List.of(10L));
+
+        assertThat(refresher.lastFinishedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void withDownloadsOffNothingIsCheckedAndNothingIsStamped() {
+        when(api.downloadsEnabled()).thenReturn(false);
+
+        assertThat(refresher.checkEditions(List.of(10L))).isFalse();
+        assertThat(refresher.lastFinishedAt()).isNull();
+    }
+
+    @Test
     void withDownloadsOffNothingIsChecked() {
         when(api.downloadsEnabled()).thenReturn(false);
 

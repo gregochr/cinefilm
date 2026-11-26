@@ -144,7 +144,8 @@ class SubtitleRetimeJobTest {
     void aRequestThatLandsAfterTheLastCheckButBeforeTheRunIsGivenUpStartsANewRun() {
         when(service.candidateIds()).thenReturn(List.of());
         boolean[] asked = {false};
-        SubtitleRetimeJob on = new SubtitleRetimeJob(service, executor, "on", events) {
+        SubtitleRetimeJob on = new SubtitleRetimeJob(service, recheck, new BusyRetry(pauses::add), executor, "on",
+            events) {
             @Override
             void afterLastCheck() {
                 if (!asked[0]) {

@@ -58,6 +58,18 @@ public class SidecarTimingRefresher {
     private final AtomicBoolean deferred = new AtomicBoolean();
     private final ReadFailures failures;
 
+    /** What {@link #fitFilm} did. */
+    public enum Fit {
+        /** The film was fitted now, or the timing check is off: its checks need not wait for a fit. */
+        DONE,
+        /** A pass is booked or going and will fit it, after the caller's thread is free: its checks wait for it. */
+        LEFT_TO_PASS,
+        /** A scan, an edit or an encoding session stopped it; asking again may work. */
+        BUSY,
+        /** It failed. */
+        FAILED
+    }
+
     /** Why a run ends early: playback is encoding, or the library lock is taken. Not an error. */
     private static final class Wait extends RuntimeException {
         private static final long serialVersionUID = 1L;
@@ -143,18 +155,19 @@ public class SidecarTimingRefresher {
      * to go round once more and this returns at once: it fits the same due sidecars.
      *
      * @param filmId the film
-     * @return true when the film was fitted, or is left to a pass that will; false when a scan, an edit or an
-     *     encoding session stopped it (try again)
+     * @return what happened: the film was fitted (or the check is off, so there is nothing to wait for), the work is
+     *     left to a pass that is booked or going, a scan, an edit or an encoding session stopped it (try again), or it
+     *     failed
      */
-    public boolean fitFilm(Long filmId) {
+    public Fit fitFilm(Long filmId) {
         if (!enabled) {
-            return true;
+            return Fit.DONE;
         }
         if (!running.compareAndSet(false, true)) {
             pending.set(true);
-            return true;
+            return Fit.LEFT_TO_PASS;
         }
-        boolean settled = true;
+        Fit result = Fit.DONE;
         try {
             if (sessions.isEncoding()) {
                 throw new Wait("a film is being transcoded");
@@ -168,9 +181,10 @@ public class SidecarTimingRefresher {
             }
         } catch (Wait e) {
             deferred.set(true);
-            settled = false;
+            result = Fit.BUSY;
             LOG.info("Subtitle timing of film {} waits: {}", filmId, e.getMessage());
         } catch (RuntimeException e) {
+            result = Fit.FAILED;
             LOG.warn("Could not check the subtitle timing of film {}: {}", filmId, e.getClass().getSimpleName());
         } finally {
             running.set(false);
@@ -178,7 +192,7 @@ public class SidecarTimingRefresher {
         if (pending.get()) {
             launch();
         }
-        return settled;
+        return result;
     }
 
     private boolean launch() {

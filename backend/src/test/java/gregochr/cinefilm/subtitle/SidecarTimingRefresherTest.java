@@ -19,6 +19,7 @@ import gregochr.cinefilm.library.LibraryRoot;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.subtitle.EmbeddedCueReader.ReadException;
 import gregochr.cinefilm.subtitle.EmbeddedCueReader.Reading;
+import gregochr.cinefilm.subtitle.SidecarTimingRefresher.Fit;
 import gregochr.cinefilm.subtitle.SidecarTimingService.FitJob;
 import gregochr.cinefilm.subtitle.SidecarTimingService.ReferenceRead;
 import gregochr.cinefilm.subtitle.SidecarTimingService.SaveOutcome;
@@ -576,7 +577,7 @@ class SidecarTimingRefresherTest {
         when(service.save(any(FitJob.class), any(TimingFit.Result.class), any(Instant.class)))
             .thenReturn(SaveOutcome.APPLIED);
 
-        assertThat(refresher.fitFilm(7L)).isTrue();
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.DONE);
 
         InOrder order = inOrder(service, reader);
         order.verify(service).readsFor(7L);
@@ -595,7 +596,7 @@ class SidecarTimingRefresherTest {
         when(service.readsFor(7L)).thenReturn(List.of());
         when(service.fitJobs(7L)).thenReturn(List.of());
 
-        assertThat(refresher.fitFilm(7L)).isTrue();
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.DONE);
 
         verifyNoInteractions(events);
     }
@@ -606,7 +607,7 @@ class SidecarTimingRefresherTest {
         when(service.fitJobs(7L)).thenReturn(List.of(job(7L, 5L)));
         when(service.save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW)).thenReturn(SaveOutcome.BUSY);
 
-        assertThat(refresher.fitFilm(7L)).isFalse();
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.BUSY);
 
         assertThat(refresher.isRunning()).isFalse();
         queued.clear();
@@ -618,7 +619,7 @@ class SidecarTimingRefresherTest {
     void fitFilmWhilePlaybackIsEncodingIsNotSettled() {
         when(sessions.isEncoding()).thenReturn(true);
 
-        assertThat(refresher.fitFilm(7L)).isFalse();
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.BUSY);
 
         verifyNoInteractions(service);
         assertThat(refresher.isRunning()).isFalse();
@@ -628,7 +629,7 @@ class SidecarTimingRefresherTest {
     void fitFilmWhileAPassIsBookedLeavesTheFilmToThatPassAndReturnsAtOnce() {
         refresher.onScanFinished(new ScanFinished("nightly"));
 
-        assertThat(refresher.fitFilm(7L)).isTrue();
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.LEFT_TO_PASS);
 
         verifyNoInteractions(service, reader);
         assertThat(queued).hasSize(1);
@@ -638,7 +639,7 @@ class SidecarTimingRefresherTest {
     void fitFilmThatFailsIsLoggedAndGivesTheRunBack() {
         when(service.readsFor(7L)).thenThrow(new IllegalStateException("db down"));
 
-        assertThat(refresher.fitFilm(7L)).isTrue();
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.FAILED);
 
         assertThat(refresher.isRunning()).isFalse();
         assertThat(messages()).containsExactly("Could not check the subtitle timing of film 7: "
@@ -650,7 +651,7 @@ class SidecarTimingRefresherTest {
         SidecarTimingRefresher off = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add,
             false, events);
 
-        assertThat(off.fitFilm(7L)).isTrue();
+        assertThat(off.fitFilm(7L)).isEqualTo(Fit.DONE);
 
         verifyNoInteractions(service, reader);
     }

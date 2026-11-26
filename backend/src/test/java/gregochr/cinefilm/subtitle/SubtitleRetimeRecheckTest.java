@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.subtitle.SidecarTimingRefresher.Fit;
 import gregochr.cinefilm.subtitle.SubtitleRetimeService.TouchedEdition;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -18,7 +20,10 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** The re-check after a retime run: the fit first, then the checks, edition by edition, busy fits tried again. */
+/**
+ * The re-check after a retime run: an edition is checked only once its film's fit has been made in this run, edition
+ * by edition, a busy fit tried again.
+ */
 @ExtendWith(MockitoExtension.class)
 class SubtitleRetimeRecheckTest {
 
@@ -40,14 +45,17 @@ class SubtitleRetimeRecheckTest {
     }
 
     @Test
-    void eachTouchedEditionIsFittedAndThenCheckedInTurn() {
+    void eachTouchedEditionIsCheckedAfterItsFilmWasFittedInTurn() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(20L, 2L)));
-        when(timing.fitFilm(1L)).thenReturn(true);
-        when(timing.fitFilm(2L)).thenReturn(true);
+        when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
+        when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
 
         recheck.run(IDS);
 
+        verify(checks).checkEditions(List.of(10L));
+        verify(checks).checkEditions(List.of(20L));
+        // The order is the point of the re-check, besides the calls themselves.
         InOrder order = inOrder(timing, checks);
         order.verify(timing).fitFilm(1L);
         order.verify(checks).checkEditions(List.of(10L));
@@ -60,7 +68,7 @@ class SubtitleRetimeRecheckTest {
     void aFilmWithTwoTouchedEditionsIsFittedOnceAndBothAreChecked() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(11L, 1L)));
-        when(timing.fitFilm(1L)).thenReturn(true);
+        when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
 
         recheck.run(IDS);
 
@@ -70,29 +78,54 @@ class SubtitleRetimeRecheckTest {
     }
 
     @Test
-    void aFitThatComesBackBusyIsTriedAgainAndTheChecksFollowTheFit() {
+    void aFitThatComesBackBusyIsTriedAgainAndTheChecksFollowOnceItIsMade() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
-        when(timing.fitFilm(1L)).thenReturn(false, false, true);
+        when(timing.fitFilm(1L)).thenReturn(Fit.BUSY, Fit.BUSY, Fit.DONE);
 
         recheck.run(IDS);
 
-        InOrder order = inOrder(timing, checks);
-        order.verify(timing, times(3)).fitFilm(1L);
-        order.verify(checks).checkEditions(List.of(10L));
+        verify(timing, times(3)).fitFilm(1L);
+        verify(checks).checkEditions(List.of(10L));
         assertThat(pauses).hasSize(2);
     }
 
     @Test
-    void aFitThatStaysBusyGivesUpAfterTheBoundAndTheRowsStayDueForTheNextPass() {
+    void aFitThatStaysBusyGivesUpAfterTheBoundAndTheChecksAreLeftToThePassThatFollowsTheFit() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
-        when(timing.fitFilm(1L)).thenReturn(false);
+        when(timing.fitFilm(1L)).thenReturn(Fit.BUSY);
 
         recheck.run(IDS);
 
         verify(timing, times(BusyRetry.ATTEMPTS)).fitFilm(1L);
         assertThat(pauses).hasSize(BusyRetry.ATTEMPTS - 1);
-        // The checks still run: a download whose fit is not made yet simply is not due for one.
-        verify(checks).checkEditions(List.of(10L));
+        // A stale fit would count as "the fit exists": checking now could compare and download before the fit that
+        // may prove the file, so the checks wait for the timing pass that is deferred (its end starts them).
+        verifyNoInteractions(checks);
+    }
+
+    @Test
+    void aFitLeftToABookedPassIsNotWaitedForAndItsEditionIsNotCheckedYet() {
+        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
+            new TouchedEdition(11L, 1L)));
+        when(timing.fitFilm(1L)).thenReturn(Fit.LEFT_TO_PASS);
+
+        recheck.run(IDS);
+
+        verify(timing).fitFilm(1L);
+        assertThat(pauses).isEmpty();
+        verifyNoInteractions(checks);
+    }
+
+    @Test
+    void aFitThatFailedIsNotTriedAgainAndItsEditionIsNotChecked() {
+        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
+        when(timing.fitFilm(1L)).thenReturn(Fit.FAILED);
+
+        recheck.run(IDS);
+
+        verify(timing).fitFilm(1L);
+        assertThat(pauses).isEmpty();
+        verifyNoInteractions(checks);
     }
 
     @Test
@@ -100,7 +133,7 @@ class SubtitleRetimeRecheckTest {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(20L, 2L)));
         when(timing.fitFilm(1L)).thenThrow(new IllegalStateException("db down"));
-        when(timing.fitFilm(2L)).thenReturn(true);
+        when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
 
         recheck.run(IDS);
 
@@ -114,5 +147,6 @@ class SubtitleRetimeRecheckTest {
         recheck.run(IDS);
 
         assertThat(pauses).isEmpty();
+        verifyNoInteractions(timing, checks);
     }
 }
