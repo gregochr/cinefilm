@@ -114,8 +114,9 @@ public class SidecarCheckService {
             return List.of();
         }
         List<Edition> fetched = editionIds == null ? editions.findWithFilesByFilmIdIn(filmIds)
+            // The same editions as the film query returns: it joins the files, so an edition with none drops out.
             : editions.findWithFilesByIdIn(editionIds).stream()
-                .filter(e -> filmIds.contains(e.getFilm().getId())).toList();
+                .filter(e -> !e.getMediaFiles().isEmpty() && filmIds.contains(e.getFilm().getId())).toList();
         Map<Long, Resolution> resolved = resolver.resolve(fetched);
         List<ForcedCheckCandidate> ledger = candidates.findByEditionIdInAndKind(resolved.keySet(), SubtitleKind.FORCED);
         Set<Long> staleFiles = new HashSet<>();
@@ -185,9 +186,10 @@ public class SidecarCheckService {
             return;
         }
         // A download waits for its timing fit while it has none (as before this change) and, new, while the fit it has
-        // was made outdated by a retime less than a day ago (only the retime job sets stale_since, and the re-check
-        // and the timing passes fit those rows again within that time): a check now would count that fit as "the fit
-        // exists", compare and download before the fit that may prove the file. Later it is checked as it would be.
+        // was made outdated by a rewrite or restore of its cues less than a day ago (the retime job or an Admin retime
+        // sets stale_since; the timing passes fit those rows again within that time): a check now would count that fit
+        // as "the fit exists", compare and download before the fit that may prove the file. Later it is checked as it
+        // would be.
         boolean fitStillToCome = fitStaleSince != null && fitStaleSince.isAfter(clock.instant().minus(STALE_FIT_WAIT));
         if (timingCheckEnabled && (download.alignment() == null || fitStillToCome)) {
             return;

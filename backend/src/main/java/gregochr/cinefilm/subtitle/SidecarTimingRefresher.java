@@ -124,6 +124,15 @@ public class SidecarTimingRefresher {
     }
 
     /**
+     * Fits again after some downloads' cues were rewritten or restored (by the retime job or an Admin retime): their
+     * fits are marked stale. The pass that follows announces itself, which starts the checks.
+     */
+    @EventListener
+    public void onCuesRewritten(SubtitleCuesRewritten event) {
+        startDue();
+    }
+
+    /**
      * Asks for a check run in the background, unless the check is off. When one is already running the request is not
      * lost: the running one goes round again before it finishes.
      *

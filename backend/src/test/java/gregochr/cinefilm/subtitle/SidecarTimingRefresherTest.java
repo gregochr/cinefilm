@@ -568,6 +568,13 @@ class SidecarTimingRefresherTest {
     }
 
     @Test
+    void rewrittenCuesBookATimingPassSoTheirStaleFitsAreMadeAgain() {
+        refresher.onCuesRewritten(new SubtitleCuesRewritten(java.util.Set.of(5L)));
+
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
     void fitFilmReadsAndFitsOneFilmOnTheCallingThreadAndAnnouncesNothing() {
         when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
         when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
