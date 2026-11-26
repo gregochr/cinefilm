@@ -122,10 +122,12 @@ writes nothing), `on`, or `restore` (the rollback, below).
   - **Every due test treats a row with `stale_since` set as due, whatever its trust:** the timing fit, and the file
     and download checks of `SidecarCheckService`. The timing references and the full-file probe keep no rows; their
     in-memory "done" sets lose each rewritten or restored sidecar id, so those are measured again. Both only log.
-  - **Rows that name a changed reference are not deleted.** Whenever a reference's `cues_text` changes, by a rewrite,
-    a re-scale or a restore, every `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment` that
-    names it, in every edition of the film, gets `stale_since` set (a new column on the three tables). Those keys name
-    the reference, not its cues.
+  - **Rows of a film with a changed reference are not deleted.** Whenever a reference's `cues_text` changes, by a
+    rewrite, a re-scale or a restore, every `ForcedSubtitleCheck`, `ForcedDownloadCheck` and `ForcedSubtitleAlignment`
+    of every edition of its film, **whatever reference it names**, gets `stale_since` set (a new column on the three
+    tables). A verdict may rest on another reference that was passed over for drift, or on none (a fit saved with no
+    file for a rate conflict), and those keys do not change; over-marking only makes a row due again. A fit's save
+    also drops when any file it read has a new `cues_version`.
   - A stale row still decides what plays. What is due treats it as due. The new verdict replaces it in one write.
     - **No verdict for a passing reason** (the budget, an outage, the candidate cap): the old row stays, and stays
       due. So an owner's file that failed is never put back on screen by a deletion.
@@ -329,7 +331,7 @@ Not in this plan:
    - The `cues_version` guard: it is raised on every change of a reference's `cues_text`, and a check or fit drops
      its save when the version it read has moved. Test: a check that read a reference before its rewrite drops its
      save.
-   - Rows that name a changed reference get `stale_since`, in every edition of the film. They keep deciding until
+   - Rows of the film (whatever reference they name) get `stale_since`, in every edition of the film. They keep deciding until
      replaced, and are due.
    - `restore` covers references too.
    - `ReferenceFetcher.store` resets the retime columns.

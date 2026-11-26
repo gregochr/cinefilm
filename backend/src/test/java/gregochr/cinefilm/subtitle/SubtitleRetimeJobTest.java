@@ -200,7 +200,8 @@ class SubtitleRetimeJobTest {
         verifyNoMoreInteractions(recheck);
         assertThat(messages()).containsExactly("Could not retime download 6: IllegalStateException",
             "Subtitle retime (ON) finished: 1 rewritten, 1 restored, 1 set off, 1 fit as they are, 1 left as "
-                + "they were, 0 left for the next run (library busy), 1 failed; references: 0 rewritten, 0 restored");
+                + "they were, 0 left for the next run (library busy), 1 failed; references: 0 rewritten, 0 restored, "
+                + "0 left for the next run (library busy)");
     }
 
     @Test
@@ -277,7 +278,8 @@ class SubtitleRetimeJobTest {
         verifyNoInteractions(events, recheck);
         assertThat(messages()).containsExactly("Subtitle retime stops: the library is busy",
             "Subtitle retime (ON) finished: 0 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as they "
-                + "were, 1 left for the next run (library busy), 0 failed; references: 0 rewritten, 0 restored");
+                + "were, 1 left for the next run (library busy), 0 failed; references: 0 rewritten, 0 restored, "
+                + "0 left for the next run (library busy)");
     }
 
     @Test
@@ -312,7 +314,7 @@ class SubtitleRetimeJobTest {
         assertThat(messages()).containsExactly(
             "Subtitle retime (ON) finished: 1 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as "
                 + "they were, 0 left for the next run (library busy), 0 failed; references: 1 rewritten, "
-                + "1 restored");
+                + "1 restored, 0 left for the next run (library busy)");
     }
 
     @Test
@@ -338,7 +340,8 @@ class SubtitleRetimeJobTest {
         verifyNoInteractions(service, events, recheck);
         assertThat(messages()).containsExactly("Subtitle retime stops: the library is busy",
             "Subtitle retime (ON) finished: 0 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as they "
-                + "were, 0 left for the next run (library busy), 0 failed; references: 0 rewritten, 0 restored");
+                + "were, 0 left for the next run (library busy), 0 failed; references: 0 rewritten, 0 restored, "
+                + "1 left for the next run (library busy); DOWNLOADS NOT VISITED: the run stopped at a busy library");
     }
 
     @Test
@@ -351,6 +354,7 @@ class SubtitleRetimeJobTest {
 
         assertThat(messages()).containsExactly("Could not retime reference 9: IllegalStateException",
             "Subtitle retime (ON) finished: 0 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as they "
-                + "were, 0 left for the next run (library busy), 1 failed; references: 0 rewritten, 0 restored");
+                + "were, 0 left for the next run (library busy), 1 failed; references: 0 rewritten, 0 restored, "
+                + "0 left for the next run (library busy)");
     }
 }

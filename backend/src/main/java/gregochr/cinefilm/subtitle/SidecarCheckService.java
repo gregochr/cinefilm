@@ -258,7 +258,9 @@ public class SidecarCheckService {
      * was fetched for, the reference is still one of the film's single-file candidates (and, for a download, is not the
      * download's own file), and what was checked still has exactly the version that was compared (an attach, move,
      * nudge, changed file or rescan meanwhile makes it stale: the result is dropped and it is due again), and the
-     * reference's cues are still the version that was read ({@code cuesVersion}). The owner's
+     * reference's cues are still the version that was read ({@code cuesVersion}; that read and the write below are not
+     * one atomic step with the retime job's rewrite, the same small window the served-version check has: a verdict
+     * that slips through is marked outdated by the rewrite's own {@code stale_since} and made again). The owner's
      * files' check is the edition's one current row; a download's is its own row.
      *
      * @param due what was checked

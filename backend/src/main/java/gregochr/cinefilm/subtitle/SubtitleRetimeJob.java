@@ -136,11 +136,12 @@ public class SubtitleRetimeJob {
         Set<Long> changed = new HashSet<>();
         Set<Long> changedReferences = new HashSet<>();
         int[] failed = {0};
+        boolean downloadsSkipped = false;
         try {
             // Stored references first: the re-check then compares with references already on the film's timeline.
-            boolean busy = visitAll("reference", referenceService.candidateIds(), referenceService::process,
+            downloadsSkipped = visitAll("reference", referenceService.candidateIds(), referenceService::process,
                 referenceCounts, changedReferences, failed);
-            if (!busy) {
+            if (!downloadsSkipped) {
                 visitAll("download", service.candidateIds(), service::process, counts, changed, failed);
             }
             if (!changed.isEmpty() || !changedReferences.isEmpty()) {
@@ -161,10 +162,12 @@ public class SubtitleRetimeJob {
         }
         LOG.info("Subtitle retime ({}) finished: {} rewritten, {} restored, {} set off, {} fit as they are, "
                 + "{} left as they were, {} left for the next run (library busy), {} failed; references: {} rewritten, "
-                + "{} restored", mode,
+                + "{} restored, {} left for the next run (library busy){}", mode,
             count(counts, Outcome.REWRITTEN), count(counts, Outcome.RESTORED), count(counts, Outcome.DECIDED_OFF),
             count(counts, Outcome.DECIDED_FITS), count(counts, Outcome.UNCHANGED), count(counts, Outcome.BUSY),
-            failed[0], count(referenceCounts, Outcome.REWRITTEN), count(referenceCounts, Outcome.RESTORED));
+            failed[0], count(referenceCounts, Outcome.REWRITTEN), count(referenceCounts, Outcome.RESTORED),
+            count(referenceCounts, Outcome.BUSY),
+            downloadsSkipped ? "; DOWNLOADS NOT VISITED: the run stopped at a busy library" : "");
     }
 
     /**

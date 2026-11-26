@@ -47,6 +47,8 @@ class ReferenceRetimeServiceTest {
     @Mock
     private EditionRepository editions;
     @Mock
+    private SubtitleSidecarRepository sidecars;
+    @Mock
     private FilmRates rates;
     @Mock
     private ForcedSubtitleCheckRepository checks;
@@ -63,8 +65,8 @@ class ReferenceRetimeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ReferenceRetimeService(references, editions, rates, checks, downloadChecks, alignments, lock,
-            CLOCK, transactions);
+        service = new ReferenceRetimeService(references, editions, sidecars, rates, checks, downloadChecks,
+            alignments, lock, CLOCK, transactions);
         reference = new OpenSubtitlesReference();
         reference.setId(REFERENCE_ID);
         reference.setFilmId(FILM_ID);
@@ -94,26 +96,37 @@ class ReferenceRetimeServiceTest {
         reference.setCuesVersion(4);
     }
 
+    /** The film's one edition (40) with one part (10) and the forced sidecar (5) attached to it. */
+    private void filmHasEditionAndSidecar() {
+        Edition edition = TestData.edition(TestData.film(FILM_ID, "Taken", 2008, NOW), 40L, "Original", 0, null);
+        TestData.file(edition, "Taken.m4v").setId(10L);
+        when(editions.findWithFilesByFilmIdIn(Set.of(FILM_ID))).thenReturn(List.of(edition));
+        SubtitleSidecar sidecar = new SubtitleSidecar();
+        sidecar.setId(5L);
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(sidecar));
+    }
+
+    /** A check of the edition that names ANOTHER reference of the film. */
     private ForcedSubtitleCheck fileCheck() {
         ForcedSubtitleCheck check = new ForcedSubtitleCheck();
-        check.setReferenceId(REFERENCE_ID);
-        when(checks.findByReferenceId(REFERENCE_ID)).thenReturn(List.of(check));
+        check.setReferenceId(REFERENCE_ID + 1);
+        when(checks.findByEditionIdIn(List.of(40L))).thenReturn(List.of(check));
         return check;
     }
 
     private ForcedDownloadCheck downloadCheck() {
         ForcedDownloadCheck check = new ForcedDownloadCheck();
-        check.setReferenceId(REFERENCE_ID);
-        when(downloadChecks.findByReferenceId(REFERENCE_ID)).thenReturn(List.of(check));
+        check.setReferenceId(REFERENCE_ID + 1);
+        when(downloadChecks.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(check));
         return check;
     }
 
+    /** A fit saved with no file at all (a rate conflict): it names no reference. */
     private ForcedSubtitleAlignment fit() {
         ForcedSubtitleAlignment fit = new ForcedSubtitleAlignment();
-        fit.setReferenceSource(ReferenceSource.OPENSUBTITLES);
-        fit.setReferenceOsFileId(OS_FILE_ID);
-        when(alignments.findByReferenceSourceAndReferenceOsFileId(ReferenceSource.OPENSUBTITLES, OS_FILE_ID))
-            .thenReturn(List.of(fit));
+        fit.setReferenceSource(ReferenceSource.EMBEDDED);
+        fit.setReferenceOsFileId(null);
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(fit));
         return fit;
     }
 
@@ -183,8 +196,9 @@ class ReferenceRetimeServiceTest {
     }
 
     @Test
-    void everyRowThatNamesTheRewrittenReferenceIsMarkedOutdatedAndKeepsItsVerdict() {
+    void everyRowOfTheFilmsEditionsIsMarkedOutdatedWhateverReferenceItNamesAndKeepsItsVerdict() {
         referenceIs();
+        filmHasEditionAndSidecar();
         filmRateIs(25.0, false);
         ForcedSubtitleCheck fileCheck = fileCheck();
         fileCheck.setVerdict("AGREES");
@@ -204,6 +218,21 @@ class ReferenceRetimeServiceTest {
         verify(checks).saveAll(List.of(fileCheck));
         verify(downloadChecks).saveAll(List.of(downloadCheck));
         verify(alignments).saveAll(List.of(fit));
+    }
+
+    @Test
+    void onlyThisFilmsEditionsAndSidecarsAreLookedUpSoRowsOfAnotherFilmAreNeverMarked() {
+        referenceIs();
+        filmHasEditionAndSidecar();
+        filmRateIs(25.0, false);
+
+        service.process(REFERENCE_ID, RetimeMode.ON);
+
+        verify(editions).findWithFilesByFilmIdIn(Set.of(FILM_ID));
+        verify(sidecars).findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED);
+        verify(checks).findByEditionIdIn(List.of(40L));
+        verify(downloadChecks).findBySidecarIdIn(List.of(5L));
+        verify(alignments).findBySidecarIdIn(List.of(5L));
     }
 
     @Test
@@ -316,6 +345,7 @@ class ReferenceRetimeServiceTest {
     void restorePutsARetimedReferenceBackAndMarksItsRows() {
         referenceIs();
         retimedAlready();
+        filmHasEditionAndSidecar();
         ForcedDownloadCheck downloadCheck = downloadCheck();
 
         Outcome outcome = service.process(REFERENCE_ID, RetimeMode.RESTORE);

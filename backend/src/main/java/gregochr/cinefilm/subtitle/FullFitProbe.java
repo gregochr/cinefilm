@@ -114,6 +114,13 @@ final class FullFitProbe {
                 + "to compare with", job.editionId(), job.filmId());
             return false;
         }
+        if (second.getRetimedBy() != null) {
+            // A raw download against a reference already on the film's timeline would drift: passed over, like a
+            // retimed download, rather than judged by a rate rule the probe does not carry.
+            LOG.info("Full subtitle fit: sidecar {} not measured: the second file {} is retimed",
+                job.sidecarId(), second.getOsFileId());
+            return false;
+        }
         List<SubtitleCue> reference = SrtParser.cues(second.getCuesText());
         Result forward = TimingFit.fit(starts(job.download()), starts(reference));
         Result backward = TimingFit.fit(starts(reference), starts(job.download()));

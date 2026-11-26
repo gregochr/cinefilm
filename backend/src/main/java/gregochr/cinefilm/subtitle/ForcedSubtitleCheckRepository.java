@@ -14,9 +14,6 @@ public interface ForcedSubtitleCheckRepository extends JpaRepository<ForcedSubti
     /** The current checks of some editions. */
     List<ForcedSubtitleCheck> findByEditionIdIn(Collection<Long> editionIds);
 
-    /** The checks made against one reference (any edition of its film). */
-    List<ForcedSubtitleCheck> findByReferenceId(Long referenceId);
-
     /** The outdated checks (those with {@code staleSince} set) of some editions. */
     List<ForcedSubtitleCheck> findByEditionIdInAndStaleSinceIsNotNull(Collection<Long> editionIds);
 }

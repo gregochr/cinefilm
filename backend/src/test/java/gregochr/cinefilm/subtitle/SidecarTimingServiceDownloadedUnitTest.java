@@ -485,7 +485,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
-    void aFitIsGuardedByTheVersionOfTheFileItFittedToNotOfAnotherStoredFile() {
+    void aFitIgnoresTheVersionOfTheDownloadsOwnFileWhichItWasNeverFittedTo() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         sidecar.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
         sidecar.setOpenSubtitlesFileId(5012L);
@@ -500,6 +500,23 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         assertThat(job.referenceVersions()).isEqualTo(Map.of(5013L, 0));
         assertThat(service.save(job, aligned(0), 5013L, LATER)).isEqualTo(SaveOutcome.SAVED);
+    }
+
+    @Test
+    void aFitIsDroppedWhenAFileItWasJudgedBesideButNotChosenWasRewrittenSince() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference chosen = reference(5012, 300, IMDB);
+        OpenSubtitlesReference beside = reference(5013, 300, IMDB);
+        beside.setCuesVersion(3);
+        stored(chosen, beside);
+        served();
+        FitJob job = new FitJob(1L, 5L, TimingKeys.identity(sidecar), BASE_KEY + OS_KEY + ":5012,5013", STARTS,
+            List.of(), null, List.of(new DownloadedFit.Reference(5012L, "Release 5012", 300, List.of(1L)),
+                new DownloadedFit.Reference(5013L, "Release 5013", 300, List.of(1L))), Map.of(5012L, 0, 5013L, 2));
+
+        assertThat(service.save(job, aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);
+
+        verifyNoInteractions(alignments);
     }
 
     @Test

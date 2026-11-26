@@ -510,4 +510,39 @@ class ForcedDownloadServiceChosenUnitTest {
 
         assertThat(lock.holder()).isNull();
     }
+
+    private static final String ORIGINAL = "1\n00:01:40,000 --> 00:01:42,000\nHello\n\n";
+    private static final String SCALED = "1\n00:01:35,904 --> 00:01:37,822\nHello\n\n";
+
+    @Test
+    void aChosenFileIsCopiedFromTheReferencesOriginalCuesNotItsRetimedText() {
+        editionLoads();
+        used(SubtitleKind.FORCED, 0, 0);
+        OpenSubtitlesReference retimed = reference(5011, 1);
+        retimed.setCuesText(SCALED);
+        retimed.setOriginalCuesText(ORIGINAL);
+        retimed.setRetimedBy(23.976 / 25);
+        retimed.setTimedFps(23.976);
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, retimed, null, NOW)).isEqualTo(ChosenOutcome.ADDED);
+
+        SubtitleSidecar row = savedRows().get(0);
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        assertThat(row.getLastEndMs()).isEqualTo(102_000L);
+        assertThat(row.getSizeBytes()).isEqualTo(ORIGINAL.length());
+        assertThat(row.getTimedFps()).isEqualTo(23.976);
+        assertThat(row.getRetimedBy()).isNull();
+        assertThat(row.getOriginalCuesText()).isNull();
+    }
+
+    @Test
+    void aChosenFileFromARawReferenceCopiesItsCues() {
+        editionLoads();
+        used(SubtitleKind.FORCED, 0, 0);
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 1), null, NOW))
+            .isEqualTo(ChosenOutcome.ADDED);
+
+        assertThat(savedRows().get(0).getCuesText()).isEqualTo(CUES);
+    }
 }

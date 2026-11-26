@@ -2,6 +2,7 @@ package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
@@ -25,15 +26,17 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Every call takes the library lock, reads the row again under it, and works k out again from the original cues.
  *
  * <p>A rewrite or a restore raises the reference's {@code cuesVersion} (so a check or fit that read the old cues drops
- * its save) and marks every check and fit that names the reference, in every edition of the film, outdated
- * ({@code stale_since}): those rows keep deciding what plays until a new verdict replaces them, and are due again.
- * Fits name a reference by its OpenSubtitles file id, which belongs to one film.
+ * its save) and marks every check and fit of every edition of the film outdated ({@code stale_since}), whatever
+ * reference it names: a verdict may rest on a reference that was passed over because it drifted, or on none at all (a
+ * fit saved with no file for a rate conflict), and its key does not change. Those rows keep deciding what plays until
+ * a new verdict replaces them, and are due again; marking one that did not need it only makes it due again.
  */
 @Service
 public class ReferenceRetimeService {
 
     private final OpenSubtitlesReferenceRepository references;
     private final EditionRepository editions;
+    private final SubtitleSidecarRepository sidecars;
     private final FilmRates rates;
     private final ForcedSubtitleCheckRepository checks;
     private final ForcedDownloadCheckRepository downloadChecks;
@@ -44,12 +47,14 @@ public class ReferenceRetimeService {
 
     /** Creates the service. */
     public ReferenceRetimeService(OpenSubtitlesReferenceRepository references, EditionRepository editions,
-                                  FilmRates rates, ForcedSubtitleCheckRepository checks,
+                                  SubtitleSidecarRepository sidecars, FilmRates rates,
+                                  ForcedSubtitleCheckRepository checks,
                                   ForcedDownloadCheckRepository downloadChecks,
                                   ForcedSubtitleAlignmentRepository alignments, LibraryLock lock, Clock clock,
                                   PlatformTransactionManager transactions) {
         this.references = references;
         this.editions = editions;
+        this.sidecars = sidecars;
         this.rates = rates;
         this.checks = checks;
         this.downloadChecks = downloadChecks;
@@ -136,14 +141,19 @@ public class ReferenceRetimeService {
         reference.setLastCueEndMs(SrtParser.cues(cues).stream().mapToLong(SubtitleCue::endMs).max().orElse(0));
         references.save(reference);
         Instant now = clock.instant();
-        List<ForcedSubtitleCheck> fileChecks = checks.findByReferenceId(reference.getId());
+        List<Edition> filmEditions = editions.findWithFilesByFilmIdIn(Set.of(reference.getFilmId()));
+        List<Long> editionIds = filmEditions.stream().map(Edition::getId).toList();
+        List<Long> fileIds = filmEditions.stream().flatMap(e -> e.originalParts().stream()).map(MediaFile::getId)
+            .toList();
+        List<Long> sidecarIds = sidecars.findByMediaFileIdInAndKind(fileIds, SubtitleKind.FORCED).stream()
+            .map(SubtitleSidecar::getId).toList();
+        List<ForcedSubtitleCheck> fileChecks = checks.findByEditionIdIn(editionIds);
         fileChecks.forEach(check -> check.setStaleSince(now));
         checks.saveAll(fileChecks);
-        List<ForcedDownloadCheck> downloads = downloadChecks.findByReferenceId(reference.getId());
+        List<ForcedDownloadCheck> downloads = downloadChecks.findBySidecarIdIn(sidecarIds);
         downloads.forEach(check -> check.setStaleSince(now));
         downloadChecks.saveAll(downloads);
-        List<ForcedSubtitleAlignment> fits = alignments.findByReferenceSourceAndReferenceOsFileId(
-            ReferenceSource.OPENSUBTITLES, reference.getOsFileId());
+        List<ForcedSubtitleAlignment> fits = alignments.findBySidecarIdIn(sidecarIds);
         fits.forEach(fit -> fit.setStaleSince(now));
         alignments.saveAll(fits);
     }

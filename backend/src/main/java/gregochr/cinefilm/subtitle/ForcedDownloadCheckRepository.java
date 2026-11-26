@@ -14,9 +14,6 @@ public interface ForcedDownloadCheckRepository extends JpaRepository<ForcedDownl
     /** The current checks of some downloads. */
     List<ForcedDownloadCheck> findBySidecarIdIn(Collection<Long> sidecarIds);
 
-    /** The checks made against one reference (any edition of its film). */
-    List<ForcedDownloadCheck> findByReferenceId(Long referenceId);
-
     /** The outdated checks (those with {@code staleSince} set) of some downloads. */
     List<ForcedDownloadCheck> findBySidecarIdInAndStaleSinceIsNotNull(Collection<Long> sidecarIds);
 }

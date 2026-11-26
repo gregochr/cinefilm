@@ -426,4 +426,36 @@ class ForcedDownloadServiceUnitTest {
     void aPromotedReferenceAndCandidateThatStateNoRateGiveADownloadWithNone() {
         assertThat(addedRate(null, null)).isNull();
     }
+
+    @Test
+    void aDownloadMadeFromARetimedReferenceIsCopiedFromItsOriginalCuesAndKeepsItsStatedRate() {
+        String original = "1\n00:01:40,000 --> 00:01:42,000\nHello\n\n";
+        OpenSubtitlesResult stating = new OpenSubtitlesResult(4011, 5011, "Release 5011", 23.976, 10, true, false,
+            null, null, 1);
+        film.setOsCandidates(OpenSubtitlesResult.listToJson(List.of(stating)));
+        OpenSubtitlesReference retimed = stored(5011, 1);
+        retimed.setCuesText("1\n00:01:35,904 --> 00:01:37,822\nHello\n\n");
+        retimed.setOriginalCuesText(original);
+        retimed.setRetimedBy(23.976 / 25);
+        retimed.setTimedFps(23.976);
+        DueDownload due = new DueDownload(Kind.MISSING, 1L, 40L, IMDB, "Original", null, List.of(stating), 3, null);
+        when(films.findById(1L)).thenReturn(Optional.of(film));
+        when(need.isNeeded(1L)).thenReturn(true);
+        when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(edition));
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of());
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of());
+        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution(null, false, false)));
+        when(sidecars.save(argThat(row -> row.isDownload() && row.getPath().equals("opensubtitles:40:5011"))))
+            .thenAnswer(call -> call.getArgument(0));
+
+        assertThat(service.add(due, retimed, NOW)).isEqualTo(AddOutcome.ADDED);
+
+        ArgumentCaptor<SubtitleSidecar> saved = ArgumentCaptor.forClass(SubtitleSidecar.class);
+        verify(sidecars).save(saved.capture());
+        assertThat(saved.getValue().getCuesText()).isEqualTo(original);
+        assertThat(saved.getValue().getLastEndMs()).isEqualTo(102_000L);
+        assertThat(saved.getValue().getTimedFps()).isEqualTo(23.976);
+        assertThat(saved.getValue().getRetimedBy()).isNull();
+        assertThat(saved.getValue().getOriginalCuesText()).isNull();
+    }
 }

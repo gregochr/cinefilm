@@ -419,4 +419,16 @@ class FullFitProbeTest {
             + "phase 2b");
         verifyNoInteractions(api, budget);
     }
+
+    @Test
+    void aDownloadWhoseSecondFileIsRetimedIsPassedOverWithOneLine() {
+        OpenSubtitlesReference retimed = stored(5012, lines(300, 2_000));
+        retimed.setRetimedBy(0.959);
+        serving(job(7L, 3 * HOUR + 60_000, List.of(candidate(5012)), Map.of(5012L, retimed)));
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        assertThat(infoLines()).containsExactly("Full subtitle fit: sidecar 7 not measured: the second file 5012 is "
+            + "retimed");
+    }
 }

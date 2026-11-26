@@ -567,8 +567,9 @@ public class SidecarTimingService {
             : job.osReferences().stream().noneMatch(r -> r.osFileId() == osFileId)) {
             return SaveOutcome.DROPPED;
         }
-        if (osFileId != null && cuesChanged(job, osFileId, currentRefs.get(current.edition().getId()))) {
-            // The file was rewritten, restored or fetched again while it was fitted: this fit is of cues that are gone.
+        if (cuesChanged(job, currentRefs.get(current.edition().getId()))) {
+            // A file the job read (the chosen one or another that was judged beside it) was rewritten, restored or
+            // fetched again while it was fitted: this fit rests on cues that are gone.
             return SaveOutcome.DROPPED;
         }
         ReferenceSource source = osFileId == null ? ReferenceSource.EMBEDDED : ReferenceSource.OPENSUBTITLES;
@@ -608,11 +609,13 @@ public class SidecarTimingService {
         return applies ? SaveOutcome.APPLIED : SaveOutcome.SAVED;
     }
 
-    /** True when the file's cues now have another version than the one the job read (a job with none is unguarded). */
-    private static boolean cuesChanged(FitJob job, long osFileId, OsRefs now) {
-        Integer read = job.referenceVersions().get(osFileId);
-        return read != null && now.usable().stream().filter(f -> f.osFileId() == osFileId)
-            .noneMatch(f -> f.cuesVersion() == read);
+    /**
+     * True when any file the job read now has another version of its cues than the one read (a job that recorded none
+     * is unguarded).
+     */
+    private static boolean cuesChanged(FitJob job, OsRefs now) {
+        return job.referenceVersions().entrySet().stream().anyMatch(read -> now.usable().stream()
+            .noneMatch(f -> f.osFileId() == read.getKey() && f.cuesVersion() == read.getValue()));
     }
 
     /**
