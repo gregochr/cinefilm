@@ -16,6 +16,8 @@ import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.OffFitsState.Kind;
 import java.util.List;
 import java.util.Set;
@@ -185,17 +187,77 @@ class SidecarTimingServiceOffFitsStateTest {
     }
 
     @Test
-    void aReadThatFailedOnTheFilmFileAsItIsNowIsNever() {
+    void aReadThatFailedOnTheFilmFileAsItIsNowSeveralTimesInARowIsNever() {
         served();
-        failures.record(10L, TimingKeys.fingerprint(part), NOW);
+        for (int i = 0; i < ReadFailures.GIVE_UP; i++) {
+            failures.record(10L, TimingKeys.fingerprint(part), NOW);
+        }
 
         assertThat(state()).isEqualTo(OffFitsState.NEVER);
     }
 
     @Test
+    void aSingleFailedReadStillWaitsAndTheNextSuccessfulReadIsReady() {
+        served();
+        failures.record(10L, TimingKeys.fingerprint(part), NOW);
+        assertThat(state()).isEqualTo(OffFitsState.PENDING);
+
+        // The check read the file the next time round: the failure is cleared and the fit is made.
+        failures.clear(10L);
+        read(TimingKeys.fingerprint(part));
+        fit(key(), null);
+
+        assertThat(state().kind()).isEqualTo(Kind.READY);
+    }
+
+    @Test
+    void aReadThatFoundNoEnglishTrackIsReadyWithItsReason() {
+        served();
+        EmbeddedCueStarts none = read(TimingKeys.fingerprint(part));
+        none.setStatus(EmbeddedCueStarts.Status.NO_REFERENCE);
+        none.setReason("No English track");
+        none.setStartsMs(List.of());
+        fit(key(), null);
+
+        OffFitsState state = state();
+
+        assertThat(state.kind()).isEqualTo(Kind.READY);
+        assertThat(state.noReference()).isEqualTo("No English track");
+    }
+
+    @Test
+    void aFilmFittedToOpenSubtitlesFilesIsReadyAndTheRatesDecide() {
+        served();
+        edition.getFilm().setOsFullSearchedImdbId(IMDB);
+        edition.getFilm().setOsFullCandidates(OpenSubtitlesResult.listToJson(List.of(new OpenSubtitlesResult(4012,
+            5012, "Release 5012", 23.976, 10, true, false, null, null))));
+        EmbeddedCueStarts none = read(TimingKeys.fingerprint(part));
+        none.setStatus(EmbeddedCueStarts.Status.NO_REFERENCE);
+        none.setReason("No English track");
+        none.setStartsMs(List.of());
+        when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(List.of(new ReferenceFacts(5012L, 1L, IMDB, 5012L,
+            "Release 5012", 300, 3_001_000L, null)));
+        fit(key() + "|os" + DownloadedFit.RULES_VERSION + ":" + IMDB + ":5012", null);
+
+        assertThat(state().kind()).isEqualTo(Kind.READY);
+    }
+
+    @Test
+    void aSidecarTimedForTheWholeEditionIsReadyOnTheEditionsKey() {
+        served();
+        download.setWholeEdition(true);
+        read(TimingKeys.fingerprint(part));
+        fit(key() + "@0", null);
+
+        assertThat(state().kind()).isEqualTo(Kind.READY);
+    }
+
+    @Test
     void aReadThatFailedOnAnOlderVersionOfTheFilmFileDoesNotCount() {
         served();
-        failures.record(10L, "999:1", NOW);
+        for (int i = 0; i < ReadFailures.GIVE_UP; i++) {
+            failures.record(10L, "999:1", NOW);
+        }
 
         assertThat(state()).isEqualTo(OffFitsState.PENDING);
     }

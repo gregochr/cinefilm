@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +38,8 @@ final class FullFitProbe {
     private final ReferenceFetcher fetcher;
     private final FullFitService service;
     private final Set<Long> done = ConcurrentHashMap.newKeySet();
+    /** Raised by every {@link #forget}: a measurement that started before it must not mark its sidecar done. */
+    private final AtomicLong epoch = new AtomicLong();
 
     /** Creates the probe over the check job's fetcher, so every fetch goes through its lock and ceilings. */
     FullFitProbe(ReferenceFetcher fetcher, FullFitService service) {
@@ -50,6 +53,7 @@ final class FullFitProbe {
      * @param sidecarIds the sidecars to forget
      */
     void forget(Collection<Long> sidecarIds) {
+        epoch.incrementAndGet();
         done.removeAll(sidecarIds);
     }
 
@@ -61,9 +65,11 @@ final class FullFitProbe {
      */
     int measure(int checkLimit) {
         int measured = 0;
+        // Before the due list is read: a forget that lands after this, whenever, keeps its sidecar from being marked.
+        long started = epoch.get();
         for (Job job : service.due(done)) {
             try {
-                if (measure(job, checkLimit)) {
+                if (measure(job, checkLimit, started)) {
                     measured++;
                 }
             } catch (ReferenceFetcher.Stop e) {
@@ -80,15 +86,29 @@ final class FullFitProbe {
         return measured;
     }
 
-    private boolean measure(Job job, int checkLimit) {
+    /** Marks a sidecar measured unless a forget landed since the measurement started (it was on the old cues). */
+    boolean markUnlessForgotten(Set<Long> marks, Long sidecarId, long started) {
+        if (epoch.get() != started) {
+            return true;
+        }
+        boolean added = marks.add(sidecarId);
+        if (epoch.get() != started) {
+            // A forget landed between the check and the add: it did not see this mark, so it is taken back.
+            marks.remove(sidecarId);
+            return true;
+        }
+        return added;
+    }
+
+    private boolean measure(Job job, int checkLimit, long started) {
         if (job.rateSide().retimed()) {
             // A retimed download is measured from phase 2b: nothing is fetched or judged for it before then.
-            done.add(job.sidecarId());
+            markUnlessForgotten(done, job.sidecarId(), started);
             LOG.info("Full subtitle fit: sidecar {} not measured: retimed, measured from phase 2b", job.sidecarId());
             return false;
         }
         OpenSubtitlesReference second = second(job, checkLimit);
-        done.add(job.sidecarId());
+        markUnlessForgotten(done, job.sidecarId(), started);
         if (second == null) {
             LOG.info("Full subtitle fit of edition {} (film {}): not measured, OpenSubtitles has no second full file "
                 + "to compare with", job.editionId(), job.filmId());

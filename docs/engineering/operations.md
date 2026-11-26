@@ -420,8 +420,9 @@ The rollback is the `restore` mode, in this order:
    docker logs cinefilm 2>&1 | grep 'Subtitle retime (RESTORE) finished' | tail -1
    ```
 
-   If it says `N left for the next run (library busy)` with N above 0, a scan or an Admin edit held the library:
-   restart again and wait for the next line. Only when no download is left do the next step.
+   The line must say `0 left for the next run (library busy)` and `0 failed`. If either is above 0 (a scan or an
+   Admin edit held the library, or a download could not be restored), restart again with `restore` still set, wait
+   for the next line and read it again. Only when both are 0 do the next step.
 4. Roll back the image (above).
 
 `off` restores nothing: it stops the job and leaves the rewritten cues as they are, which is right while the image

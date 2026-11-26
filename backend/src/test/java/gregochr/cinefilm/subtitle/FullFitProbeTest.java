@@ -206,6 +206,28 @@ class FullFitProbeTest {
     }
 
     @Test
+    void aForgetThatLandsWhileADownloadIsBeingMeasuredLeavesItToBeMeasuredAgain() {
+        serving(job(7L, null, List.of(candidate(5012)), Map.of()));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        boolean[] forgotten = {false};
+        when(api.download(5012)).thenAnswer(call -> {
+            if (!forgotten[0]) {
+                // The cues of sidecar 7 are rewritten while its second file is being fetched.
+                forgotten[0] = true;
+                probe.forget(List.of(7L));
+            }
+            return downloaded(lines(300, 500));
+        });
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> call.getArgument(0));
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        // It was not marked done on its old cues, so the next pass measures it again; that one is marked.
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+    }
+
+    @Test
     void aSecondFileNotStoredIsFetchedWithinTheComparisonCeilingAndNothingElseIsStored() {
         serving(job(7L, null, List.of(candidate(5012)), Map.of()));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.empty());

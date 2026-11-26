@@ -14,8 +14,24 @@ class ReadFailuresTest {
     private final ReadFailures failures = new ReadFailures();
 
     @Test
-    void aFailureCountsOnlyForTheVersionOfTheFileThatFailed() {
+    void aFileIsUnreadableOnlyAfterSeveralFailuresInARowOnTheSameVersion() {
         failures.record(10L, "1000:1", NOW);
+        failures.record(10L, "1000:1", NOW);
+        assertThat(failures.failedFor(10L, "1000:1")).isFalse();
+
+        failures.record(10L, "1000:1", NOW);
+        assertThat(failures.failedFor(10L, "1000:1")).isTrue();
+
+        // A changed file starts counting again.
+        failures.record(10L, "2000:1", NOW);
+        assertThat(failures.failedFor(10L, "2000:1")).isFalse();
+    }
+
+    @Test
+    void aFailureCountsOnlyForTheVersionOfTheFileThatFailed() {
+        for (int i = 0; i < ReadFailures.GIVE_UP; i++) {
+            failures.record(10L, "1000:1", NOW);
+        }
 
         assertThat(failures.failedFor(10L, "1000:1")).isTrue();
         assertThat(failures.failedFor(10L, "2000:1")).isFalse();
@@ -34,7 +50,9 @@ class ReadFailuresTest {
 
     @Test
     void aReadThatSucceededClearsTheFailure() {
-        failures.record(10L, "1000:1", NOW);
+        for (int i = 0; i < ReadFailures.GIVE_UP; i++) {
+            failures.record(10L, "1000:1", NOW);
+        }
 
         failures.clear(10L);
 

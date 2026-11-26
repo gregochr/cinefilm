@@ -785,9 +785,8 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
-    void theOwnersOnDecidesAnUndecidedRowAtOnceEvenOnAFilmWithAnEnglishTrack() {
-        // An accepted owner override: the job would wait for its fit check here, the owner's click does not.
-        english();
+    void theOwnersOnDecidesAnUndecidedRowAtOnceEvenWhileTheTimingCheckHasNotFittedIt() {
+        // An accepted owner override: the job would wait for the timing check's fit here, the owner's click does not.
         rowIs();
         filmRateIs(25.0);
 
