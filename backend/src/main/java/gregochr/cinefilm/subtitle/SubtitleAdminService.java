@@ -78,7 +78,7 @@ public class SubtitleAdminService {
                                 ForcedDownloadBlockRepository blocks, Clock clock, LibraryLock lock,
                                 PlatformTransactionManager transactions, ApplicationEventPublisher events,
                                 FilmRates filmRates, SubtitleRetimeService retimer,
-                                @Value("${cinefilm.subtitles.retime:off}") String retimeSetting) {
+                                @Value("${cinefilm.subtitles.retime:on}") String retimeSetting) {
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;

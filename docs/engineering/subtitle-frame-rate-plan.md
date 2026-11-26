@@ -99,8 +99,8 @@ cues themselves are put on the film's timeline once, and every reader sees them 
 - The cue hash in `TimingKeys.identity` and the served version change, so each rewritten file's fits and checks are
   stale. That is exactly the set that needs them made again.
 
-**The job.** `SubtitleRetimeJob`, run by `cinefilm.subtitles.retime`: `off` (the default until the last phase; the job
-writes nothing), `on`, or `restore` (the rollback, below).
+**The job.** `SubtitleRetimeJob`, run by `cinefilm.subtitles.retime`: `on` (the default since the last phase; before it,
+`off`), `off` (the job writes nothing), or `restore` (the rollback, below).
 - **Which files.** Each run, it visits:
   - every download and every stored reference with a known stated rate;
   - every row with `retimed_by` set.

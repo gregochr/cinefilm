@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
  * Puts downloaded subtitles on the film's timeline (docs/engineering/subtitle-frame-rate-plan.md, "The job"), at
  * start-up, nightly ({@link SubtitleRetimeScheduler}) and after each pass of the keyframe index (a film's rate may
  * have arrived), one download at a time and one run at a time, in the background. {@code cinefilm.subtitles.retime} is
- * {@code off} (the default: nothing is read or written), {@code on}, or {@code restore} (the rollback: every retimed
+ * {@code on} (the default), {@code off} (nothing is read or written), or {@code restore} (the rollback: every retimed
  * download is put back). Each download is visited by {@link SubtitleRetimeService#process}, which takes the library
  * lock for that one row; a row whose lock stays busy through {@link BusyRetry} is visited again on the next run. A run
  * that rewrote or restored something publishes {@link SubtitleCuesRewritten} and then fits and checks the touched
@@ -50,7 +50,7 @@ public class SubtitleRetimeJob {
     public SubtitleRetimeJob(SubtitleRetimeService service, ReferenceRetimeService referenceService,
                              SubtitleRetimeRecheck recheck, BusyRetry retry,
                              @Qualifier("timingCheckExecutor") Executor executor,
-                             @Value("${cinefilm.subtitles.retime:off}") String setting,
+                             @Value("${cinefilm.subtitles.retime:on}") String setting,
                              ApplicationEventPublisher events) {
         this.service = service;
         this.referenceService = referenceService;
