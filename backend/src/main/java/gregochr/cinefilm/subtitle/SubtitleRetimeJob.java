@@ -148,14 +148,13 @@ public class SubtitleRetimeJob {
                 }
             }
             if (!changed.isEmpty()) {
-                // Forget, re-check, publish, then start the full pass; do not reorder. The probes forget first so that
-                // the pass finds these sidecars due. The event goes after the re-check: Spring delivers it on this
-                // thread, and the timing refresher's listener books a timing pass that would hold the refresher's run
-                // flag, so every fit of the re-check would be left to that pass and nothing would be checked now. The
-                // full pass goes last, after the event's own forget: earlier, it would measure each sidecar and the
-                // event would make the next pass measure it again.
+                // Re-check, publish, then start the full pass; do not reorder. The event goes after the re-check:
+                // Spring delivers it on this thread, and the timing refresher's listener books a timing pass that
+                // would hold the refresher's run flag, so every fit of the re-check would be left to that pass and
+                // nothing would be checked now. The event also makes the probes forget (the re-check measures nothing
+                // in them), and the full pass goes after that: earlier, it would measure each sidecar and the forget
+                // would make the next pass measure it again.
                 Set<Long> ids = Set.copyOf(changed);
-                recheck.forgetMeasured(ids);
                 boolean allFitted = recheck.run(ids);
                 events.publishEvent(new SubtitleCuesRewritten(ids));
                 if (allFitted) {

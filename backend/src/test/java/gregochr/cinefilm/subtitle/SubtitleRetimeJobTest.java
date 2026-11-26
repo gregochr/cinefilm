@@ -187,7 +187,6 @@ class SubtitleRetimeJobTest {
         // The event is published after the re-check: its listeners book passes that would hold the re-check's fits.
         verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L, 2L)));
         InOrder order = inOrder(events, recheck);
-        order.verify(recheck).forgetMeasured(Set.of(1L, 2L));
         order.verify(recheck).run(Set.of(1L, 2L));
         order.verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L, 2L)));
         verifyNoMoreInteractions(recheck);

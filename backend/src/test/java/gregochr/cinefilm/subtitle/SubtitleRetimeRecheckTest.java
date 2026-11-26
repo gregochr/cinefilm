@@ -151,13 +151,6 @@ class SubtitleRetimeRecheckTest {
     }
 
     @Test
-    void theProbesAreToldToForgetTheRewrittenSidecars() {
-        recheck.forgetMeasured(IDS);
-
-        verify(checks).onCuesRewritten(new SubtitleCuesRewritten(IDS));
-    }
-
-    @Test
     void aFailureToListTheEditionsIsLoggedNotThrown() {
         when(service.touchedEditions(IDS)).thenThrow(new IllegalStateException("db down"));
 
