@@ -1,9 +1,11 @@
 package gregochr.cinefilm.opensubtitles;
 
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,20 +28,42 @@ public interface OpenSubtitlesReferenceRepository extends JpaRepository<OpenSubt
      * @param cueCount its line count (0 when unusable)
      * @param lastCueEndMs where its last cue ends, or null for a file stored before that was kept
      * @param timedFps the rate OpenSubtitles states for it, or null
+     * @param cuesVersion the version of its cues when read ({@link OpenSubtitlesReference#getCuesVersion})
      */
     record ReferenceFacts(Long id, Long filmId, String imdbId, long osFileId, String release, int cueCount,
-                          Long lastCueEndMs, Double timedFps) {
+                          Long lastCueEndMs, Double timedFps, int cuesVersion) {
+
+        /** Facts of cues that were never changed (version 0). */
+        public ReferenceFacts(Long id, Long filmId, String imdbId, long osFileId, String release, int cueCount,
+                              Long lastCueEndMs, Double timedFps) {
+            this(id, filmId, imdbId, osFileId, release, cueCount, lastCueEndMs, timedFps, 0);
+        }
     }
 
     /** The facts of every reference stored for some films, for the timing check on the playback path. */
     @Query("select new gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository$ReferenceFacts(r.id, "
-        + "r.filmId, r.imdbId, r.osFileId, r.release, r.cueCount, r.lastCueEndMs, r.timedFps) "
+        + "r.filmId, r.imdbId, r.osFileId, r.release, r.cueCount, r.lastCueEndMs, r.timedFps, r.cuesVersion) "
         + "from OpenSubtitlesReference r "
         + "where r.filmId in :filmIds")
     List<ReferenceFacts> findFactsByFilmIdIn(@Param("filmIds") Collection<Long> filmIds);
 
     /** Every reference stored for some films (any IMDb id; the caller keeps those for the film's current one). */
     List<OpenSubtitlesReference> findByFilmIdIn(Collection<Long> filmIds);
+
+    /**
+     * The version of a reference's cues now (empty when the row is gone), reading the row with a lock held to the end
+     * of the caller's transaction ({@code SELECT ... FOR UPDATE}). A check's save reads it this way and writes its
+     * verdict in the same transaction, so the retime job's rewrite of that row (which updates it before it marks any
+     * verdict stale) waits for the save to commit, and its stale marking then lands on the row the save wrote.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r.cuesVersion from OpenSubtitlesReference r where r.id = :id")
+    Optional<Integer> findCuesVersionForUpdate(@Param("id") Long id);
+
+    /** The ids of the usable references the retime job visits: one with a stated rate, and one that is retimed. */
+    @Query("select r.id from OpenSubtitlesReference r where r.cueCount > 0 "
+        + "and (r.timedFps is not null or r.retimedBy is not null) order by r.id")
+    List<Long> findRetimeCandidateIds();
 
     /**
      * Sets the stated frame rate of a reference that has none, and touches no other column, so it cannot write back

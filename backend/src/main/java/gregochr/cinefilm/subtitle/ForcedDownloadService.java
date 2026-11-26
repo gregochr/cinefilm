@@ -455,11 +455,13 @@ public class ForcedDownloadService {
         row.setKind(kind);
         row.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
         row.setPath("opensubtitles:" + edition.getId() + ":" + reference.getOsFileId());
-        row.setCuesText(reference.getCuesText());
+        // Always the reference's original cues, never its retimed text: the download's own retime then scales it once.
+        String cues = reference.getOriginalCuesText() != null ? reference.getOriginalCuesText()
+            : reference.getCuesText();
+        row.setCuesText(cues);
         row.setCueCount(reference.getCueCount());
-        row.setLastEndMs(SrtParser.cues(reference.getCuesText()).stream().mapToLong(SubtitleCue::endMs).max()
-            .orElse(0));
-        row.setSizeBytes(reference.getCuesText().length());
+        row.setLastEndMs(SrtParser.cues(cues).stream().mapToLong(SubtitleCue::endMs).max().orElse(0));
+        row.setSizeBytes(cues.length());
         row.setModifiedAt(now);
         row.setPresence(Presence.PRESENT);
         row.setMediaFileId(edition.originalParts().get(0).getId());

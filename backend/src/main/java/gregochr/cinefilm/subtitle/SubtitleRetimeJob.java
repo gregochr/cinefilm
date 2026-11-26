@@ -4,10 +4,12 @@ import gregochr.cinefilm.subtitle.SubtitleRetimeService.Outcome;
 import gregochr.cinefilm.transcode.KeyframeIndexPassFinished;
 import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -35,6 +37,7 @@ public class SubtitleRetimeJob {
     private static final Logger LOG = LoggerFactory.getLogger(SubtitleRetimeJob.class);
 
     private final SubtitleRetimeService service;
+    private final ReferenceRetimeService referenceService;
     private final SubtitleRetimeRecheck recheck;
     private final BusyRetry retry;
     private final Executor executor;
@@ -44,11 +47,13 @@ public class SubtitleRetimeJob {
     private final AtomicBoolean pending = new AtomicBoolean();
 
     /** Creates the job; the executor is {@code timingCheckExecutor}, so a run never overlaps a timing check. */
-    public SubtitleRetimeJob(SubtitleRetimeService service, SubtitleRetimeRecheck recheck, BusyRetry retry,
+    public SubtitleRetimeJob(SubtitleRetimeService service, ReferenceRetimeService referenceService,
+                             SubtitleRetimeRecheck recheck, BusyRetry retry,
                              @Qualifier("timingCheckExecutor") Executor executor,
                              @Value("${cinefilm.subtitles.retime:off}") String setting,
                              ApplicationEventPublisher events) {
         this.service = service;
+        this.referenceService = referenceService;
         this.recheck = recheck;
         this.retry = retry;
         this.executor = executor;
@@ -127,34 +132,26 @@ public class SubtitleRetimeJob {
     /** One pass over every download that may need retiming. */
     void run() {
         Map<Outcome, Integer> counts = new EnumMap<>(Outcome.class);
+        Map<Outcome, Integer> referenceCounts = new EnumMap<>(Outcome.class);
         Set<Long> changed = new HashSet<>();
-        int failed = 0;
+        Set<Long> changedReferences = new HashSet<>();
+        int[] failed = {0};
+        boolean downloadsSkipped = false;
         try {
-            for (Long id : service.candidateIds()) {
-                try {
-                    Outcome outcome = visit(id);
-                    counts.merge(outcome, 1, Integer::sum);
-                    if (outcome == Outcome.REWRITTEN || outcome == Outcome.RESTORED) {
-                        changed.add(id);
-                    }
-                    if (outcome == Outcome.BUSY) {
-                        // A scan or an edit holds the lock: the rest would wait as long, so the next run has them.
-                        LOG.info("Subtitle retime stops: the library is busy");
-                        break;
-                    }
-                } catch (RuntimeException e) {
-                    failed++;
-                    LOG.warn("Could not retime download {}: {}", id, e.getClass().getSimpleName());
-                }
+            // Stored references first: the re-check then compares with references already on the film's timeline.
+            downloadsSkipped = visitAll("reference", referenceService.candidateIds(), referenceService::process,
+                referenceCounts, changedReferences, failed);
+            if (!downloadsSkipped) {
+                visitAll("download", service.candidateIds(), service::process, counts, changed, failed);
             }
-            if (!changed.isEmpty()) {
+            if (!changed.isEmpty() || !changedReferences.isEmpty()) {
                 // Re-check, publish, then announce the fits; do not reorder. The event goes after the re-check: its
                 // listener books a timing pass on this thread that would hold the refresher's run flag, so every fit
                 // of the re-check would be left to it. The event also makes the probes forget. Announcing goes last:
                 // it starts a check pass, which would otherwise measure a sidecar before the forget and again after.
                 // A pass already running meanwhile may still measure one twice: accepted (the probes only log).
                 Set<Long> ids = Set.copyOf(changed);
-                boolean fitted = recheck.run(ids);
+                boolean fitted = recheck.run(ids, Set.copyOf(changedReferences));
                 events.publishEvent(new SubtitleCuesRewritten(ids));
                 if (fitted) {
                     recheck.announceFits();
@@ -162,19 +159,50 @@ public class SubtitleRetimeJob {
             }
         } catch (RuntimeException e) {
             LOG.error("Subtitle retime failed", e);
+            failed[0]++;
         }
         LOG.info("Subtitle retime ({}) finished: {} rewritten, {} restored, {} set off, {} fit as they are, "
-                + "{} left as they were, {} left for the next run (library busy), {} failed", mode,
+                + "{} left as they were, {} left for the next run (library busy), {} failed; references: {} rewritten, "
+                + "{} restored, {} left for the next run (library busy){}", mode,
             count(counts, Outcome.REWRITTEN), count(counts, Outcome.RESTORED), count(counts, Outcome.DECIDED_OFF),
             count(counts, Outcome.DECIDED_FITS), count(counts, Outcome.UNCHANGED), count(counts, Outcome.BUSY),
-            failed);
+            failed[0], count(referenceCounts, Outcome.REWRITTEN), count(referenceCounts, Outcome.RESTORED),
+            count(referenceCounts, Outcome.BUSY),
+            downloadsSkipped ? "; DOWNLOADS NOT VISITED: the run stopped at a busy library" : "");
     }
 
-    /** One download: a busy library is tried again a bounded number of times, then left for the next run. */
-    private Outcome visit(Long id) {
+    /**
+     * Visits each row in turn: a busy library is tried again a bounded number of times, then the rest is left for the
+     * next run. One that throws is counted and passed over.
+     *
+     * @return true when the library stayed busy, so the run stops
+     */
+    private boolean visitAll(String what, List<Long> ids, BiFunction<Long, RetimeMode, Outcome> process,
+                             Map<Outcome, Integer> counts, Set<Long> changed, int[] failed) {
+        for (Long id : ids) {
+            try {
+                Outcome outcome = visit(what, id, process);
+                counts.merge(outcome, 1, Integer::sum);
+                if (outcome == Outcome.REWRITTEN || outcome == Outcome.RESTORED) {
+                    changed.add(id);
+                }
+                if (outcome == Outcome.BUSY) {
+                    // A scan or an edit holds the lock: the rest would wait as long, so the next run has them.
+                    LOG.info("Subtitle retime stops: the library is busy");
+                    return true;
+                }
+            } catch (RuntimeException e) {
+                failed[0]++;
+                LOG.warn("Could not retime {} {}: {}", what, id, e.getClass().getSimpleName());
+            }
+        }
+        return false;
+    }
+
+    private Outcome visit(String what, Long id, BiFunction<Long, RetimeMode, Outcome> process) {
         Outcome[] outcome = new Outcome[1];
-        retry.until("Retime of download " + id, () -> {
-            outcome[0] = service.process(id, mode);
+        retry.until("Retime of " + what + " " + id, () -> {
+            outcome[0] = process.apply(id, mode);
             return outcome[0] != Outcome.BUSY;
         });
         return outcome[0];

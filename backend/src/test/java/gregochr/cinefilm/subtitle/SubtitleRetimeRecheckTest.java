@@ -33,6 +33,8 @@ class SubtitleRetimeRecheckTest {
     @Mock
     private SubtitleRetimeService service;
     @Mock
+    private ReferenceRetimeService referenceService;
+    @Mock
     private SidecarTimingRefresher timing;
     @Mock
     private SidecarCheckRefresher checks;
@@ -42,7 +44,7 @@ class SubtitleRetimeRecheckTest {
 
     @BeforeEach
     void setUp() {
-        recheck = new SubtitleRetimeRecheck(service, timing, checks, new BusyRetry(pauses::add));
+        recheck = new SubtitleRetimeRecheck(service, referenceService, timing, checks, new BusyRetry(pauses::add));
     }
 
     @Test
@@ -51,7 +53,7 @@ class SubtitleRetimeRecheckTest {
             new TouchedEdition(11L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.BUSY, Fit.BUSY, Fit.FITTED);
 
-        assertThat(recheck.run(IDS)).isTrue();
+        assertThat(recheck.run(IDS, Set.of())).isTrue();
 
         // The film is fitted once, and both of its touched editions are checked.
         verify(timing, times(3)).fitFilm(1L);
@@ -66,7 +68,7 @@ class SubtitleRetimeRecheckTest {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.BUSY);
 
-        assertThat(recheck.run(IDS)).isFalse();
+        assertThat(recheck.run(IDS, Set.of())).isFalse();
 
         verify(timing, times(BusyRetry.ATTEMPTS)).fitFilm(1L);
         assertThat(pauses).hasSize(BusyRetry.ATTEMPTS - 1);
@@ -83,7 +85,7 @@ class SubtitleRetimeRecheckTest {
         when(timing.fitFilm(2L)).thenReturn(Fit.BUSY);
 
         // Film 1's fit was saved, so it is announced although the walk stopped at film 2.
-        assertThat(recheck.run(IDS)).isTrue();
+        assertThat(recheck.run(IDS, Set.of())).isTrue();
 
         verify(checks).checkEditions(List.of(10L));
         verify(timing, times(BusyRetry.ATTEMPTS)).fitFilm(2L);
@@ -98,7 +100,7 @@ class SubtitleRetimeRecheckTest {
             new TouchedEdition(11L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.LEFT_TO_PASS);
 
-        assertThat(recheck.run(IDS)).isFalse();
+        assertThat(recheck.run(IDS, Set.of())).isFalse();
 
         verify(timing).fitFilm(1L);
         assertThat(pauses).isEmpty();
@@ -112,7 +114,7 @@ class SubtitleRetimeRecheckTest {
         when(timing.fitFilm(1L)).thenReturn(Fit.FAILED);
         when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
 
-        assertThat(recheck.run(IDS)).isFalse();
+        assertThat(recheck.run(IDS, Set.of())).isFalse();
 
         verify(timing).fitFilm(1L);
         assertThat(pauses).isEmpty();
@@ -130,16 +132,40 @@ class SubtitleRetimeRecheckTest {
         when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
         when(checks.checkEditions(List.of(10L, 20L))).thenThrow(new IllegalStateException("db down"));
 
-        assertThat(recheck.run(IDS)).isEqualTo(fitted);
+        assertThat(recheck.run(IDS, Set.of())).isEqualTo(fitted);
     }
 
     @Test
     void aFailureToListTheEditionsIsLoggedNotThrown() {
         when(service.touchedEditions(IDS)).thenThrow(new IllegalStateException("db down"));
 
-        assertThat(recheck.run(IDS)).isFalse();
+        assertThat(recheck.run(IDS, Set.of())).isFalse();
 
         assertThat(pauses).isEmpty();
         verifyNoInteractions(timing, checks);
+    }
+
+    @Test
+    void theEditionsOfChangedReferencesFilmsAreFittedAndCheckedAfterTheDownloadsAndNoneTwice() {
+        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
+        when(referenceService.touchedEditions(Set.of(9L))).thenReturn(List.of(new TouchedEdition(10L, 1L),
+            new TouchedEdition(11L, 1L), new TouchedEdition(20L, 2L)));
+        when(timing.fitFilm(1L)).thenReturn(Fit.FITTED);
+        when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
+
+        assertThat(recheck.run(IDS, Set.of(9L))).isTrue();
+
+        verify(checks).checkEditions(List.of(10L, 11L, 20L));
+    }
+
+    @Test
+    void whenOnlyReferencesChangedNoDownloadEditionsAreAskedFor() {
+        when(referenceService.touchedEditions(Set.of(9L))).thenReturn(List.of(new TouchedEdition(20L, 2L)));
+        when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
+
+        assertThat(recheck.run(Set.of(), Set.of(9L))).isFalse();
+
+        verify(checks).checkEditions(List.of(20L));
+        verifyNoInteractions(service);
     }
 }

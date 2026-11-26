@@ -163,7 +163,7 @@ class SidecarTimingServiceDownloadedUnitTest {
     private void stored(OpenSubtitlesReference... stored) {
         when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(Arrays.stream(stored)
             .map(r -> new ReferenceFacts(r.getId(), r.getFilmId(), r.getImdbId(), r.getOsFileId(), r.getRelease(),
-                r.getCueCount(), r.getLastCueEndMs(), r.getTimedFps())).toList());
+                r.getCueCount(), r.getLastCueEndMs(), r.getTimedFps(), r.getCuesVersion())).toList());
     }
 
     /** The job reads the cue text of the files it fits to, and only those. */
@@ -450,6 +450,93 @@ class SidecarTimingServiceDownloadedUnitTest {
         assertThat(service.save(jobFitting(), aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);
         assertThat(service.save(jobFitting(5013L), aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);
         assertThat(service.save(jobFitting(5012L), aligned(0), null, LATER)).isEqualTo(SaveOutcome.DROPPED);
+    }
+
+    /** A job that fitted to file 5012 as it read it, at the given cues version. */
+    private FitJob jobFittingVersion(int version) {
+        FitJob job = jobFitting(5012L);
+        return new FitJob(job.filmId(), job.sidecarId(), job.identity(), job.referenceKey(), job.servedStarts(),
+            job.referenceStarts(), job.noReference(), job.osReferences(), Map.of(5012L, version));
+    }
+
+    @Test
+    void aFitMadeOnCuesThatWereRewrittenSinceTheyWereReadIsDroppedAndNothingIsWritten() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference rewritten = reference(5012, 300, IMDB);
+        rewritten.setCuesVersion(2);
+        stored(rewritten);
+        served();
+
+        assertThat(service.save(jobFittingVersion(1), aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);
+
+        verifyNoInteractions(alignments);
+    }
+
+    @Test
+    void aFitMadeOnCuesThatAreStillTheVersionThatWasReadIsSaved() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference unchanged = reference(5012, 300, IMDB);
+        unchanged.setCuesVersion(2);
+        stored(unchanged);
+        served();
+        when(alignments.findBySidecarId(5L)).thenReturn(Optional.empty());
+
+        assertThat(service.save(jobFittingVersion(2), aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.SAVED);
+    }
+
+    @Test
+    void aFitIgnoresTheVersionOfTheDownloadsOwnFileWhichItWasNeverFittedTo() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        sidecar.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        sidecar.setOpenSubtitlesFileId(5012L);
+        sidecar.setPath("opensubtitles:40:5012");
+        sidecar.setImdbId(IMDB);
+        sidecar.setWholeEdition(true);
+        OpenSubtitlesReference own = reference(5012, 300, IMDB);
+        own.setCuesVersion(9);
+        stored(own, reference(5013, 300, IMDB));
+        FitJob job = onlyJob(5013L);
+        when(alignments.findBySidecarId(5L)).thenReturn(Optional.empty());
+
+        assertThat(job.referenceVersions()).isEqualTo(Map.of(5013L, 0));
+        assertThat(service.save(job, aligned(0), 5013L, LATER)).isEqualTo(SaveOutcome.SAVED);
+    }
+
+    @Test
+    void aFitIsDroppedWhenAFileItWasJudgedBesideButNotChosenWasRewrittenSince() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference chosen = reference(5012, 300, IMDB);
+        OpenSubtitlesReference beside = reference(5013, 300, IMDB);
+        beside.setCuesVersion(3);
+        stored(chosen, beside);
+        served();
+        FitJob job = new FitJob(1L, 5L, TimingKeys.identity(sidecar), BASE_KEY + OS_KEY + ":5012,5013", STARTS,
+            List.of(), null, List.of(new DownloadedFit.Reference(5012L, "Release 5012", 300, List.of(1L)),
+                new DownloadedFit.Reference(5013L, "Release 5013", 300, List.of(1L))), Map.of(5012L, 0, 5013L, 2));
+
+        assertThat(service.save(job, aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);
+
+        verifyNoInteractions(alignments);
+    }
+
+    @Test
+    void theJobRecordsTheVersionOfEachFileItReadSoASaveCanTellWhetherItChanged() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference file = reference(5013, 300, IMDB);
+        file.setCuesVersion(4);
+        stored(reference(5012, 300, IMDB), file);
+        when(references.findAllById(List.of(5013L))).thenReturn(List.of(file));
+        sidecar.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        sidecar.setOpenSubtitlesFileId(5012L);
+        sidecar.setPath("opensubtitles:40:5012");
+        sidecar.setImdbId(IMDB);
+        sidecar.setWholeEdition(true);
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        FitJob job = service.fitJobs(1L).get(0);
+
+        assertThat(job.referenceVersions()).isEqualTo(Map.of(5013L, 4));
     }
 
     private static ReferenceFacts factsOf(OpenSubtitlesReference r) {

@@ -4,6 +4,7 @@ import gregochr.cinefilm.subtitle.SidecarTimingRefresher.Fit;
 import gregochr.cinefilm.subtitle.SubtitleRetimeService.TouchedEdition;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,14 +27,16 @@ public class SubtitleRetimeRecheck {
     private static final Logger LOG = LoggerFactory.getLogger(SubtitleRetimeRecheck.class);
 
     private final SubtitleRetimeService service;
+    private final ReferenceRetimeService referenceService;
     private final SidecarTimingRefresher timing;
     private final SidecarCheckRefresher checks;
     private final BusyRetry retry;
 
     /** Creates the re-check. */
-    public SubtitleRetimeRecheck(SubtitleRetimeService service, SidecarTimingRefresher timing,
-                                 SidecarCheckRefresher checks, BusyRetry retry) {
+    public SubtitleRetimeRecheck(SubtitleRetimeService service, ReferenceRetimeService referenceService,
+                                 SidecarTimingRefresher timing, SidecarCheckRefresher checks, BusyRetry retry) {
         this.service = service;
+        this.referenceService = referenceService;
         this.timing = timing;
         this.checks = checks;
         this.retry = retry;
@@ -53,13 +56,15 @@ public class SubtitleRetimeRecheck {
      * Fits and checks the editions the given downloads were made for.
      *
      * @param sidecarIds the downloads whose cues were rewritten or restored
+     * @param referenceIds the stored references whose cues were rewritten or restored: every edition of their films
+     *     is looked at too, after the downloads' editions
      * @return true when at least one fit was saved, so the caller should announce it ({@link #announceFits})
      */
-    public boolean run(Set<Long> sidecarIds) {
+    public boolean run(Set<Long> sidecarIds, Set<Long> referenceIds) {
         try {
             Map<Long, Fit> fitted = new HashMap<>();
             List<Long> fittedEditions = new ArrayList<>();
-            List<TouchedEdition> touched = service.touchedEditions(sidecarIds);
+            List<TouchedEdition> touched = touched(sidecarIds, referenceIds);
             for (TouchedEdition edition : touched) {
                 Fit fit = fitted.computeIfAbsent(edition.filmId(), this::fit);
                 if (fit == Fit.DONE || fit == Fit.FITTED) {
@@ -92,6 +97,18 @@ public class SubtitleRetimeRecheck {
             LOG.error("Subtitle retime re-check failed", e);
             return false;
         }
+    }
+
+    /** The editions of the changed downloads, then those of the changed references' films, each edition once. */
+    private List<TouchedEdition> touched(Set<Long> sidecarIds, Set<Long> referenceIds) {
+        Map<Long, TouchedEdition> touched = new LinkedHashMap<>();
+        if (!sidecarIds.isEmpty()) {
+            service.touchedEditions(sidecarIds).forEach(e -> touched.putIfAbsent(e.editionId(), e));
+        }
+        if (!referenceIds.isEmpty()) {
+            referenceService.touchedEditions(referenceIds).forEach(e -> touched.putIfAbsent(e.editionId(), e));
+        }
+        return List.copyOf(touched.values());
     }
 
     /** Announces the fits the re-check saved. */

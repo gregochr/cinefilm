@@ -78,6 +78,9 @@ class SidecarCheckServiceUnitTest {
     private ForcedCheckCandidateRepository candidates;
 
     @Mock
+    private gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository referenceRepository;
+
+    @Mock
     private ForcedSubtitleAlignmentRepository alignments;
 
     private SidecarCheckService service;
@@ -89,7 +92,7 @@ class SidecarCheckServiceUnitTest {
     @BeforeEach
     void setUp() {
         service = new SidecarCheckService(films, sidecars, editions, resolver, checks, downloadChecks, candidates,
-            true, alignments, CLOCK);
+            true, alignments, referenceRepository, CLOCK);
         film = film(1L, "Taken", 2008, NOW);
         film.setImdbId("tt1");
         edition = edition(film, 40L, "Original", 90 * MIN, null);
@@ -417,5 +420,36 @@ class SidecarCheckServiceUnitTest {
 
         resolved(resolution(null, List.of(downloadState(Trust.UNCHECKED, Proof.NONE, null, noFile))));
         assertThat(service.due()).extracting(DueCheck::downloadSidecarId).containsExactly(7L);
+    }
+
+    @Test
+    void aResultMadeOnCuesThatWereRewrittenSinceTheyWereReadIsDroppedAndNothingIsWritten() {
+        Resolution resolution = resolution(check("CHECK"), List.of());
+        when(films.findById(1L)).thenReturn(Optional.of(film));
+        OpenSubtitlesReference read = reference();
+        read.setCuesVersion(2);
+        when(referenceRepository.findCuesVersionForUpdate(900L)).thenReturn(Optional.of(3));
+        DueCheck due = new DueCheck(1L, 40L, "tt1", "Original", List.of(), Set.of(), resolution.fileVersion(), false,
+            List.of());
+
+        assertThat(service.save(due, read, AGREES, LATER)).isFalse();
+
+        verify(films).findById(1L);
+        verify(referenceRepository).findCuesVersionForUpdate(900L);
+        verifyNoMoreInteractions(checks, downloadChecks, editions, resolver);
+    }
+
+    @Test
+    void aResultMadeOnCuesThatAreStillTheVersionThatWasReadIsSaved() {
+        Resolution resolution = resolution(check("CHECK"), List.of());
+        readyToSave(resolution);
+        when(checks.findByEditionId(40L)).thenReturn(Optional.empty());
+        OpenSubtitlesReference read = reference();
+        read.setCuesVersion(2);
+        when(referenceRepository.findCuesVersionForUpdate(900L)).thenReturn(Optional.of(2));
+        DueCheck due = new DueCheck(1L, 40L, "tt1", "Original", List.of(), Set.of(), resolution.fileVersion(), false,
+            List.of());
+
+        assertThat(service.save(due, read, AGREES, LATER)).isTrue();
     }
 }
