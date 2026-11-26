@@ -424,7 +424,8 @@ The rollback is the `restore` mode, in this order:
    The run restores stored references first, then downloads, and the line counts both. It must say `0 left for the
    next run (library busy)` **twice** (once for downloads, once after `references:`), `0 failed`, and it must **not**
    end with `DOWNLOADS NOT VISITED` (that means a busy library stopped the run at the references, so no download was
-   looked at). If any of those is wrong (a scan or an Admin edit held the library, or a row could not be restored),
+   looked at). A run that failed as a whole (a database error while listing the rows, logged as `Subtitle retime
+   failed`) counts as `1 failed`, so the `0 failed` rule rules it out too. If any of those is wrong (a scan or an Admin edit held the library, or a row could not be restored),
    restart again with `restore` still set, wait for the next line and read it again. Only when all are right do the
    next step.
 4. Roll back the image (above).

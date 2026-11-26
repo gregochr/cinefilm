@@ -289,6 +289,11 @@ class SubtitleRetimeJobTest {
         job("on").run();
 
         verifyNoInteractions(events, recheck);
+        // The run is counted as failed, so the finished line can never read as a clean (rollback) run.
+        assertThat(messages()).containsExactly("Subtitle retime failed",
+            "Subtitle retime (ON) finished: 0 rewritten, 0 restored, 0 set off, 0 fit as they are, 0 left as they "
+                + "were, 0 left for the next run (library busy), 1 failed; references: 0 rewritten, 0 restored, "
+                + "0 left for the next run (library busy)");
     }
 
     @Test

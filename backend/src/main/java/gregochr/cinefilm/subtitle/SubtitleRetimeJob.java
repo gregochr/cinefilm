@@ -159,6 +159,7 @@ public class SubtitleRetimeJob {
             }
         } catch (RuntimeException e) {
             LOG.error("Subtitle retime failed", e);
+            failed[0]++;
         }
         LOG.info("Subtitle retime ({}) finished: {} rewritten, {} restored, {} set off, {} fit as they are, "
                 + "{} left as they were, {} left for the next run (library busy), {} failed; references: {} rewritten, "

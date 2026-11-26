@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
@@ -96,38 +97,51 @@ class ReferenceRetimeServiceTest {
         reference.setCuesVersion(4);
     }
 
-    /** The film's one edition (40) with one part (10) and the forced sidecar (5) attached to it. */
-    private void filmHasEditionAndSidecar() {
-        Edition edition = TestData.edition(TestData.film(FILM_ID, "Taken", 2008, NOW), 40L, "Original", 0, null);
-        TestData.file(edition, "Taken.m4v").setId(10L);
-        when(editions.findWithFilesByFilmIdIn(Set.of(FILM_ID))).thenReturn(List.of(edition));
-        SubtitleSidecar sidecar = new SubtitleSidecar();
-        sidecar.setId(5L);
-        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(sidecar));
+    /**
+     * The film has two editions: 40 with two parts (10, 11) and 41 with one (12), each with a forced sidecar (5 on
+     * part 10, 6 on part 12). Reading only the first edition, or only each edition's first file, misses rows.
+     */
+    private void filmHasTwoEditionsWithSidecars() {
+        Edition first = TestData.edition(TestData.film(FILM_ID, "Taken", 2008, NOW), 40L, "Original", 0, null);
+        TestData.file(first, "Taken.part1.m4v").setId(10L);
+        MediaFile second = TestData.file(first, "Taken.part2.m4v");
+        second.setId(11L);
+        second.setPartNumber(2);
+        Edition extended = TestData.edition(TestData.film(FILM_ID, "Taken", 2008, NOW), 41L, "Extended", 0, null);
+        TestData.file(extended, "Taken.extended.m4v").setId(12L);
+        when(editions.findWithFilesByFilmIdIn(Set.of(FILM_ID))).thenReturn(List.of(first, extended));
+        SubtitleSidecar onFirst = new SubtitleSidecar();
+        onFirst.setId(5L);
+        SubtitleSidecar onExtended = new SubtitleSidecar();
+        onExtended.setId(6L);
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 11L, 12L), SubtitleKind.FORCED))
+            .thenReturn(List.of(onFirst, onExtended));
     }
 
-    /** A check of the edition that names ANOTHER reference of the film. */
-    private ForcedSubtitleCheck fileCheck() {
-        ForcedSubtitleCheck check = new ForcedSubtitleCheck();
-        check.setReferenceId(REFERENCE_ID + 1);
-        when(checks.findByEditionIdIn(List.of(40L))).thenReturn(List.of(check));
-        return check;
+    /** One check per edition, each naming ANOTHER reference of the film. */
+    private List<ForcedSubtitleCheck> fileChecks() {
+        List<ForcedSubtitleCheck> rows = List.of(new ForcedSubtitleCheck(), new ForcedSubtitleCheck());
+        rows.forEach(check -> check.setReferenceId(REFERENCE_ID + 1));
+        when(checks.findByEditionIdIn(List.of(40L, 41L))).thenReturn(rows);
+        return rows;
     }
 
-    private ForcedDownloadCheck downloadCheck() {
-        ForcedDownloadCheck check = new ForcedDownloadCheck();
-        check.setReferenceId(REFERENCE_ID + 1);
-        when(downloadChecks.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(check));
-        return check;
+    private List<ForcedDownloadCheck> downloadChecks() {
+        List<ForcedDownloadCheck> rows = List.of(new ForcedDownloadCheck(), new ForcedDownloadCheck());
+        rows.forEach(check -> check.setReferenceId(REFERENCE_ID + 1));
+        when(downloadChecks.findBySidecarIdIn(List.of(5L, 6L))).thenReturn(rows);
+        return rows;
     }
 
-    /** A fit saved with no file at all (a rate conflict): it names no reference. */
-    private ForcedSubtitleAlignment fit() {
-        ForcedSubtitleAlignment fit = new ForcedSubtitleAlignment();
-        fit.setReferenceSource(ReferenceSource.EMBEDDED);
-        fit.setReferenceOsFileId(null);
-        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(fit));
-        return fit;
+    /** Fits saved with no file at all (a rate conflict): they name no reference. */
+    private List<ForcedSubtitleAlignment> fits() {
+        List<ForcedSubtitleAlignment> rows = List.of(new ForcedSubtitleAlignment(), new ForcedSubtitleAlignment());
+        rows.forEach(fit -> {
+            fit.setReferenceSource(ReferenceSource.EMBEDDED);
+            fit.setVerdict(TimingFit.Verdict.ALIGNED);
+        });
+        when(alignments.findBySidecarIdIn(List.of(5L, 6L))).thenReturn(rows);
+        return rows;
     }
 
     private OpenSubtitlesReference saved() {
@@ -198,41 +212,41 @@ class ReferenceRetimeServiceTest {
     @Test
     void everyRowOfTheFilmsEditionsIsMarkedOutdatedWhateverReferenceItNamesAndKeepsItsVerdict() {
         referenceIs();
-        filmHasEditionAndSidecar();
+        filmHasTwoEditionsWithSidecars();
         filmRateIs(25.0, false);
-        ForcedSubtitleCheck fileCheck = fileCheck();
-        fileCheck.setVerdict("AGREES");
-        ForcedDownloadCheck downloadCheck = downloadCheck();
-        downloadCheck.setVerdict("CHECK");
-        ForcedSubtitleAlignment fit = fit();
-        fit.setVerdict(TimingFit.Verdict.ALIGNED);
+        List<ForcedSubtitleCheck> fileChecks = fileChecks();
+        fileChecks.forEach(check -> check.setVerdict("AGREES"));
+        List<ForcedDownloadCheck> downloadChecks = downloadChecks();
+        downloadChecks.forEach(check -> check.setVerdict("CHECK"));
+        List<ForcedSubtitleAlignment> fits = fits();
 
         service.process(REFERENCE_ID, RetimeMode.ON);
 
-        assertThat(fileCheck.getStaleSince()).isEqualTo(NOW);
-        assertThat(fileCheck.getVerdict()).isEqualTo("AGREES");
-        assertThat(downloadCheck.getStaleSince()).isEqualTo(NOW);
-        assertThat(downloadCheck.getVerdict()).isEqualTo("CHECK");
-        assertThat(fit.getStaleSince()).isEqualTo(NOW);
-        assertThat(fit.getVerdict()).isEqualTo(TimingFit.Verdict.ALIGNED);
-        verify(checks).saveAll(List.of(fileCheck));
-        verify(downloadChecks).saveAll(List.of(downloadCheck));
-        verify(alignments).saveAll(List.of(fit));
+        assertThat(fileChecks).extracting(ForcedSubtitleCheck::getStaleSince).containsExactly(NOW, NOW);
+        assertThat(fileChecks).extracting(ForcedSubtitleCheck::getVerdict).containsExactly("AGREES", "AGREES");
+        assertThat(downloadChecks).extracting(ForcedDownloadCheck::getStaleSince).containsExactly(NOW, NOW);
+        assertThat(downloadChecks).extracting(ForcedDownloadCheck::getVerdict).containsExactly("CHECK", "CHECK");
+        assertThat(fits).extracting(ForcedSubtitleAlignment::getStaleSince).containsExactly(NOW, NOW);
+        assertThat(fits).extracting(ForcedSubtitleAlignment::getVerdict)
+            .containsExactly(TimingFit.Verdict.ALIGNED, TimingFit.Verdict.ALIGNED);
+        verify(this.checks).saveAll(fileChecks);
+        verify(this.downloadChecks).saveAll(downloadChecks);
+        verify(alignments).saveAll(fits);
     }
 
     @Test
     void onlyThisFilmsEditionsAndSidecarsAreLookedUpSoRowsOfAnotherFilmAreNeverMarked() {
         referenceIs();
-        filmHasEditionAndSidecar();
+        filmHasTwoEditionsWithSidecars();
         filmRateIs(25.0, false);
 
         service.process(REFERENCE_ID, RetimeMode.ON);
 
         verify(editions).findWithFilesByFilmIdIn(Set.of(FILM_ID));
-        verify(sidecars).findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED);
-        verify(checks).findByEditionIdIn(List.of(40L));
-        verify(downloadChecks).findBySidecarIdIn(List.of(5L));
-        verify(alignments).findBySidecarIdIn(List.of(5L));
+        verify(sidecars).findByMediaFileIdInAndKind(List.of(10L, 11L, 12L), SubtitleKind.FORCED);
+        verify(checks).findByEditionIdIn(List.of(40L, 41L));
+        verify(downloadChecks).findBySidecarIdIn(List.of(5L, 6L));
+        verify(alignments).findBySidecarIdIn(List.of(5L, 6L));
     }
 
     @Test
@@ -345,8 +359,8 @@ class ReferenceRetimeServiceTest {
     void restorePutsARetimedReferenceBackAndMarksItsRows() {
         referenceIs();
         retimedAlready();
-        filmHasEditionAndSidecar();
-        ForcedDownloadCheck downloadCheck = downloadCheck();
+        filmHasTwoEditionsWithSidecars();
+        List<ForcedDownloadCheck> marked = downloadChecks();
 
         Outcome outcome = service.process(REFERENCE_ID, RetimeMode.RESTORE);
 
@@ -355,7 +369,7 @@ class ReferenceRetimeServiceTest {
         assertThat(written.getCuesText()).isEqualTo(ORIGINAL);
         assertThat(written.getRetimedBy()).isNull();
         assertThat(written.getCuesVersion()).isEqualTo(5);
-        assertThat(downloadCheck.getStaleSince()).isEqualTo(NOW);
+        assertThat(marked).extracting(ForcedDownloadCheck::getStaleSince).containsExactly(NOW, NOW);
         verifyNoInteractions(rates);
     }
 
