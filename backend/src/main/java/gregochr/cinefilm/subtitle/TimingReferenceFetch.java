@@ -114,12 +114,7 @@ final class TimingReferenceFetch {
         for (Target target : service.targets()) {
             Shared shared = films.computeIfAbsent(List.of(target.filmId(), target.imdbId()),
                 key -> new Shared(target));
-            try {
-                fillRates(target, shared);
-            } catch (RuntimeException e) {
-                LOG.warn("Could not fill the stated frame rates of the references of edition {}: {}",
-                    target.editionId(), e.getClass().getSimpleName());
-            }
+            fillRates(target, shared);
             try {
                 if (!stopped) {
                     fetchFor(target, shared, checkLimit, fetchesLeft);
@@ -154,7 +149,13 @@ final class TimingReferenceFetch {
         for (OpenSubtitlesResult candidate : target.candidates()) {
             OpenSubtitlesReference reference = shared.stored.get(candidate.fileId());
             if (reference != null && reference.isFinal()) {
-                fetcher.fillRate(reference, candidate);
+                try {
+                    fetcher.fillRate(reference, candidate);
+                } catch (RuntimeException e) {
+                    // One row's failed fill leaves that row unrated; the others are still filled.
+                    LOG.warn("Could not fill the stated frame rate of OpenSubtitles file {} (edition {}): {}",
+                        candidate.fileId(), target.editionId(), e.getClass().getSimpleName());
+                }
             }
         }
     }

@@ -1056,26 +1056,29 @@ class TimingReferenceFetchTest {
     }
 
     @Test
-    void aFillThatThrowsDoesNotEndThePassSoTheOtherRowsAndTheNextTargetAreStillMeasured() {
-        OpenSubtitlesReference withRate = stored(5011, scatteredReference());
-        withRate.setTimedFps(23.976);
-        OpenSubtitlesReference rateless = stored(5012, scatteredReference());
+    void aFillThatThrowsLeavesOnlyThatRowUnfilledSoTheRowsAfterItAndTheNextTargetAreStillFilledAndMeasured() {
+        OpenSubtitlesReference throwing = stored(5012, scatteredReference());
+        OpenSubtitlesReference after = stored(5013, scatteredReference());
         OpenSubtitlesReference other = stored(6011, scatteredReference());
         other.setTimedFps(23.976);
         doThrow(new IllegalStateException("boom")).when(references).fillTimedFps(5012L, 23.976);
         when(service.targets()).thenReturn(List.of(
-            target(1, 2, null, List.of(retimedShifted()), List.of(candidate(5012), candidate(5011)),
-                Map.of(5011L, withRate, 5012L, rateless)),
+            target(1, 2, null, List.of(retimedShifted()), List.of(candidate(5012), candidate(5013)),
+                Map.of(5012L, throwing, 5013L, after)),
             target(2, 1, null, List.of(retimedShifted()), List.of(candidate(6011)), Map.of(6011L, other))));
         when(filmRates.forEdition(10L)).thenReturn(25.0);
         when(filmRates.forEdition(20L)).thenReturn(25.0);
 
         int written = fetch.run(CHECK_LIMIT, true);
 
-        assertThat(lines(Level.WARN)).contains("Could not fill the stated frame rates of the references of edition "
-            + "10: IllegalStateException");
+        assertThat(lines(Level.WARN)).contains("Could not fill the stated frame rate of OpenSubtitles file 5012 "
+            + "(edition 10): IllegalStateException");
+        // The row after the failing one is filled and measured, and so is the next target's.
+        verify(references).fillTimedFps(5013L, 23.976);
+        assertThat(after.getTimedFps()).isEqualTo(23.976);
+        assertThat(throwing.getTimedFps()).isNull();
         assertThat(written).isEqualTo(2);
-        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5011"));
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5013"));
         assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 6011"));
     }
 }
