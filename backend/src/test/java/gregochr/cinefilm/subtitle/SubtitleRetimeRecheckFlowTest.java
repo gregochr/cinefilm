@@ -175,13 +175,13 @@ class SubtitleRetimeRecheckFlowTest {
         checkSaves(due10, ref11);
         checkSaves(due20, ref22);
 
-        recheck.run(IDS);
+        assertThat(recheck.run(IDS)).isTrue();
 
         // Edition B's check is saved only after film 2's fit, edition A's after film 1's.
         assertThat(happened).containsExactly("fit film 1", "check edition 10", "fit film 2", "check edition 20");
-        // Nothing started a full check pass while the walk was going; one is asked for once it has ended.
+        // Nothing started a full check pass during the re-check: the caller asks for it afterwards.
         assertThat(checkQueueDuringTheWalk).containsExactly(0, 0);
-        assertThat(checkQueue).hasSize(1);
+        assertThat(checkQueue).isEmpty();
         assertThat(timingQueue).isEmpty();
         // The stored reference of edition B was compared, and the one that would be downloaded was not touched.
         verify(checkService).due(List.of(10L));
@@ -214,21 +214,26 @@ class SubtitleRetimeRecheckFlowTest {
         // run; only then was the event announced, and it booked the timing pass and the full check pass.
         assertThat(happened).containsExactly("fit film 1", "check edition 10", "cues rewritten announced");
         assertThat(timingQueue).hasSize(1);
-        // One request for a full check pass from the re-check; the event's own listener only forgets.
+        // One request for a full check pass, from the job after the event; the event's own listener only forgets.
         assertThat(checkQueue).hasSize(1);
     }
 
     @Test
-    void theFullPassTheReCheckStartsFindsTheRewrittenSidecarDueBecauseTheProbeForgotItFirst() {
+    void eachRewrittenSidecarIsMeasuredOnceBecauseTheFullPassStartsAfterTheEventsForget() {
         DueCheck due10 = due(1, 10, 5011);
         OpenSubtitlesReference ref11 = stored(1, 5011);
         List<Set<Long>> measuredWhenDueWasRead = new ArrayList<>();
+        int[] served = {0};
         FullFitService.Job full = new FullFitService.Job(1L, 10L, "tt1", 5L, 5011L, CUES, 100_000L, null, List.of(),
             Map.of());
         when(fullFit.due(anySet())).thenAnswer(call -> {
             Set<Long> measured = new HashSet<>(call.getArgument(0));
             measuredWhenDueWasRead.add(measured);
-            return measured.contains(5L) ? List.of() : List.of(full);
+            if (measured.contains(5L)) {
+                return List.of();
+            }
+            served[0]++;
+            return List.of(full);
         });
         when(retimeService.candidateIds()).thenReturn(List.of(5L));
         when(retimeService.process(5L, RetimeMode.ON)).thenReturn(SubtitleRetimeService.Outcome.REWRITTEN);
@@ -243,11 +248,14 @@ class SubtitleRetimeRecheckFlowTest {
 
         checksInline = true;
         job.run();
+        // The next pass of any kind finds nothing to measure.
+        checkRefresher.run();
 
-        // The pass the re-check asked for ran at once, on the check thread, and read its due list after the forget.
-        assertThat(measuredWhenDueWasRead).hasSize(2);
-        assertThat(measuredWhenDueWasRead.get(0)).isEmpty();
-        // Not containing 5: without the forget the sidecar would still be marked measured on its old cues.
+        // Measured before the rewrite and once after it, not twice after: the pass the job started came after the
+        // event's forget, so the sidecar is marked done on its new cues and the next pass leaves it.
+        assertThat(served[0]).isEqualTo(2);
+        assertThat(measuredWhenDueWasRead).hasSize(3);
         assertThat(measuredWhenDueWasRead.get(1)).isEmpty();
+        assertThat(measuredWhenDueWasRead.get(2)).containsExactly(5L);
     }
 }

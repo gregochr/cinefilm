@@ -58,8 +58,10 @@ public class SubtitleRetimeRecheck {
      * Fits and checks the editions the given downloads were made for.
      *
      * @param sidecarIds the downloads whose cues were rewritten or restored
+     * @return true when every touched film was fitted here, so a full check pass may be started
+     *     ({@link #startFullPass}); false when a fit is still to come or the re-check failed
      */
-    public void run(Set<Long> sidecarIds) {
+    public boolean run(Set<Long> sidecarIds) {
         try {
             Map<Long, Fit> fitted = new HashMap<>();
             List<TouchedEdition> touched = service.touchedEditions(sidecarIds);
@@ -73,16 +75,22 @@ public class SubtitleRetimeRecheck {
                     break;
                 }
             }
-            // One request for a full pass, after the walk, so whatever was left is caught; but never while a film's fit
-            // is still to come (a stale fit would let the pass compare and download before it): the timing pass that
-            // fits it announces its end, which starts the checks.
-            if (fitted.values().stream().allMatch(fit -> fit == Fit.DONE)) {
-                checks.startDue();
-            }
             LOG.info("Subtitle retime: {} touched editions looked at", touched.size());
+            // A full pass may follow only when no film's fit is still to come (a stale fit would let the pass compare
+            // and download before it): the timing pass that fits it announces its end, which starts the checks.
+            return fitted.values().stream().allMatch(fit -> fit == Fit.DONE);
         } catch (RuntimeException e) {
             LOG.error("Subtitle retime re-check failed", e);
+            return false;
         }
+    }
+
+    /**
+     * One request for a full check pass, so whatever the re-check left is caught. The caller makes it after the
+     * rewritten sidecars were forgotten and the event published, so the pass measures each of them once.
+     */
+    public void startFullPass() {
+        checks.startDue();
     }
 
     private void recheck(TouchedEdition edition, Map<Long, Fit> fitted) {

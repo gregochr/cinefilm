@@ -61,11 +61,12 @@ class SubtitleRetimeRecheckTest {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.BUSY, Fit.BUSY, Fit.DONE);
 
-        recheck.run(IDS);
+        assertThat(recheck.run(IDS)).isTrue();
 
         verify(timing, times(3)).fitFilm(1L);
         verify(checks).checkEditions(List.of(10L));
-        verify(checks).startDue();
+        // The full pass is the caller's to start, after its own steps.
+        verifyNoMoreInteractions(checks);
         assertThat(pauses).hasSize(2);
     }
 
@@ -140,6 +141,13 @@ class SubtitleRetimeRecheckTest {
         recheck.run(IDS);
 
         verify(checks).checkEditions(List.of(20L));
+    }
+
+    @Test
+    void theFullPassIsRequestedFromTheCheckRefresherOnlyWhenTheCallerAsks() {
+        recheck.startFullPass();
+
+        verify(checks).startDue();
     }
 
     @Test

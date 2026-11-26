@@ -190,6 +190,7 @@ class SubtitleRetimeJobTest {
         order.verify(recheck).forgetMeasured(Set.of(1L, 2L));
         order.verify(recheck).run(Set.of(1L, 2L));
         order.verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L, 2L)));
+        verifyNoMoreInteractions(recheck);
         assertThat(messages()).containsExactly("Could not retime download 6: IllegalStateException",
             "Subtitle retime (ON) finished: 1 rewritten, 1 restored, 1 set off, 1 fit as they are, 1 left as "
                 + "they were, 0 left for the next run (library busy), 1 failed");
@@ -207,6 +208,19 @@ class SubtitleRetimeJobTest {
         assertThat(seenByRecheck).containsExactly(List.of());
         assertThat(messages()).hasSize(1);
         assertThat(messages().get(0)).startsWith("Subtitle retime (RESTORE) finished: 0 rewritten, 1 restored");
+    }
+
+    @Test
+    void theFullPassIsStartedAfterTheEventAndOnlyWhenEveryFilmWasFitted() {
+        when(service.candidateIds()).thenReturn(List.of(1L));
+        when(service.process(1L, RetimeMode.ON)).thenReturn(Outcome.REWRITTEN);
+        when(recheck.run(Set.of(1L))).thenReturn(true);
+
+        job("on").run();
+
+        InOrder order = inOrder(events, recheck);
+        order.verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L)));
+        order.verify(recheck).startFullPass();
     }
 
     @Test
