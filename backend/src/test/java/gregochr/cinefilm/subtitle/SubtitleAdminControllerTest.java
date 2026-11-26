@@ -14,12 +14,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.BadRequestException;
+import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CheckDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CueDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CuesDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
+import gregochr.cinefilm.subtitle.SubtitleDtos.RetimeRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 import java.time.Instant;
 import java.util.List;
@@ -38,7 +40,8 @@ class SubtitleAdminControllerTest {
     private static final SidecarDto DTO = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L,
         "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L,
         true, null, null, null, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false,
-        "FORCED");
+        "FORCED",
+            null, null, null, null, null);
 
     @Autowired
     private MockMvc mvc;
@@ -193,7 +196,8 @@ class SubtitleAdminControllerTest {
         SidecarDto download = new SidecarDto(8L, "opensubtitles:70:5011", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, null, true, false, 12, "Downloaded from OpenSubtitles", 0, false, false,
             1700000000000L, true, null, null, null, "OPENSUBTITLES", "Taken.2008.BluRay", 5011L,
-            "Plays: it agrees with OpenSubtitles", false, "FORCED");
+            "Plays: it agrees with OpenSubtitles", false, "FORCED",
+            null, null, null, null, null);
         when(service.list()).thenReturn(List.of(download, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))
@@ -215,12 +219,74 @@ class SubtitleAdminControllerTest {
     void aFileADownloadHasReplacedSaysSoInTheJson() throws Exception {
         SidecarDto replaced = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, false, 12, "No problems found", 0, false, false, 1700000000000L, false, null,
-            null, null, "FILE", null, null, "Replaced by an OpenSubtitles download that agrees", true, "FORCED");
+            null, null, "FILE", null, null, "Replaced by an OpenSubtitles download that agrees", true, "FORCED",
+            null, null, null, null, null);
         when(service.list()).thenReturn(List.of(replaced));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].replacedByDownload").value(true));
+    }
+
+    @Test
+    void retimePassesTheChoiceAndAnswersTheRowWithItsRateFacts() throws Exception {
+        SidecarDto retimed = new SidecarDto(8L, "opensubtitles:70:5011", "PRESENT", "matched", 7L, "Taken", 70L,
+            "Original", 1, null, true, false, 12, "Downloaded from OpenSubtitles", 0, false, false, 1700000000000L,
+            true, null, null, null, "OPENSUBTITLES", "Taken.2008", 5011L, "Plays: it agrees with OpenSubtitles", false,
+            "FORCED", 23.976, 25.0, "AUTO", 0.9590400000000001,
+            "Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%");
+        when(service.retime(8L, new RetimeRequest(true))).thenReturn(retimed);
+        when(service.retime(8L, new RetimeRequest(false))).thenReturn(DTO);
+
+        mvc.perform(signedIn(put("/api/admin/subtitles/8/retime")).content("{\"retime\":true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.timedFps").value(23.976))
+            .andExpect(jsonPath("$.filmFps").value(25.0))
+            .andExpect(jsonPath("$.retime").value("AUTO"))
+            .andExpect(jsonPath("$.retimedBy").value(0.9590400000000001))
+            .andExpect(jsonPath("$.rateLine").value("Timed for 23.976 fps; this film is 25 fps, so it is sped up 4%"));
+        mvc.perform(signedIn(put("/api/admin/subtitles/8/retime")).content("{\"retime\":false}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.timedFps").doesNotExist())
+            .andExpect(jsonPath("$.rateLine").doesNotExist());
+        verify(service).retime(8L, new RetimeRequest(true));
+        verify(service).retime(8L, new RetimeRequest(false));
+    }
+
+    @Test
+    void retimeErrorsMapTo400And404And409WithTheirMessages() throws Exception {
+        when(service.retime(5L, new RetimeRequest(true)))
+            .thenThrow(new BadRequestException("Only a subtitle downloaded from OpenSubtitles can be retimed"));
+        when(service.retime(9L, new RetimeRequest(true))).thenThrow(new NotFoundException("No such subtitle"));
+        when(service.retime(8L, new RetimeRequest(true))).thenThrow(new ConflictException("A scan is running"));
+        when(service.retime(8L, new RetimeRequest(null)))
+            .thenThrow(new BadRequestException("Say whether to retime it"));
+
+        mvc.perform(signedIn(put("/api/admin/subtitles/5/retime")).content("{\"retime\":true}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Only a subtitle downloaded from OpenSubtitles can be retimed"));
+        mvc.perform(signedIn(put("/api/admin/subtitles/9/retime")).content("{\"retime\":true}"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such subtitle"));
+        mvc.perform(signedIn(put("/api/admin/subtitles/8/retime")).content("{\"retime\":true}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("A scan is running"));
+        mvc.perform(signedIn(put("/api/admin/subtitles/8/retime")).content("{}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Say whether to retime it"));
+    }
+
+    @Test
+    void retimeWithAMalformedBodyOrIdIs400InvalidRequest() throws Exception {
+        mvc.perform(signedIn(put("/api/admin/subtitles/8/retime")).content("not json"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+        mvc.perform(signedIn(put("/api/admin/subtitles/8/retime")).content("{\"retime\":\"yes\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+        mvc.perform(signedIn(put("/api/admin/subtitles/abc/retime")).content("{\"retime\":true}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
     }
 
     @Test
@@ -231,6 +297,7 @@ class SubtitleAdminControllerTest {
             .andExpect(jsonPath("$.error").value("Authentication required"));
         for (MockHttpServletRequestBuilder request : List.of(post("/api/admin/subtitles/5/attach"),
             post("/api/admin/subtitles/5/detach"), put("/api/admin/subtitles/5/offset"),
+            put("/api/admin/subtitles/5/retime"),
             post("/api/admin/subtitles/5/verify"), delete("/api/admin/subtitles/5/verify"),
             delete("/api/admin/subtitles/5"))) {
             mvc.perform(request.header("X-CineFilm", "1").contentType("application/json").content("{}"))
@@ -243,6 +310,7 @@ class SubtitleAdminControllerTest {
     void everyChangeWithoutTheCsrfHeaderIs403() throws Exception {
         for (MockHttpServletRequestBuilder request : List.of(post("/api/admin/subtitles/5/attach"),
             post("/api/admin/subtitles/5/detach"), put("/api/admin/subtitles/5/offset"),
+            put("/api/admin/subtitles/5/retime"),
             post("/api/admin/subtitles/5/verify"), delete("/api/admin/subtitles/5/verify"),
             delete("/api/admin/subtitles/5"))) {
             mvc.perform(request.with(user("owner")).contentType("application/json").content("{}"))
@@ -259,7 +327,8 @@ class SubtitleAdminControllerTest {
         SidecarDto checked = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L, true, check,
             null, null, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false,
-            "FORCED");
+            "FORCED",
+            null, null, null, null, null);
         when(service.list()).thenReturn(List.of(checked, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))
@@ -283,14 +352,16 @@ class SubtitleAdminControllerTest {
         SidecarDto fitted = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, true, 12, "No problems found", 900, false, false, 1700000000000L, true, null,
             "AUTO", alignment, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false,
-            "FORCED");
+            "FORCED",
+            null, null, null, null, null);
         SubtitleDtos.AlignmentDto doubtful = new SubtitleDtos.AlignmentDto("CHECK",
             List.of("Only 4 of 12 lines line up with the film's English track"), 600, 0.33, 4, 12, false,
             Instant.parse("2024-04-01T02:30:00Z"), "OPENSUBTITLES", "Alien.1979.BluRay");
         SidecarDto checked = new SidecarDto(6L, "Alien.en.forced.srt", "PRESENT", "matched", 8L, "Alien", 80L,
             "Original", 1, 1, false, true, 12, "No problems found", 0, false, false, 1700000000000L, true, null,
             null, doubtful, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false,
-            "FORCED");
+            "FORCED",
+            null, null, null, null, null);
         when(service.list()).thenReturn(List.of(fitted, checked, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))

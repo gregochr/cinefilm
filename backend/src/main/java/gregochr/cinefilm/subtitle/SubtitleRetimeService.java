@@ -93,6 +93,28 @@ public class SubtitleRetimeService {
         }
     }
 
+    /**
+     * Applies the owner's per-file choice for a download, under the caller's library lock and transaction (the Admin's
+     * retime route holds both). {@code retime} is set to {@code OFF} (a retimed file is restored at once) or to
+     * {@code AUTO} (the file is retimed at once when k is not 1 and both rates are known), whatever the global
+     * {@code cinefilm.subtitles.retime} setting says: it is the owner's own choice. The row is the caller's managed
+     * entity, so its change is written with the caller's transaction, before the lock is given back and the job reads
+     * it again.
+     *
+     * @param row the download, already read under the lock
+     * @param on true to retime it, false to leave it as it was timed
+     * @return what was done
+     */
+    public Outcome applyChoice(SubtitleSidecar row, boolean on) {
+        if (row.getRetime() == RetimeChoice.OFF_FITS) {
+            // The file already fits this copy as it is, so neither choice has anything to add, and nothing would set
+            // OFF_FITS back once it was overwritten. (The Admin route refuses an "on" before it gets here.)
+            return Outcome.UNCHANGED;
+        }
+        row.setRetime(on ? RetimeChoice.AUTO : RetimeChoice.OFF);
+        return processLocked(row.getId(), RetimeMode.ON);
+    }
+
     private Outcome processLocked(Long id, RetimeMode mode) {
         // Read again under the lock: what the candidate list said may be an edit ago.
         SubtitleSidecar row = sidecars.findById(id).orElse(null);
@@ -116,7 +138,7 @@ public class SubtitleRetimeService {
             if (k == 1.0) {
                 return Outcome.UNCHANGED;
             }
-            if (row.getOffsetSource() == SubtitleSidecar.OffsetSource.OWNER || row.getOwnerVerifiedAt() != null) {
+            if (timingSetByHand(row)) {
                 row.setRetime(RetimeChoice.OFF);
                 sidecars.save(row);
                 return Outcome.DECIDED_OFF;
@@ -135,6 +157,17 @@ public class SubtitleRetimeService {
             return Outcome.UNCHANGED;
         }
         return rewrite(row, edition, k, film);
+    }
+
+    /**
+     * True when the owner set the row's timing by hand (an OWNER offset or a verification): the job then decides
+     * {@code retime} off for it and never retimes it.
+     *
+     * @param row the download
+     * @return whether its timing is the owner's
+     */
+    static boolean timingSetByHand(SubtitleSidecar row) {
+        return row.getOffsetSource() == SubtitleSidecar.OffsetSource.OWNER || row.getOwnerVerifiedAt() != null;
     }
 
     private Outcome rewrite(SubtitleSidecar row, Edition edition, double k, double film) {
