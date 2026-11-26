@@ -184,10 +184,11 @@ class SubtitleRetimeJobTest {
 
         job("on").run();
 
-        // The ids are forgotten (the listener of the published event) before the re-check measures anything.
+        // The event is published after the re-check: its listeners book passes that would hold the re-check's fits.
+        verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L, 2L)));
         InOrder order = inOrder(events, recheck);
-        order.verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L, 2L)));
         order.verify(recheck).run(Set.of(1L, 2L));
+        order.verify(events).publishEvent(new SubtitleCuesRewritten(Set.of(1L, 2L)));
         assertThat(messages()).containsExactly("Could not retime download 6: IllegalStateException",
             "Subtitle retime (ON) finished: 1 rewritten, 1 restored, 1 set off, 1 fit as they are, 1 left as "
                 + "they were, 0 left for the next run (library busy), 1 failed");

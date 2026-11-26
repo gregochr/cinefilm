@@ -148,8 +148,12 @@ public class SubtitleRetimeJob {
                 }
             }
             if (!changed.isEmpty()) {
-                events.publishEvent(new SubtitleCuesRewritten(Set.copyOf(changed)));
+                // The re-check first, the event after. Spring delivers the event on this thread, and the timing
+                // refresher's listener books a timing pass at once: it would hold the refresher's run flag, every
+                // fit of the re-check would be left to that pass behind this one, and nothing would be checked now.
+                // The probes forget after the re-check and measure these sidecars again on their next pass.
                 recheck.run(Set.copyOf(changed));
+                events.publishEvent(new SubtitleCuesRewritten(Set.copyOf(changed)));
             }
         } catch (RuntimeException e) {
             LOG.error("Subtitle retime failed", e);

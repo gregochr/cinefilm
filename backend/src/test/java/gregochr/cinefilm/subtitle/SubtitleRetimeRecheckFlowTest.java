@@ -74,13 +74,16 @@ class SubtitleRetimeRecheckFlowTest {
     private final List<Integer> checkQueueDuringTheWalk = new ArrayList<>();
     private final List<Runnable> checkQueue = new ArrayList<>();
     private final List<Runnable> timingQueue = new ArrayList<>();
+    private SidecarCheckRefresher checkRefresher;
+    private SidecarTimingRefresher timingRefresher;
     private SubtitleRetimeRecheck recheck;
+    private SubtitleRetimeJob job;
 
     @BeforeEach
     void setUp() {
-        SidecarCheckRefresher checkRefresher = new SidecarCheckRefresher(api, budget, references, checkService,
+        checkRefresher = new SidecarCheckRefresher(api, budget, references, checkService,
             fullFit, timingReferences, CLOCK, checkQueue::add, new FakeDailyLimit(20), event -> { }, filmRates);
-        SidecarTimingRefresher timingRefresher = new SidecarTimingRefresher(timingService, reader, root, sessions,
+        timingRefresher = new SidecarTimingRefresher(timingService, reader, root, sessions,
             CLOCK, timingQueue::add, true, event -> {
                 if (event instanceof SidecarTimingFinished finished) {
                     happened.add("timing announced");
@@ -89,6 +92,15 @@ class SubtitleRetimeRecheckFlowTest {
             }, new ReadFailures());
         recheck = new SubtitleRetimeRecheck(retimeService, timingRefresher, checkRefresher,
             new BusyRetry(pause -> { }));
+        // A publisher that delivers the retime job's event to the real listeners, on the publishing thread.
+        job = new SubtitleRetimeJob(retimeService, recheck, new BusyRetry(pause -> { }), Runnable::run, "on",
+            event -> {
+                if (event instanceof SubtitleCuesRewritten rewritten) {
+                    happened.add("cues rewritten announced");
+                    checkRefresher.onCuesRewritten(rewritten);
+                    timingRefresher.onCuesRewritten(rewritten);
+                }
+            });
     }
 
     private static OpenSubtitlesResult candidate(long fileId) {
@@ -171,5 +183,28 @@ class SubtitleRetimeRecheckFlowTest {
         verifyNoMoreInteractions(checkService);
         verify(api, atLeastOnce()).downloadsEnabled();
         verifyNoMoreInteractions(api);
+    }
+
+    @Test
+    void aJobRunChecksItsEditionsInTheRunBecauseTheEventIsPublishedAfterTheReCheck() {
+        DueCheck due10 = due(1, 10, 5011);
+        OpenSubtitlesReference ref11 = stored(1, 5011);
+        when(retimeService.candidateIds()).thenReturn(List.of(5L));
+        when(retimeService.process(5L, RetimeMode.ON)).thenReturn(SubtitleRetimeService.Outcome.REWRITTEN);
+        when(retimeService.touchedEditions(Set.of(5L))).thenReturn(List.of(new TouchedEdition(10L, 1L)));
+        when(api.downloadsEnabled()).thenReturn(true);
+        filmFits(1L, 5L);
+        when(checkService.due(List.of(10L))).thenReturn(List.of(due10));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(ref11));
+        checkSaves(due10, ref11);
+
+        job.run();
+
+        // The film was fitted by the re-check itself (not left to a booked pass) and its edition was checked in the
+        // run; only then was the event announced, and it booked the timing pass and the full check pass.
+        assertThat(happened).containsExactly("fit film 1", "check edition 10", "cues rewritten announced");
+        assertThat(timingQueue).hasSize(1);
+        // One request for a full check pass from the re-check; the event's own listener only forgets.
+        assertThat(checkQueue).hasSize(1);
     }
 }
