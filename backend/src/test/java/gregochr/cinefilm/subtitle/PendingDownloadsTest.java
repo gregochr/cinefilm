@@ -51,6 +51,9 @@ class PendingDownloadsTest {
     private static final Assessment FAILED = new Assessment(Trust.FAILED, Proof.NONE);
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private FilmRepository films;
 
     @Mock
@@ -80,9 +83,9 @@ class PendingDownloadsTest {
     @BeforeEach
     void setUp() {
         pending = new PendingDownloads(films, editions, sidecars, resolver, references, blocks, ledger,
-            OpenSubtitlesSwitches.on());
+            OpenSubtitlesSwitches.on(), filmRates);
         pendingWithDownloadsOff = new PendingDownloads(films, editions, sidecars, resolver, references, blocks,
-            ledger, new OpenSubtitlesSwitches(true, false));
+            ledger, new OpenSubtitlesSwitches(true, false), filmRates);
         film = film(1L, "Amelie", 2001, NOW);
         film.setImdbId(IMDB);
         edition = edition(film, 40L, "Original", 90 * MIN, null);

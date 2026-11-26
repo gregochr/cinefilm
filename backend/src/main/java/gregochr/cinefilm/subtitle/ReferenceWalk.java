@@ -6,6 +6,7 @@ import gregochr.cinefilm.subtitle.SubtitleComparison.Verdict;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * The decisions of walking an edition's OpenSubtitles candidates: when to move on to the next one, and which result to
@@ -26,6 +27,10 @@ public final class ReferenceWalk {
     static final long OTHER_CUT_PERCENT = 30;
     /** The share test applies only when both files have at least this many lines (inclusive). */
     static final int OTHER_CUT_MIN_LINES = 8;
+    /** A result that agrees: the rate rule's test for "the originals agree" and the opposite of its "fails". */
+    public static final Predicate<Result> AGREES = r -> Verdict.AGREES.equals(r.verdict());
+    /** A result that does not agree (the walk would move on, or CHECK): the rate rule's "fails". */
+    public static final Predicate<Result> FAILS = AGREES.negate();
     /** The most candidates an edition is ever compared with, per IMDb id. */
     public static final int MAX_CANDIDATES = 3;
 

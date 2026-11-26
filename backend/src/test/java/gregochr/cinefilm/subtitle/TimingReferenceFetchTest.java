@@ -4,7 +4,9 @@ import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -39,6 +41,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -56,6 +60,9 @@ class TimingReferenceFetchTest {
     private static final int LIMIT = 20;
     private static final int CHECK_LIMIT = 6;
     private static final long RUNTIME = 3_000_000;
+
+    @Mock
+    private FilmRates filmRates;
 
     @Mock
     private OpenSubtitlesApi api;
@@ -101,7 +108,7 @@ class TimingReferenceFetchTest {
     @BeforeEach
     void setUp() {
         fetch = new TimingReferenceFetch(new ReferenceFetcher(api, budget, references, CLOCK,
-            new FakeDailyLimit(LIMIT)), service, clock);
+            new FakeDailyLimit(LIMIT)), service, clock, filmRates);
         logged.start();
         fetchLog.addAppender(logged);
     }
@@ -238,7 +245,31 @@ class TimingReferenceFetchTest {
             + "hearing-impaired true, "
             + "300 lines); ALIGNED at -2000 ms, 100% of 12 lines matched, median residual 0 ms; reference's last cue "
             + "ends 0:50:01, runtime 0:50:00, credits start unknown");
-        verifyNoInteractions(api, budget);
+        verifyNoInteractions(api, budget, filmRates);
+    }
+
+    /** A forced download retimed from 23.976: its stored cues are the original twelve, 90 s later. */
+    private static File retimedDownload() {
+        File plain = forced(8, Origin.DOWNLOAD);
+        List<SubtitleCue> onFilm = SrtParser.cues(plain.cuesText()).stream()
+            .map(c -> new SubtitleCue(c.startMs() + 90_000, c.endMs() + 90_000, c.text())).toList();
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, plain.cuesText());
+        return new File(8L, Origin.DOWNLOAD, 12, SrtParser.format(onFilm), 5099L, side);
+    }
+
+    @Test
+    void aRetimedForcedFileIsMeasuredAgainstARawReferenceOfTheSameFamilyOnTheirOriginals() {
+        OpenSubtitlesReference reference = stored(5012, full(300));
+        reference.setTimedFps(23.976);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedDownload()),
+            List.of(candidate(5012)), Map.of(5012L, reference))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(1);
+        assertThat(lines(Level.INFO)).singleElement().asString().contains("ALIGNED at -2000 ms");
     }
 
     @Test
@@ -400,6 +431,8 @@ class TimingReferenceFetchTest {
 
         verify(api).download(5012);
         verify(api).download(5013);
+        // Only a final row is filled; this one is not final, so the fetch (not the fill) is what touches it.
+        verify(references, never()).fillTimedFps(5012L, 23.976);
         assertThat(saved).containsOnlyKeys(5012L, 5013L);
         assertThat(lines(Level.INFO).get(0)).contains("fetched file 5012").contains("299 lines, usable false");
         assertThat(lines(Level.INFO).get(1)).contains("fetched file 5013").contains("usable true, best match 100%");
@@ -712,5 +745,269 @@ class TimingReferenceFetchTest {
             "Could not fetch a timing reference for edition 20: NullPointerException",
             "Could not measure the forced subtitles of edition 20: NullPointerException");
         assertThat(lines(Level.INFO)).singleElement().satisfies(line -> assertThat(line).contains("edition 10"));
+    }
+
+    @Test
+    void aRetimedForcedFileAndAReferenceStated25ThatOnlyAgreesOnTheOriginalsIsARateConflictAndNotMeasured() {
+        // An irregular reference: only the originals, 2 s apart, line up; 92 s apart they do not.
+        OpenSubtitlesReference reference = stored(5012, scatteredReference());
+        reference.setTimedFps(25.0);
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, shifted(2_000).cuesText());
+        File retimed = new File(8L, Origin.DOWNLOAD, 12, shifted(92_000).cuesText(), 5099L, side);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimed),
+            List.of(candidate(5012)), Map.of(5012L, reference))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isZero();
+        assertThat(lines(Level.INFO)).contains("Forced timing reference of edition 10 (film 1): no verdict, "
+            + "RATE_CONFLICT (sidecar 8, reference 5012)");
+    }
+
+    /** A retimed 23.976 forced download: stored 92 s late, its original 2 s late (it fits the scattered reference). */
+    private static File retimedShifted() {
+        RateComparison.Side side = new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976, RetimeChoice.AUTO,
+            0.959, shifted(2_000).cuesText());
+        return new File(8L, Origin.DOWNLOAD, 12, shifted(92_000).cuesText(), 5099L, side);
+    }
+
+    @Test
+    void aStoredReferenceOfTheSameFamilyThatMatchesOnlyOnTheOriginalsStopsTheWalkAndNothingIsFetched() {
+        OpenSubtitlesReference first = stored(5012, scatteredReference());
+        first.setTimedFps(23.976);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
+            List.of(candidate(5012), candidate(5013)), Map.of(5012L, first))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(1);
+        verifyNoInteractions(api, budget);
+        assertThat(lines(Level.INFO)).singleElement().asString().contains("against OpenSubtitles file 5012")
+            .contains("ALIGNED at -2000 ms");
+    }
+
+    @Test
+    void aStoredReferenceOfUnknownRateIsPassedOverAndTheNextCandidateIsFetched() {
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5013, scatteredReference(), saved);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
+            List.of(noRate(5012), candidate(5013)), Map.of(5012L, stored(5012, scatteredReference())))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(budget).take(DAY, CHECK_LIMIT);
+        assertThat(saved).containsOnlyKeys(5013L);
+        assertThat(lines(Level.INFO)).contains("Forced timing reference of edition 10 (film 1): no verdict, "
+            + "UNKNOWN_RATE (sidecar 8, reference 5012)");
+    }
+
+    @Test
+    void aFileGivenNoSideIsTheOwnersFileWhenItIsTheOwnersAndADownloadOfNoKnownRateOtherwise() {
+        assertThat(new File(7L, Origin.OWNER, 12, "x").rateSide()).isEqualTo(RateComparison.Side.file());
+        assertThat(new File(8L, Origin.DOWNLOAD, 12, "x", 5011L).rateSide())
+            .isEqualTo(new RateComparison.Side(RateComparison.Kind.DOWNLOAD, null, null, null, null));
+        assertThat(new File(9L, Origin.CHOSEN, 12, "x").rateSide().kind()).isEqualTo(RateComparison.Kind.DOWNLOAD);
+    }
+
+    private static OpenSubtitlesResult noRate(long fileId) {
+        return new OpenSubtitlesResult(fileId - 1000, fileId, "Release " + fileId, null, 10, true, false, null,
+            null);
+    }
+
+    @Test
+    void aTransientlyFailedCandidateWhoseStoredRowStatesARateIsFetchedAgainBecauseTheFetchKeepsIt() {
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        OpenSubtitlesReference transientFailure = stored(5011, List.of());
+        transientFailure.setFailedDownloads(1);
+        transientFailure.setTimedFps(23.976);
+        // The fetcher finds the stored row, so the rate it has is the one the fetched row keeps.
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011L)).thenReturn(Optional.of(transientFailure));
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5011L)).thenReturn(downloaded(scatteredReference()));
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
+            OpenSubtitlesReference reference = call.getArgument(0);
+            saved.put(reference.getOsFileId(), reference);
+            return reference;
+        });
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, List.of(retimedShifted()),
+            List.of(noRate(5011)), Map.of(5011L, transientFailure))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        fetch.run(CHECK_LIMIT, true);
+
+        assertThat(saved).containsOnlyKeys(5011L);
+        assertThat(saved.get(5011L).getTimedFps()).isEqualTo(23.976);
+        // With the rate kept the fetched row judges: the originals line up, 2 s out.
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5011")
+            .contains("ALIGNED at -2000 ms"));
+    }
+
+    @Test
+    void aStoredFinalReferenceThatStatesNoRateIsJudgedNotPassedOver() {
+        OpenSubtitlesReference storedNoRate = stored(5011, scatteredReference());
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
+            List.of(noRate(5011)), Map.of(5011L, storedNoRate))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
+
+        verifyNoInteractions(api, budget);
+        assertThat(lines(Level.INFO)).contains("Forced timing reference of edition 10 (film 1): no verdict, "
+            + "UNKNOWN_RATE (sidecar 8, reference 5011)");
+    }
+
+    @Test
+    void aPairWithNoVerdictBecauseARateIsUnknownIsMeasuredOnTheNextRunOnceTheRateArrives() {
+        OpenSubtitlesReference noRateYet = stored(5012, scatteredReference());
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()), List.of(),
+            Map.of(5012L, noRateYet))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
+
+        noRateYet.setTimedFps(23.976);
+
+        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(1);
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5012")
+            .contains("ALIGNED at -2000 ms"));
+        // And once measured, never again while the process runs.
+        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
+    }
+
+    @Test
+    void aRatelessFinalRowAfterAMatchingFirstCandidateIsFilledAndMeasuredThoughTheWalkNeverReachesIt() {
+        OpenSubtitlesReference first = stored(5011, scatteredReference());
+        first.setTimedFps(23.976);
+        OpenSubtitlesReference second = stored(5012, scatteredReference());
+        when(service.targets()).thenReturn(List.of(target(1, 2, null, List.of(retimedShifted()),
+            List.of(candidate(5011), candidate(5012)), Map.of(5011L, first, 5012L, second))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(2);
+        verifyNoInteractions(api, budget);
+        verify(references).fillTimedFps(5012L, 23.976);
+        assertThat(second.getTimedFps()).isEqualTo(23.976);
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5012")
+            .contains("ALIGNED at -2000 ms"));
+    }
+
+    @Test
+    void aFillThatThrowsLeavesOnlyThatRowUnfilledSoTheRowsAfterItAndTheNextTargetAreStillFilledAndMeasured() {
+        OpenSubtitlesReference throwing = stored(5012, scatteredReference());
+        OpenSubtitlesReference after = stored(5013, scatteredReference());
+        OpenSubtitlesReference other = stored(6011, scatteredReference());
+        other.setTimedFps(23.976);
+        doThrow(new IllegalStateException("boom")).when(references).fillTimedFps(5012L, 23.976);
+        when(service.targets()).thenReturn(List.of(
+            target(1, 2, null, List.of(retimedShifted()), List.of(candidate(5012), candidate(5013)),
+                Map.of(5012L, throwing, 5013L, after)),
+            target(2, 1, null, List.of(retimedShifted()), List.of(candidate(6011)), Map.of(6011L, other))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+        when(filmRates.forEdition(20L)).thenReturn(25.0);
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(lines(Level.WARN)).contains("Could not fill the stated frame rate of OpenSubtitles file 5012 "
+            + "(edition 10): IllegalStateException");
+        // The row after the failing one is filled and measured, and so is the next target's.
+        verify(references).fillTimedFps(5013L, 23.976);
+        assertThat(after.getTimedFps()).isEqualTo(23.976);
+        assertThat(throwing.getTimedFps()).isNull();
+        assertThat(written).isEqualTo(2);
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 5013"));
+        assertThat(lines(Level.INFO)).anySatisfy(line -> assertThat(line).contains("against OpenSubtitles file 6011"));
+    }
+
+    private static File longFile(long id, boolean retimed) {
+        RateComparison.Side side = retimed ? new RateComparison.Side(RateComparison.Kind.DOWNLOAD, 23.976,
+            RetimeChoice.AUTO, 0.959, SrtParser.format(full(300))) : RateComparison.Side.file();
+        return new File(id, retimed ? Origin.DOWNLOAD : Origin.OWNER, 300, SrtParser.format(full(300)), 5000L + id,
+            side);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"every candidate before it states no rate", "a long unretimed file sits beside",
+        "the first is a stored transient failure with no rate"})
+    void noRateCandidatesAreNeitherFetchedNorCountedForRetimedFilesAndTheNextCandidateIsFetched(String scenario) {
+        boolean three = scenario.startsWith("every");
+        long fetchedId = three ? 5014 : 5012;
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, fetchedId, scatteredReference(), saved);
+        OpenSubtitlesReference transientFailure = stored(5011, List.of());
+        transientFailure.setFailedDownloads(1);
+        File longOwners = new File(9L, Origin.OWNER, 300, SrtParser.format(full(300)));
+        List<File> files = scenario.startsWith("a long") ? List.of(retimedShifted(), longOwners)
+            : List.of(retimedShifted());
+        List<OpenSubtitlesResult> candidates = three
+            ? List.of(noRate(5011), noRate(5012), noRate(5013), candidate(5014))
+            : List.of(noRate(5011), candidate(5012));
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, files, candidates,
+            scenario.startsWith("the first") ? Map.of(5011L, transientFailure) : Map.of())));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        fetch.run(CHECK_LIMIT, true);
+
+        for (OpenSubtitlesResult passedOver : candidates.subList(0, candidates.size() - 1)) {
+            verify(api, never()).download(passedOver.fileId());
+        }
+        verify(budget, times(1)).take(DAY, CHECK_LIMIT);
+        assertThat(saved).containsOnlyKeys(fetchedId);
+        assertThat(lines(Level.INFO)).contains("Timing reference for edition 10 (film 1): file 5011 passed over, "
+            + "no verdict: UNKNOWN_RATE");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"a target with no files", "the candidate's own download only",
+        "every file long and retimed"})
+    void aNoRateCandidateIsPassedOverWithNoDownloadWhenNoFileCouldJudgeIt(String scenario) {
+        File ownDownload = new File(8L, Origin.DOWNLOAD, 12, shifted(92_000).cuesText(), 5011L,
+            retimedShifted().side());
+        List<File> files = scenario.startsWith("a target") ? List.of()
+            : scenario.startsWith("the candidate") ? List.of(ownDownload) : List.of(longFile(8, true));
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, files, List.of(noRate(5011)), Map.of())));
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verifyNoInteractions(api, budget);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"a short unretimed file beside the retimed one", "every file long, one of them raw"})
+    void aNoRateCandidateIsStillFetchedWhenAnotherFileIsNotRetimedBecauseThatFileCanJudgeIt(String scenario) {
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5011, scatteredReference(), saved);
+        List<File> files = scenario.startsWith("a short") ? List.of(retimedShifted(), shifted(2_000))
+            : List.of(longFile(8, true), longFile(9, false));
+        when(service.targets()).thenReturn(List.of(target(1, 0, null, files, List.of(noRate(5011)), Map.of())));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(api).download(5011);
+        assertThat(saved).containsOnlyKeys(5011L);
+    }
+
+    @ParameterizedTest(name = "fetching allowed: {0}")
+    @ValueSource(booleans = {true, false})
+    void aStoredFinalReferenceWithNoRateGetsTheCandidatesRateWithoutADownloadAndThenJudgesWhetherOrNotFetchingStopped(
+        boolean mayFetch) {
+        OpenSubtitlesReference old = stored(5011, scatteredReference());
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(retimedShifted()),
+            List.of(candidate(5011)), Map.of(5011L, old))));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(fetch.run(CHECK_LIMIT, mayFetch)).isEqualTo(1);
+
+        verifyNoInteractions(api, budget);
+        verify(references).fillTimedFps(5011L, 23.976);
+        assertThat(old.getTimedFps()).isEqualTo(23.976);
+        assertThat(lines(Level.INFO)).singleElement().asString().contains("against OpenSubtitles file 5011")
+            .contains("ALIGNED at -2000 ms");
     }
 }

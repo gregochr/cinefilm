@@ -49,6 +49,7 @@ final class TimingReferenceFetch {
     private final ReferenceFetcher fetcher;
     private final TimingReferenceService service;
     private final Clock clock;
+    private final FilmRates filmRates;
     private final Set<String> done = ConcurrentHashMap.newKeySet();
     private LocalDate day;
     private int fetchedToday;
@@ -69,10 +70,12 @@ final class TimingReferenceFetch {
     }
 
     /** Creates it over the check job's fetcher, so every fetch goes through its lock and ceilings. */
-    TimingReferenceFetch(ReferenceFetcher fetcher, TimingReferenceService service, Clock clock) {
+    TimingReferenceFetch(ReferenceFetcher fetcher, TimingReferenceService service, Clock clock,
+                       FilmRates filmRates) {
         this.fetcher = fetcher;
         this.service = service;
         this.clock = clock;
+        this.filmRates = filmRates;
     }
 
     /** The fetches this run may make: the per-run limit, less what today (UTC) has used. */
@@ -111,6 +114,7 @@ final class TimingReferenceFetch {
         for (Target target : service.targets()) {
             Shared shared = films.computeIfAbsent(List.of(target.filmId(), target.imdbId()),
                 key -> new Shared(target));
+            fillRates(target, shared);
             try {
                 if (!stopped) {
                     fetchFor(target, shared, checkLimit, fetchesLeft);
@@ -136,6 +140,27 @@ final class TimingReferenceFetch {
     }
 
     /**
+     * Gives each stored final reference of the target's candidates the rate the candidate states, when the row has
+     * none (the fetcher's own fill: a targeted update, no download). It runs before the walk and the measurement, and
+     * whether or not fetching has stopped, so neither sees a row rejected as of unknown rate for want of a fill the
+     * run could have made. The rows are the objects both go on to read.
+     */
+    private void fillRates(Target target, Shared shared) {
+        for (OpenSubtitlesResult candidate : target.candidates()) {
+            OpenSubtitlesReference reference = shared.stored.get(candidate.fileId());
+            if (reference != null && reference.isFinal()) {
+                try {
+                    fetcher.fillRate(reference, candidate);
+                } catch (RuntimeException e) {
+                    // One row's failed fill leaves that row unrated; the others are still filled.
+                    LOG.warn("Could not fill the stated frame rate of OpenSubtitles file {} (edition {}): {}",
+                        candidate.fileId(), target.editionId(), e.getClass().getSimpleName());
+                }
+            }
+        }
+    }
+
+    /**
      * Walks the candidates in order, fetching those not stored while the run, the day and the film's cap allow, until
      * one is usable and matches. A reference fetched joins the film's shared map; one already stored costs nothing.
      */
@@ -143,6 +168,15 @@ final class TimingReferenceFetch {
         for (OpenSubtitlesResult candidate : target.candidates()) {
             OpenSubtitlesReference reference = shared.stored.get(candidate.fileId());
             boolean fetched = reference == null || !reference.isFinal();
+            if (fetched && candidate.fps() == null && (reference == null || reference.getTimedFps() == null)
+                && everyDecidingFileRetimed(target, candidate)) {
+                // It would arrive with no rate (a stored row's rate is kept by a fetch), and a retimed file cannot be
+                // judged against it: no download and no slot, or a few such files would block one whose rate is
+                // known.
+                LOG.info("Timing reference for edition {} (film {}): file {} passed over, no verdict: UNKNOWN_RATE",
+                    target.editionId(), target.filmId(), candidate.fileId());
+                continue;
+            }
             if (fetched) {
                 if (fetchesLeft[0] <= 0 || reference == null && shared.kept >= TimingReferenceRule.MAX_REFERENCES) {
                     return;
@@ -177,6 +211,19 @@ final class TimingReferenceFetch {
         }
     }
 
+    /**
+     * True when every file that decides the walk for this candidate is retimed, so a file that states no rate judges
+     * none of them. The deciding files are those {@link #judge} looks at: not the download's own file, and under
+     * {@value TimingReferenceRule#FULL_LINES} lines. With none of those, every file but the download's own is looked
+     * at; with none at all (or all retimed) the candidate is passed over, as it could judge nothing.
+     */
+    private static boolean everyDecidingFileRetimed(Target target, OpenSubtitlesResult candidate) {
+        List<File> others = target.files().stream()
+            .filter(f -> !(f.osFileId() != null && f.osFileId() == candidate.fileId())).toList();
+        List<File> deciding = others.stream().filter(f -> f.lines() < TimingReferenceRule.FULL_LINES).toList();
+        return (deciding.isEmpty() ? others : deciding).stream().allMatch(f -> f.rateSide().retimed());
+    }
+
     /** A download is never measured against the OpenSubtitles file it came from: it would match itself. */
     private static boolean isOwnFile(File file, OpenSubtitlesReference reference) {
         return file.osFileId() != null && file.osFileId() == reference.getOsFileId();
@@ -187,11 +234,11 @@ final class TimingReferenceFetch {
     }
 
     /** Whether a forced file under 300 lines (one under 8 is TOO_FEW and never matches) matches; the best share. */
-    private static Judgement judge(Target target, OpenSubtitlesReference reference) {
+    private Judgement judge(Target target, OpenSubtitlesReference reference) {
         if (!isUsable(target, reference)) {
             return new Judgement(false, 0);
         }
-        List<Long> referenceStarts = starts(SrtParser.cues(reference.getCuesText()));
+        RateComparison.Side referenceSide = RateComparison.Side.of(reference);
         boolean matches = false;
         double best = 0;
         for (File file : target.files()) {
@@ -202,7 +249,10 @@ final class TimingReferenceFetch {
             if (file.lines() >= TimingReferenceRule.FULL_LINES) {
                 continue;
             }
-            Result fit = TimingFit.fit(starts(SrtParser.cues(file.cuesText())), referenceStarts);
+            Result fit = fit(target, file, reference, referenceSide);
+            if (fit == null) {
+                continue;
+            }
             matches |= TimingReferenceRule.matches(fit);
             best = Math.max(best, fit.matchedShare());
         }
@@ -241,20 +291,23 @@ final class TimingReferenceFetch {
 
     /** Measures against one reference; {@code candidate} is null for a stored file that is not a current candidate. */
     private int measure(Target target, OpenSubtitlesResult candidate, OpenSubtitlesReference reference) {
-        List<Long> referenceStarts = null;
+        RateComparison.Side referenceSide = RateComparison.Side.of(reference);
         int written = 0;
         for (File file : target.files()) {
             if (isOwnFile(file, reference)) {
                 continue;
             }
             String cues = JsonEtag.etag(file.cuesText().getBytes(StandardCharsets.UTF_8));
-            if (!done.add(file.sidecarId() + ":" + cues + ":" + reference.getOsFileId())) {
+            String key = file.sidecarId() + ":" + cues + ":" + reference.getOsFileId();
+            if (done.contains(key)) {
                 continue;
             }
-            if (referenceStarts == null) {
-                referenceStarts = starts(SrtParser.cues(reference.getCuesText()));
+            Result fit = fit(target, file, reference, referenceSide);
+            if (fit == null) {
+                // No verdict yet (a rate is not known): the pair is tried again once it is, not marked measured.
+                continue;
             }
-            Result fit = TimingFit.fit(starts(SrtParser.cues(file.cuesText())), referenceStarts);
+            done.add(key);
             LOG.info("Forced timing reference of edition {} (film {}): {} file {} ({} lines, {}) against "
                     + "OpenSubtitles file {} (\"{}\", fps {}, hearing-impaired {}, {} lines); {} at {} ms, {}% of {} "
                     + "lines matched, median residual {} ms; reference's last cue ends {}, runtime {}, credits "
@@ -271,6 +324,25 @@ final class TimingReferenceFetch {
             written++;
         }
         return written;
+    }
+
+    /**
+     * The fit of a forced file to a reference by the rate rule ({@link RateComparison}); null (and an INFO line) when
+     * there is no verdict, which is never a failure.
+     */
+    private Result fit(Target target, File file, OpenSubtitlesReference reference, RateComparison.Side referenceSide) {
+        RateComparison.Side fileSide = file.rateSide();
+        RateComparison.Judged<Result> judged = RateComparison.judge(fileSide, referenceSide,
+            () -> filmRates.forEdition(target.editionId()), SrtParser.cues(file.cuesText()),
+            RateComparison.originalOf(fileSide), SrtParser.cues(reference.getCuesText()),
+            RateComparison.originalOf(referenceSide), (a, b) -> TimingFit.fit(starts(a), starts(b)),
+            r -> TimingFit.Verdict.CHECK.equals(r.verdict()), r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
+        if (!judged.hasVerdict()) {
+            LOG.info("Forced timing reference of edition {} (film {}): no verdict, {} (sidecar {}, reference {})",
+                target.editionId(), target.filmId(), judged.reason(), file.sidecarId(), reference.getId());
+            return null;
+        }
+        return judged.result();
     }
 
     private static List<Long> starts(List<SubtitleCue> cues) {

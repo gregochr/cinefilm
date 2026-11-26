@@ -108,12 +108,43 @@ class DownloadPlanTest {
         assertThat(DownloadPlan.promotable(reference(5001, List.of()))).isFalse();
     }
 
+    /** Promotion with a film rate that must not be asked for: nothing in these cases is retimed. */
+    private static Optional<OpenSubtitlesReference> promote(List<OpenSubtitlesResult> ranked, Long keptFileId,
+                                                            Map<Long, OpenSubtitlesReference> stored,
+                                                            Set<Long> ledger, Set<Long> skipped,
+                                                            List<SubtitleCue> fileCues) {
+        return DownloadPlan.promotion(ranked, keptFileId, stored, ledger, skipped, fileCues, () -> {
+            throw new AssertionError("the film's rate is not needed when nothing is retimed");
+        });
+    }
+
+    @Test
+    void aRetimedReferenceOfUnknownRateAgainstTheOwnersFileOnAnUnknownFilmRateIsNotPromoted() {
+        OpenSubtitlesReference retimed = reference(5001, SERVED);
+        retimed.setRetimedBy(0.959);
+        retimed.setOriginalCuesText(SrtParser.format(SERVED));
+
+        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
+            SERVED, () -> null)).isEmpty();
+    }
+
+    @Test
+    void aRetimedReferenceIsPromotedWhenItAgreesOnTheFilmTimeline() {
+        OpenSubtitlesReference retimed = reference(5001, SERVED);
+        retimed.setTimedFps(23.976);
+        retimed.setRetimedBy(0.959);
+        retimed.setOriginalCuesText(SrtParser.format(otherCut()));
+
+        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
+            SERVED, () -> 25.0)).containsSame(retimed);
+    }
+
     @Test
     void theReferenceTheWalkKeptIsPromotedWhenItsCutFits() {
         OpenSubtitlesReference kept = reference(5002, SERVED);
         OpenSubtitlesReference first = reference(5001, SERVED);
 
-        Optional<OpenSubtitlesReference> promoted = DownloadPlan.promotion(List.of(result(5001), result(5002)), 5002L,
+        Optional<OpenSubtitlesReference> promoted = promote(List.of(result(5001), result(5002)), 5002L,
             stored(first, kept), Set.of(5001L, 5002L), Set.of(), SERVED);
 
         assertThat(promoted).containsSame(kept);
@@ -124,7 +155,7 @@ class DownloadPlanTest {
         OpenSubtitlesReference first = reference(5001, SERVED);
         OpenSubtitlesReference second = reference(5002, SERVED);
 
-        Optional<OpenSubtitlesReference> promoted = DownloadPlan.promotion(List.of(result(5001), result(5002)), null,
+        Optional<OpenSubtitlesReference> promoted = promote(List.of(result(5001), result(5002)), null,
             stored(first, second), Set.of(5001L, 5002L), Set.of(), SERVED);
 
         assertThat(promoted).containsSame(first);
@@ -136,7 +167,7 @@ class DownloadPlanTest {
         OpenSubtitlesReference fits = reference(5002, SERVED);
         assertThat(ReferenceWalk.looksLikeOtherCut(SubtitleComparison.compare(SERVED, otherCut()))).isTrue();
 
-        Optional<OpenSubtitlesReference> promoted = DownloadPlan.promotion(List.of(result(5001), result(5002)), 5001L,
+        Optional<OpenSubtitlesReference> promoted = promote(List.of(result(5001), result(5002)), 5001L,
             stored(other, fits), Set.of(5001L, 5002L), Set.of(), SERVED);
 
         assertThat(promoted).containsSame(fits);
@@ -147,7 +178,7 @@ class DownloadPlanTest {
         List<SubtitleCue> full = spaced(300, 10_000);
         OpenSubtitlesReference reference = reference(5001, full);
 
-        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(reference), Set.of(5001L), Set.of(),
+        assertThat(promote(List.of(result(5001)), 5001L, stored(reference), Set.of(5001L), Set.of(),
             spaced(10, 100_000))).isEmpty();
     }
 
@@ -156,8 +187,8 @@ class DownloadPlanTest {
         OpenSubtitlesReference reference = reference(5001, SERVED);
         Map<Long, OpenSubtitlesReference> stored = stored(reference);
 
-        assertThat(DownloadPlan.promotion(List.of(result(5001)), null, stored, Set.of(), Set.of(), SERVED)).isEmpty();
-        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored, Set.of(5001L), Set.of(5001L),
+        assertThat(promote(List.of(result(5001)), null, stored, Set.of(), Set.of(), SERVED)).isEmpty();
+        assertThat(promote(List.of(result(5001)), 5001L, stored, Set.of(5001L), Set.of(5001L),
             SERVED)).isEmpty();
     }
 
@@ -165,15 +196,15 @@ class DownloadPlanTest {
     void aReferenceThatIsNotOneOfTheFilmsSingleFileCandidatesOrIsUnusableIsNotPromoted() {
         OpenSubtitlesReference unusable = reference(5002, List.of());
 
-        assertThat(DownloadPlan.promotion(List.of(result(5002)), null, stored(unusable), Set.of(5002L), Set.of(),
+        assertThat(promote(List.of(result(5002)), null, stored(unusable), Set.of(5002L), Set.of(),
             SERVED)).isEmpty();
-        assertThat(DownloadPlan.promotion(List.of(), 5001L, stored(reference(5001, SERVED)), Set.of(5001L), Set.of(),
+        assertThat(promote(List.of(), 5001L, stored(reference(5001, SERVED)), Set.of(5001L), Set.of(),
             SERVED)).isEmpty();
     }
 
     @Test
     void aKeptFileThatIsNotStoredIsSkipped() {
-        assertThat(DownloadPlan.promotion(List.of(result(5001)), 9999L, stored(), Set.of(9999L), Set.of(), SERVED))
+        assertThat(promote(List.of(result(5001)), 9999L, stored(), Set.of(9999L), Set.of(), SERVED))
             .isEmpty();
     }
 
@@ -208,5 +239,49 @@ class DownloadPlanTest {
         assertThat(DownloadPlan.remaining(Set.of(1L, 2L))).isEqualTo(1);
         assertThat(DownloadPlan.remaining(Set.of(1L, 2L, 3L))).isZero();
         assertThat(DownloadPlan.remaining(Set.of(1L, 2L, 3L, 4L))).isZero();
+    }
+
+    @Test
+    void aRetimedReferenceThatLooksLikeAnotherCutOnTheFilmTimelineButMatchesOnTheOriginalsIsAConflictNotPromoted() {
+        OpenSubtitlesReference retimed = reference(5001, otherCut());
+        retimed.setTimedFps(23.976);
+        retimed.setRetimedBy(0.959);
+        retimed.setOriginalCuesText(SrtParser.format(SERVED));
+
+        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
+            SERVED, () -> 25.0)).isEmpty();
+    }
+
+    /** A reference listing every 25 s: the owner's ten lines, 100 s apart, are all in it, but it has far more. */
+    private static OpenSubtitlesReference retimedLonger(List<SubtitleCue> original) {
+        OpenSubtitlesReference retimed = reference(5001, spaced(40, 25_000));
+        retimed.setTimedFps(23.976);
+        retimed.setRetimedBy(0.959);
+        retimed.setOriginalCuesText(SrtParser.format(original));
+        return retimed;
+    }
+
+    @Test
+    void aFilmTimelineCheckThatIsNotAnotherCutIsARateConflictWhenTheOriginalsAgreeAndSoNothingIsPromoted() {
+        OpenSubtitlesReference retimed = retimedLonger(SERVED);
+        SubtitleComparison.Result onFilm = SubtitleComparison.compare(SERVED, SrtParser.cues(retimed.getCuesText()));
+        assertThat(onFilm.verdict()).isEqualTo(SubtitleComparison.Verdict.CHECK);
+        assertThat(ReferenceWalk.looksLikeOtherCut(onFilm)).isFalse();
+
+        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
+            SERVED, () -> 25.0)).isEmpty();
+    }
+
+    @Test
+    void theSameCheckThatIsNotAnotherCutStandsAndIsPromotedWhenTheOriginalsAreACheckThatIsNotAnotherCutEither() {
+        // The originals list every 25 s: the owner's lines are all in them, but they have far more (incomplete).
+        List<SubtitleCue> originals = spaced(40, 25_000);
+        SubtitleComparison.Result onOriginals = SubtitleComparison.compare(SERVED, originals);
+        assertThat(onOriginals.verdict()).isEqualTo(SubtitleComparison.Verdict.CHECK);
+        assertThat(ReferenceWalk.looksLikeOtherCut(onOriginals)).isFalse();
+        OpenSubtitlesReference retimed = retimedLonger(originals);
+
+        assertThat(DownloadPlan.promotion(List.of(result(5001)), 5001L, stored(retimed), Set.of(5001L), Set.of(),
+            SERVED, () -> 25.0)).containsSame(retimed);
     }
 }

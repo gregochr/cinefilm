@@ -52,6 +52,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class SidecarTimingService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SidecarTimingService.class);
+    /** Why a sidecar has no file to fit to when the rate rule left every file out for want of a stated rate. */
+    static final String NO_RATE_VERDICT = "The frame rates of the files are not known well enough to compare them";
+    /** Why a sidecar has no file to fit to when the rate rule left a file out as a rate conflict. */
+    static final String RATE_CONFLICT_VERDICT = "The files disagree about the frame rate (rate conflict)";
 
     /** A fitted offset closer than this to the current one is left alone. */
     static final int APPLY_THRESHOLD_MS = 100;
@@ -65,6 +69,7 @@ public class SidecarTimingService {
     private final CreditsDetectionRepository credits;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
+    private final FilmRates filmRates;
 
     /** A film file whose embedded track must be read (it has no read, or its file changed since). */
     public record ReferenceRead(Long mediaFileId, String path, String fingerprint) {
@@ -128,7 +133,8 @@ public class SidecarTimingService {
                                 MediaFileRepository files, EmbeddedCueStartsRepository cache,
                                 ForcedSubtitleAlignmentRepository alignments,
                                 OpenSubtitlesReferenceRepository references, CreditsDetectionRepository credits,
-                                LibraryLock lock, PlatformTransactionManager transactions) {
+                                LibraryLock lock, PlatformTransactionManager transactions,
+                                FilmRates filmRates) {
         this.sidecars = sidecars;
         this.editions = editions;
         this.files = files;
@@ -138,6 +144,7 @@ public class SidecarTimingService {
         this.credits = credits;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
+        this.filmRates = filmRates;
     }
 
     /**
@@ -257,12 +264,88 @@ public class SidecarTimingService {
         List<FitJob> jobs = new ArrayList<>();
         for (Served s : served) {
             if (state(s, reads, os, fits.get(s.sidecar().getId())) == State.NEEDS_FIT) {
-                jobs.add(job(filmId, s, reads, os));
+                FitJob job = job(filmId, s, reads, os);
+                if (job != null) {
+                    jobs.add(job);
+                }
             }
         }
         return jobs;
     }
 
+    /**
+     * The files to fit a sidecar to, by the rate rule ({@link RateComparison}). A file with no verdict is left out
+     * (and noted at INFO); one the rule compares through the sidecar's original cues carries those cue starts to
+     * be fitted instead of the sidecar's stored ones. The same texts and starts as before while nothing is retimed.
+     */
+    private DownloadedFits downloadedFits(Served s, List<ReferenceFacts> downloaded,
+                                           Map<Long, OpenSubtitlesReference> texts) {
+        SubtitleSidecar sidecar = s.sidecar();
+        RateComparison.Side served = RateComparison.Side.of(sidecar);
+        List<DownloadedFit.Reference> fitTo = new ArrayList<>();
+        boolean conflict = false;
+        boolean[] filmRateUnknown = {false};
+        for (ReferenceFacts f : downloaded) {
+            OpenSubtitlesReference reference = texts.get(f.osFileId());
+            RateComparison.Side referenceSide = RateComparison.Side.of(reference);
+            if (!served.retimed() && !referenceSide.retimed()) {
+                fitTo.add(new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(),
+                    starts(SrtParser.cues(reference.getCuesText())), null));
+                continue;
+            }
+            // Judged as the fit is saved (DownloadedFit's 1 s allowance), so a failure here is a failure there.
+            DownloadedFit.Reference judging = new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(),
+                List.of());
+            RateComparison.Judged<TimingFit.Result> judged = RateComparison.judge(served, referenceSide,
+                () -> {
+                    Double rate = filmRate(s);
+                    filmRateUnknown[0] |= rate == null;
+                    return rate;
+                }, SrtParser.cues(sidecar.getCuesText()), RateComparison.originalOf(served),
+                SrtParser.cues(reference.getCuesText()), RateComparison.originalOf(referenceSide),
+                (x, y) -> DownloadedFit.judge(TimingFit.fit(starts(x), starts(y)), judging),
+                r -> TimingFit.Verdict.CHECK.equals(r.verdict()), r -> TimingFit.Verdict.ALIGNED.equals(r.verdict()));
+            if (!judged.hasVerdict()) {
+                LOG.info("Timing of subtitle {} against OpenSubtitles file {}: no verdict, {} (reference {})",
+                    sidecar.getId(), f.osFileId(), judged.reason(), reference.getId());
+                conflict |= judged.reason() == RateComparison.Reason.RATE_CONFLICT;
+                continue;
+            }
+            fitTo.add(new DownloadedFit.Reference(f.osFileId(), f.release(), f.cueCount(), starts(judged.second()),
+                starts(judged.first())));
+        }
+        return new DownloadedFits(fitTo, conflict, served.onFilm() && filmRateUnknown[0]);
+    }
+
+    /**
+     * The files a sidecar is fitted to.
+     *
+     * @param references the files with a verdict, in order
+     * @param conflict true when a file was left out as a rate conflict
+     * @param waitsForFilmRate true when the sidecar takes the film's rate and it was not known: indexing may settle it
+     */
+    private record DownloadedFits(List<DownloadedFit.Reference> references, boolean conflict,
+                                  boolean waitsForFilmRate) {
+    }
+
+    private static List<Long> starts(List<SubtitleCue> cues) {
+        return cues.stream().map(SubtitleCue::startMs).toList();
+    }
+
+    /** The film's rate for a sidecar: the whole edition's, or the one film file it is timed for. */
+    private Double filmRate(Served s) {
+        SubtitleSidecar sidecar = s.sidecar();
+        return sidecar.isWholeEdition() ? filmRates.forEdition(s.edition().getId())
+            : filmRates.forFile(sidecar.getMediaFileId());
+    }
+
+    /**
+     * The fit to make for a sidecar, or null when there is nothing to save yet: every file was left out for want of the
+     * film's rate, which the sidecar takes as its own (an owner's file, or a download that fits as it is). Nothing is
+     * saved then, so it stays due and is fitted once the film's rate is indexed (neither its key nor its identity holds
+     * the rate, so a saved "no file" would be current for good). When the files are the cause (one states no rate)
+     * indexing changes nothing, so the "no file" is saved, with the reason; so is a rate conflict.
+     */
     private FitJob job(Long filmId, Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os) {
         SubtitleSidecar sidecar = s.sidecar();
         List<Long> starts = SrtParser.cues(sidecar.getCuesText()).stream().map(SubtitleCue::startMs).toList();
@@ -273,9 +356,20 @@ public class SidecarTimingService {
             Map<Long, OpenSubtitlesReference> texts = new HashMap<>();
             references.findAllById(downloaded.stream().map(ReferenceFacts::id).toList())
                 .forEach(r -> texts.put(r.getOsFileId(), r));
-            List<DownloadedFit.Reference> fitTo = downloaded.stream().map(f -> new DownloadedFit.Reference(
-                f.osFileId(), f.release(), f.cueCount(), SrtParser.cues(texts.get(f.osFileId()).getCuesText()).stream()
-                .map(SubtitleCue::startMs).toList())).toList();
+            DownloadedFits fits = downloadedFits(s, downloaded, texts);
+            List<DownloadedFit.Reference> fitTo = fits.references();
+            if (fitTo.isEmpty()) {
+                String reason = RATE_CONFLICT_VERDICT;
+                if (!fits.conflict()) {
+                    if (fits.waitsForFilmRate()) {
+                        return null;
+                    }
+                    reason = NO_RATE_VERDICT;
+                }
+                // Every file was left out by the rate rule: saved with no file and the reason.
+                return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
+                    List.copyOf(starts), List.of(), reason);
+            }
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
                 List.copyOf(starts), List.of(), null, fitTo);
         }
@@ -535,8 +629,15 @@ public class SidecarTimingService {
             return key;
         }
         String imdbId = os.get(s.edition().getId()).imdbId();
+        // A retimed sidecar is compared by the rates, so each file also says whether it states one: "r" when it
+        // does, "u" when it does not. A file that gains a rate turns "u" into "r" and makes the fit due again, and
+        // a fit saved before the rate rule (which has neither mark) is due too, to be judged by the rule. Any other
+        // sidecar's key is as it was.
+        boolean ratesMatter = s.sidecar().getRetimedBy() != null;
         return key + "|os" + DownloadedFit.RULES_VERSION + ":" + imdbId + ":" + downloaded.stream()
-            .map(ReferenceFacts::osFileId).sorted().map(String::valueOf).collect(Collectors.joining(","));
+            .sorted(Comparator.comparingLong(ReferenceFacts::osFileId))
+            .map(r -> r.osFileId() + (ratesMatter ? r.timedFps() != null ? "r" : "u" : ""))
+            .collect(Collectors.joining(","));
     }
 
     /**

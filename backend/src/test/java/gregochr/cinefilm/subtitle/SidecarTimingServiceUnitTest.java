@@ -52,6 +52,9 @@ class SidecarTimingServiceUnitTest {
         STARTS.stream().map(s -> new SubtitleCue(s, s + 1_500, "line")).toList());
 
     @Mock
+    private FilmRates filmRates;
+
+    @Mock
     private SubtitleSidecarRepository sidecars;
 
     @Mock
@@ -84,7 +87,7 @@ class SidecarTimingServiceUnitTest {
     @BeforeEach
     void setUp() {
         service = new SidecarTimingService(sidecars, editions, files, cache, alignments, references, credits, lock,
-            transactions);
+            transactions, filmRates);
         edition = edition(film(1L, "Taken", 2008, NOW), 40L, "Original", 90 * MIN, null);
         film1 = file(edition, "Taken.m4v");
         film1.setId(10L);

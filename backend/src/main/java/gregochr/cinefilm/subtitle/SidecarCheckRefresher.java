@@ -11,7 +11,6 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesSearchFinished;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException;
 import gregochr.cinefilm.subtitle.ReferenceWalk.Attempt;
 import gregochr.cinefilm.subtitle.SubtitleComparison.Result;
-import gregochr.cinefilm.subtitle.SubtitleComparison.Verdict;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -21,7 +20,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -57,7 +55,6 @@ import org.springframework.stereotype.Service;
 public class SidecarCheckRefresher {
 
     private static final Logger LOG = LoggerFactory.getLogger(SidecarCheckRefresher.class);
-    private static final Predicate<Result> AGREES = r -> Verdict.AGREES.equals(r.verdict());
 
     /** A reset time further ahead than this is not believed (the reply is untrusted). */
     static final Duration MAX_BLOCK = ReferenceFetcher.MAX_BLOCK;
@@ -95,7 +92,7 @@ public class SidecarCheckRefresher {
         this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
         this.service = service;
         this.probe = new FullFitProbe(fetcher, fullFit);
-        this.timingReference = new TimingReferenceFetch(fetcher, timingReferences, clock);
+        this.timingReference = new TimingReferenceFetch(fetcher, timingReferences, clock, filmRates);
         this.clock = clock;
         this.executor = executor;
         // The comparisons may bring the day's total only to their share, so downloads of missing and replacement
@@ -370,7 +367,7 @@ public class SidecarCheckRefresher {
             RateComparison.Judged<Result> judged = RateComparison.judge(served, referenceSide,
                 () -> filmRates.forEdition(due.editionId()), due.cues(), () -> due.originalCues(),
                 SrtParser.cues(reference.getCuesText()), RateComparison.originalOf(referenceSide),
-                SubtitleComparison::compare, AGREES.negate(), AGREES);
+                SubtitleComparison::compare, ReferenceWalk.FAILS, ReferenceWalk.AGREES);
             if (!judged.hasVerdict()) {
                 LOG.info("Edition {}: candidate {} (file {}) skipped, no verdict: {} (sidecar {}, reference {})",
                     due.editionId(), position, candidate.fileId(), judged.reason(), due.downloadSidecarId(),

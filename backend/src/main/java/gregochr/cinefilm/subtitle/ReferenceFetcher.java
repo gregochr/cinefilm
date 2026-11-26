@@ -147,7 +147,7 @@ final class ReferenceFetcher {
      * update of that one column (the row is also written by the cue-end backfill, under another lock), and best
      * effort: a failed fill leaves the stored reference as it was and does not fail the fetch.
      */
-    private void fillRate(OpenSubtitlesReference stored, OpenSubtitlesResult candidate) {
+    void fillRate(OpenSubtitlesReference stored, OpenSubtitlesResult candidate) {
         if (stored.getTimedFps() != null || candidate.fps() == null) {
             return;
         }
@@ -197,7 +197,8 @@ final class ReferenceFetcher {
         reference.setImdbId(imdbId);
         reference.setOsFileId(candidate.fileId());
         reference.setRelease(candidate.release());
-        reference.setTimedFps(candidate.fps());
+        // A rate the row has is never replaced by none (as fillRate): a candidate that states none keeps it.
+        reference.setTimedFps(candidate.fps() != null ? candidate.fps() : reference.getTimedFps());
         reference.setFetchedAt(now);
         return reference;
     }

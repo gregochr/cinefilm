@@ -81,6 +81,12 @@ final class FullFitProbe {
     }
 
     private boolean measure(Job job, int checkLimit) {
+        if (job.rateSide().retimed()) {
+            // A retimed download is measured from phase 2b: nothing is fetched or judged for it before then.
+            done.add(job.sidecarId());
+            LOG.info("Full subtitle fit: sidecar {} not measured: retimed, measured from phase 2b", job.sidecarId());
+            return false;
+        }
         OpenSubtitlesReference second = second(job, checkLimit);
         done.add(job.sidecarId());
         if (second == null) {
