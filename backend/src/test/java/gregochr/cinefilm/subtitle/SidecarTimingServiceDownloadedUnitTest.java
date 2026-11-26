@@ -56,6 +56,8 @@ class SidecarTimingServiceDownloadedUnitTest {
     private static final Instant LATER = NOW.plusSeconds(3_600);
     private static final String IMDB = "tt0000001";
     private static final String BASE_KEY = "10:1000:" + NOW.toEpochMilli();
+    /** The base key of a sidecar timed for the whole edition: its start on the edition's timeline follows. */
+    private static final String WHOLE_BASE_KEY = BASE_KEY + "@0";
     private static final String OS_KEY = "|os" + DownloadedFit.RULES_VERSION + ":" + IMDB;
     private static final List<Long> STARTS = IntStream.range(0, 12).mapToObj(i -> 10_000L + i * 7_000L).toList();
 
@@ -1139,5 +1141,36 @@ class SidecarTimingServiceDownloadedUnitTest {
         stored(file);
 
         assertThat(service.fitJobs(1L).get(0).referenceKey()).isEqualTo(without);
+    }
+
+    @Test
+    void aRetimedSidecarsKeyMarksAFileWithNoStatedRateAndDiffersFromTheKeyBeforeTheRateRule() {
+        retimed();
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference noRate = reference(5012, 300, IMDB);
+        stored(noRate);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(noRate));
+        served();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
+
+        String key = service.fitJobs(1L).get(0).referenceKey();
+
+        assertThat(key).isEqualTo(WHOLE_BASE_KEY + OS_KEY + ":5012u");
+        assertThat(key).isNotEqualTo(WHOLE_BASE_KEY + OS_KEY + ":5012");
+    }
+
+    @Test
+    void aFitSavedBeforeTheRateRuleForARetimedDownloadAndAFileOfNoRateIsDueToBeJudgedByTheRule() {
+        retimed();
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference noRate = reference(5012, 300, IMDB);
+        stored(noRate);
+        when(references.findAllById(List.of(5012L))).thenReturn(List.of(noRate));
+        served();
+        // The row as an earlier release saved it: a key with no mark for the file.
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(WHOLE_BASE_KEY + OS_KEY + ":5012")));
+
+        assertThat(service.fitJobs(1L)).singleElement()
+            .satisfies(job -> assertThat(job.referenceKey()).isEqualTo(WHOLE_BASE_KEY + OS_KEY + ":5012u"));
     }
 }
