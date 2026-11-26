@@ -37,13 +37,15 @@ Nothing else is tuned. The labels are the kit's `LABEL_DEFAULTS`.
 The two numbers were set on this data, so it proves nothing on its own. 26 half-A files have 8 or more cues
 (`pin-tiny.json`; scratch script `d1.py` on the kit).
 
-- **On the cues from before the retime**, the files the server has since retimed are known positives where the
-  retime was heard or measured to help. The measure flags 7 of 8 drifting files: Hitman (f 0.00 to 0.49), Jack Ryan
-  (0.03 to 0.41), Inferno (0.08 to 0.46), Captain America (0.01 to 0.23), Severance (0.08 to 0.28), Bridge of Spies
-  (0.03 to 0.25) and The Brutalist (0.16 to 0.31). It misses 1917 (0.03 to 0.09), whose cues lie on little speech.
-- **On the cues as played**, it flags 2 of 26: Bridge of Spies and The Brutalist, the two files that the 25 Nov
-  check found drifting and the server did not retime. None of the 9 retimed files is flagged as played.
-- The other 17 files are not flagged either way. The largest gain at k̂ among them is 0.02.
+- **The 9 files the server has since retimed, on their cues from before the retime.** The measure flags 5, each in
+  the direction the server applied: Hitman (f 0.00 to 0.49), Jack Ryan (0.03 to 0.41), Inferno (0.08 to 0.46),
+  Captain America (0.01 to 0.23) and Severance (0.08 to 0.28). It misses 1917 (0.03 to 0.09). A Brilliant Young
+  Mind, Batman v Superman and A Most Wanted Man show little or no foreign speech under their cues at any k (f at
+  most 0.05), so they cannot be flagged either way.
+- **The 9 retimed files as played:** none is flagged.
+- **The 17 files not retimed (they play as they always have):** 2 are flagged, Bridge of Spies (0.03 to 0.25) and
+  The Brutalist (0.16 to 0.31). They are the two files that the 25 Nov check found drifting and the server did not
+  retime. Among the other 15, the largest gain at k̂ is 0.02.
 
 ## Proof (all before any build; any failure ends this plan)
 
