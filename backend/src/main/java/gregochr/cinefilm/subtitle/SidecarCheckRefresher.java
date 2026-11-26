@@ -163,8 +163,7 @@ public class SidecarCheckRefresher {
     /**
      * The retime job rewrote or restored some downloads' cues: the full-file probe and the timing references forget
      * that they measured these sidecars, so the next pass measures them again. With the timing check off nothing
-     * else follows a rewrite (an Admin retime, say), so a check pass is asked for; with it on, the timing pass the
-     * event books announces its end, which starts the checks.
+     * else follows a rewrite, so a check pass is asked for; with it on, the timing pass the event books starts it.
      */
     @EventListener
     public void onCuesRewritten(SubtitleCuesRewritten event) {

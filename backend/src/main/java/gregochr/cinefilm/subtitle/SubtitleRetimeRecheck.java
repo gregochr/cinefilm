@@ -12,13 +12,12 @@ import org.springframework.stereotype.Component;
 
 /**
  * The re-check that follows a retime run (docs/engineering/subtitle-frame-rate-plan.md, "The re-check runs at once"):
- * for each touched edition in turn, the timing fit of its film first, then the edition's checks (a download's check
- * waits for its fit), so a failed download is judged again within the run. A fit that comes back busy is tried again
- * ({@link BusyRetry}); the first film whose fit stays busy stops the walk. The checks of an edition run only when its
- * film was fitted here: a fit left to a booked timing pass (it runs on this thread after the job) or a busy one leaves
- * them to the pass that follows the timing pass; a failed fit is retried by the timing pass the event books straight
- * after the job, then by the daily pass. {@link #run} says whether any fit was saved: the caller then announces it
- * ({@link #announceFits}). Nothing here throws to its caller.
+ * for each touched edition in turn, the timing fit of its film first, then the edition's checks, so a failed download
+ * is judged again within the run. A fit that comes back busy is tried again ({@link BusyRetry}); the first film whose
+ * fit stays busy stops the walk. An edition is checked only when its film was fitted here: a fit left to a booked
+ * timing pass, a busy one or a failed one leaves it to the pass the event books after the job, then the daily pass.
+ * {@link #run} says whether any fit was saved: the caller then announces it ({@link #announceFits}). Nothing here
+ * throws to its caller.
  */
 @Component
 public class SubtitleRetimeRecheck {

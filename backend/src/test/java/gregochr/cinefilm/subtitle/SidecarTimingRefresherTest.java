@@ -591,7 +591,6 @@ class SidecarTimingRefresherTest {
         order.verify(reader).read(FILE);
         order.verify(service).fitJobs(7L);
         order.verify(service).save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW);
-        // Announcing would start a full check pass in the middle of the caller's walk over many films.
         verifyNoInteractions(events);
         assertThat(queued).isEmpty();
         assertThat(refresher.isRunning()).isFalse();
@@ -610,6 +609,19 @@ class SidecarTimingRefresherTest {
         assertThat(refresher.isRunning()).isFalse();
         queued.clear();
         refresher.startIfDeferred();
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
+    void fitFilmWithNothingToFitIsDoneAndAPassRequestedMeanwhileIsBooked() {
+        when(service.readsFor(7L)).thenAnswer(call -> {
+            refresher.startDue();
+            return List.of();
+        });
+        when(service.fitJobs(7L)).thenReturn(List.of());
+
+        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.DONE);
+
         assertThat(queued).hasSize(1);
     }
 

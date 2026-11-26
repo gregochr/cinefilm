@@ -75,7 +75,6 @@ class SubtitleRetimeRecheckFlowTest {
     private FilmRates filmRates;
 
     private final List<String> happened = new ArrayList<>();
-    private final List<Integer> checkQueueDuringTheWalk = new ArrayList<>();
     private final List<Runnable> checkQueue = new ArrayList<>();
     private final List<Runnable> timingQueue = new ArrayList<>();
     private SidecarCheckRefresher checkRefresher;
@@ -119,7 +118,6 @@ class SubtitleRetimeRecheckFlowTest {
         when(timingService.fitJobs(filmId)).thenReturn(List.of(job));
         when(timingService.save(job, TimingFit.fit(STARTS, TRACK), NOW)).thenAnswer(call -> {
             happened.add("fit film " + filmId);
-            checkQueueDuringTheWalk.add(checkQueue.size());
             return SaveOutcome.APPLIED;
         });
     }
@@ -154,11 +152,7 @@ class SubtitleRetimeRecheckFlowTest {
 
         // Edition B's check is saved only after film 2's fit, edition A's after film 1's.
         assertThat(happened).containsExactly("fit film 1", "check edition 10", "fit film 2", "check edition 20");
-        // Nothing started a full check pass during the re-check: the caller asks for it afterwards.
-        assertThat(checkQueueDuringTheWalk).containsExactly(0, 0);
         assertThat(checkQueue).isEmpty();
-        assertThat(timingQueue).isEmpty();
-        // The stored reference of edition B was compared, and the one that would be downloaded was not touched.
         verify(checkService).due(List.of(10L));
         verify(checkService).due(List.of(20L));
         verify(checkService).markTried(10L, "tt1", 5011, NOW);

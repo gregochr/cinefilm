@@ -167,9 +167,7 @@ public class SidecarTimingRefresher {
      * returns at once.
      *
      * @param filmId the film
-     * @return what happened: the film was fitted (or the check is off, so there is nothing to wait for), the work is
-     *     left to a pass that is booked or going, a scan, an edit or an encoding session stopped it (try again), or it
-     *     failed
+     * @return what happened, see {@link Fit}
      */
     public Fit fitFilm(Long filmId) {
         if (!enabled) {
