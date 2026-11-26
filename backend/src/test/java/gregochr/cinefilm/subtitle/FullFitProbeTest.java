@@ -483,6 +483,21 @@ class FullFitProbeTest {
     }
 
     @Test
+    void aRetimedReferenceWithNoOriginalCuesIsNeverJudgedAgainAfterOnePassEither() {
+        OpenSubtitlesReference reference = stored(5012, lines(300, 0));
+        reference.setTimedFps(23.976);
+        reference.setRetimedBy(0.959);
+        serving(retimedJob(reference));
+        when(filmRates.forEdition(10L)).thenReturn(25.0);
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        assertThat(infoLines()).hasSize(1);
+        verify(filmRates).forEdition(10L);
+    }
+
+    @Test
     void aJobGivenNoSideIsADownloadOfNoKnownRateNeverTheOwnersFile() {
         Job job = new Job(1L, 40L, "tt1", 7L, 5011L, List.of(), 0, null, List.of(), Map.of());
 
