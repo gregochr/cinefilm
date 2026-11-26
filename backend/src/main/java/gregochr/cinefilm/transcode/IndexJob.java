@@ -15,13 +15,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
  * The background keyframe index: after a library scan (and once at start-up) it indexes every present, playable
  * original that has no current index, one file at a time on a low-priority thread. A file that fails is logged and
- * skipped. Only one run at a time; asking while one runs does nothing.
+ * skipped. A pass that ends publishes {@link KeyframeIndexPassFinished}. Only one run at a time; asking while one
+ * runs does nothing.
  */
 @Component
 public class IndexJob {
@@ -42,17 +44,20 @@ public class IndexJob {
     private final KeyframeIndexService service;
     private final Executor executor;
     private final boolean onStartup;
+    private final ApplicationEventPublisher events;
     private final AtomicBoolean running = new AtomicBoolean();
 
     /** Creates the job; the executor is {@code indexExecutor}, {@code cinefilm.transcode.index-on-startup} too. */
     public IndexJob(MediaFileRepository files, MediaKeyframesRepository rows, KeyframeIndexService service,
                     @Qualifier("indexExecutor") Executor executor,
-                    @Value("${cinefilm.transcode.index-on-startup:true}") boolean onStartup) {
+                    @Value("${cinefilm.transcode.index-on-startup:true}") boolean onStartup,
+                    ApplicationEventPublisher events) {
         this.files = files;
         this.rows = rows;
         this.service = service;
         this.executor = executor;
         this.onStartup = onStartup;
+        this.events = events;
     }
 
     /** Indexes after a library scan finished (new files may have arrived). */
@@ -118,5 +123,10 @@ public class IndexJob {
             }
         }
         LOG.info("Keyframe index pass finished: {} files, {} failed", originals.size(), failed);
+        try {
+            events.publishEvent(new KeyframeIndexPassFinished());
+        } catch (RuntimeException e) {
+            LOG.warn("A listener of the keyframe index pass failed: {}", e.getClass().getSimpleName());
+        }
     }
 }

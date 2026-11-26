@@ -2,10 +2,13 @@ package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.library.LibraryLock;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -36,6 +39,8 @@ public class SubtitleRetimeService {
         RESTORED,
         /** The owner's hand-set timing was found, so retime was set off for the file. */
         DECIDED_OFF,
+        /** The original cues fit the film's own English track as they are, so retime was set to fit-as-is. */
+        DECIDED_FITS,
         /** Nothing needed to change. */
         UNCHANGED,
         /** The library lock was taken by someone else; the row is left for the next run. */
@@ -47,6 +52,7 @@ public class SubtitleRetimeService {
     private final FilmRates rates;
     private final ForcedDownloadCheckRepository downloadChecks;
     private final ForcedSubtitleAlignmentRepository alignments;
+    private final EmbeddedCueStartsRepository cache;
     private final LibraryLock lock;
     private final Clock clock;
     private final TransactionTemplate tx;
@@ -54,13 +60,14 @@ public class SubtitleRetimeService {
     /** Creates the service. */
     public SubtitleRetimeService(SubtitleSidecarRepository sidecars, EditionRepository editions, FilmRates rates,
                                  ForcedDownloadCheckRepository downloadChecks,
-                                 ForcedSubtitleAlignmentRepository alignments, LibraryLock lock, Clock clock,
-                                 PlatformTransactionManager transactions) {
+                                 ForcedSubtitleAlignmentRepository alignments, EmbeddedCueStartsRepository cache,
+                                 LibraryLock lock, Clock clock, PlatformTransactionManager transactions) {
         this.sidecars = sidecars;
         this.editions = editions;
         this.rates = rates;
         this.downloadChecks = downloadChecks;
         this.alignments = alignments;
+        this.cache = cache;
         this.lock = lock;
         this.clock = clock;
         this.tx = new TransactionTemplate(transactions);
@@ -143,10 +150,19 @@ public class SubtitleRetimeService {
                 sidecars.save(row);
                 return Outcome.DECIDED_OFF;
             }
-            // Wait for the decision on a film with an English track of its own: 2a-3b tries a fit of the original
-            // cues first, and a file that fits as it is must not have been rewritten before that.
-            if (hasEnglishTrack(edition)) {
+            // A file whose original cues fit the film's own English track as they are is left alone (OFF_FITS); on a
+            // film that may have such a track, nothing is decided until it has been read.
+            OffFitsRule.Decision decision = decide(row, edition);
+            if (decision == OffFitsRule.Decision.WAIT) {
                 return Outcome.UNCHANGED;
+            }
+            if (decision == OffFitsRule.Decision.FITS_AS_IS) {
+                row.setRetime(RetimeChoice.OFF_FITS);
+                if (retimed) {
+                    return restore(row, edition);
+                }
+                sidecars.save(row);
+                return Outcome.DECIDED_FITS;
             }
             row.setRetime(RetimeChoice.AUTO);
         }
@@ -240,10 +256,24 @@ public class SubtitleRetimeService {
             .orElse(null);
     }
 
-    private static boolean hasEnglishTrack(Edition edition) {
+    /** The fit of the row's original cues to the film's own English track, by the timing fit's own rule. */
+    private OffFitsRule.Decision decide(SubtitleSidecar row, Edition edition) {
+        List<MediaFile> files = TimingKeys.referenceFiles(edition, row);
+        Map<Long, EmbeddedCueStarts> reads = new HashMap<>();
+        cache.findAllById(files.stream().map(MediaFile::getId).toList())
+            .forEach(read -> reads.put(read.getMediaFileId(), read));
+        // The same condition the timing fit uses to know every file has a current read.
+        TimingKeys.EmbeddedReference reference = TimingKeys.referenceKey(edition, row, reads) == null ? null
+            : TimingKeys.embeddedReference(edition, row, reads);
+        String original = row.getOriginalCuesText() != null ? row.getOriginalCuesText() : row.getCuesText();
+        List<Long> starts = SrtParser.cues(original).stream().map(SubtitleCue::startMs).toList();
+        return OffFitsRule.decide(mayHaveEnglishTrack(edition), reference, starts);
+    }
+
+    private static boolean mayHaveEnglishTrack(Edition edition) {
         return edition.originalParts().stream()
             .flatMap(part -> part.getSubtitleStreams().stream())
-            .anyMatch(stream -> !stream.isForced() && stream.getLanguage() != null
-                && gregochr.cinefilm.film.SubtitleStream.isEnglishOrUnlabelled(stream.getLanguage()));
+            .anyMatch(stream -> EmbeddedStreams.mayBeFullEnglish(stream.getLanguage(), stream.isForced(),
+                stream.getFormat(), stream.getTitle()));
     }
 }

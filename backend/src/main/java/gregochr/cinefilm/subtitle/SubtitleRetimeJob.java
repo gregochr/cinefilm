@@ -1,6 +1,7 @@
 package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.subtitle.SubtitleRetimeService.Outcome;
+import gregochr.cinefilm.transcode.KeyframeIndexPassFinished;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -18,12 +19,13 @@ import org.springframework.stereotype.Service;
 
 /**
  * Puts downloaded subtitles on the film's timeline (docs/engineering/subtitle-frame-rate-plan.md, "The job"), at
- * start-up and nightly ({@link SubtitleRetimeScheduler}), one download at a time and one run at a time, in the
- * background. {@code cinefilm.subtitles.retime} is {@code off} (the default: nothing is read or written), {@code on},
- * or {@code restore} (the rollback: every retimed download is put back). Each download is visited by
- * {@link SubtitleRetimeService#process}, which takes the library lock for that one row; a row whose lock was busy is
- * visited again on the next run. A run that rewrote or restored something publishes {@link SubtitleCuesRewritten}.
- * Nothing here throws to its caller.
+ * start-up, nightly ({@link SubtitleRetimeScheduler}) and after each pass of the keyframe index (a film's rate may
+ * have arrived), one download at a time and one run at a time, in the background. {@code cinefilm.subtitles.retime} is
+ * {@code off} (the default: nothing is read or written), {@code on}, or {@code restore} (the rollback: every retimed
+ * download is put back). Each download is visited by {@link SubtitleRetimeService#process}, which takes the library
+ * lock for that one row; a row whose lock was busy is visited again on the next run. A run that rewrote or restored
+ * something publishes {@link SubtitleCuesRewritten}. A request that arrives while a run is going makes it go round
+ * once more. Nothing here throws to its caller.
  */
 @Service
 public class SubtitleRetimeJob {
@@ -35,9 +37,11 @@ public class SubtitleRetimeJob {
     private final RetimeMode mode;
     private final ApplicationEventPublisher events;
     private final AtomicBoolean running = new AtomicBoolean();
+    private final AtomicBoolean pending = new AtomicBoolean();
 
     /** Creates the job; the executor is {@code timingCheckExecutor}, so a run never overlaps a timing check. */
-    public SubtitleRetimeJob(SubtitleRetimeService service, @Qualifier("timingCheckExecutor") Executor executor,
+    public SubtitleRetimeJob(SubtitleRetimeService service,
+                             @Qualifier("timingCheckExecutor") Executor executor,
                              @Value("${cinefilm.subtitles.retime:off}") String setting,
                              ApplicationEventPublisher events) {
         this.service = service;
@@ -52,13 +56,29 @@ public class SubtitleRetimeJob {
         start();
     }
 
+    /** Runs after a pass of the keyframe index: a film's frame rate may have arrived. */
+    @EventListener
+    public void onIndexPassFinished(KeyframeIndexPassFinished event) {
+        start();
+    }
+
     /**
-     * Asks for a run in the background.
+     * Asks for a run in the background. When one is going it goes round once more before it finishes, so a request
+     * (a rate that arrived during the run) is not lost.
      *
-     * @return true when this call started one; false when the setting is off or a run is going
+     * @return true when this call started a run; false when the setting is off or a run was already going
      */
     public boolean start() {
-        if (mode == RetimeMode.OFF || !running.compareAndSet(false, true)) {
+        if (mode == RetimeMode.OFF) {
+            return false;
+        }
+        // Set before trying to take the run: a run that is just finishing re-checks it after giving the run up.
+        pending.set(true);
+        return launch();
+    }
+
+    private boolean launch() {
+        if (!running.compareAndSet(false, true)) {
             return false;
         }
         try {
@@ -72,9 +92,15 @@ public class SubtitleRetimeJob {
 
     private void worker() {
         try {
-            run();
+            while (pending.getAndSet(false)) {
+                run();
+            }
         } finally {
             running.set(false);
+        }
+        // A request that arrived after the last pass but before the run was given up would otherwise be lost.
+        if (pending.get()) {
+            launch();
         }
     }
 
@@ -102,10 +128,11 @@ public class SubtitleRetimeJob {
         } catch (RuntimeException e) {
             LOG.error("Subtitle retime failed", e);
         }
-        LOG.info("Subtitle retime ({}) finished: {} rewritten, {} restored, {} set off, {} left as they were, "
-                + "{} left for the next run (library busy), {} failed", mode, count(counts, Outcome.REWRITTEN),
-            count(counts, Outcome.RESTORED), count(counts, Outcome.DECIDED_OFF), count(counts, Outcome.UNCHANGED),
-            count(counts, Outcome.BUSY), failed);
+        LOG.info("Subtitle retime ({}) finished: {} rewritten, {} restored, {} set off, {} fit as they are, "
+                + "{} left as they were, {} left for the next run (library busy), {} failed", mode,
+            count(counts, Outcome.REWRITTEN), count(counts, Outcome.RESTORED), count(counts, Outcome.DECIDED_OFF),
+            count(counts, Outcome.DECIDED_FITS), count(counts, Outcome.UNCHANGED), count(counts, Outcome.BUSY),
+            failed);
     }
 
     private static int count(Map<Outcome, Integer> counts, Outcome outcome) {

@@ -3,7 +3,6 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
-import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.Presence;
@@ -373,22 +372,9 @@ public class SidecarTimingService {
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
                 List.copyOf(starts), List.of(), null, fitTo);
         }
-        List<MediaFile> refFiles = TimingKeys.referenceFiles(s.edition(), sidecar);
-        EditionTimeline timeline = sidecar.isWholeEdition() ? TimingKeys.timelineOrNull(s.edition()) : null;
-        List<Long> reference = new ArrayList<>();
-        String noReference = null;
-        for (int i = 0; i < refFiles.size() && noReference == null; i++) {
-            EmbeddedCueStarts read = reads.get(refFiles.get(i).getId());
-            if (read.getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE) {
-                noReference = (sidecar.isWholeEdition() ? "Part " + (i + 1) + ": " : "") + read.getReason();
-            } else {
-                long shift = timeline == null ? 0 : timeline.partStartMs(i);
-                read.getStartsMs().forEach(start -> reference.add(start + shift));
-            }
-        }
+        TimingKeys.EmbeddedReference embedded = TimingKeys.embeddedReference(s.edition(), sidecar, reads);
         return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar),
-            referenceKey(s, reads, os), List.copyOf(starts),
-            noReference == null ? List.copyOf(reference) : List.of(), noReference);
+            referenceKey(s, reads, os), List.copyOf(starts), embedded.starts(), embedded.noReference());
     }
 
     /**

@@ -98,4 +98,41 @@ final class TimingKeys {
         }
         return String.join(",", entries);
     }
+
+    /**
+     * What a sidecar is fitted to inside the film.
+     *
+     * @param starts the film's English track's cue starts on the sidecar's timeline; empty when no track is usable
+     * @param noReference why there is no usable track, or null
+     */
+    record EmbeddedReference(List<Long> starts, String noReference) {
+    }
+
+    /**
+     * The embedded English track a sidecar is fitted to: every reference file's cue starts, a whole-edition sidecar's
+     * shifted to where each part starts on the edition timeline, or the reason the first file without a usable track
+     * has none. The one place this is assembled, for the timing fit and for the retime job's decision.
+     *
+     * @param edition the sidecar's edition (its files loaded)
+     * @param sidecar the sidecar
+     * @param reads the reads of the reference files, each present and current ({@link #referenceKey} is not null)
+     * @return the reference
+     */
+    static EmbeddedReference embeddedReference(Edition edition, SubtitleSidecar sidecar,
+                                               Map<Long, EmbeddedCueStarts> reads) {
+        List<MediaFile> refFiles = referenceFiles(edition, sidecar);
+        EditionTimeline timeline = sidecar.isWholeEdition() ? timelineOrNull(edition) : null;
+        List<Long> reference = new ArrayList<>();
+        String noReference = null;
+        for (int i = 0; i < refFiles.size() && noReference == null; i++) {
+            EmbeddedCueStarts read = reads.get(refFiles.get(i).getId());
+            if (read.getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE) {
+                noReference = (sidecar.isWholeEdition() ? "Part " + (i + 1) + ": " : "") + read.getReason();
+            } else {
+                long shift = timeline == null ? 0 : timeline.partStartMs(i);
+                read.getStartsMs().forEach(start -> reference.add(start + shift));
+            }
+        }
+        return new EmbeddedReference(noReference == null ? List.copyOf(reference) : List.of(), noReference);
+    }
 }

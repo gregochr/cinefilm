@@ -9,6 +9,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.TestData;
@@ -51,6 +52,8 @@ class SubtitleRetimeServiceUnitTest {
     @Mock
     private ForcedSubtitleAlignmentRepository alignments;
     @Mock
+    private EmbeddedCueStartsRepository cache;
+    @Mock
     private PlatformTransactionManager transactions;
 
     private final LibraryLock lock = new LibraryLock();
@@ -60,7 +63,7 @@ class SubtitleRetimeServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        service = new SubtitleRetimeService(sidecars, editions, rates, downloadChecks, alignments, lock, CLOCK,
+        service = new SubtitleRetimeService(sidecars, editions, rates, downloadChecks, alignments, cache, lock, CLOCK,
             transactions);
         edition = TestData.edition(TestData.film(1L, "Taken", 2008, NOW), EDITION_ID, "Original", 100 * MIN, null);
         var part = TestData.file(edition, "Taken.m4v");
@@ -91,7 +94,37 @@ class SubtitleRetimeServiceUnitTest {
     private void english() {
         var stream = new gregochr.cinefilm.film.SubtitleStream();
         stream.setLanguage("English");
+        stream.setFormat("subrip");
         edition.originalParts().get(0).getSubtitleStreams().add(stream);
+    }
+
+    /** Ten cues, irregularly spaced so that no offset but the right one lines two files up. */
+    private static List<SubtitleCue> tenCues(double scale) {
+        List<SubtitleCue> cues = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            long start = Math.round((60_000 + i * 37_000L + i * i * 911L % 5_000) * scale);
+            cues.add(new SubtitleCue(start, start + 2_000, "Line " + i));
+        }
+        return cues;
+    }
+
+    /**
+     * The row's original cues are {@link #tenCues}, and the film file has a current read of its English track whose
+     * cue starts are those cues' scaled by {@code readScale} (1 fits exactly).
+     */
+    private void filmTrackRead(double readScale, EmbeddedCueStarts.Status status) {
+        var part = edition.originalParts().get(0);
+        part.setSizeBytes(1_000L);
+        part.setModifiedAt(NOW);
+        String original = SrtParser.format(tenCues(1.0));
+        row.setCuesText(original);
+        EmbeddedCueStarts read = new EmbeddedCueStarts();
+        read.setMediaFileId(10L);
+        read.setFingerprint(part.fingerprint());
+        read.setStatus(status);
+        read.setReason(status == EmbeddedCueStarts.Status.NO_REFERENCE ? "No English track" : null);
+        read.setStartsMs(tenCues(readScale).stream().map(SubtitleCue::startMs).toList());
+        when(cache.findAllById(List.of(10L))).thenReturn(List.of(read));
     }
 
     private SubtitleSidecar saved() {
@@ -396,14 +429,113 @@ class SubtitleRetimeServiceUnitTest {
     }
 
     @Test
+    void originalCuesThatFitTheFilmsEnglishTrackAreSetToFitAsIsAndNothingIsRewritten() {
+        english();
+        filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.DECIDED_FITS);
+
+        SubtitleSidecar written = saved();
+        assertThat(written.getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
+        assertThat(written.getRetimedBy()).isNull();
+        assertThat(written.getOriginalCuesText()).isNull();
+        assertThat(SrtParser.cues(written.getCuesText())).isEqualTo(tenCues(1.0));
+    }
+
+    @Test
+    void originalCuesThatDoNotFitTheFilmsEnglishTrackAreRetimedAsUsual() {
+        english();
+        filmTrackRead(1.0427, EmbeddedCueStarts.Status.USABLE);
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
+
+        assertThat(saved().getRetime()).isEqualTo(RetimeChoice.AUTO);
+        assertThat(row.getRetimedBy()).isEqualTo(K);
+    }
+
+    @Test
+    void aFilmFileWithNoEnglishTrackInItDecidesAutoOnceItHasBeenRead() {
+        english();
+        filmTrackRead(1.0, EmbeddedCueStarts.Status.NO_REFERENCE);
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
+        assertThat(saved().getRetime()).isEqualTo(RetimeChoice.AUTO);
+    }
+
+    @Test
+    void embeddedStartsNotReadYetKeepTheRowUndecidedAndWriteNothing() {
+        english();
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.UNCHANGED);
+
+        assertThat(row.getRetime()).isNull();
+        assertThat(row.getCuesText()).isEqualTo(ORIGINAL);
+        verify(sidecars).findById(5L);
+        verifyNoMoreInteractions(sidecars);
+    }
+
+    @Test
+    void aReadOfAnOlderVersionOfTheFilmFileCountsAsNotReadYet() {
+        english();
+        filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
+        edition.originalParts().get(0).setSizeBytes(2_000L);
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.UNCHANGED);
+        assertThat(row.getRetime()).isNull();
+    }
+
+    @Test
+    void aFilmWithNoEnglishStreamDecidesAutoAtOnceWithoutALook() {
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.REWRITTEN);
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.AUTO);
+    }
+
+    @Test
+    void aRowThatWasRetimedAndNowFitsAsIsIsPutBack() {
+        english();
+        filmTrackRead(1.0, EmbeddedCueStarts.Status.USABLE);
+        row.setOriginalCuesText(SrtParser.format(tenCues(1.0)));
+        row.setCuesText(CueScaler.scale(row.getOriginalCuesText(), K));
+        row.setRetimedBy(K);
+        row.setRetimedForFps(25.0);
+        rowIs();
+        filmRateIs(25.0);
+
+        assertThat(service.process(5L, RetimeMode.ON)).isEqualTo(Outcome.RESTORED);
+
+        assertThat(row.getRetime()).isEqualTo(RetimeChoice.OFF_FITS);
+        assertThat(row.getRetimedBy()).isNull();
+        assertThat(SrtParser.cues(row.getCuesText())).isEqualTo(tenCues(1.0));
+    }
+
+    @Test
     void aForcedTrackOrAnotherLanguageIsNotAnEnglishTrack() {
         var forced = new gregochr.cinefilm.film.SubtitleStream();
         forced.setLanguage("English");
         forced.setForced(true);
+        forced.setFormat("subrip");
         var french = new gregochr.cinefilm.film.SubtitleStream();
         french.setLanguage("French");
+        french.setFormat("subrip");
         var unlabelled = new gregochr.cinefilm.film.SubtitleStream();
-        edition.originalParts().get(0).getSubtitleStreams().addAll(List.of(forced, french, unlabelled));
+        unlabelled.setFormat("subrip");
+        var picture = new gregochr.cinefilm.film.SubtitleStream();
+        picture.setLanguage("English");
+        picture.setFormat("webvtt");
+        edition.originalParts().get(0).getSubtitleStreams().addAll(List.of(forced, french, unlabelled, picture));
         rowIs();
         filmRateIs(25.0);
 

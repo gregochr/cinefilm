@@ -404,6 +404,29 @@ update film set match_status = 'NEEDS_MATCH' where match_status = 'LEFT_UNMATCHE
 
 (The films reappear in To do under "Need a match".) Any later release that adds an enum value adds its line here.
 
+**Subtitle retime: restore the cues before rolling back the image.** With `cinefilm.subtitles.retime` on, the retime job
+rewrites downloaded subtitles' stored cues onto the film's timeline (`docs/engineering/subtitle-frame-rate-plan.md`).
+**An image rollback alone leaves the rewritten cues in place**, and the older image does not know they were rewritten.
+The rollback is the `restore` mode, in this order:
+
+1. Set `cinefilm.subtitles.retime` to `restore` (`CINEFILM_SUBTITLES_RETIME=restore` in `~/cinefilm/.env`: delete the
+   old line first, as for `CINEFILM_CREDITS_AUTO_ENABLED` above).
+2. **Restart the app**, because the mode is read once, at startup:
+   `export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d --force-recreate cinefilm`.
+3. **Wait for the run to end.** The run starts at startup and puts every retimed download back. It has ended when the
+   log shows the line `Subtitle retime (RESTORE) finished: ... restored ...`:
+
+   ```bash
+   docker logs cinefilm 2>&1 | grep 'Subtitle retime (RESTORE) finished' | tail -1
+   ```
+
+   If it says `N left for the next run (library busy)` with N above 0, a scan or an Admin edit held the library:
+   restart again and wait for the next line. Only when no download is left do the next step.
+4. Roll back the image (above).
+
+`off` restores nothing: it stops the job and leaves the rewritten cues as they are, which is right while the image
+stays.
+
 **Manual image rollback.** On dockermacmini:
 
 ```bash
