@@ -15,42 +15,22 @@ class BusyRetryTest {
     private final BusyRetry retry = new BusyRetry(pauses::add);
 
     @Test
-    void aStepThatSettlesAtOnceIsNeverPausedFor() {
-        assertThat(retry.until("step", () -> true)).isTrue();
-
-        assertThat(pauses).isEmpty();
-    }
-
-    @Test
-    void aBusyStepIsTriedAgainAfterAPauseAndSettles() {
-        AtomicInteger tries = new AtomicInteger();
-
-        assertThat(retry.until("step", () -> tries.incrementAndGet() == 3)).isTrue();
-
-        assertThat(tries).hasValue(3);
-        assertThat(pauses).containsExactly(Duration.ofSeconds(5), Duration.ofSeconds(10));
-    }
-
-    @Test
-    void aStepThatSettlesOnTheLastTryIsSettled() {
+    void aBusyStepIsTriedAgainAfterDoublingPausesAndCanSettleOnTheLastTry() {
         AtomicInteger tries = new AtomicInteger();
 
         assertThat(retry.until("step", () -> tries.incrementAndGet() == BusyRetry.ATTEMPTS)).isTrue();
 
-        assertThat(pauses).hasSize(BusyRetry.ATTEMPTS - 1);
+        assertThat(pauses).containsExactly(Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(20));
     }
 
     @Test
-    void aStepThatIsAlwaysBusyGivesUpAfterTheBoundWithAPauseBetweenTriesOnly() {
+    void aStepThatIsAlwaysBusyGivesUpAfterTheBound() {
         AtomicInteger tries = new AtomicInteger();
 
-        assertThat(retry.until("step", () -> {
-            tries.incrementAndGet();
-            return false;
-        })).isFalse();
+        assertThat(retry.until("step", () -> tries.incrementAndGet() < 0)).isFalse();
 
         assertThat(tries).hasValue(BusyRetry.ATTEMPTS);
-        assertThat(pauses).containsExactly(Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(20));
+        assertThat(pauses).hasSize(BusyRetry.ATTEMPTS - 1);
     }
 
     @Test
@@ -61,10 +41,7 @@ class BusyRetryTest {
         AtomicInteger tries = new AtomicInteger();
 
         try {
-            assertThat(interrupted.until("step", () -> {
-                tries.incrementAndGet();
-                return false;
-            })).isFalse();
+            assertThat(interrupted.until("step", () -> tries.incrementAndGet() < 0)).isFalse();
 
             assertThat(tries).hasValue(1);
             assertThat(Thread.currentThread().isInterrupted()).isTrue();

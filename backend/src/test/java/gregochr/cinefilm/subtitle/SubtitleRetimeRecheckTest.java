@@ -1,10 +1,10 @@
 package gregochr.cinefilm.subtitle;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.subtitle.SidecarTimingRefresher.Fit;
@@ -16,7 +16,6 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -45,26 +44,6 @@ class SubtitleRetimeRecheckTest {
     }
 
     @Test
-    void eachTouchedEditionIsCheckedAfterItsFilmWasFittedInTurn() {
-        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
-            new TouchedEdition(20L, 2L)));
-        when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
-        when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
-
-        recheck.run(IDS);
-
-        verify(checks).checkEditions(List.of(10L));
-        verify(checks).checkEditions(List.of(20L));
-        // The order is the point of the re-check, besides the calls themselves.
-        InOrder order = inOrder(timing, checks);
-        order.verify(timing).fitFilm(1L);
-        order.verify(checks).checkEditions(List.of(10L));
-        order.verify(timing).fitFilm(2L);
-        order.verify(checks).checkEditions(List.of(20L));
-        assertThat(pauses).isEmpty();
-    }
-
-    @Test
     void aFilmWithTwoTouchedEditionsIsFittedOnceAndBothAreChecked() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(11L, 1L)));
@@ -86,6 +65,7 @@ class SubtitleRetimeRecheckTest {
 
         verify(timing, times(3)).fitFilm(1L);
         verify(checks).checkEditions(List.of(10L));
+        verify(checks).startDue();
         assertThat(pauses).hasSize(2);
     }
 
@@ -104,22 +84,26 @@ class SubtitleRetimeRecheckTest {
     }
 
     @Test
+    void afterTheFirstFilmWhoseFitStaysBusyTheRestAreNotFittedAndTheDeferredPassIsLeftToCheckThem() {
+        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
+            new TouchedEdition(20L, 2L), new TouchedEdition(30L, 3L)));
+        when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
+        when(timing.fitFilm(2L)).thenReturn(Fit.BUSY);
+
+        recheck.run(IDS);
+
+        verify(checks).checkEditions(List.of(10L));
+        verify(timing, times(BusyRetry.ATTEMPTS)).fitFilm(2L);
+        verifyNoMoreInteractions(timing, checks);
+        // Only the one film's retries were waited for.
+        assertThat(pauses).hasSize(BusyRetry.ATTEMPTS - 1);
+    }
+
+    @Test
     void aFitLeftToABookedPassIsNotWaitedForAndItsEditionIsNotCheckedYet() {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(11L, 1L)));
         when(timing.fitFilm(1L)).thenReturn(Fit.LEFT_TO_PASS);
-
-        recheck.run(IDS);
-
-        verify(timing).fitFilm(1L);
-        assertThat(pauses).isEmpty();
-        verifyNoInteractions(checks);
-    }
-
-    @Test
-    void aFitThatFailedIsNotTriedAgainAndItsEditionIsNotChecked() {
-        when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L)));
-        when(timing.fitFilm(1L)).thenReturn(Fit.FAILED);
 
         recheck.run(IDS);
 

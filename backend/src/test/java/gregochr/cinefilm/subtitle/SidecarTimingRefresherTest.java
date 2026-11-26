@@ -568,7 +568,7 @@ class SidecarTimingRefresherTest {
     }
 
     @Test
-    void fitFilmReadsAndFitsOneFilmOnTheCallingThreadAndAnnouncesIt() {
+    void fitFilmReadsAndFitsOneFilmOnTheCallingThreadAndAnnouncesNothing() {
         when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
         when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
         when(reader.read(FILE)).thenReturn(usable());
@@ -584,21 +584,12 @@ class SidecarTimingRefresherTest {
         order.verify(reader).read(FILE);
         order.verify(service).fitJobs(7L);
         order.verify(service).save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW);
-        verify(events).publishEvent(new SidecarTimingFinished());
+        // Announcing would start a full check pass in the middle of the caller's walk over many films.
+        verifyNoInteractions(events);
         assertThat(queued).isEmpty();
         assertThat(refresher.isRunning()).isFalse();
         assertThat(messages()).containsExactly(
             "Subtitle timing of film 7 after a retime: 1 files read, 1 fitted (1 offsets set), 0 failed");
-    }
-
-    @Test
-    void fitFilmThatFindsNothingToFitAnnouncesNothing() {
-        when(service.readsFor(7L)).thenReturn(List.of());
-        when(service.fitJobs(7L)).thenReturn(List.of());
-
-        assertThat(refresher.fitFilm(7L)).isEqualTo(Fit.DONE);
-
-        verifyNoInteractions(events);
     }
 
     @Test
@@ -649,7 +640,7 @@ class SidecarTimingRefresherTest {
     @Test
     void fitFilmDoesNothingWhileTheTimingCheckIsOff() {
         SidecarTimingRefresher off = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add,
-            false, events);
+            false, events, failures);
 
         assertThat(off.fitFilm(7L)).isEqualTo(Fit.DONE);
 

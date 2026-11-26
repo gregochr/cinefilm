@@ -12,13 +12,12 @@ import org.springframework.stereotype.Component;
 
 /**
  * The re-check that follows a retime run (docs/engineering/subtitle-frame-rate-plan.md, "The re-check runs at once"):
- * for each edition whose downloads were rewritten or restored, in turn, the timing fit of its film first and then the
- * checks of the edition, since a download's check waits for its fit. So a download that failed, or one whose proof was
- * taken away, is judged again within the run and not at the next scheduled pass. A fit that comes back busy (a scan or
- * an Admin edit holds the library lock) is tried again a bounded number of times ({@link BusyRetry}). The checks of an
- * edition run only when its film was fitted here: when the fit is left to a booked timing pass (it runs on this same
- * thread, after the job) or stays busy, the checks are left to the pass that follows it, which announces itself.
- * Nothing here throws to its caller.
+ * for each touched edition in turn, the timing fit of its film first, then the edition's checks (a download's check
+ * waits for its fit), so a failed download is judged again within the run. A fit that comes back busy is tried again
+ * ({@link BusyRetry}); the first film whose fit stays busy stops the walk. The checks of an edition run only when its
+ * film was fitted here: a fit left to a booked timing pass (it runs on this thread after the job), a failed fit or a
+ * busy one leaves them to the pass that follows the timing pass. After the walk, with every film fitted, one check
+ * pass is asked for. Nothing here throws to its caller.
  */
 @Component
 public class SubtitleRetimeRecheck {
@@ -60,8 +59,21 @@ public class SubtitleRetimeRecheck {
             List<TouchedEdition> touched = service.touchedEditions(sidecarIds);
             for (TouchedEdition edition : touched) {
                 recheck(edition, fitted);
+                if (fitted.containsValue(Fit.BUSY)) {
+                    // Each busy film costs its whole retry; the rest would wait as long. The deferred timing pass is
+                    // already booked and fits them, and its end starts the checks.
+                    LOG.info("Subtitle retime re-check stops: the library stayed busy, the rest is left to the "
+                        + "deferred timing pass");
+                    break;
+                }
             }
-            LOG.info("Subtitle retime: {} editions fitted and checked again", touched.size());
+            // One request for a full pass, after the walk, so whatever was left is caught; but never while a film's fit
+            // is still to come (a stale fit would let the pass compare and download before it): the timing pass that
+            // fits it announces its end, which starts the checks.
+            if (fitted.values().stream().allMatch(fit -> fit == Fit.DONE)) {
+                checks.startDue();
+            }
+            LOG.info("Subtitle retime: {} touched editions looked at", touched.size());
         } catch (RuntimeException e) {
             LOG.error("Subtitle retime re-check failed", e);
         }

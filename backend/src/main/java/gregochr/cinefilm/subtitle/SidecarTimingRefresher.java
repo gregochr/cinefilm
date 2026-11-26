@@ -151,8 +151,10 @@ public class SidecarTimingRefresher {
     /**
      * The re-check after the retime job rewrote or restored cues (docs/engineering/subtitle-frame-rate-plan.md, "The
      * re-check runs at once"): reads and fits one film now, on the calling thread (the job's, which is this
-     * service's own executor), so it never overlaps a pass. When a pass is already booked or going, that pass is asked
-     * to go round once more and this returns at once: it fits the same due sidecars.
+     * service's own executor), so it never overlaps a pass. It does not announce {@link SidecarTimingFinished}: that
+     * would start a full check pass at once, in the middle of the caller's walk over many films. When a pass is
+     * already booked or going, that pass is asked to go round once more and this returns at once: it fits the same
+     * due sidecars.
      *
      * @param filmId the film
      * @return what happened: the film was fitted (or the check is off, so there is nothing to wait for), the work is
@@ -176,9 +178,6 @@ public class SidecarTimingRefresher {
             film(filmId, counts);
             LOG.info("Subtitle timing of film {} after a retime: {} files read, {} fitted ({} offsets set), "
                 + "{} failed", filmId, counts[0], counts[1], counts[2], counts[3]);
-            if (counts[1] > 0) {
-                announce();
-            }
         } catch (Wait e) {
             deferred.set(true);
             result = Fit.BUSY;

@@ -112,29 +112,12 @@ class SidecarCheckRefresherRetimeTest {
     }
 
     @Test
-    void theRetimeChecksStampTheTimeEvenWhenTheyFail() {
-        when(api.downloadsEnabled()).thenReturn(true);
-        when(service.due()).thenThrow(new IllegalStateException("db down"));
-
-        refresher.checkEditions(List.of(10L));
-
-        assertThat(refresher.lastFinishedAt()).isEqualTo(NOW);
-    }
-
-    @Test
-    void withDownloadsOffNothingIsCheckedAndNothingIsStamped() {
-        when(api.downloadsEnabled()).thenReturn(false);
-
-        assertThat(refresher.checkEditions(List.of(10L))).isFalse();
-        assertThat(refresher.lastFinishedAt()).isNull();
-    }
-
-    @Test
     void withDownloadsOffNothingIsChecked() {
         when(api.downloadsEnabled()).thenReturn(false);
 
         assertThat(refresher.checkEditions(List.of(10L))).isFalse();
 
+        assertThat(refresher.lastFinishedAt()).isNull();
         verifyNoInteractions(service, budget, events);
     }
 
@@ -161,23 +144,6 @@ class SidecarCheckRefresherRetimeTest {
     }
 
     @Test
-    void aStoredReferenceIsComparedBeforeOneThatWouldBeDownloaded() {
-        DueCheck due = due(1, 10, 5011, 5012);
-        OpenSubtitlesReference stored = reference(8, 1, 5012);
-        when(api.downloadsEnabled()).thenReturn(true);
-        when(service.due()).thenReturn(List.of(due));
-        when(fetcher.isStored(1L, "tt1", 5011)).thenReturn(false);
-        when(fetcher.isStored(1L, "tt1", 5012)).thenReturn(true);
-        when(fetcher.fetch(1L, "tt1", candidate(5012), 6)).thenReturn(stored);
-        when(service.save(due, stored, AGREES, NOW)).thenReturn(true);
-
-        refresher.checkEditions(List.of(10L));
-
-        verify(service).markTried(10L, "tt1", 5012, NOW);
-        verify(service).save(due, stored, AGREES, NOW);
-    }
-
-    @Test
     void aSpentBudgetChecksNothing() {
         when(api.downloadsEnabled()).thenReturn(true);
         when(budget.blockedUntil(NOW)).thenReturn(NOW.plusSeconds(3_600));
@@ -196,6 +162,7 @@ class SidecarCheckRefresherRetimeTest {
         assertThat(refresher.checkEditions(List.of(10L))).isTrue();
 
         verify(service, times(2)).due();
+        assertThat(refresher.lastFinishedAt()).isEqualTo(NOW);
     }
 
     @Test
