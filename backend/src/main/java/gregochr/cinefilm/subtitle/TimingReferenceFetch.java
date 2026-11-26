@@ -298,7 +298,9 @@ final class TimingReferenceFetch {
                 continue;
             }
             String cues = JsonEtag.etag(file.cuesText().getBytes(StandardCharsets.UTF_8));
-            String key = file.sidecarId() + ":" + cues + ":" + reference.getOsFileId();
+            // The reference's cue version is part of the key: a reference rewritten since is measured again.
+            String key = file.sidecarId() + ":" + cues + ":" + reference.getOsFileId() + ":"
+                + reference.getCuesVersion();
             if (done.contains(key)) {
                 continue;
             }

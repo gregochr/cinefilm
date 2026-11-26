@@ -136,14 +136,14 @@ class OpenSubtitlesReferenceRepositoryTest extends ApiTestBase {
     void theCuesVersionStartsAtZeroIsRaisedByReplacingCuesAndReadAloneAndInTheFacts() {
         Long filmId = film();
         OpenSubtitlesReference reference = usable(filmId, 5011, 23.976, null);
-        assertThat(references.findCuesVersionById(reference.getId())).contains(0);
+        assertThat(references.findCuesVersionForUpdate(reference.getId())).contains(0);
 
         reference.replaceCues("1\n00:00:02,000 --> 00:00:03,000\nHi\n\n");
         references.saveAndFlush(reference);
 
-        assertThat(references.findCuesVersionById(reference.getId())).contains(1);
+        assertThat(references.findCuesVersionForUpdate(reference.getId())).contains(1);
         assertThat(references.findFactsByFilmIdIn(java.util.List.of(filmId))).extracting(
             OpenSubtitlesReferenceRepository.ReferenceFacts::cuesVersion).containsExactly(1);
-        assertThat(references.findCuesVersionById(reference.getId() + 1000)).isEmpty();
+        assertThat(references.findCuesVersionForUpdate(reference.getId() + 1000)).isEmpty();
     }
 }

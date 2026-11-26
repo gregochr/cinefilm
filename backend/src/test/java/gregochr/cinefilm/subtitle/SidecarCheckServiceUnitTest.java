@@ -428,13 +428,14 @@ class SidecarCheckServiceUnitTest {
         when(films.findById(1L)).thenReturn(Optional.of(film));
         OpenSubtitlesReference read = reference();
         read.setCuesVersion(2);
-        when(referenceRepository.findCuesVersionById(900L)).thenReturn(Optional.of(3));
+        when(referenceRepository.findCuesVersionForUpdate(900L)).thenReturn(Optional.of(3));
         DueCheck due = new DueCheck(1L, 40L, "tt1", "Original", List.of(), Set.of(), resolution.fileVersion(), false,
             List.of());
 
         assertThat(service.save(due, read, AGREES, LATER)).isFalse();
 
         verify(films).findById(1L);
+        verify(referenceRepository).findCuesVersionForUpdate(900L);
         verifyNoMoreInteractions(checks, downloadChecks, editions, resolver);
     }
 
@@ -445,7 +446,7 @@ class SidecarCheckServiceUnitTest {
         when(checks.findByEditionId(40L)).thenReturn(Optional.empty());
         OpenSubtitlesReference read = reference();
         read.setCuesVersion(2);
-        when(referenceRepository.findCuesVersionById(900L)).thenReturn(Optional.of(2));
+        when(referenceRepository.findCuesVersionForUpdate(900L)).thenReturn(Optional.of(2));
         DueCheck due = new DueCheck(1L, 40L, "tt1", "Original", List.of(), Set.of(), resolution.fileVersion(), false,
             List.of());
 

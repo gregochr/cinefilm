@@ -139,7 +139,8 @@ public class ReferenceRetimeService {
     private void changed(OpenSubtitlesReference reference, String cues) {
         reference.replaceCues(cues);
         reference.setLastCueEndMs(SrtParser.cues(cues).stream().mapToLong(SubtitleCue::endMs).max().orElse(0));
-        references.save(reference);
+        // Flushed now, before any verdict is marked: the update takes the row lock a check's save may be holding.
+        references.saveAndFlush(reference);
         Instant now = clock.instant();
         List<Edition> filmEditions = editions.findWithFilesByFilmIdIn(Set.of(reference.getFilmId()));
         List<Long> editionIds = filmEditions.stream().map(Edition::getId).toList();

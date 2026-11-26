@@ -315,6 +315,21 @@ class TimingReferenceFetchTest {
     }
 
     @Test
+    void aReferenceWhoseCuesWereRewrittenSinceIsMeasuredAgainAgainstTheSameUnchangedFiles() {
+        OpenSubtitlesReference reference = stored(5012, full(300));
+        when(service.targets()).thenReturn(List.of(target(1, 1, null,
+            List.of(forced(7, Origin.OWNER), forced(8, Origin.DOWNLOAD)), List.of(candidate(5012)),
+            Map.of(5012L, reference))));
+        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(2);
+        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
+
+        reference.setCuesVersion(1);
+
+        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(2);
+        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
+    }
+
+    @Test
     void forgettingEverySidecarOfAFilmMeasuresAllOfThemAgain() {
         when(service.targets()).thenReturn(List.of(target(1, 1, null,
             List.of(forced(7, Origin.OWNER), forced(8, Origin.DOWNLOAD)), List.of(candidate(5012)),

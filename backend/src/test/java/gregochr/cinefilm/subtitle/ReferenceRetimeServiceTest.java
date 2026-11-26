@@ -146,7 +146,7 @@ class ReferenceRetimeServiceTest {
 
     private OpenSubtitlesReference saved() {
         ArgumentCaptor<OpenSubtitlesReference> captor = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
-        verify(references).save(captor.capture());
+        verify(references).saveAndFlush(captor.capture());
         return captor.getValue();
     }
 
