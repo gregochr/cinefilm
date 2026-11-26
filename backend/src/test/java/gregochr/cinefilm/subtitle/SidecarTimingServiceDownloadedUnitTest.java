@@ -1170,7 +1170,11 @@ class SidecarTimingServiceDownloadedUnitTest {
         // The row as an earlier release saved it: a key with no mark for the file.
         when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(WHOLE_BASE_KEY + OS_KEY + ":5012")));
 
-        assertThat(service.fitJobs(1L)).singleElement()
-            .satisfies(job -> assertThat(job.referenceKey()).isEqualTo(WHOLE_BASE_KEY + OS_KEY + ":5012u"));
+        assertThat(service.fitJobs(1L)).singleElement().satisfies(job -> {
+            assertThat(job.referenceKey()).isEqualTo(WHOLE_BASE_KEY + OS_KEY + ":5012u");
+            // Judged by the rule now: no verdict for a file of no stated rate, so a saved no-file fit.
+            assertThat(job.noReference()).isEqualTo(SidecarTimingService.NO_RATE_VERDICT);
+            assertThat(job.osReferences()).isEmpty();
+        });
     }
 }
