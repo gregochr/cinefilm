@@ -557,6 +557,17 @@ class FullFitProbeTest {
     }
 
     @Test
+    void aDownloadNotRetimedStillFetchesAnUnstoredCandidateOfNoRate() {
+        serving(job(7L, null, List.of(noRate(5012), candidate(5013)), Map.of()));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5012)).thenReturn(downloaded(lines(300, 500)));
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> call.getArgument(0));
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        verify(api, never()).download(5013);
+    }
+
+    @Test
     void aStoredConflictThenAFetchedReferenceOfUnknownRateIsNotDoneSoTheNextPassesJudgeItAgainWithoutAnotherFetch() {
         Map<Long, OpenSubtitlesReference> saved = fetching5013(null);
         serving(retimedJobOf(RETIMED, List.of(noRate(5012), candidate(5013)), rated(5012, 25.0)));
