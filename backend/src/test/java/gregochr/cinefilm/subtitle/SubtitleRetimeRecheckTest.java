@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -119,16 +121,16 @@ class SubtitleRetimeRecheckTest {
         verifyNoMoreInteractions(checks);
     }
 
-    @Test
-    void aFailureOfTheChecksIsLoggedNotThrown() {
+    @ParameterizedTest
+    @CsvSource({"DONE, false", "FITTED, true"})
+    void aFailureOfTheChecksIsLoggedNotThrownAndTheFitsAreStillReported(Fit fit, boolean fitted) {
         when(service.touchedEditions(IDS)).thenReturn(List.of(new TouchedEdition(10L, 1L),
             new TouchedEdition(20L, 2L)));
-        when(timing.fitFilm(1L)).thenReturn(Fit.DONE);
+        when(timing.fitFilm(1L)).thenReturn(fit);
         when(timing.fitFilm(2L)).thenReturn(Fit.DONE);
         when(checks.checkEditions(List.of(10L, 20L))).thenThrow(new IllegalStateException("db down"));
 
-        // Nothing was left to fit, so nothing is announced.
-        assertThat(recheck.run(IDS)).isFalse();
+        assertThat(recheck.run(IDS)).isEqualTo(fitted);
     }
 
     @Test

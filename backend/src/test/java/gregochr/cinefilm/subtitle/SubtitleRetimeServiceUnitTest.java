@@ -495,11 +495,14 @@ class SubtitleRetimeServiceUnitTest {
         file.setId(7L);
         file.setPath("movie.srt");
         file.setOrigin(SubtitleSidecar.Origin.FILE);
+        other.setPath("opensubtitles:41:778");
+        var second = TestData.edition(edition.getFilm(), 41L, "Extended", 100 * MIN, null);
         when(sidecars.findAllById(Set.of(8L, 7L, 6L, 5L))).thenReturn(List.of(file, other, row));
-        when(editions.findWithFilesByIdIn(Set.of(EDITION_ID))).thenReturn(List.of(edition));
+        when(editions.findWithFilesByIdIn(Set.of(EDITION_ID, 41L))).thenReturn(List.of(second, edition));
 
-        assertThat(service.touchedEditions(Set.of(8L, 7L, 6L, 5L)))
-            .containsExactly(new SubtitleRetimeService.TouchedEdition(EDITION_ID, 1L));
+        assertThat(service.touchedEditions(Set.of(8L, 7L, 6L, 5L))).containsExactly(
+            new SubtitleRetimeService.TouchedEdition(EDITION_ID, 1L),
+            new SubtitleRetimeService.TouchedEdition(41L, 1L));
     }
 
     @Test

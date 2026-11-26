@@ -65,8 +65,7 @@ public class SubtitleRetimeRecheck {
                 if (fit == Fit.DONE || fit == Fit.FITTED) {
                     fittedEditions.add(edition.editionId());
                 } else {
-                    // A stale fit would count as "the fit exists" and let the check compare and download before the
-                    // fit that may prove the file: the checks follow the timing pass that is booked.
+                    // A stale fit would let the check compare and download before the fit: the booked pass checks it.
                     LOG.info("Edition {} not checked yet: the timing fit of film {} is {}", edition.editionId(),
                         edition.filmId(), fit);
                 }
@@ -78,9 +77,14 @@ public class SubtitleRetimeRecheck {
                     break;
                 }
             }
-            // One walk for every edition whose film was fitted: one due query, one announcement at its end.
+            // One walk for every fitted edition: one due query, one announcement at its end. A stop (budget, outage)
+            // ends the whole walk; the later editions stay due for the next pass. The fits are announced anyway.
             if (!fittedEditions.isEmpty()) {
-                checks.checkEditions(fittedEditions);
+                try {
+                    checks.checkEditions(fittedEditions);
+                } catch (RuntimeException e) {
+                    LOG.warn("Could not check the retimed editions: {}", e.getClass().getSimpleName());
+                }
             }
             LOG.info("Subtitle retime: {} touched editions looked at", touched.size());
             return fitted.containsValue(Fit.FITTED);
