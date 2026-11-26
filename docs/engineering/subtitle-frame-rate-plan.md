@@ -312,7 +312,7 @@ Not in this plan:
      - the AUTO reset and restore;
      - the owner-timing rule;
      - the immediate fit, then the checks, with the `BUSY` retry.
-   - Comparisons by the rule in "How two files are compared".
+   - Comparisons by the rule in "How two files are compared". The full-subtitle fit probe does not measure a retimed full download until phase 2b; it logs that it passed over it.
    - Tests:
      - with the switch off, nothing is written;
      - a retimed file's served cues, fits and checks follow the rewrite;
