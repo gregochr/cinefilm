@@ -1179,4 +1179,29 @@ class SidecarCheckRefresherTest {
         assertThat(saved.getValue().getImdbId()).isEqualTo("tt9");
         assertThat(saved.getValue().getId()).isEqualTo(77L);
     }
+
+    @Test
+    void aReferenceRetimedAsItIsStoredIsReadAgainAndTheCheckComparesTheRewrittenRow() {
+        DueCheck first = due(1, 10, 5011);
+        when(service.due()).thenReturn(List.of(first));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
+        storingReferences();
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(downloaded(CUES, 50, null));
+        RetimeOnArrival arrival = org.mockito.Mockito.mock(RetimeOnArrival.class);
+        when(arrival.referenceArrived(77L)).thenReturn(true);
+        OpenSubtitlesReference rewritten = new OpenSubtitlesReference();
+        rewritten.setId(77L);
+        rewritten.setImdbId("tt1");
+        rewritten.setOsFileId(5011);
+        rewritten.setCuesText(SrtParser.format(CUES));
+        rewritten.setCueCount(CUES.size());
+        when(references.findById(77L)).thenReturn(Optional.of(rewritten));
+        refresher.retimeOnArrival(arrival);
+        savingEverything();
+
+        startAndRun();
+
+        verify(service).save(first, rewritten, AGREES, NOW);
+    }
 }

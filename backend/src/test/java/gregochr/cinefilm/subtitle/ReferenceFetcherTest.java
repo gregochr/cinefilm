@@ -261,4 +261,61 @@ class ReferenceFetcherTest {
         assertThat(written.getRetimedBy()).isNull();
         assertThat(written.getOriginalCuesText()).isNull();
     }
+
+    @Test
+    void aReferenceStoredWhileTheArrivalHookRewritesItIsReturnedAsRewritten() {
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, IMDB, 5011L)).thenReturn(Optional.empty());
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011L)).thenReturn(new OpenSubtitlesDownload(
+            SrtParser.parse(SRT.getBytes(StandardCharsets.UTF_8)), null, null));
+        OpenSubtitlesReference rewritten = new OpenSubtitlesReference();
+        rewritten.setId(9L);
+        org.mockito.Mockito.doAnswer(call -> {
+            OpenSubtitlesReference reference = call.getArgument(0);
+            reference.setId(9L);
+            return reference;
+        }).when(references).saveAndFlush(argThat(saved -> saved.getOsFileId() == 5011L));
+        when(references.findById(9L)).thenReturn(Optional.of(rewritten));
+        long[] asked = new long[1];
+        fetcher.onArrival(id -> {
+            asked[0] = id;
+            return true;
+        });
+
+        assertThat(fetcher.fetch(1L, IMDB, stating(25.0), LIMIT)).isSameAs(rewritten);
+        assertThat(asked[0]).isEqualTo(9L);
+    }
+
+    @Test
+    void aReferenceTheArrivalHookLeavesAsItIsIsReturnedAsStored() {
+        downloads();
+        fetcher.onArrival(id -> false);
+
+        OpenSubtitlesReference fetched = fetcher.fetch(1L, IMDB, stating(25.0), LIMIT);
+
+        assertThat(fetched).isSameAs(stored());
+    }
+
+    @Test
+    void anArrivalHookThatFailsLeavesTheStoredReferenceAndTheFetchStillSucceeds() {
+        downloads();
+        fetcher.onArrival(id -> {
+            throw new IllegalStateException("boom");
+        });
+
+        OpenSubtitlesReference fetched = fetcher.fetch(1L, IMDB, stating(25.0), LIMIT);
+
+        assertThat(fetched).isSameAs(stored());
+    }
+
+    @Test
+    void anUnusableDownloadIsNeverGivenToTheArrivalHook() {
+        downloads("not a subtitle".getBytes(StandardCharsets.UTF_8));
+        boolean[] asked = {false};
+        fetcher.onArrival(id -> asked[0] = true);
+
+        fetcher.fetch(1L, IMDB, stating(25.0), LIMIT);
+
+        assertThat(asked[0]).isFalse();
+    }
 }

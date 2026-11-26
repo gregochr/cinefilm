@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.function.LongPredicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -47,6 +48,7 @@ final class ReferenceFetcher {
     private final OpenSubtitlesReferenceRepository references;
     private final Clock clock;
     private final DailyDownloadLimit limits;
+    private volatile LongPredicate arrival;
 
     /** Why a run ends early: the budget is spent or OpenSubtitles' limit is reached. Not an error. */
     static final class Stop extends RuntimeException {
@@ -95,6 +97,14 @@ final class ReferenceFetcher {
         synchronized (FETCH) {
             return fetchLocked(filmId, imdbId, candidate, limit);
         }
+    }
+
+    /**
+     * Sets what runs once a download is stored: it is given the new reference's row id and says whether it rewrote it
+     * (the fetch then returns the row as rewritten, so the caller compares the cues now stored).
+     */
+    void onArrival(LongPredicate arrival) {
+        this.arrival = arrival;
     }
 
     /** True when a reference for this file is already stored for the film's IMDb id and needs no download. */
@@ -220,7 +230,21 @@ final class ReferenceFetcher {
         if (!usable) {
             reference.setFailedDownloads(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS);
         }
-        return save(filmId, imdbId, candidate, reference);
+        return arrived(save(filmId, imdbId, candidate, reference));
+    }
+
+    /** A usable reference just stored is retimed at once when the setting says so; a failure leaves it as stored. */
+    private OpenSubtitlesReference arrived(OpenSubtitlesReference stored) {
+        LongPredicate hook = arrival;
+        if (hook == null || !stored.isUsable()) {
+            return stored;
+        }
+        try {
+            return hook.test(stored.getId()) ? references.findById(stored.getId()).orElse(stored) : stored;
+        } catch (RuntimeException e) {
+            LOG.warn("Could not retime the new reference {}: {}", stored.getId(), e.getClass().getSimpleName());
+            return stored;
+        }
     }
 
     private OpenSubtitlesReference save(Long filmId, String imdbId, OpenSubtitlesResult candidate,
