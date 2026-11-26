@@ -25,7 +25,7 @@ its offset c and its film's `tiny` speech map (3d's kit, `soundfit.py`):
 
 - For k in {1, 23.976/25, 25/23.976}, a cue at t is placed at k·t + c. The k ≠ 1 tries are the one-step slip
   between a 25 fps and a 23.976 fps release, either way.
-- **f(k)** is the share of the cues' time over speech labelled foreign, at the offset in c ± 2 s (10 ms grid) where
+- **f(k)** is the share of the cues' time over speech labelled foreign, at the offset in c ± 2 s (100 ms steps) where
   foreign minus English speech under the cues is highest.
 - k̂ is the k ≠ 1 with the larger f. **The file is flagged as at the wrong speed by k̂** when f(k̂) ≥ 0.20 and
   f(k̂) − f(1) ≥ 0.12. Otherwise it is not flagged.
@@ -60,22 +60,33 @@ On design files, to learn whether a flag means what it says:
 3. **A Most Wanted Man**, late (not flagged; the 3e-R review saw a weaker whole-file fit after its retime): "I'm
    stuck in traffic." plays at 1:45:02.
 
-Each answer is recorded here. If either of 1 and 2 plays right as it is, the flag is wrong on design data and this
-plan ends.
+Each answer is recorded here. Files 1 and 2 pass only if the line is heard near its 4% position (1:56:50,
+2:46:10). If either plays right as it is, or is wrong but not near that position (another cause, such as a
+different cut), the flag is wrong on design data and this plan ends. File 3 is reported, not judged.
 
 ### Step 2: half B, held out
 
 Half B was never scored by 3e or by the 25 Nov check. 34 of its forced files have maps on the server already (the
-kit's `run2/maps`). The owner runs one read-only query for their `retimed_by` and stated rates. Then, once:
+kit's `run2/maps`). The owner runs one read-only query for their `retimed_by` and stated rates. Then, once, on the
+half-B files with 8 or more cues:
 
-- **G1, positives:** among half-B files the server retimed, on the cues from before the retime, the measure must
-  flag at least 70% (with 8 or more cues), each in the direction the server applied.
-- **G2, as played:** every half-B file flagged as played is ear-checked by the owner at its last cues. At least
-  80% of the flags must be heard to be right (the line is minutes out as played). A file not flagged is not heard.
-- **G3, noise:** the 72 half-A decoys of 3e (cross-film and shuffled cues, `pin-tiny.json`) are measured as
-  played. At most 5% may be flagged. A decoy has no true speed, so a flag is noise.
+- **G1, positives.** The set is the half-B files the server retimed whose cues from before the retime show foreign
+  speech: f ≥ 0.20 at some k. On those cues the measure must flag at least 80%, each in the direction the server
+  applied. (Half A: 5 of 5. The 4 retimed half-A files with f under 0.20 at every k are outside the set.)
+- **G2, files believed right.** The set is the half-B files as played that the server retimed (their stated rate
+  was right) or that the measure shows no slip for on their cues. At most 1 in 20 of them may be flagged as played.
+  This is the real risk: a right file flagged would be put minutes out.
+- **G3, flags as played are heard.** Every half-B file flagged as played is ear-checked by the owner at its last
+  cues, as in step 1. At least 80% must be heard near their 4% position.
+- **G4, noise.** Half B's own decoys (cross-film and shuffled cues, built by the kit's `build_decoys` and never
+  scored) are measured with their cues as the source file plays them, on the decoy's map. At most 5% may be
+  flagged.
+- **Enough files.** G1 needs at least 5 files in its set, G3 at least 3 flags (half B and step 1's two files
+  together don't count: step 1 is design data). If half B gives fewer, the forced films of 3e's 80-file evaluation
+  list (unspent; 3e has ended) are mapped by the owner and measured the same way, once, and the gates are judged on
+  half B and that list together. If there are still too few, the plan ends unproven.
 
-The numbers and the files heard are recorded here. The 80-file evaluation list of 3e stays unspent and unused.
+The numbers and the files heard are recorded here.
 
 ## Build (only if step 2 passes; each PR at most 1,500 changed lines)
 
@@ -94,7 +105,7 @@ A wrong flag puts a right file minutes out.
 1. **Three tries, as played.** The server's stated-rate retime is right for most files, so the measure looks only
    for the one-step slip left over. The smaller 24 / 23.976 slip (0.1%) is not tried: the maps cannot see it.
 2. **Forced files only.** Their cues lie on foreign speech, which is what the maps label.
-3. **Heard, not assumed.** A flag as played is a claim that a file plays wrongly today, so G2 is judged by ear.
+3. **Heard, not assumed.** A flag as played is a claim that a file plays wrongly today, so G3 is judged by ear.
 4. **No Plex input or answer** (`no-plex-baselines`).
 
 ## Open questions for the owner

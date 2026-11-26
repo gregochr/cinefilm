@@ -208,7 +208,8 @@ evaluation set are mapped with the chosen labeller only. Steps 5 to 7 then run a
 
 ### Attempt 2: `base`, stopped early
 
-`base` relabelled 21 of the 54 design films (21 half-A films, no bias film), taking 59,085 CPU seconds with peak
+`base` relabelled 21 of the 54 media files to relabel (31 half-A and 23 bias files; it reached 21 half-A files and no
+bias file), taking 59,085 CPU seconds with peak
 RSS under 700 MB and no failures. On those files it labels the speech under the forced cues as `tiny` does: foreign
 32.4% against 32.6%, English 32.7% against 32.4%. It was stopped on the owner's word (2026-11-25) and not dry-run.
 L2 (SpeechBrain) was not tried, because the labeller was not the cause.
@@ -225,9 +226,9 @@ plays them: each file's original cues × its `retimed_by` from the server, plus 
 25/23.976, 24/25 and 25/24. **2 of the 26 eligible files pass every rule and the 3.458 threshold**, the same 2 as
 attempt 1 (2012 and John Wick).
 
-The rule that fails is the 300 ms peak rule. Files known to play in sync peak well away from their offset: Hitman at
-−730 ms, Captain America at −820 ms, Inferno at −1,360 ms. Only Jack Ryan's peak is within 300 ms. The maps' speech
-stretches are too coarse to place a file to 300 ms. No labeller or rate change alters that, and the plan allows no
+The rule that fails is the 300 ms peak rule. Hitman, heard in sync since the retime, peaks at −730 ms. Captain
+America (−820 ms) and Inferno (−1,360 ms), whose retime the fit supports but no one has heard, peak further out.
+Jack Ryan, also heard in sync, is the only one of these within 300 ms. The maps' speech stretches are too coarse to place a file to 300 ms. No labeller or rate change alters that, and the plan allows no
 change to the rules once a dry run has been seen.
 
 ### What is left
@@ -236,8 +237,8 @@ change to the rules once a dry run has been seen.
   never scored, and the 80-file evaluation list is unspent.
 - **What the maps can see** is a gross drift: a retimed Hitman's share of foreign speech under its cues goes from 0%
   to 49%. A coarse check of that kind (is this file at the wrong rate?) is a separate question with a separate
-  plan (`subtitle-drift-check-plan.md`), proved on its own data. It uses half B, never scored by 3e, and leaves
-  the evaluation list unspent.
+  plan (`subtitle-drift-check-plan.md`), proved on its own data. It uses half B, never scored by 3e, and turns to the
+  evaluation list only if half B has too few files.
 - 2 half-A files still drift after the retime, because their stated rate looks wrong: Bridge of Spies (sidecar 60)
   and The Brutalist (sidecar 166; the film has an intermission, so its cause is not proven). The owner sets no rate
   (owner, 2026-11-26: "3e-R only, no control"), so they wait for that check.
