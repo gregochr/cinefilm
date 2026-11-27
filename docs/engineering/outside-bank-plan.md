@@ -71,7 +71,8 @@ engine (`useStream.js:341`).
 1. **The bank holds whole segments in film order in page memory** (never IndexedDB, never sent anywhere), at most
    one copy of each sequence number, each at the rung it was fetched at, with its bytes and the timings of its last
    fetch attempt (start, first byte, end), plus the media playlist text of every rung up to 480p. Limit 600 MB; at
-   the limit its front stops until film plays out.
+   the limit its front stops until film plays out. A segment hls.js asked for at the front's next position is held
+   even over it (decision 4).
 2. **Armed, then on.** The look-ahead gives the engine a need F (film ahead, seconds), the time to the stretch and
    whether it has begun. **Armed** (a stretch within 30 minutes: the 20 of the rule plus hls.js's 480 s and the 30 s
    back buffer): the bank fetches the media playlist of every rung up to 480p (one plain `fetch` each; playlist
@@ -137,7 +138,7 @@ engine (`useStream.js:341`).
    manual level follows by decision 3. When a stretch is passed and the next is within 20 minutes, the same choice
    is made for that one.
 8. **Pausing and stopping.** A fatal network error, or a plain 503 to the front, **pauses** the front; it resumes
-   on a successful server answer to any request or after `RECONNECT_MS`, never on a fragment the bank answered. A **410** to
+   on a successful server answer to any request or after `RECONNECT_MS`, never on a fragment answered from held film. A **410** to
    the front stops the bank and calls `onStopped` at once (Admin Stop, as today); a **404** calls `onSessionLost` at
    once (the rebuild starts a new engine and bank). A media error never touches the front. The bank turns **off** when the stretch is passed and no other is within 20
    minutes, or the look-ahead lapses (`train-lookahead-plan.md` decision 7's lapse rule): the front stops, held film
@@ -157,14 +158,15 @@ writes every rung, and the bank fills no faster than it.
 
 1. **B1, the store** (`segmentBank.js`, pure; about 250 lines of code): decisions 1 and 9, the playlists, the 600
    MB limit, the coverage test of decision 2. Tests: one copy per sequence number at its rung; dropping 30 s behind;
-   seeks forward inside (keeping what ends within 30 s before the target), back and beyond; the limit stopping and releasing the front; covered and not covered.
+   seeks forward inside (keeping what ends within 30 s before the target), back and beyond; the limit stopping and releasing the front; a put over the limit accepted, the front stopped; covered and not
+   covered.
 2. **B2a, the front** (`bankFront.js`, `fetch` and the clock passed in; about 250): the front's fetches of decision
    4. Tests: the playlists fetched when armed; the start and the move past a request beyond it; one request at a
    time; no request once film ahead reaches F, and the next once playback brings it below F; one kbit/s report per
    completed fetch and none for a failed one; decision 7's 60 s window (`w` and `d` per
    film second) kept at the rung fetched and counting nothing while the front does not want film; `setRung` applying
    from the next fetch only, and a start above 480p fetching at 480p; 503 with `Retry-After` and the backoff, a
-   503 without it pausing (no request until `RECONNECT_MS` or a server answer), network error, the first-byte and no-progress limits, a 25 s transfer completing;
+   503 without it pausing (no request until `RECONNECT_MS` or a successful server answer), network error, the first-byte and no-progress limits, a 25 s transfer completing;
    abort of the fetch in flight and of pending retries, and no request after it stops.
 3. **B2b, requests hls.js waits on** (`bankRequests.js`; about 250): decision 4's first and third bullets and
    decision 8. Tests: hls.js's request before the front's next; the front waiting through a gap, including one
@@ -173,12 +175,13 @@ writes every rung, and the bank fills no faster than it.
    following positions in order up to F while hls.js is quiet; the same with the front already at F (one fetch,
    then nothing until film plays out); the same with the bank at its 600 MB limit (one request, hls.js answered,
    the segment held, then nothing until film plays out); the same while the front is paused (fetched at once,
-   before `RECONNECT_MS`, exactly one server request; after a 200 the front's next request is the following
-   position; after a plain 503 the front stays paused); the waiting
+   before `RECONNECT_MS`, exactly one server request; after a 200 the front requests the following position
+   before `RECONNECT_MS`; after a plain 503 the 503 is handed to hls.js at once and no front request comes before
+   `RECONNECT_MS`); the waiting
    request's limits counted from hls.js's request with the fetch carrying on; `onTimeout` when the no-progress rule
    ends the fetch; a 503, 404 or 410, or a 503 wait already under way, handed over at once; a wrong-rung request
-   failed as a `bank-rung` 503; a plain 503 or fatal error pausing, resumed by a server answer or `RECONNECT_MS`
-   and never by an answered fragment; 410 calling `onStopped` and 404 `onSessionLost` at once.
+   failed as a `bank-rung` 503; a plain 503 or fatal error pausing, resumed by a successful server answer or
+   `RECONNECT_MS`, not by a 503 to another request, and never by a fragment answered from held film; 410 calling `onStopped` and 404 `onSessionLost` at once.
 4. **B3, choosing the rung** (`bankRung.js`, pure; about 120): decision 7. Tests: the projection at, just under and
    just over F; wait-dominated, transfer-dominated and a window with one 503; no choice inside a stretch, at F, at
    the limit or before 20 s; none reaching F keeping the highest projection; a 240p start on a fast link choosing
@@ -202,10 +205,11 @@ writes every rung, and the bank fills no faster than it.
    handed to the front; arming and turn-on (not before coverage, nor while a
    playlist is missing, nor while a fragment is loading through the inner loader, then on once it lands; not at or
    above F, nor with the stretch more than 20 minutes away); a fatal `NETWORK_ERROR` pausing the front, resumed
-   by a server answer or `RECONNECT_MS`; marked fragments taking no samples and the front's reports reaching
+   by a successful server answer or `RECONNECT_MS`; marked fragments taking no samples and the front's reports reaching
    `handlers.onThroughput`; 410 and 404 from the front reaching `onStopped` and `onSessionLost`; turning off
    (front stopped, held film answered, release on the first request beyond it, which makes exactly one server
-   request, through the inner loader, none by the front; bank cleared); a seek forward beyond
+   request, through the inner loader, none by the front, the release written before the inner loader's `load` is
+   called; bank cleared); a seek forward beyond
    what is held releasing at once and arming again with a stretch near; a media error leaving the front running; a
    pinned rung never armed. **A pane check with the real hls.js 1.7.4** (a built engine bundle against a public test stream, the bank
    armed then on, the link cut by the test's own fetch): every media request after turn-on answered by the bank,
