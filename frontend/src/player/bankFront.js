@@ -136,12 +136,24 @@ export function createBankFront({
     }
   }
 
-  // Tells the subscribers of every position `dropped` names that their fetch is gone, and forgets them.
-  function dropSubscribers(dropped) {
+  // Forgets the subscribers of every position `dropped` names and returns their sets. They are told with
+  // abortSubscribers once the front's new state is set, so a callback that calls back in (a fetch now from its
+  // onAbort, a stop) sees the new position, and no set is reached twice.
+  function detachSubscribers(dropped) {
+    const detached = [];
     for (const [seq, set] of [...listeners]) {
       if (!dropped(seq)) continue;
       listeners.delete(seq);
-      for (const l of [...set]) l.onAbort?.();
+      detached.push(set);
+    }
+    return detached;
+  }
+
+  function abortSubscribers(detached) {
+    for (const set of detached) {
+      for (const l of [...set]) {
+        if (set.delete(l)) l.onAbort?.();
+      }
     }
   }
 
@@ -416,7 +428,7 @@ export function createBankFront({
     resetPosition();
     if (pauseTimer !== null) clearTimer(pauseTimer);
     pauseTimer = null;
-    dropSubscribers(() => true);
+    abortSubscribers(detachSubscribers(() => true));
   }
 
   return {
@@ -429,19 +441,21 @@ export function createBankFront({
       // A fetch now for subscribers at this very position carries on, with one new request.
       const keep = forced && seq === next && listeners.get(seq)?.size > 0;
       resetPosition();
-      dropSubscribers((q) => q !== seq);
+      const dropped = detachSubscribers((q) => q !== seq);
       next = seq;
       wantedRung = clamp(rung);
       running = true;
       syncWatch();
+      abortSubscribers(dropped);
       if (keep) forceFetch();
       pump();
     },
     movePast(seq) {
       if (stopped || seq < next) return;
       resetPosition();
-      dropSubscribers((q) => q <= seq);
+      const dropped = detachSubscribers((q) => q <= seq);
       next = seq + 1;
+      abortSubscribers(dropped);
       pump();
     },
     update(input) {

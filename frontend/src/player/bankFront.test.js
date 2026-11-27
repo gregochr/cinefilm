@@ -1759,3 +1759,72 @@ describe('the bank front: round four of the hooks', () => {
     expect(log).toEqual(['X abort']);
   });
 });
+
+describe('the bank front: callbacks that call back in from onAbort', () => {
+  it('fetches the new position, not the dropped one, when onAbort calls fetchNow after a start', async () => {
+    const { server, front } = await running();
+    front.subscribe(0, { onAbort: () => front.fetchNow() });
+    front.start({ seq: 9, rung: 'r480' });
+    await flush();
+    expect(server.calls).toHaveLength(5);
+    expect(server.calls[4].url).toBe(segUrl('r480', 9));
+    expect(server.maxOpen).toBe(1);
+    await complete(server.calls.at(-1));
+    expect(front.position().seq).toBe(10);
+  });
+
+  it('fetches the position after a move, not the dropped one, when onAbort calls fetchNow', async () => {
+    const { server, front } = await running();
+    front.subscribe(0, { onAbort: () => front.fetchNow() });
+    front.movePast(8);
+    await flush();
+    expect(server.calls).toHaveLength(5);
+    expect(server.calls[4].url).toBe(segUrl('r480', 9));
+  });
+
+  it('makes no request when onAbort calls fetchNow after a stop', async () => {
+    const { server, front } = await running();
+    front.subscribe(0, { onAbort: () => front.fetchNow() });
+    front.stop();
+    await flush();
+    expect(server.calls).toHaveLength(4);
+  });
+
+  it('tells each listener once when one onAbort calls stop while a start drops several positions', async () => {
+    const { front } = await running();
+    const log = [];
+    front.subscribe(0, {
+      onAbort: () => {
+        log.push(0);
+        front.stop();
+      },
+    });
+    front.subscribe(5, { onAbort: () => log.push(5) });
+    front.start({ seq: 9, rung: 'r480' });
+    expect(log).toEqual([0, 5]);
+  });
+
+  it('tells each listener once when one onAbort calls stop during a stop', async () => {
+    const { front } = await running();
+    const log = [];
+    front.subscribe(0, {
+      onAbort: () => {
+        log.push(0);
+        front.stop();
+      },
+    });
+    front.subscribe(5, { onAbort: () => log.push(5) });
+    front.stop();
+    expect(log).toEqual([0, 5]);
+  });
+
+  it('does not tell a listener that an earlier onAbort unsubscribed', async () => {
+    const { front } = await running();
+    const log = [];
+    let offB = () => {};
+    front.subscribe(0, { onAbort: () => offB() });
+    offB = front.subscribe(0, { onAbort: () => log.push('B abort') });
+    front.stop();
+    expect(log).toEqual([]);
+  });
+});
