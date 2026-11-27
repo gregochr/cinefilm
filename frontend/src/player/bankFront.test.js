@@ -824,6 +824,24 @@ describe('the bank front: the stopwatch of wall time spent wanting film', () => 
     });
   });
 
+  it('stops it when a fetch in flight fails after F was reached, and goes on when film is wanted again', async () => {
+    const { server, front } = await running();
+    front.update({ filmAhead: 12, need: 12 });
+    await vi.advanceTimersByTimeAsync(1000);
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(100_000);
+    expect(server.calls).toHaveLength(4);
+    front.update({ filmAhead: 0, need: 12 });
+    await flush();
+    await complete(server.calls.at(-1), { firstMs: 500, bodyMs: 500 });
+    expect(front.window()).toMatchObject({
+      measuredS: 4,
+      measuredWallS: 2,
+      w: 1.5 / 4,
+      d: 0.5 / 4,
+    });
+  });
+
   it('starts it over on a move to a new position', async () => {
     const { server, front } = await running();
     await vi.advanceTimersByTimeAsync(5000);
