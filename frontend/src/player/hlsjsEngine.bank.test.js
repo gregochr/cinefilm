@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeHls } from '../test/fakeHls.js';
-import { BANK_RUNG_TEXT, HOLD_CHECK_MS, hlsConfig, startHlsJs } from './hlsjsEngine.js';
+import {
+  BANK_RUNG_TEXT,
+  HOLD_CHECK_MS,
+  RECONNECT_MS,
+  hlsConfig,
+  startHlsJs,
+} from './hlsjsEngine.js';
 import { HEALTHY_MS } from './stepGate.js';
 
 beforeEach(() => {
@@ -592,6 +598,23 @@ describe('the engine holds hls.js on the bank’s level', () => {
         });
         env.hls.bufferFlushed({ start: 100, end: Infinity });
         expect(env.levelWrites().at(-1)).toBe(3);
+      });
+
+      it('forgets it when a media error is recovered', () => {
+        const env = loadedUnappended();
+        mediaError(env.hls); // no fragment named: the recovery detaches the media
+        env.seek();
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(40);
+        expect(env.levelWrites().at(-1)).toBe(1);
+      });
+
+      it('forgets it when loading restarts after a network error', () => {
+        const env = loadedUnappended();
+        env.hls.error({ fatal: true, type: 'networkError', details: 'fragLoadError' });
+        vi.advanceTimersByTime(RECONNECT_MS);
+        env.seek();
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(40);
+        expect(env.levelWrites().at(-1)).toBe(1);
       });
 
       it('forgets it when the bank turns off and on again', () => {

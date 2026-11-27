@@ -418,6 +418,7 @@ export function startHlsJs({
     timer = null;
     stopHoldTimer(); // the fragment in flight is aborted by the reload
     loadingFrag = null;
+    pending = null; // `stopLoad` throws away a fragment loaded but not appended, with no event
     undoRebank();
     // What was earned before the break is earned again: the rates are forgotten and the cap falls at once.
     ceiling = champagneBase(hls.levels ?? []);
@@ -665,6 +666,7 @@ export function startHlsJs({
     if (data.type === ErrorTypes.NETWORK_ERROR) beginReconnecting();
     else if (data.type === ErrorTypes.MEDIA_ERROR) {
       // The recovery loads from the playhead: at the rung the bank holds there.
+      pending = null; // the recovery detaches the media: a fragment loaded but not appended is thrown away
       if (bank) holdBankLevelAt(video.currentTime);
       hls.recoverMediaError();
     } else handlers.onFatal();
