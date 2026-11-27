@@ -198,12 +198,16 @@ Then the owner is told what the buffers allow, with question 2.
    minute, a playing minute with no fragment in a decidable part (no seek, an `endPositionMs`, a known runtime,
    well before the film's end: bad), the film's end within 60 s with a good check (good) and with no check
    anywhere in the journey (unknown), each of a seek, no `endPositionMs` and a null known runtime on a playing
-   no-fragment minute with a good check (good) and with no check anywhere in the journey (unknown), a stored
+   no-fragment minute (for the seek and the null runtime, with position + ahead below every candidate end − 60 s:
+   the stored `runtimeMs` and the parts' sum counting an unknown duration as 0, so a build that ignores the
+   condition reads it bad) with a good check (good) and with no check anywhere in the journey (unknown), a stored
    `runtimeMs` shorter than the parts' sum, with a good check and position + ahead between the stored value
    − 60 s and the sum − 60 s (the sum is used: bad); `knownRuntimeMs` tested directly with exact
    values: one file (its `durationMs`; `durationMs` 0 or null with `videoDurationMs` above 0 gives null), two parts
    (the sum of `videoDurationMs` where above 0, else `durationMs`; one part with `durationMs` null but
-   `videoDurationMs` above 0 counted; one part with both null, or both 0, gives null), no original parts (null);
+   `videoDurationMs` above 0 counted; one part with `videoDurationMs` 0 and `durationMs` above 0 counted at its
+   `durationMs`; one part with both null, or both 0, gives null; wherever both are above 0 they differ, so the
+   exact sum tells the two readings apart), no original parts (null);
    a point in the overlap of two parts' rows where
    the earlier part's row is good and the later's bad (bad) and the other way round (good), the boundaries (moved
    + stalled 44,999 and 45,000 ms; moved 44,999 and 45,000 ms; medians 499 and 500; position + ahead at runtime
