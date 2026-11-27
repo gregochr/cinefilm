@@ -284,8 +284,12 @@ export function createBankFront({
       retryTimer = null;
       lastAnswer = null;
       // A forced retry goes ahead only while someone is waiting on the position.
-      if (forced && listeners.get(next)?.size > 0) fetchSegment();
-      else pump();
+      if (forced && listeners.get(next)?.size > 0) {
+        fetchSegment();
+      } else {
+        forced = false; // nobody waits any more
+        pump();
+      }
     }, ms);
   }
 
@@ -369,14 +373,14 @@ export function createBankFront({
       forced = false;
       next = seq + 1;
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
-      // The subscribers of this position are done with it; one that subscribes from inside onDone stays.
-      const heard = [...(listeners.get(seq) ?? [])];
-      emit(seq, 'onDone', bank.getSegment(seq));
+      // One listener at a time, each leaving the set before it is called, so a stop, start or move inside one
+      // aborts only those not yet called; one that subscribes from inside onDone stays for the next fetch.
       const set = listeners.get(seq);
-      if (set !== undefined) {
-        heard.forEach((l) => set.delete(l));
-        if (set.size === 0) listeners.delete(seq);
+      for (const l of [...(set ?? [])]) {
+        if (listeners.get(seq) !== set || !set.delete(l)) continue;
+        l.onDone?.(bank.getSegment(seq));
       }
+      if (set?.size === 0 && listeners.get(seq) === set) listeners.delete(seq);
       resetWatch();
     });
   }

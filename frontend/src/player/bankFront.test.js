@@ -1322,6 +1322,8 @@ describe('the bank front: any successful answer ends a pause, and the rungs may 
     expect(above.server.calls.at(-1).url).toBe(segUrl('r480', 1));
     const unknown = await running({ rungs: bestFirst, rung: 'nope' });
     expect(unknown.server.calls.at(-1).url).toBe(segUrl('r480', 0));
+  });
+});
 
 describe('the bank front: a forced flag that does not outlive its fetch now', () => {
   it("makes no request on an ordinary fetch's Retry-After retry during an outside pause, after a fetch now ended in a plain 503", async () => {
@@ -1660,5 +1662,74 @@ describe('the bank front: what keeps forced retries and replays honest', () => {
     const late = [];
     zero.front.subscribe(0, { onServerAnswer: (s) => late.push(s) });
     expect(late).toEqual([]);
+  });
+});
+
+describe('the bank front: round four of the hooks', () => {
+  it("gives no onAbort to a listener that has had its onDone when a later one's onDone stops the front", async () => {
+    const { server, front } = await running();
+    const log = [];
+    front.subscribe(0, { onDone: () => log.push('A done'), onAbort: () => log.push('A abort') });
+    front.subscribe(0, { onDone: () => front.stop(), onAbort: () => log.push('B abort') });
+    front.subscribe(0, { onDone: () => log.push('C done'), onAbort: () => log.push('C abort') });
+    await complete(server.calls.at(-1));
+    expect(log).toEqual(['A done', 'C abort']);
+  });
+
+  it("gives no onAbort to a listener that has had its onDone when a later one's onDone starts elsewhere", async () => {
+    const { server, front } = await running();
+    const log = [];
+    front.subscribe(0, { onDone: () => log.push('A done'), onAbort: () => log.push('A abort') });
+    front.subscribe(0, { onDone: () => front.start({ seq: 9, rung: 'r480' }) });
+    await complete(server.calls.at(-1));
+    expect(log).toEqual(['A done']);
+  });
+
+  it('clears forced when a retry timer finds nobody waiting, so a later start at a subscribed position obeys the pause', async () => {
+    const { server, front } = await running({ filmAhead: 12, need: 12 });
+    front.subscribe(5, {});
+    front.fetchNow();
+    await flush();
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(server.calls).toHaveLength(4);
+    front.pause();
+    front.subscribe(0, {});
+    front.start({ seq: 0, rung: 'r480' });
+    await vi.advanceTimersByTimeAsync(RECONNECT_MS - 1);
+    expect(server.calls).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.calls).toHaveLength(4); // at F: the pause ending asks for nothing
+  });
+
+  it('keeps a start at another position from carrying a fetch now on, while paused', async () => {
+    const { server, front } = await running();
+    server.calls.at(-1).status(503);
+    await vi.advanceTimersByTimeAsync(1000);
+    front.subscribe(0, {});
+    front.fetchNow();
+    await flush();
+    expect(server.calls).toHaveLength(5);
+    front.subscribe(5, {});
+    front.start({ seq: 5, rung: 'r480' });
+    await vi.advanceTimersByTimeAsync(RECONNECT_MS - 1000 - 1);
+    expect(server.calls).toHaveLength(5);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.calls).toHaveLength(6);
+    expect(server.calls[5].url).toBe(segUrl('r480', 5));
+  });
+
+  it("stops delivering an event to a listener that another listener's callback has unsubscribed", async () => {
+    const { server, front } = await running();
+    const log = [];
+    let offB = () => {};
+    front.subscribe(0, { onFirstByte: () => offB() });
+    offB = front.subscribe(0, {
+      onFirstByte: () => log.push('B firstByte'),
+      onProgress: () => log.push('B progress'),
+      onDone: () => log.push('B done'),
+    });
+    await complete(server.calls.at(-1));
+    expect(log).toEqual([]);
   });
 });
