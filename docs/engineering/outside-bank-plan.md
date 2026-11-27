@@ -210,8 +210,8 @@ writes every rung, and the bank fills no faster than it.
    handed to the front; arming and turn-on (not before coverage, nor while a
    playlist is missing, nor while a fragment is loading through the inner loader, then on once it lands; not at or
    above F, nor with the stretch more than 20 minutes away); a fatal `NETWORK_ERROR` pausing the front, resumed
-   by a successful server answer or `RECONNECT_MS`, and a second fatal `NETWORK_ERROR` while paused leaving the
-   front's request at the first pause + `RECONNECT_MS`; marked fragments taking no samples and the front's reports reaching
+   by a successful server answer or `RECONNECT_MS`; paused by a fatal `NETWORK_ERROR` at t0, a second at about t0 +
+   `RECONNECT_MS` / 2, then no front request before t0 + `RECONNECT_MS` and exactly one at it; marked fragments taking no samples and the front's reports reaching
    `handlers.onThroughput`; 410 and 404 from the front reaching `onStopped` and `onSessionLost`; turning off
    (front stopped, held film answered, release on the first request beyond it, which makes exactly one server
    request, through the inner loader, none by the front, the release written before the inner loader's `load` is
