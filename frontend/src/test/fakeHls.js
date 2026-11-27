@@ -83,6 +83,11 @@ export class FakeHls {
     FakeHls.instances.push(this);
   }
 
+  // hls.ts `loadingEnabled`: whether loading is running.
+  get loadingEnabled() {
+    return this.started;
+  }
+
   // hls.js 1.7.4 (`level-controller.ts`): the level last switched to; setting a level other than -1 that is not
   // the current one fires LEVEL_SWITCHING at once. A manual level is only remembered here.
   get loadLevel() {

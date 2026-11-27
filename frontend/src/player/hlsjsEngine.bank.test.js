@@ -671,15 +671,29 @@ describe('the engine holds hls.js on the bank’s level', () => {
         expect(env.hls.loadLevel).toBe(3);
       });
 
-      it('takes hls.js’s position as it is when loading had stopped, so it does not restart', () => {
+      it('reloads from the last time update when loading had stopped', () => {
         const env = loadedUnappended();
         levelsByPosition(env);
         env.hls.startLoad(30);
         env.hls.stopLoad();
         env.setTime(2400);
-        resetByHls(env); // loading had not started: hls.js reloads nothing, `startPosition` stays 30
+        env.tick(); // the last time update is at 2400
+        resetByHls(env); // loading had not started: hls.js reloads later, from where it last saw the playhead
         expect(env.hls.startLoad).toHaveBeenCalledTimes(1);
-        expect(env.lookup.levelAt).toHaveBeenCalledWith(30);
+        expect(env.lookup.levelAt).toHaveBeenCalledWith(2400);
+        expect(env.hls.loadLevel).toBe(3);
+      });
+
+      it('reloads from the configured start position when there is one and loading had stopped', () => {
+        const env = loadedUnappended();
+        levelsByPosition(env);
+        env.hls.config.startPosition = 120;
+        env.hls.stopLoad();
+        env.setTime(2400);
+        env.tick();
+        resetByHls(env);
+        expect(env.lookup.levelAt).toHaveBeenCalledWith(120);
+        expect(env.hls.loadLevel).toBe(2);
       });
 
       it('recovers a fatal reset itself, with the level held at the playhead', () => {
