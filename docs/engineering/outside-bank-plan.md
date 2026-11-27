@@ -100,8 +100,9 @@ engine (`useStream.js:341`).
    its limit). Then: below the limit, the front carries on past it towards F; at the limit or at F the front does
    not carry on; while the front is paused the fetch is made at once for hls.js in the first bullet's shape, and only
    a successful answer resumes the front (at the following position); a plain 503 is handed to hls.js and the front
-   stays paused; a 404 or 410 follows decision 8. **While the bank is turning off** it fetches nothing: that request
-   is the one beyond held film, the release of decision 8 comes first, and the request goes to the inner loader. The front starts at the end of
+   stays paused; a 404 or 410 follows decision 8. **While the bank is turning off** it fetches nothing: any request
+   for a fragment not held (beyond held film, or behind it after a seek back) releases first (decision 8) and goes
+   to the inner loader. The front starts at the end of
    hls.js's buffered range holding the playhead and, whenever hls.js asks past it, moves past that. It fetches one
    segment at a time until film ahead reaches F, and tops up as the film plays.
    - **A fetch hls.js waits on** keeps today's shape: hls.js's own first-byte and load limits count from hls.js's
@@ -138,11 +139,13 @@ engine (`useStream.js:341`).
    manual level follows by decision 3. When a stretch is passed and the next is within 20 minutes, the same choice
    is made for that one.
 8. **Pausing and stopping.** A fatal network error, or a plain 503 to the front, **pauses** the front; it resumes
-   on a successful server answer to any request or after `RECONNECT_MS`, never on a fragment answered from held film. A **410** to
+   on a successful server answer to any request or after `RECONNECT_MS`, never on a fragment answered from held film.
+   `RECONNECT_MS` runs from the pause itself; a 503 to a request made while paused does not restart it. A **410** to
    the front stops the bank and calls `onStopped` at once (Admin Stop, as today); a **404** calls `onSessionLost` at
    once (the rebuild starts a new engine and bank). A media error never touches the front. The bank turns **off** when the stretch is passed and no other is within 20
    minutes, or the look-ahead lapses (`train-lookahead-plan.md` decision 7's lapse rule): the front stops, held film
-   is still answered until hls.js asks beyond it, then the release of decision 3 and the bank is cleared. A seek
+   is still answered until hls.js asks for a fragment not held (beyond it, or behind it after a seek back), then
+   the release of decision 3 and the bank is cleared. A seek
    forward beyond what is held clears it at once (release, then armed again if a stretch is near).
 9. **Keeping and dropping.** A segment is dropped once the playhead is 30 s past its end, so a refused append
    fetched again is answered. A seek forward inside what is held drops what ends more than 30 s before the target; a seek back keeps what
@@ -176,8 +179,8 @@ writes every rung, and the bank fills no faster than it.
    then nothing until film plays out); the same with the bank at its 600 MB limit (one request, hls.js answered,
    the segment held, then nothing until film plays out); the same while the front is paused (fetched at once,
    before `RECONNECT_MS`, exactly one server request; after a 200 the front requests the following position
-   before `RECONNECT_MS`; after a plain 503 the 503 is handed to hls.js at once and no front request comes before
-   `RECONNECT_MS`); the waiting
+   before `RECONNECT_MS`; paused at t0, hls.js asking at about t0 + `RECONNECT_MS` / 2 and getting a plain 503,
+   handed to hls.js at once, then no front request before t0 + `RECONNECT_MS` and exactly one at it); the waiting
    request's limits counted from hls.js's request with the fetch carrying on; `onTimeout` when the no-progress rule
    ends the fetch; a 503, 404 or 410, or a 503 wait already under way, handed over at once; a wrong-rung request
    failed as a `bank-rung` 503; a plain 503 or fatal error pausing, resumed by a successful server answer or
@@ -209,7 +212,7 @@ writes every rung, and the bank fills no faster than it.
    `handlers.onThroughput`; 410 and 404 from the front reaching `onStopped` and `onSessionLost`; turning off
    (front stopped, held film answered, release on the first request beyond it, which makes exactly one server
    request, through the inner loader, none by the front, the release written before the inner loader's `load` is
-   called; bank cleared); a seek forward beyond
+   called; the same for a seek back during turning off; bank cleared); a seek forward beyond
    what is held releasing at once and arming again with a stretch near; a media error leaving the front running; a
    pinned rung never armed. **A pane check with the real hls.js 1.7.4** (a built engine bundle against a public test stream, the bank
    armed then on, the link cut by the test's own fetch): every media request after turn-on answered by the bank,
