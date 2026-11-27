@@ -68,6 +68,20 @@ describe('the bank store (decisions 1 and 9)', () => {
     expect(bank.heldBytes()).toBe(10);
   });
 
+  it('owns its bytes: detaching the original buffer changes nothing held, and dropping releases the limit', () => {
+    const bank = createSegmentBank({ limitBytes: 10 });
+    const original = new Uint8Array(10).fill(7).buffer;
+    bank.putSegment({ seq: 0, rung: 'r480', start: 0, end: 4, bytes: original, timings: TIMINGS });
+    structuredClone(original, { transfer: [original] });
+    expect(original.byteLength).toBe(0);
+    expect(bank.heldBytes()).toBe(10);
+    expect(bank.atLimit()).toBe(true);
+    expect(new Uint8Array(bank.getSegment(0).bytes)).toEqual(new Uint8Array(10).fill(7));
+    bank.dropBehind(50);
+    expect(bank.heldBytes()).toBe(0);
+    expect(bank.atLimit()).toBe(false);
+  });
+
   it('holds playlists: held, missing, and all of a list of rungs', () => {
     const bank = createSegmentBank();
     expect(bank.getPlaylist('r240')).toBeNull();

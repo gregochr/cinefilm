@@ -12,8 +12,9 @@ const EDGE_EPSILON_S = 1e-3;
  * `putSegment({ seq, rung, start, end, bytes, timings })`: `start` and `end` are film seconds, `bytes` an
  * ArrayBuffer, `timings` `{ start, first, end }` of the last fetch attempt. A later put of the same `seq`
  * replaces the earlier copy. A put is always accepted, over the limit too; `atLimit()` tells the front to stop.
- * `getSegment(seq)` hands out a fresh copy of the bytes each time (hls.js transfers its payload to a worker,
- * which detaches it), never the stored buffer.
+ * The bank copies the bytes on the way in and on the way out: the caller's buffer may be transferred to hls.js's
+ * worker (which detaches it) and must not affect what is held. `getSegment(seq)` hands out a fresh copy each
+ * time, never the stored buffer.
  */
 export function createSegmentBank({ limitBytes = BANK_LIMIT_BYTES } = {}) {
   const segments = new Map();
@@ -21,7 +22,7 @@ export function createSegmentBank({ limitBytes = BANK_LIMIT_BYTES } = {}) {
   let heldBytes = 0;
 
   function drop(seq) {
-    heldBytes -= segments.get(seq).bytes.byteLength;
+    heldBytes -= segments.get(seq).size;
     segments.delete(seq);
   }
 
@@ -59,14 +60,22 @@ export function createSegmentBank({ limitBytes = BANK_LIMIT_BYTES } = {}) {
   return {
     putSegment({ seq, rung, start, end, bytes, timings }) {
       if (segments.has(seq)) drop(seq);
-      segments.set(seq, { seq, rung, start, end, bytes, timings });
-      heldBytes += bytes.byteLength;
+      const own = bytes.slice(0);
+      segments.set(seq, { seq, rung, start, end, bytes: own, size: own.byteLength, timings });
+      heldBytes += own.byteLength;
     },
     hasSegment: (seq) => segments.has(seq),
     getSegment(seq) {
       const s = segments.get(seq);
       if (s === undefined) return null;
-      return { ...s, bytes: s.bytes.slice(0), timings: { ...s.timings } };
+      return {
+        seq: s.seq,
+        rung: s.rung,
+        start: s.start,
+        end: s.end,
+        bytes: s.bytes.slice(0),
+        timings: { ...s.timings },
+      };
     },
     putPlaylist(rung, text) {
       playlists.set(rung, text);
