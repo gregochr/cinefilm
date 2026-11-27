@@ -1347,6 +1347,78 @@ describe('the step gate follows what hls.js fetches', () => {
   });
 });
 
+describe('a rung hls.js marked after a failed fragment is forgotten after a healthy minute', () => {
+  const trouble = (hls, over) =>
+    hls.error({ fatal: false, type: 'networkError', details: 'fragLoadTimeOut', ...over });
+
+  // Auto fetching level 1, level 2 marked: the first FRAG_LOADED, at t = 0, is the one that sees the mark.
+  function marked() {
+    const env = start();
+    env.hls.manifest(levels, 1);
+    env.hls.fetchLevel(1);
+    env.hls.levels[2].fragmentError = 1;
+    env.hls.fragLoaded(stats);
+    return env;
+  }
+
+  it.each([
+    [HEALTHY_MS - 1, 1],
+    [HEALTHY_MS, 0],
+  ])('a fragment loaded %i ms after the one that saw the mark leaves it at %i', (ms, mark) => {
+    const { hls, advance } = marked();
+    advance(ms);
+    hls.fragLoaded(stats);
+    expect(hls.levels[2].fragmentError).toBe(mark);
+  });
+
+  it.each([
+    ['a fragment timeout', (hls) => trouble(hls, {})],
+    ['a fragment error with no HTTP answer', (hls) => trouble(hls, { details: 'fragLoadError' })],
+    ['a waiting event on the video', (_hls, video) => video.dispatchEvent(new Event('waiting'))],
+  ])('starts the minute again on %s', (_name, act) => {
+    const { hls, video, advance } = marked();
+    advance(30_000);
+    act(hls, video);
+    advance(HEALTHY_MS - 1);
+    hls.fragLoaded(stats);
+    expect(hls.levels[2].fragmentError).toBe(1);
+    advance(1);
+    hls.fragLoaded(stats);
+    expect(hls.levels[2].fragmentError).toBe(0);
+  });
+
+  it('does not start the minute again on a fragment error with an HTTP answer (a 503)', () => {
+    const { hls, advance } = marked();
+    advance(30_000);
+    trouble(hls, { details: 'fragLoadError', response: { code: 503 } });
+    advance(30_000);
+    hls.fragLoaded(stats);
+    expect(hls.levels[2].fragmentError).toBe(0);
+  });
+
+  it('keeps the mark of the level being fetched however long it stands', () => {
+    const { hls, advance } = start();
+    hls.manifest(levels, 1);
+    hls.fetchLevel(2);
+    hls.levels[2].fragmentError = 1;
+    hls.fragLoaded(stats);
+    advance(HEALTHY_MS * 10);
+    hls.fragLoaded(stats);
+    expect(hls.levels[2].fragmentError).toBe(1);
+  });
+
+  it('leaves a pinned quality alone', () => {
+    const { hls, advance } = start({ auto: false });
+    hls.manifest(levels, 1);
+    hls.fetchLevel(1);
+    hls.levels[2].fragmentError = 1;
+    hls.fragLoaded(stats);
+    advance(HEALTHY_MS);
+    hls.fragLoaded(stats);
+    expect(hls.levels[2].fragmentError).toBe(1);
+  });
+});
+
 describe('the champagne ceiling: Auto climbs above 480p only on headroom', () => {
   // Real rates (Rung.java): a transcoded rung's average is its target + audio, its peak is x 1.2 + audio; a
   // copy rung's peak is x 1.5 + audio. `bitrate` is the variant's BANDWIDTH (the peak), as hls.js has it.

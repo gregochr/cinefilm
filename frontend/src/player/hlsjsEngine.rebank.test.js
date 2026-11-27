@@ -97,8 +97,10 @@ function bank(env, level) {
   }
 }
 
-// Auto banked at `level` with the cap one above it and the link fast: the bank is full and quiet.
-function ready(env, level) {
+// Auto banked at `level` with the cap one above it and the link fast: the bank is full and quiet. hls.js has
+// stepped up by itself and is fetching the new rung (LEVEL_SWITCHING), which is when a re-bank may start;
+// `stepped: false` leaves it on the old rung.
+function ready(env, level, { stepped = true } = {}) {
   env.hls.manifest(env.hls.levels, level);
   env.hls.fetchLevel(level);
   for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(stats(FAST));
@@ -106,6 +108,7 @@ function ready(env, level) {
   env.hls.fragLoaded(stats(FAST)); // the step gate climbs one rung
   bank(env, level);
   env.setAhead(480);
+  if (stepped) env.hls.fetchLevel(level + 1);
 }
 
 // Back to a state `ready` left, after an undo: fast rates, the cap climbed again, a full bank.
@@ -166,8 +169,7 @@ describe('re-banking one rung up', () => {
 
   it('never goes above 480p: banked at the 480p level there is nothing to do', () => {
     const env = world(plainWith720);
-    ready(env, 2);
-    env.hls.fetchLevel(2);
+    ready(env, 2); // hls.js is fetching level 3, the next rung: only the 480p limit can refuse
     for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(stats(FAST));
     env.tick();
     expect(env.hls.autoLevelCapping).toBeGreaterThanOrEqual(3);
@@ -181,6 +183,8 @@ describe('re-banking one rung up', () => {
     for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(stats(FAST)); // no healthy minute yet: the cap is level 0
     bank(env, 0);
     env.setAhead(480);
+    env.hls.fetchLevel(1); // hls.js is on the next rung (LEVEL_SWITCHING only ever lowers the cap, so it stays 0)
+    expect(env.hls.autoLevelCapping).toBe(0);
     env.tick();
     expect(env.flushes).toHaveLength(0);
   });
@@ -194,6 +198,8 @@ describe('re-banking one rung up', () => {
     env.hls.fragLoaded(stats(2999));
     bank(env, 0);
     env.setAhead(480);
+    env.hls.fetchLevel(1); // hls.js has stepped up, the cap allows it: only the headroom can refuse
+    expect(env.hls.autoLevelCapping).toBe(1);
     env.tick();
     expect(env.flushes).toHaveLength(0);
   });
@@ -405,6 +411,95 @@ describe('re-banking one rung up', () => {
   });
 });
 
+describe('the re-bank waits for hls.js to be fetching the new rung', () => {
+  const oldLast = { sn: 48, start: 480, duration: 10, level: 0, type: 'main', stats: {} };
+  const newFirst = { sn: 49, start: 490, duration: 10, level: 1, type: 'main', stats: {} };
+  const fail503 = (hls, frag) =>
+    hls.error({
+      fatal: false,
+      type: 'networkError',
+      details: 'fragLoadError',
+      response: { code: 503 },
+      frag,
+    });
+
+  // `minAutoBitrate` writes are recorded: the floor must not be touched while hls.js is on the old rung.
+  function recordWrites(env) {
+    const writes = [];
+    let value = env.hls.config.minAutoBitrate;
+    Object.defineProperty(env.hls.config, 'minAutoBitrate', {
+      get: () => value,
+      set: (v) => {
+        writes.push(v);
+        value = v;
+      },
+    });
+    return writes;
+  }
+
+  it('does nothing while hls.js is still on the old rung: no flush, the floor never written', () => {
+    const env = world(plain);
+    ready(env, 0, { stepped: false });
+    const writes = recordWrites(env);
+    env.tick();
+    env.hls.fragBuffered(oldLast);
+    env.tick();
+    expect(env.flushes).toHaveLength(0);
+    expect(writes).toEqual([]);
+    expect(env.hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it('starts on the old rung’s last fragment once LEVEL_SWITCHING named the new rung', () => {
+    const env = world(plain);
+    ready(env, 0, { stepped: false });
+    env.hls.fetchLevel(1); // hls.js’s own handler runs first and names the new level
+    env.hls.fragBuffered(oldLast);
+    expect(env.hls.config.minAutoBitrate).toBe(1_000_000);
+    expect(env.flushes).toHaveLength(1);
+    expect(env.flushes[0].data).toEqual({ startOffset: 300, endOffset: Infinity, type: null });
+    expect(env.flushes[0].floor).toBe(1_000_000);
+  });
+
+  it('does not start when a fragment at the new rung has already started loading', () => {
+    const env = world(plain);
+    ready(env, 0, { stepped: false });
+    env.hls.fetchLevel(1);
+    env.hls.fragLoading(newFirst); // the bank was under hls.js’s target: it loaded at once
+    env.hls.fragBuffered(oldLast);
+    env.tick();
+    expect(env.flushes).toHaveLength(0);
+    expect(env.hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it('starts after a 503 on the first fragment of the new rung, hls.js still on the new rung', () => {
+    const env = world(plain);
+    ready(env, 0, { stepped: false });
+    env.hls.fetchLevel(1);
+    env.hls.fragLoading(newFirst);
+    fail503(env.hls, newFirst);
+    expect(env.flushes).toHaveLength(0);
+    env.tick();
+    expect(env.flushes).toHaveLength(1);
+    expect(env.flushes[0].floor).toBe(1_000_000);
+  });
+
+  it('does not start after that 503 when the headroom is short of 3 x the new rung’s peak', () => {
+    const env = world(plain);
+    env.hls.manifest(env.hls.levels, 0);
+    env.hls.fetchLevel(0);
+    for (let i = 0; i < 3; i += 1) env.hls.fragLoaded(stats(2999));
+    env.advance(HEALTHY_MS);
+    env.hls.fragLoaded(stats(2999));
+    bank(env, 0);
+    env.setAhead(480);
+    env.hls.fetchLevel(1);
+    env.hls.fragLoading(newFirst);
+    fail503(env.hls, newFirst);
+    env.tick();
+    expect(env.flushes).toHaveLength(0);
+  });
+});
+
 describe('when the re-bank is done', () => {
   it('takes the floor off once the bank is back to 460 s after the flush, with no cool-down', () => {
     const env = world(plain);
@@ -427,6 +522,7 @@ describe('when the re-bank is done', () => {
     env.hls.fetchLevel(1);
     env.advance(HEALTHY_MS);
     env.hls.fragLoaded(stats(FAST)); // the cap climbs to 480p
+    env.hls.fetchLevel(2); // and hls.js steps up to it
     env.advance(119_999 - HEALTHY_MS);
     env.tick();
     expect(env.flushes).toHaveLength(1);
@@ -567,6 +663,7 @@ describe('the floor hold and the re-bank share one floor', () => {
     env.hls.fragLoaded(stats(FAST));
     bank(env, 1);
     env.setAhead(480);
+    env.hls.fetchLevel(2); // hls.js has stepped up to 480p
     return env;
   }
 

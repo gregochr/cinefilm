@@ -74,7 +74,8 @@ export class FakeHls {
 
   /** The manifest arrives: `levels` lowest bitrate first, `firstLevel` the one the master listed first. */
   manifest(levels, firstLevel) {
-    this.levels = levels;
+    // hls.js's own level objects carry its error marks: a level the test gives none starts with none.
+    this.levels = levels.map((l) => ({ fragmentError: 0, loadError: 0, ...l }));
     this.emit(FakeHls.Events.MANIFEST_PARSED, { levels, firstLevel });
   }
 
