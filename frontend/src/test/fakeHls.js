@@ -57,9 +57,20 @@ export class FakeHls {
     this.levels = [];
     this.autoLevelCapping = -1;
     this.loadSource = vi.fn();
-    this.attachMedia = vi.fn();
-    this.startLoad = vi.fn();
-    this.recoverMediaError = vi.fn();
+    this.video = null;
+    this.startPosition = -1; // hls.js's `startPosition`: what `startLoad` was last given
+    this.attachMedia = vi.fn((video) => {
+      this.video = video;
+    });
+    this.startLoad = vi.fn((position = -1) => {
+      this.startPosition = position;
+    });
+    // hls.ts `recoverMediaError`: reads the playhead, detaches and attaches, and restarts loading from the time
+    // it read when that is not 0.
+    this.recoverMediaError = vi.fn(() => {
+      const time = this.video?.currentTime;
+      if (time) this.startLoad(time);
+    });
     this.destroy = vi.fn();
     this.trigger = vi.fn(); // what the engine asks hls.js to do (the buffer flush)
     FakeHls.instances.push(this);

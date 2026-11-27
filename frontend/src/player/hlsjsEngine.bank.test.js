@@ -624,20 +624,61 @@ describe('the engine holds hls.js on the bank’s level', () => {
         expect(env.levelWrites().at(-1)).toBe(1);
       });
 
-      it('forgets it when hls.js resets the media by itself, and writes the level for where it reloads', () => {
-        const env = loadedUnappended();
-        env.lookup.levelAt.mockImplementation((s) => (s < 5 ? 0 : s < 50 ? 1 : 3));
-        env.tick(); // the playhead is at 10
-        // hls.js's error controller has already recovered: the media is reloaded, the playhead is 0, nothing
-        // is buffered. The engine hears of the error after that.
+      // What hls.js's error controller has done by the time the engine hears of a non-fatal reset: it read the
+      // playhead, recovered (loading restarts from it) and reloaded the media, so the playhead is 0 and nothing
+      // is buffered.
+      const resetByHls = (env) => {
+        env.hls.recoverMediaError();
         env.setTime(0);
         env.setRanges([]);
         env.lookup.levelAt.mockClear();
         env.hls.error({ fatal: false, type: 'mediaError', details: 'mediaSourceRequiresReset' });
+      };
+      const levelsByPosition = (env) =>
+        env.lookup.levelAt.mockImplementation((s) => (s < 5 ? 0 : s < 50 ? 1 : s < 2000 ? 2 : 3));
+
+      it('forgets it when hls.js resets the media by itself, and writes the level for where it reloads', () => {
+        const env = loadedUnappended();
+        levelsByPosition(env);
+        env.tick(); // the playhead is at 10
+        resetByHls(env);
         expect(env.lookup.levelAt).toHaveBeenCalledTimes(1);
         expect(env.lookup.levelAt).toHaveBeenCalledWith(10);
         expect(env.hls.loadLevel).toBe(1);
-        expect(env.hls.recoverMediaError).not.toHaveBeenCalled(); // hls.js did that, not the engine
+        expect(env.hls.recoverMediaError).toHaveBeenCalledTimes(1); // hls.js's, not the engine's
+      });
+
+      it('reloads from a seek that no time update has followed', () => {
+        const env = loadedUnappended();
+        levelsByPosition(env);
+        env.tick();
+        env.setTime(2400);
+        env.seek(); // waiting for data: no timeupdate yet
+        resetByHls(env);
+        expect(env.lookup.levelAt).toHaveBeenCalledWith(2400);
+        expect(env.hls.loadLevel).toBe(3);
+      });
+
+      it('reloads from a seek made while paused', () => {
+        const env = loadedUnappended();
+        levelsByPosition(env);
+        env.tick();
+        env.setPaused(true);
+        env.setTime(2400);
+        env.seek();
+        resetByHls(env);
+        expect(env.lookup.levelAt).toHaveBeenCalledWith(2400);
+        expect(env.hls.loadLevel).toBe(3);
+      });
+
+      it('falls back to the last time update when the playhead was 0 and loading did not restart', () => {
+        const env = loadedUnappended();
+        levelsByPosition(env);
+        env.tick(); // the playhead is at 10
+        env.setTime(0);
+        resetByHls(env); // time 0: hls.js does not call startLoad with it
+        expect(env.hls.startPosition).toBe(-1);
+        expect(env.lookup.levelAt).toHaveBeenCalledWith(10);
       });
 
       it('recovers a fatal reset itself, with the level held at the playhead', () => {
