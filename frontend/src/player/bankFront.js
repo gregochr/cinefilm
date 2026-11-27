@@ -50,6 +50,20 @@ function parsePlaylist(text, playlistUrl) {
  *   pause and nothing restarts it; `isPaused()` says whether it is on. The time paused counts as waiting in the
  *   window's next entry.
  * - `position()` is `{ seq, rung }`, what the front will fetch next.
+ * - `fetchNow()` fetches that position at once, whether or not the front is paused, wants film or is at its
+ *   limit, with one server request; nothing new when a fetch is in flight or a retry is pending (that retry then
+ *   goes ahead whatever the wants and the pause say, as do the retries of this fetch, and only those), or when it
+ *   is not armed and started. A pause is left as it is (its timer untouched) unless the fetch succeeds, which
+ *   resumes the front.
+ * - `subscribe(seq, listener)` attaches to the front's fetch of `seq`, in flight now or the next one: the same
+ *   server request serves both. The listener may have `onFirstByte()`, `onProgress(loadedBytes)`, `onDone(segment)`
+ *   (a fresh `bank.getSegment(seq)`, after which the subscription ends), `onServerAnswer(status, headers)` for any
+ *   answer other than 200 (the front goes on handling it itself), `onError('network' | 'timeout')` and
+ *   `onAbort()`, once, when `stop()`, `start()` or `movePast()` drops the position (the subscription ends). Nothing
+ *   else is called for an aborted fetch, a first byte already past is not replayed, and a listener must not
+ *   throw. A subscriber to a position that is in a Retry-After or network-error wait at that moment hears that
+ *   answer or error at once, before `subscribe` returns, then the retry's own events; never a pause's answer.
+ *   Returns the function that unsubscribes.
  */
 export function createBankFront({
   rungs,
@@ -66,6 +80,7 @@ export function createBankFront({
   const eligible = rungs.filter((r) => r.height <= FRONT_MAX_HEIGHT);
   const byId = new Map(eligible.map((r) => [r.id, r]));
   const parsed = new Map();
+  const listeners = new Map();
   const entries = [];
   let armed = false;
   let running = false;
@@ -83,6 +98,8 @@ export function createBankFront({
   let wantedRung = null;
   let lockedRung = null;
   let backoffs = 0;
+  let forced = false; // a fetch now is under way: its retries bypass the wants and pause checks
+  let lastAnswer = null; // the answer or error that started the retry wait now pending: { seq, name, args }
   let filmAhead = 0;
   let need = 0;
 
@@ -101,6 +118,19 @@ export function createBankFront({
     } else if (!on && watchMark !== null) {
       watch += (now() - watchMark) / 1000;
       watchMark = null;
+    }
+  }
+
+  function emit(seq, name, ...args) {
+    for (const l of [...(listeners.get(seq) ?? [])]) l[name]?.(...args);
+  }
+
+  // Tells the subscribers of every position `dropped` names that their fetch is gone, and forgets them.
+  function dropSubscribers(dropped) {
+    for (const [seq, set] of [...listeners]) {
+      if (!dropped(seq)) continue;
+      listeners.delete(seq);
+      for (const l of [...set]) l.onAbort?.();
     }
   }
 
@@ -134,10 +164,12 @@ export function createBankFront({
     retryTimer = null;
     lockedRung = null;
     backoffs = 0;
+    forced = false;
+    lastAnswer = null;
     resetWatch();
   }
 
-  async function attempt(url, { ctx, controller, limit }) {
+  async function attempt(url, { ctx, controller, limit, notify }) {
     const startedAt = now();
     limit(FIRST_BYTE_MS);
     const response = await fetchFn(url, {
@@ -147,16 +179,24 @@ export function createBankFront({
     });
     if (response.status !== 200) {
       const header = Number(response.headers?.get?.('Retry-After'));
-      return { outcome: 'status', status: response.status, retryAfter: header, startedAt };
+      notify('onServerAnswer', response.status, response.headers);
+      const { status, headers } = response;
+      return { outcome: 'status', status, headers, retryAfter: header, startedAt };
     }
     const reader = response.body.getReader();
     const chunks = [];
     let firstAt = null;
+    let loaded = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done || ctx.aborted) break;
-      firstAt ??= now();
+      if (firstAt === null) {
+        firstAt = now();
+        notify('onFirstByte');
+      }
       chunks.push(value);
+      loaded += value.byteLength;
+      notify('onProgress', loaded);
       limit(NO_PROGRESS_MS);
     }
     const endAt = now();
@@ -191,13 +231,17 @@ export function createBankFront({
       stopTimer();
       controller.abort();
     };
+    const notify = (name, ...args) => {
+      if (seq !== null && !ctx.aborted) emit(seq, name, ...args);
+    };
     current = ctx;
     const startedAt = now();
     let result;
     try {
-      result = await attempt(url, { ctx, controller, limit });
+      result = await attempt(url, { ctx, controller, limit, notify });
     } catch {
       result = { outcome: timedOut ? 'timeout' : 'network', startedAt };
+      notify('onError', result.outcome);
     }
     stopTimer();
     return ctx.aborted ? CANCELLED : result;
@@ -222,16 +266,19 @@ export function createBankFront({
     pauseTimer = setTimer(resume, reconnectMs);
   }
 
-  function later(ms) {
+  function later(ms, seq, name, ...args) {
+    lastAnswer = seq === null ? null : { seq, name, args };
     retryTimer = setTimer(() => {
       retryTimer = null;
-      pump();
+      lastAnswer = null;
+      if (forced) fetchSegment();
+      else pump();
     }, ms);
   }
 
-  function failed(res) {
+  function failed(res, seq) {
     if (res.outcome !== 'status') {
-      later(NETWORK_RETRY_MS);
+      later(NETWORK_RETRY_MS, seq, 'onError', res.outcome);
     } else if (res.status === 410) {
       stop();
       onStopped();
@@ -239,12 +286,19 @@ export function createBankFront({
       stop();
       onSessionLost();
     } else if (res.status === 503 && res.retryAfter > 0) {
-      later(Math.min(res.retryAfter * 1000 * 2 ** backoffs, RETRY_AFTER_CAP_MS));
+      later(
+        Math.min(res.retryAfter * 1000 * 2 ** backoffs, RETRY_AFTER_CAP_MS),
+        seq,
+        'onServerAnswer',
+        res.status,
+        res.headers,
+      );
       backoffs += 1;
     } else if (res.status === 503) {
+      forced = false; // only retries of a fetch now bypass the pause
       pause();
     } else {
-      later(NETWORK_RETRY_MS);
+      later(NETWORK_RETRY_MS, seq, 'onServerAnswer', res.status, res.headers);
     }
   }
 
@@ -260,7 +314,7 @@ export function createBankFront({
       done(res);
       pump();
     } else {
-      failed(res);
+      failed(res, seq);
       syncWatch();
     }
   }
@@ -299,8 +353,11 @@ export function createBankFront({
       const kbps = fragmentKbps({ loading: timings, loaded: res.bytes.byteLength });
       if (kbps !== null) onThroughput(kbps);
       lockedRung = null;
+      forced = false;
       next = seq + 1;
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
+      emit(seq, 'onDone', bank.getSegment(seq));
+      listeners.delete(seq);
       resetWatch();
     });
   }
@@ -316,6 +373,7 @@ export function createBankFront({
         bank.putPlaylist(missing.id, text);
       });
     } else if (running && wants()) {
+      forced = false; // an ordinary fetch: its retries obey the wants and the pause
       fetchSegment();
     }
   }
@@ -328,6 +386,7 @@ export function createBankFront({
     resetPosition();
     if (pauseTimer !== null) clearTimer(pauseTimer);
     pauseTimer = null;
+    dropSubscribers(() => true);
   }
 
   return {
@@ -338,6 +397,7 @@ export function createBankFront({
     start({ seq, rung }) {
       if (stopped) return;
       resetPosition();
+      dropSubscribers((q) => q !== seq);
       next = seq;
       wantedRung = clamp(rung);
       running = true;
@@ -347,6 +407,7 @@ export function createBankFront({
     movePast(seq) {
       if (stopped || seq < next) return;
       resetPosition();
+      dropSubscribers((q) => q <= seq);
       next = seq + 1;
       pump();
     },
@@ -363,6 +424,23 @@ export function createBankFront({
     pause,
     isPaused: () => paused,
     position: () => ({ seq: next, rung: lockedRung ?? wantedRung }),
+    fetchNow() {
+      if (stopped || !armed || !running) return;
+      if (!eligible.every((r) => bank.getPlaylist(r.id) !== null)) return;
+      forced = true; // a retry of this position goes ahead whatever the wants and the pause say
+      if (!busy && retryTimer === null) fetchSegment();
+    },
+    subscribe(seq, listener) {
+      const set = listeners.get(seq) ?? new Set();
+      set.add(listener);
+      listeners.set(seq, set);
+      if (retryTimer !== null && lastAnswer?.seq === seq)
+        listener[lastAnswer.name]?.(...lastAnswer.args);
+      return () => {
+        set.delete(listener);
+        if (set.size === 0 && listeners.get(seq) === set) listeners.delete(seq);
+      };
+    },
     /** `{ rung, rate, w, d, measuredS, measuredWallS }`: per film second, over the last 60 s of fetching. */
     window() {
       const rung = entries.at(-1)?.rung ?? null;
