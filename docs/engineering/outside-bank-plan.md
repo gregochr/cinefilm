@@ -92,9 +92,10 @@ engine (`useStream.js:341`).
    `cap(gate.start(fetched))` (the rung the bank last fetched, which the link has just carried; still clamped by the
    champagne ceiling in `applyCap`), so the climb from there is one level a minute.
 4. **One fetcher.** The bank loader gives every media request of hls.js to the bank, which answers from what it
-   holds, waits on its own fetch of it, or fetches it **next** (hls.js's requests first; from hls.js's first request
-   for film the bank does not hold, the front waits until hls.js asks for held film, or a seek or clear; quiet
-   spells in between do not count). The front starts at the end of
+   holds, waits on its own fetch of it, or fetches it **next** (hls.js's requests first). A request **behind the front**
+   (held film lies after it, as after a seek back) starts a wait: the front waits until hls.js asks for held film,
+   or a seek or clear; quiet spells in between do not count. A request **at the front's next position** is simply
+   the front's next fetch, and the front carries on past it towards F. The front starts at the end of
    hls.js's buffered range holding the playhead and, whenever hls.js asks past it, moves past that. It fetches one
    segment at a time until film ahead reaches F, and tops up as the film plays.
    - **A fetch hls.js waits on** keeps today's shape: hls.js's own first-byte and load limits count from hls.js's
@@ -161,7 +162,8 @@ writes every rung, and the bank fills no faster than it.
    abort of the fetch in flight and of pending retries, and no request after it stops.
 3. **B2b, requests hls.js waits on** (`bankRequests.js`; about 250): decision 4's first and third bullets and
    decision 8. Tests: hls.js's request before the front's next; the front waiting through a gap, including one
-   longer than hls.js's buffer goal with hls.js quiet mid-gap (no front request until hls.js reaches held film); the waiting
+   longer than hls.js's buffer goal with hls.js quiet mid-gap (no front request until hls.js reaches held film);
+   hls.js asking at the front's own position, the front then fetching on to F while hls.js is quiet; the waiting
    request's limits counted from hls.js's request with the fetch carrying on; `onTimeout` when the no-progress rule
    ends the fetch; a 503, 404 or 410, or a 503 wait already under way, handed over at once; a wrong-rung request
    failed as a `bank-rung` 503; a plain 503 or fatal error pausing, resumed by a server answer or `RECONNECT_MS`
