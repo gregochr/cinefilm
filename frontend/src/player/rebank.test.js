@@ -31,6 +31,7 @@ const frags = (level, offset = 0) =>
 const base = {
   levels,
   applied: 2,
+  fetched: 2, // hls.js is already fetching at or above every rung these tests re-bank to
   banked: frags(0),
   playhead: 0,
   aheadS: 480,
@@ -114,7 +115,9 @@ describe('rebankDecision', () => {
   describe('never above 480p', () => {
     it('says no when the next rung is above the 480p level', () => {
       const banked = frags(2);
-      expect(decide({ banked, applied: 3, headroom: [20_000, 20_000, 20_000] })).toBeNull();
+      // hls.js is already on the next rung (3), so only the 480p limit can refuse.
+      const high = { applied: 3, fetched: 3, headroom: [20_000, 20_000, 20_000] };
+      expect(decide({ banked, ...high })).toBeNull();
     });
 
     it('stops at the 360p level of a ladder with no 480p rung', () => {
@@ -141,6 +144,26 @@ describe('rebankDecision', () => {
 
     it('counts as the lowest level before it is known', () => {
       expect(decide({ applied: null })).toBeNull();
+    });
+  });
+
+  describe('the level hls.js is fetching', () => {
+    // The banked rung is 0, so the new rung is 1.
+    it.each([
+      ['not known yet (null)', null, null],
+      ['one below the new rung', 0, null],
+      ['the new rung', 1, { level: 1, from: 300 }],
+      ['above the new rung', 2, { level: 1, from: 300 }],
+    ])('is %s', (_name, fetched, expected) => {
+      expect(decide({ fetched })).toEqual(expected);
+    });
+
+    it('is read against whichever rung is banked: banked at 1, the next rung is 2', () => {
+      expect(decide({ banked: frags(1), headroom: [3984, 3984, 3984], fetched: 1 })).toBeNull();
+      expect(decide({ banked: frags(1), headroom: [3984, 3984, 3984], fetched: 2 })).toEqual({
+        level: 2,
+        from: 300,
+      });
     });
   });
 

@@ -12,13 +12,17 @@
 // one place (`applyCap`) whatever the ladder. When the bank is full Auto may throw away the film from 300 s ahead
 // and fetch it again one rung higher, up to 480p (rebank.js, step-up-bank-plan.md): `minAutoBitrate` is raised to
 // that rung, then the buffer is flushed from a fragment start. `writeFloor` is the only writer of that setting:
-// the larger of the hold's floor and the re-bank's.
+// the larger of the hold's floor and the re-bank's, and the re-bank starts only once hls.js is fetching the new
+// rung. hls.js does not choose a level again after one of its fragments failed until a fragment of that level
+// loads, so in Auto a mark that has stood a minute without trouble on a level not being fetched is forgotten
+// (rungMarks.js, stuck-rung-plan.md).
 import { bankedAhead } from './buffered.js';
 import { champagneBase, champagneCeiling } from './champagne.js';
 import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
 import { REBANK_DONE_AT_S, REBANK_UNDO_BELOW_S, rebankDecision } from './rebank.js';
+import { createRungMarks } from './rungMarks.js';
 import { createStepGate } from './stepGate.js';
 import { addSample, fragmentKbps, lowerMiddle, networkGeneration } from './throughput.js';
 
@@ -130,6 +134,7 @@ export function startHlsJs({
     fLoader: createNoProgressLoader(Hls.DefaultConfig.loader),
   });
   const gate = createStepGate({ now });
+  const marks = createRungMarks({ now });
   const { Events, ErrorTypes, ErrorDetails } = Hls;
   let top = 0;
   let applied = null; // the cap on hls.js: the lower of the step gate's level and the champagne ceiling
@@ -273,6 +278,7 @@ export function startHlsJs({
     const decision = rebankDecision({
       levels: hls.levels,
       applied,
+      fetched,
       banked,
       playhead: video.currentTime,
       aheadS,
@@ -381,6 +387,7 @@ export function startHlsJs({
 
   const onWaiting = () => {
     gate.trouble();
+    marks.trouble();
     lastTroubleAt = now();
     undoRebank();
     reevaluateHold();
@@ -502,6 +509,7 @@ export function startHlsJs({
         headroom = addSample(headroom, kbps);
       }
     }
+    if (auto) marks.sweep(hls.levels, fetched);
     applyCap();
     // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch, and
     // the step gate never runs ahead of the ceiling.
@@ -522,6 +530,7 @@ export function startHlsJs({
       (data.details === ErrorDetails.FRAG_LOAD_ERROR && !data.response?.code)
     ) {
       gate.trouble();
+      marks.trouble();
       lastTroubleAt = now();
       undoRebank();
       if (auto && fetched !== null) gateCap = gate.switched(fetched);

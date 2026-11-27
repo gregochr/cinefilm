@@ -311,6 +311,9 @@ Once per change to the ladder or the buffer (`train-link-plan.md`):
     steps down to 360p and stays there, not 240p, while the buffered bar shrinks; once under four minutes are
     buffered it goes to 240p. In the Full record the seventh figure of the minute rows (the rung being fetched) is 5
     (360p) while the sixth is above 240, and 6 (240p) after.
+17. With Auto fetching 360p or above, block the 360p segment address in DevTools (Network, Block request URL)
+    for one fragment and unblock it. Auto drops to 240p; with no further trouble it is fetching 360p again within
+    about a minute and a half, and the Full record's seventh figure shows it.
 
 - DevTools throttles the page's own requests (the hls.js segments included) and only while DevTools is open. It
   does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,
