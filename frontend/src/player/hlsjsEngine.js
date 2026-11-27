@@ -18,7 +18,7 @@
 // (rungMarks.js, stuck-rung-plan.md). While the film bank is on (outside-bank-plan.md, decision 3) hls.js plays
 // on a manual level, the rung the bank holds its next fragment at, and every rule above is suspended: the engine's
 // `bankOn`, `bankWrongRung` and `bankRelease` are how the bank drives that, and nothing calls them yet.
-import { HOLE_S, bankedAhead } from './buffered.js';
+import { bankedAhead } from './buffered.js';
 import { champagneBase, champagneCeiling } from './champagne.js';
 import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
@@ -351,23 +351,32 @@ export function startHlsJs({
     applyCap();
   };
 
-  // The first film second not yet buffered from `t` on: the end of the buffered range holding `t` (a range that
-  // starts within `slack` after `t` counts as holding it), carried over the holes hls.js plays across; `t` itself
-  // when nothing holds it. The film the bank is asked for next.
-  const afterBuffered = (t, slack) => {
+  // The hole hls.js plays across when it picks its next fragment (`getFwdBufferInfo`): `maxBufferHole`, none
+  // while paused or just after a backward seek (the playhead is behind where the last time update left it).
+  let lastTime = 0;
+  const holeS = () =>
+    video.paused || lastTime > video.currentTime ? 0 : (hls.config.maxBufferHole ?? 0);
+
+  // The first film second hls.js has not got from `t` on, by its own rule (`buffer-helper.ts`): the end of the
+  // buffered range holding `t`, ranges less than a hole apart (or touching) counting as one; `t` itself when
+  // none holds it. `extra` is a range about to be appended (a loaded fragment), added to the buffered ones.
+  const bufferEnd = (t, extra = null) => {
     const { buffered } = video;
-    let position = t;
-    let matched = false;
+    const ranges = [];
     for (let i = 0; i < buffered.length; i += 1) {
-      if (
-        buffered.start(i) <= position + (matched ? HOLE_S : slack) &&
-        buffered.end(i) > position
-      ) {
-        position = buffered.end(i);
-        matched = true;
-      }
+      ranges.push({ start: buffered.start(i), end: buffered.end(i) });
     }
-    return position;
+    if (extra) ranges.push(extra);
+    ranges.sort((x, y) => x.start - y.start);
+    const hole = holeS();
+    const merged = [];
+    for (const r of ranges) {
+      const last = merged.at(-1);
+      if (last && (r.start <= last.end || r.start - last.end < hole))
+        last.end = Math.max(last.end, r.end);
+      else merged.push({ ...r });
+    }
+    return merged.find((r) => r.start <= t && t <= r.end)?.end ?? t;
   };
 
   // hls.js's next fragment is the one at `position`: it is loaded at the rung the bank holds there, or, past
@@ -375,8 +384,8 @@ export function startHlsJs({
   const holdBankLevelAt = (position) => {
     hls.loadLevel = bank.levelAt(position) ?? bank.frontLevel();
   };
-  // The same for what follows the buffered film that holds `t`.
-  const holdBankLevelAfter = (t, slack) => holdBankLevelAt(afterBuffered(t, slack));
+  // The same for the film after the buffered range at the playhead.
+  const holdBankLevelAtPlayhead = () => holdBankLevelAt(bufferEnd(video.currentTime));
 
   const stopReconnecting = () => {
     clearTimeout(timer);
@@ -433,12 +442,13 @@ export function startHlsJs({
   };
   // The bank is full, so hls.js is mostly idle and sends no fragment events: the re-bank is read on timeupdate.
   const onTimeUpdate = () => {
+    lastTime = video.currentTime;
     applyCap();
     rebankStep();
   };
   const onSeeking = () => {
     undoRebank();
-    if (bank) holdBankLevelAfter(video.currentTime, 0);
+    if (bank) holdBankLevelAtPlayhead();
     else applyCap();
   };
   video.addEventListener('waiting', onWaiting);
@@ -475,7 +485,6 @@ export function startHlsJs({
     const rung = rungForLevel(session.renditions, hls.levels[data.level]);
     if (!rung) return;
     handlers.onFetching?.(rung);
-    if (bank) return; // the bank chose this level: no gate follows it, no hold reads it
     if (arrived) gate.arrived();
     if (auto) cap(gate.switched(data.level));
     reevaluateHold();
@@ -524,6 +533,7 @@ export function startHlsJs({
   // hls.js sends { type, start, end } of the flush that finished; its error path sends 0 and 0.
   hls.on(Events.BUFFER_FLUSHED, (_event, data) => {
     pruneBanked();
+    if (bank) holdBankLevelAtPlayhead(); // a flush moved the buffered end the next fragment follows
     if (rebankFloor > 0 && data?.end === Infinity && Math.abs(data.start - flushFrom) < 0.5) {
       flushed = true;
     }
@@ -540,7 +550,9 @@ export function startHlsJs({
     ) {
       // Before hls.js chooses its next fragment: it is not appended yet, so the film after it is read from what
       // is buffered around its end (a range that starts there joins it when it lands).
-      holdBankLevelAt(afterBuffered(frag.start + frag.duration, HOLE_S));
+      holdBankLevelAt(
+        bufferEnd(frag.start, { start: frag.start, end: frag.start + frag.duration }),
+      );
     }
     stopReconnecting();
     troubled = false;
@@ -597,7 +609,7 @@ export function startHlsJs({
       marks.trouble();
       lastTroubleAt = now();
       undoRebank();
-      if (auto && fetched !== null && !bank) gateCap = gate.switched(fetched);
+      if (auto && fetched !== null) gateCap = gate.switched(fetched);
       troubled = true;
       samples = []; // what was measured before the trouble says nothing about the link now
       headroom = [];
@@ -650,7 +662,7 @@ export function startHlsJs({
       bank = lookup;
       if (wasOn) return;
       undoIfRebanking(); // the floor is written before the manual level
-      holdBankLevelAfter(video.currentTime, 0);
+      holdBankLevelAtPlayhead();
     },
     /**
      * The bank failed a request as `bank-rung` (a fragment held at another rung): hls.js is put on `level`, the
@@ -663,7 +675,8 @@ export function startHlsJs({
     /**
      * The bank turns off: hls.js is back on Auto, the floor and the cap are written again, and the step gate
      * starts at `fetchedLevel`, the level the bank last fetched (the champagne ceiling still clamps it), so the
-     * climb from there is one level a minute. Does nothing while the bank is off.
+     * climb from there is one level a minute. `fetchedLevel` is required and is the bank's own: the level hls.js is
+     * on is only the last one this engine wrote. Does nothing while the bank is off.
      */
     bankRelease(fetchedLevel) {
       if (destroyed || !bank) return;
@@ -672,7 +685,7 @@ export function startHlsJs({
       floorSet = null; // written again whatever it was
       applied = null;
       writeFloor();
-      cap(gate.start(fetchedLevel ?? fetched ?? 0));
+      cap(gate.start(fetchedLevel));
     },
     destroy() {
       destroyed = true;

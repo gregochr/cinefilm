@@ -50,7 +50,8 @@ export class FakeHls {
   }
 
   constructor(config) {
-    this.config = { minAutoBitrate: 0, ...config };
+    this.config = { minAutoBitrate: 0, maxBufferHole: 0.1, ...config }; // hls.js's default hole
+    this.currentLevel = -1; // the level last switched to, by the engine's `loadLevel` or by Auto
     this.handlers = {};
     this.levels = [];
     this.autoLevelCapping = -1;
@@ -61,6 +62,16 @@ export class FakeHls {
     this.destroy = vi.fn();
     this.trigger = vi.fn(); // what the engine asks hls.js to do (the buffer flush)
     FakeHls.instances.push(this);
+  }
+
+  // hls.js 1.7.4 (`level-controller.ts`): the level last switched to; setting a level other than -1 that is not
+  // the current one fires LEVEL_SWITCHING at once. A manual level is only remembered here.
+  get loadLevel() {
+    return this.currentLevel;
+  }
+
+  set loadLevel(level) {
+    if (level !== -1 && level !== this.currentLevel) this.fetchLevel(level);
   }
 
   // Every handler is kept, in the order added, as hls.js does.
@@ -81,6 +92,7 @@ export class FakeHls {
 
   /** hls.js starts to fetch `level` (automatic choice or not). */
   fetchLevel(level) {
+    this.currentLevel = level;
     this.emit(FakeHls.Events.LEVEL_SWITCHING, { level });
   }
 
