@@ -159,7 +159,7 @@ engine (`useStream.js:341`).
 
 Code estimates are scaled by 1.7 for this repo's history; tests run 2.4 to 3.6 times code. Step 0.3 (the encoder's
 speed, read by the owner from `GET /api/admin/transcoding`, which returns `speed`) comes first: in Auto the encoder
-writes every rung, and the bank fills no faster than it.
+writes every rung, and the bank fills no faster than it. Step 0.3 done 2026-11-27: the owner read 17.7× and 20.7× real time at 480p on the production server, with the encoder stopping three minutes ahead as designed; well above the 4× the bank needs.
 
 1. **B1, the store** (`segmentBank.js`, pure; about 250 lines of code): decisions 1 and 9, the playlists, the 600
    MB limit, the coverage test of decision 2. Tests: one copy per sequence number at its rung; dropping 30 s behind;
