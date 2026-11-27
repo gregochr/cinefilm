@@ -33,19 +33,21 @@ const MEDIA_FRAGMENT = 'media-fragment';
 
 /** The loader's own (not the inner loader's) in-flight state for a load it is serving itself. */
 class OwnLoad {
-  constructor() {
+  constructor(context) {
+    this.context = context;
     this.cancel = null;
     this.done = false;
     this.cancelled = false; // aborted or destroyed before it finished
   }
 }
 
-function createBankLoader(Inner, bank, beginLoad) {
+function createBankLoader(Inner, bank, now, beginLoad) {
   return class BankLoader {
     constructor(config) {
       // In the constructor: hls.js reads and writes `loader.stats` before it calls `load`.
       this.inner = new Inner(config);
       this.own = null;
+      this.callbacks = null;
     }
 
     get stats() {
@@ -56,8 +58,10 @@ function createBankLoader(Inner, bank, beginLoad) {
       this.inner.stats = value;
     }
 
+    // While the bank serves a load itself the inner loader never runs, so the load's context is kept here:
+    // hls.js's playlist loader reads `loader.context` to ignore a duplicate level load.
     get context() {
-      return this.inner.context;
+      return this.own === null ? this.inner.context : this.own.context;
     }
 
     set context(value) {
@@ -73,16 +77,23 @@ function createBankLoader(Inner, bank, beginLoad) {
     }
 
     load(context, config, callbacks) {
-      const own = new OwnLoad();
+      const own = new OwnLoad(context);
       const done = (deliver) => {
         if (own.done) return;
         own.done = true;
         own.cancel = null;
         deliver();
       };
-      this.own = own; // before `beginLoad`: a callback may destroy this loader from inside it
-      if (beginLoad({ loader: this, context, callbacks, own, done }) === 'pass') {
+      // Before asking the decider: it may abort or destroy this loader from inside its own call, and hls.js's
+      // loaders stamp `loading.start` at load time (a wait counts from here; an inner load stamps it itself).
+      this.own = own;
+      this.callbacks = callbacks;
+      this.inner.stats.loading.start = now();
+      const handed = beginLoad({ loader: this, context, callbacks, own, done });
+      if (own.cancelled) return; // aborted or destroyed inside the decider: nothing more to start
+      if (handed === 'pass') {
         this.own = null;
+        this.inner.stats.loading.start = 0;
         this.inner.load(context, config, this.armedCallbacks(context, callbacks));
       }
     }
@@ -127,7 +138,7 @@ function createBankLoader(Inner, bank, beginLoad) {
       own.cancel = null;
       const stats = this.inner.stats;
       stats.aborted = true;
-      this.callbacks?.onAbort?.(stats, this.inner.context, null);
+      this.callbacks?.onAbort?.(stats, own.context, null);
     }
 
     destroy() {
@@ -180,7 +191,6 @@ export function createBankLoaders({ InnerF, InnerP, bank, now = () => performanc
       reply,
     );
     if (decision.action === 'pass') return 'pass';
-    loader.callbacks = callbacks;
     if (decision.action === 'answer') {
       queueMicrotask(() =>
         done(() => deliverAnswer(loader, context, callbacks, decision.bytes, decision.timings)),
@@ -197,7 +207,6 @@ export function createBankLoaders({ InnerF, InnerP, bank, now = () => performanc
     if (context.type !== LEVEL_PLAYLIST) return 'pass';
     const text = bank.playlistText(context);
     if (text === null) return 'pass';
-    loader.callbacks = callbacks;
     queueMicrotask(() =>
       done(() => {
         const stats = loader.inner.stats;
@@ -213,7 +222,7 @@ export function createBankLoaders({ InnerF, InnerP, bank, now = () => performanc
   };
 
   return {
-    fLoader: createBankLoader(InnerF, bank, fragmentStart),
-    pLoader: createBankLoader(InnerP, bank, playlistStart),
+    fLoader: createBankLoader(InnerF, bank, now, fragmentStart),
+    pLoader: createBankLoader(InnerP, bank, now, playlistStart),
   };
 }

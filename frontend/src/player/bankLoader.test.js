@@ -107,6 +107,12 @@ describe('bank fLoader answers', () => {
     await flush();
     expect(cb.onSuccess).toHaveBeenCalledTimes(1);
     const [response, stats, context, details] = cb.onSuccess.mock.calls[0];
+    expect(cb.onSuccess).toHaveBeenCalledWith(
+      { url: ctx.url, data: response.data },
+      loader.stats,
+      ctx,
+      null,
+    );
     expect(response.url).toBe(ctx.url);
     expect(new Uint8Array(response.data)).toEqual(new Uint8Array([1, 2, 3, 4]));
     expect(stats.loading).toEqual({ start: 9700, first: 9740, end: 10_000 });
@@ -142,11 +148,13 @@ describe('bank fLoader answers', () => {
     const { F, callbacks } = setup({ decision: ANSWER() });
     const loader = new F({});
     const cb = callbacks();
-    loader.load(fragContext(1), {}, cb);
+    const ctx = fragContext(1);
+    loader.load(ctx, {}, cb);
+    expect(loader.context).toBe(ctx);
     loader.abort();
     await flush();
     expect(cb.onSuccess).not.toHaveBeenCalled();
-    expect(cb.onAbort).toHaveBeenCalledTimes(1);
+    expect(cb.onAbort).toHaveBeenCalledWith(loader.stats, ctx, null);
     expect(loader.stats.aborted).toBe(true);
     loader.abort();
     expect(cb.onAbort).toHaveBeenCalledTimes(1);
@@ -168,9 +176,16 @@ describe('bank fLoader answers', () => {
     const loader = new F({});
     const cb = callbacks();
     cb.onSuccess.mockImplementation(() => loader.destroy());
-    loader.load(fragContext(1), {}, cb);
+    const ctx = fragContext(1);
+    loader.load(ctx, {}, cb);
+    expect(loader.context).toBe(ctx);
     await flush();
-    expect(cb.onSuccess).toHaveBeenCalledTimes(1);
+    expect(cb.onSuccess).toHaveBeenCalledWith(
+      { url: ctx.url, data: expect.any(ArrayBuffer) },
+      expect.objectContaining({ bankAnswered: true }),
+      ctx,
+      null,
+    );
     expect(loader.inner.destroyed).toBe(true);
   });
 
@@ -239,16 +254,25 @@ describe('bank fLoader waits', () => {
     const s = setup({ decision: { action: 'wait', cancel } });
     const loader = new s.F({});
     const cb = s.callbacks();
-    loader.load(fragContext(7), {}, cb);
+    const ctx = fragContext(7);
+    loader.load(ctx, {}, cb);
     const reply = s.bank.fragmentRequest.mock.calls[0][1];
-    return { ...s, loader, cb, reply, cancel };
+    return { ...s, loader, cb, reply, cancel, ctx };
   }
 
   it('answers with the bytes and timings the decider later gives', () => {
-    const { loader, cb, reply } = waiting();
+    const { loader, cb, reply, ctx } = waiting();
+    expect(loader.context).toBe(ctx);
+    expect(loader.stats.loading.start).toBe(10_000);
     reply.success(bytesOf(5, 6), { start: 0, first: 10, end: 50 });
     expect(cb.onSuccess).toHaveBeenCalledTimes(1);
     const [response, stats] = cb.onSuccess.mock.calls[0];
+    expect(cb.onSuccess).toHaveBeenCalledWith(
+      { url: ctx.url, data: response.data },
+      stats,
+      ctx,
+      null,
+    );
     expect(new Uint8Array(response.data)).toEqual(new Uint8Array([5, 6]));
     expect(stats.loading).toEqual({ start: 9950, first: 9960, end: 10_000 });
     expect(stats.bankAnswered).toBe(true);
@@ -256,11 +280,11 @@ describe('bank fLoader waits', () => {
   });
 
   it('hands a server answer to hls.js as onError with the status', () => {
-    const { loader, cb, reply } = waiting();
+    const { loader, cb, reply, ctx } = waiting();
     reply.error({ code: 503, text: 'Service Unavailable' });
     expect(cb.onError).toHaveBeenCalledWith(
       { code: 503, text: 'Service Unavailable' },
-      expect.objectContaining({ url: 'https://film.test/seg-7.ts' }),
+      ctx,
       null,
       loader.stats,
     );
@@ -269,16 +293,17 @@ describe('bank fLoader waits', () => {
   });
 
   it('calls onTimeout when the decider times the wait out', () => {
-    const { loader, cb, reply } = waiting();
+    const { loader, cb, reply, ctx } = waiting();
     reply.timeout();
-    expect(cb.onTimeout).toHaveBeenCalledWith(loader.stats, expect.any(Object), null);
+    expect(cb.onTimeout).toHaveBeenCalledWith(loader.stats, ctx, null);
     expect(cb.onSuccess).not.toHaveBeenCalled();
   });
 
   it('abort during the wait cancels it, calls onAbort and ignores a later reply', () => {
-    const { loader, cb, reply, cancel } = waiting();
+    const { loader, cb, reply, cancel, ctx } = waiting();
     loader.abort();
     expect(cancel).toHaveBeenCalledTimes(1);
+    expect(cb.onAbort).toHaveBeenCalledWith(loader.stats, ctx, null);
     expect(cb.onAbort).toHaveBeenCalledTimes(1);
     reply.success(bytesOf(1), { start: 0, first: 0, end: 1 });
     reply.error({ code: 503, text: 'x' });
@@ -313,10 +338,11 @@ describe('bank fLoader passes through', () => {
     const ctx = fragContext(3);
     loader.load(ctx, { timeout: 1 }, cb);
     expect(loader.inner.loads).toEqual([ctx]);
+    expect(loader.stats.loading.start).toBe(0);
     expect(loader.inner.callbacks).toBe(cb);
     loader.abort();
     expect(loader.inner.aborted).toBe(true);
-    expect(cb.onAbort).toHaveBeenCalledTimes(1);
+    expect(cb.onAbort).toHaveBeenCalledWith(loader.stats, ctx, null);
   });
 
   it('never asks the decider about the init segment, and passes it through even when armed', () => {
@@ -362,7 +388,12 @@ describe('bank fLoader passes through', () => {
       timings: { start: 100, first: 130, end: 400 },
     });
     expect(new Uint8Array(arg.bytes)).toEqual(new Uint8Array([1, 2, 3]));
-    expect(cb.onSuccess).toHaveBeenCalledTimes(1);
+    expect(cb.onSuccess).toHaveBeenCalledWith(
+      { url: ctx.url, data: expect.any(ArrayBuffer) },
+      stats,
+      ctx,
+      null,
+    );
     expect(ctx.resetIV).toBe(false);
   });
 
@@ -373,7 +404,7 @@ describe('bank fLoader passes through', () => {
     const ctx = fragContext(4);
     loader.load(ctx, {}, cb);
     loader.inner.callbacks.onError({ code: 500, text: 'e' }, ctx, null, loader.stats);
-    expect(cb.onError).toHaveBeenCalledTimes(1);
+    expect(cb.onError).toHaveBeenCalledWith({ code: 500, text: 'e' }, ctx, null, loader.stats);
     expect(s.bank.fragmentLoaded).not.toHaveBeenCalled();
   });
 
@@ -385,7 +416,7 @@ describe('bank fLoader passes through', () => {
     a.load(ctx, {}, cbA);
     a.inner.callbacks.onSuccess({ url: ctx.url, data: 'text' }, a.stats, ctx, null);
     expect(armedBank.bank.fragmentLoaded).not.toHaveBeenCalled();
-    expect(cbA.onSuccess).toHaveBeenCalledTimes(1);
+    expect(cbA.onSuccess).toHaveBeenCalledWith({ url: ctx.url, data: 'text' }, a.stats, ctx, null);
 
     const off = setup({ armed: false });
     const b = new off.F({});
@@ -402,11 +433,14 @@ describe('bank pLoader', () => {
     const { P, callbacks, bank } = setup({ playlist: '#EXTM3U\n' });
     const loader = new P({});
     const cb = callbacks();
-    loader.load({ ...levelContext }, {}, cb);
+    const ctx = { ...levelContext };
+    loader.load(ctx, {}, cb);
+    expect(loader.context).toBe(ctx);
     expect(bank.playlistText).toHaveBeenCalledTimes(1);
     expect(cb.onSuccess).not.toHaveBeenCalled();
     await flush();
-    const [response, stats, , details] = cb.onSuccess.mock.calls[0];
+    const [response, stats, context, details] = cb.onSuccess.mock.calls[0];
+    expect(context).toBe(ctx);
     expect(response).toEqual({ url: levelContext.url, data: '#EXTM3U\n' });
     expect(stats.loading).toEqual({ start: 10_000, first: 10_000, end: 10_000 });
     expect(stats.loaded).toBe(8);
@@ -420,7 +454,8 @@ describe('bank pLoader', () => {
     const { P, callbacks } = setup({ playlist: 'x' });
     const a = new P({});
     const cbA = callbacks();
-    a.load({ ...levelContext }, {}, cbA);
+    const ctxA = { ...levelContext };
+    a.load(ctxA, {}, cbA);
     a.abort();
     const b = new P({});
     const cbB = callbacks();
@@ -428,7 +463,7 @@ describe('bank pLoader', () => {
     b.destroy();
     await flush();
     expect(cbA.onSuccess).not.toHaveBeenCalled();
-    expect(cbA.onAbort).toHaveBeenCalledTimes(1);
+    expect(cbA.onAbort).toHaveBeenCalledWith(a.stats, ctxA, null);
     expect(cbB.onSuccess).not.toHaveBeenCalled();
   });
 
@@ -447,5 +482,67 @@ describe('bank pLoader', () => {
     loader.load({ url: 'https://film.test/master.m3u8', type: 'manifest' }, {}, cb);
     expect(bank.playlistText).not.toHaveBeenCalled();
     expect(loader.inner.callbacks).toBe(cb);
+  });
+});
+
+describe('abort or destroy from inside the decider', () => {
+  const decisions = {
+    answer: () => ANSWER(),
+    wait: () => ({ action: 'wait', cancel: vi.fn() }),
+    pass: () => ({ action: 'pass' }),
+  };
+
+  for (const [name, make] of Object.entries(decisions)) {
+    it(`reports one onAbort when it aborts the load and returns ${name}`, async () => {
+      const { F, callbacks, bank } = setup();
+      const loader = new F({});
+      const cb = callbacks();
+      const ctx = fragContext(1);
+      const decision = make();
+      bank.fragmentRequest.mockImplementation(() => {
+        loader.abort();
+        return decision;
+      });
+      loader.load(ctx, {}, cb);
+      await flush();
+      expect(cb.onAbort).toHaveBeenCalledTimes(1);
+      expect(cb.onAbort).toHaveBeenCalledWith(loader.stats, ctx, null);
+      expect(cb.onSuccess).not.toHaveBeenCalled();
+      expect(loader.inner.loads).toEqual([]);
+      if (decision.cancel) expect(decision.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it(`starts nothing when it destroys the load and returns ${name}`, async () => {
+      const { F, callbacks, bank } = setup();
+      const loader = new F({});
+      const cb = callbacks();
+      const inner = loader.inner;
+      bank.fragmentRequest.mockImplementation(() => {
+        loader.destroy();
+        return make();
+      });
+      expect(() => loader.load(fragContext(1), {}, cb)).not.toThrow();
+      await flush();
+      expect(cb.onSuccess).not.toHaveBeenCalled();
+      expect(cb.onAbort).not.toHaveBeenCalled();
+      expect(inner.loads).toEqual([]);
+      expect(inner.destroyed).toBe(true);
+    });
+  }
+
+  it('reports the abort of a playlist load aborted inside playlistText', async () => {
+    const { P, callbacks, bank } = setup();
+    const loader = new P({});
+    const cb = callbacks();
+    const ctx = { url: 'https://film.test/r480/index.m3u8', type: 'level', level: 2 };
+    bank.playlistText.mockImplementation(() => {
+      loader.abort();
+      return '#EXTM3U\n';
+    });
+    loader.load(ctx, {}, cb);
+    await flush();
+    expect(cb.onAbort).toHaveBeenCalledWith(loader.stats, ctx, null);
+    expect(cb.onSuccess).not.toHaveBeenCalled();
+    expect(loader.inner.loads).toEqual([]);
   });
 });
