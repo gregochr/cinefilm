@@ -391,6 +391,13 @@ export function startHlsJs({
   // The same for the film after the buffered range at the playhead.
   // A fragment loaded but not appended yet counts as buffered, so a flush that comes first cannot hide it.
   const holdBankLevelAtPlayhead = () => holdBankLevelAt(bufferEnd(video.currentTime, pending));
+  // The pending fragment itself (a main one with its sequence number and level), not another track's.
+  const isPending = (frag) =>
+    pending !== null &&
+    Boolean(frag) &&
+    (!frag.type || frag.type === 'main') &&
+    pending.sn === frag.sn &&
+    pending.level === frag.level;
   // The hole changes with pause, play and the end of a backward seek, with no event of hls.js's: the level follows.
   const followHole = () => {
     if (bank && holeS() !== lastHole) holdBankLevelAtPlayhead();
@@ -457,7 +464,6 @@ export function startHlsJs({
     rebankStep();
   };
   const onSeeking = () => {
-    pending = null; // hls.js may drop what it was about to append
     undoRebank();
     if (bank) holdBankLevelAtPlayhead();
     else applyCap();
@@ -537,7 +543,7 @@ export function startHlsJs({
   hls.on(Events.FRAG_BUFFERED, (_event, data) => {
     endLoading(data.frag);
     const frag = data.frag;
-    if (pending && frag && pending.sn === frag.sn && pending.level === frag.level) pending = null;
+    if (isPending(frag)) pending = null;
     if (!frag || frag.sn === 'initSegment' || (frag.type && frag.type !== 'main')) return;
     const entry = { start: frag.start, end: frag.start + frag.duration, level: frag.level };
     banked = [...banked.filter((f) => f.start !== entry.start), entry];
@@ -637,6 +643,7 @@ export function startHlsJs({
       stopHoldTimer();
       applyCap();
     }
+    if (isPending(data.frag)) pending = null; // its append failed: hls.js loads it again
     if (String(data.details ?? '').startsWith('frag')) endLoading(data.frag); // a failed fragment is not loading
     if (data.response?.code === 410) {
       // Admin stopped this playback on purpose: no new session, no retry (owner 2026-11-15).

@@ -548,11 +548,50 @@ describe('the engine holds hls.js on the bank’s level', () => {
         expect(env.levelWrites().at(-1)).toBe(1);
       });
 
-      it('forgets it at a seek', () => {
+      it('keeps it through a seek inside the buffer', () => {
         const env = loadedUnappended();
+        env.setTime(20);
         env.seek();
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(50);
+        expect(env.levelWrites().at(-1)).toBe(3);
+      });
+
+      it('keeps it when another track buffers the same sequence number and level', () => {
+        const env = loadedUnappended();
+        env.hls.fragBuffered({ ...media(5, 40), type: 'audio' });
+        env.hls.bufferFlushed({ start: 100, end: Infinity });
+        expect(env.levelWrites().at(-1)).toBe(3);
+      });
+
+      it('keeps it when another fragment is buffered', () => {
+        const env = loadedUnappended();
+        env.hls.fragBuffered(media(4, 30));
+        env.hls.bufferFlushed({ start: 100, end: Infinity });
+        expect(env.levelWrites().at(-1)).toBe(3);
+      });
+
+      it('forgets it when its own append fails', () => {
+        const env = loadedUnappended();
+        env.hls.error({
+          fatal: false,
+          type: 'mediaError',
+          details: 'bufferAppendError',
+          frag: media(5, 40),
+        });
         env.hls.bufferFlushed({ start: 100, end: Infinity });
         expect(env.levelWrites().at(-1)).toBe(1);
+      });
+
+      it('keeps it when another fragment’s append fails', () => {
+        const env = loadedUnappended();
+        env.hls.error({
+          fatal: false,
+          type: 'mediaError',
+          details: 'bufferAppendError',
+          frag: media(4, 30),
+        });
+        env.hls.bufferFlushed({ start: 100, end: Infinity });
+        expect(env.levelWrites().at(-1)).toBe(3);
       });
 
       it('forgets it when the bank turns off and on again', () => {
