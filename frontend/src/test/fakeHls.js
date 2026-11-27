@@ -33,6 +33,7 @@ export class FakeHls {
     FRAG_LOAD_ERROR: 'fragLoadError',
     FRAG_LOAD_TIMEOUT: 'fragLoadTimeOut',
     INTERNAL_ABORTED: 'aborted',
+    MEDIA_SOURCE_REQUIRES_RESET: 'mediaSourceRequiresReset',
   };
   // The loader hls.js uses when no `fLoader` is set: a stub class, so tests can tell it from the wrapper.
   static DefaultConfig = {
@@ -50,17 +51,51 @@ export class FakeHls {
   }
 
   constructor(config) {
-    this.config = { minAutoBitrate: 0, ...config };
+    this.config = { minAutoBitrate: 0, maxBufferHole: 0.1, ...config }; // hls.js's default hole
+    this.currentLevel = -1; // the level last switched to, by the engine's `loadLevel` or by Auto
     this.handlers = {};
     this.levels = [];
     this.autoLevelCapping = -1;
     this.loadSource = vi.fn();
-    this.attachMedia = vi.fn();
-    this.startLoad = vi.fn();
-    this.recoverMediaError = vi.fn();
+    this.video = null;
+    this.startPosition = -1; // hls.js's `startPosition`: what `startLoad` was last given
+    this.attachMedia = vi.fn((video) => {
+      this.video = video;
+    });
+    this.started = true; // loading runs from the start (`autoStartLoad`) until `stopLoad`
+    this.startLoad = vi.fn((position = -1) => {
+      this.started = true;
+      this.startPosition = position;
+    });
+    this.stopLoad = vi.fn(() => {
+      this.started = false;
+    });
+    // hls.ts `recoverMediaError`: reads the playhead and whether loading had started, detaches (which stops
+    // loading) and attaches, and restarts loading from the time it read when it had started and the time is not 0.
+    this.recoverMediaError = vi.fn(() => {
+      const time = this.video?.currentTime;
+      const { started } = this;
+      this.stopLoad();
+      if (started && time) this.startLoad(time);
+    });
     this.destroy = vi.fn();
     this.trigger = vi.fn(); // what the engine asks hls.js to do (the buffer flush)
     FakeHls.instances.push(this);
+  }
+
+  // hls.ts `loadingEnabled`: whether loading is running.
+  get loadingEnabled() {
+    return this.started;
+  }
+
+  // hls.js 1.7.4 (`level-controller.ts`): the level last switched to; setting a level other than -1 that is not
+  // the current one fires LEVEL_SWITCHING at once. A manual level is only remembered here.
+  get loadLevel() {
+    return this.currentLevel;
+  }
+
+  set loadLevel(level) {
+    if (level !== -1 && level !== this.currentLevel) this.fetchLevel(level);
   }
 
   // Every handler is kept, in the order added, as hls.js does.
@@ -81,6 +116,7 @@ export class FakeHls {
 
   /** hls.js starts to fetch `level` (automatic choice or not). */
   fetchLevel(level) {
+    this.currentLevel = level;
     this.emit(FakeHls.Events.LEVEL_SWITCHING, { level });
   }
 
