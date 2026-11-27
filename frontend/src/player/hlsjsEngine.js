@@ -406,16 +406,12 @@ export function startHlsJs({
   };
   // The same after hls.js reset the media itself (`recoverMediaError`, run by its error controller before this
   // engine hears of the error): the playhead reads 0 and nothing is buffered, so the level is for the position
-  // hls.js reloads from: `recoverMediaError` read the playhead before it detached and called `startLoad(time)`,
-  // so `hls.startPosition` is that time. When it was 0 `startLoad` is not called with it, and the position is the
-  // playhead of the last time update (`lastTime` alone is stale after a seek that is still waiting for data).
+  // hls.js's synchronous `startLoad(time)` has just set, `hls.startPosition`. A reset with the playhead at exactly
+  // 0 s makes no such call (hls.js reloads later, on MEDIA_ATTACHED): the position is then whatever it was, and a
+  // wrong rung is caught by the bank-rung correction (`bankWrongRung`).
   const dropPendingAfterReset = () => {
     pending = null;
-    if (!bank) return;
-    const { startPosition } = hls;
-    holdBankLevelAt(
-      Number.isFinite(startPosition) && startPosition >= 0 ? startPosition : lastTime,
-    );
+    if (bank) holdBankLevelAt(hls.startPosition);
   };
   // The hole changes with pause, play and the end of a backward seek, with no event of hls.js's: the level follows.
   const followHole = () => {

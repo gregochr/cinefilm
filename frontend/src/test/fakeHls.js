@@ -62,14 +62,21 @@ export class FakeHls {
     this.attachMedia = vi.fn((video) => {
       this.video = video;
     });
+    this.started = true; // loading runs from the start (`autoStartLoad`) until `stopLoad`
     this.startLoad = vi.fn((position = -1) => {
+      this.started = true;
       this.startPosition = position;
     });
-    // hls.ts `recoverMediaError`: reads the playhead, detaches and attaches, and restarts loading from the time
-    // it read when that is not 0.
+    this.stopLoad = vi.fn(() => {
+      this.started = false;
+    });
+    // hls.ts `recoverMediaError`: reads the playhead and whether loading had started, detaches (which stops
+    // loading) and attaches, and restarts loading from the time it read when it had started and the time is not 0.
     this.recoverMediaError = vi.fn(() => {
       const time = this.video?.currentTime;
-      if (time) this.startLoad(time);
+      const { started } = this;
+      this.stopLoad();
+      if (started && time) this.startLoad(time);
     });
     this.destroy = vi.fn();
     this.trigger = vi.fn(); // what the engine asks hls.js to do (the buffer flush)
