@@ -89,10 +89,12 @@ buffers may be. If Chrome's audio buffer is the 12 MiB we recall, it holds about
    film's end, else no verdict. A minute row holds no film position, so the film's end is
    found by rebuilding each minute's position backwards from the part's `endPositionMs`, less the later minutes'
    moved ms; the minute is at the film's end when that position plus its seconds ahead (× 1000, as positions are
-   in ms) is at least the edition's runtime (as `Edition.recomputeRuntime` works it out) less 60 s. Only for a
-   part with no seek, an `endPositionMs` and a known runtime (`runtimeMs` not null and every original part has a
-   duration above 0, read as the method reads it, `timelineDurationMs()` for a split film and `getDurationMs()`
-   for one file: the method counts an unknown or 0 duration as 0, which would put the film's end early); otherwise a no-fragment minute has no verdict, never bad by itself. A
+   in ms) is at least the edition's known runtime less 60 s. The known runtime comes from one pure method,
+   `knownRuntimeMs(edition)`: the sum `Edition.recomputeRuntime` would give (each original part's
+   `timelineDurationMs()` for a split film, `getDurationMs()` for one file), computed from the parts and never read
+   from the stored `runtimeMs`, or null when there are no original parts or any part's duration so read is null
+   or 0 (the method counts those as 0, which would put the film's end early). Only for a part with no seek, an
+   `endPositionMs` and a non-null known runtime; otherwise a no-fragment minute has no verdict, never bad by itself. A
    minute with no verdict (not playing, at the film's end, or not decidable), and a point with no minute, take the
    logger's internet check for the point's state: good if it answered within
    1 s, bad if over 1 s. A round with a position but no check (`probe_ms` null: a timeout, an error answer, a
@@ -195,13 +197,13 @@ Then the owner is told what the buffers allow, with question 2.
    (decisions 4's 60 s rule and 5). Unit tests with made-up coordinates far from any real line: each half of a
    minute, a playing minute with no fragment in a decidable part (no seek, an `endPositionMs`, a known runtime,
    well before the film's end: bad), the film's end within 60 s with a good check (good) and with no check
-   anywhere in the journey (unknown), each of a seek, no `endPositionMs`, a null runtime and a two-part edition
-   with one part's `durationMs` and `videoDurationMs` both null and one with both 0, each on a playing no-fragment minute well
-   before the true end and with position + ahead below the known part's duration − 60 s (so a build that trusts
-   the summed runtime reads the minute bad), with a good check
-   (good) and with no check anywhere in the journey (unknown), a two-part edition where one part's `durationMs` is
-   null but its `videoDurationMs` above 0 (runtime known: the same minute with a good check is bad), one file with
-   `durationMs` 0 and `videoDurationMs` above 0 (runtime unknown: good with a good check), a point in the overlap of two parts' rows where
+   anywhere in the journey (unknown), each of a seek, no `endPositionMs` and a null known runtime on a playing
+   no-fragment minute with a good check (good) and with no check anywhere in the journey (unknown), a stored
+   `runtimeMs` that differs from the parts' sum (the sum is used); `knownRuntimeMs` tested directly with exact
+   values: one file (its `durationMs`; `durationMs` 0 or null with `videoDurationMs` above 0 gives null), two parts
+   (the sum of `videoDurationMs` where above 0, else `durationMs`; one part with `durationMs` null but
+   `videoDurationMs` above 0 counted; one part with both null, or both 0, gives null), no original parts (null);
+   a point in the overlap of two parts' rows where
    the earlier part's row is good and the later's bad (bad) and the other way round (good), the boundaries (moved
    + stalled 44,999 and 45,000 ms; moved 44,999 and 45,000 ms; medians 499 and 500; position + ahead at runtime
    − 60,001 and − 60,000 ms; `probe_ms` 1,000 and 1,001), a mostly-paused no-fragment minute with a good
