@@ -20,13 +20,14 @@ import { bankedAhead } from './buffered.js';
 import { champagneBase, champagneCeiling } from './champagne.js';
 import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
+import { RECONNECT_MS } from './reconnect.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
 import { REBANK_DONE_AT_S, REBANK_UNDO_BELOW_S, rebankDecision } from './rebank.js';
 import { createRungMarks } from './rungMarks.js';
 import { createStepGate } from './stepGate.js';
 import { addSample, fragmentKbps, lowerMiddle, networkGeneration } from './throughput.js';
 
-export const RECONNECT_MS = 5000;
+export { RECONNECT_MS };
 // How often the rate of the fragment in flight is read for the floor hold, in ms.
 export const HOLD_CHECK_MS = 2000;
 // A fragment in flight counts for the release only once it has been receiving this long, in ms, counted from
