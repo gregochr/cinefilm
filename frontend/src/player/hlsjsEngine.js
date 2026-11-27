@@ -40,6 +40,9 @@ export const IN_FLIGHT_MIN_AGE_MS = 4000;
 export const RETRIED_CLEARS = 4;
 // How many of the newest fragment rates the release reads.
 const RELEASE_SAMPLES = 3;
+// hls.js 1.7.4's `ErrorActionFlags.ResetMediaSource`: its error controller has already run `recoverMediaError` for
+// an error carrying it (a const enum there, so no run-time export).
+const RESET_MEDIA_SOURCE = 16;
 
 // kbit/s of one loaded fragment, timed from `loading.start` so the wait for the first byte counts; null when
 // there is nothing to measure.
@@ -174,6 +177,15 @@ export function startHlsJs({
   let holdTimer = null; // the one check of the in-flight rate, running while a fragment loads
   let bank = null; // while the film bank is on: { levelAt(seconds), frontLevel() } (hls.js level indices)
   let destroyed = false;
+  // Where loading resumes: the playhead as last seen with media loaded (-1: from the start), else the start asked
+  // for. hls.js reloads from `config.startPosition` when it reattaches the media on its own (after a reset), and the
+  // playhead reads 0 by then, so that setting follows the playhead too and never takes the film back to where it began.
+  let resumeAt = config.startPosition;
+  const rememberPlayhead = () => {
+    if (video.readyState === 0) return;
+    resumeAt = video.currentTime > 0 ? video.currentTime : -1;
+    hls.config.startPosition = resumeAt;
+  };
 
   // The one writer of `minAutoBitrate`: the larger of the hold's floor and the re-bank's.
   const writeFloor = () => {
@@ -444,7 +456,7 @@ export function startHlsJs({
     retriedRun = 0;
     applyCap();
     if (hls.levels?.length) {
-      hls.startLoad(video.readyState > 0 ? video.currentTime : config.startPosition);
+      hls.startLoad(video.readyState > 0 ? video.currentTime : resumeAt);
     } else {
       hls.loadSource(session.masterUrl);
     }
@@ -478,11 +490,13 @@ export function startHlsJs({
   // The bank is full, so hls.js is mostly idle and sends no fragment events: the re-bank is read on timeupdate.
   const onTimeUpdate = () => {
     lastTime = video.currentTime;
+    rememberPlayhead();
     followHole();
     applyCap();
     rebankStep();
   };
   const onSeeking = () => {
+    rememberPlayhead();
     undoRebank();
     if (bank) holdBankLevelAtPlayhead();
     else applyCap();
@@ -694,10 +708,19 @@ export function startHlsJs({
       dropPending(); // hls.js stops loading here: the fragment loaded but not appended is gone
       beginReconnecting();
     } else if (data.type === ErrorTypes.MEDIA_ERROR) {
-      // The recovery loads from the playhead: at the rung the bank holds there.
+      // hls.js's error controller runs before this handler: for a reset it has recovered already, and for every
+      // fatal error it has then stopped loading (`started` false), so a recovery of ours would reset the media a
+      // second time, from a playhead that reads 0, and `recoverMediaError` would not start loading again.
       pending = null; // the recovery detaches the media: a fragment loaded but not appended is thrown away
-      if (bank) holdBankLevelAt(video.currentTime);
-      hls.recoverMediaError();
+      const resumeFrom = video.readyState > 0 ? video.currentTime : resumeAt;
+      if (((data.errorAction?.flags ?? 0) & RESET_MEDIA_SOURCE) !== 0) {
+        dropPendingAfterReset();
+      } else {
+        // The recovery loads from the playhead: at the rung the bank holds there.
+        if (bank) holdBankLevelAt(video.currentTime);
+        hls.recoverMediaError();
+      }
+      if (!hls.loadingEnabled) hls.startLoad(resumeFrom);
     } else handlers.onFatal();
   });
 

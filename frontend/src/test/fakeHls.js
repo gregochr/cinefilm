@@ -4,6 +4,10 @@ import { vi } from 'vitest';
 export class FakeHls {
   static instances = [];
   static supported = true;
+  // Opt in: `error()` runs hls.js's own error controller (`onErrorOut`) before the engine's handler, as the real
+  // one is registered first: an error whose `errorAction.flags` carry the reset flag (16) is recovered, then a fatal
+  // one stops loading. Off, `error()` only emits, which is what most tests mean.
+  static errorController = false;
   static Events = {
     MANIFEST_PARSED: 'hlsManifestParsed',
     LEVEL_SWITCHING: 'hlsLevelSwitching',
@@ -45,6 +49,7 @@ export class FakeHls {
   static reset() {
     FakeHls.instances = [];
     FakeHls.supported = true;
+    FakeHls.errorController = false;
   }
   static get last() {
     return FakeHls.instances[FakeHls.instances.length - 1];
@@ -155,7 +160,18 @@ export class FakeHls {
     this.emit(FakeHls.Events.BUFFER_FLUSHED, { type, start, end });
   }
 
+  /** The media element has been attached again after a reset: hls.js reloads, from its configured start position,
+   * when loading is stopped (`base-stream-controller.ts` `onMediaAttached`, `autoStartLoad`). */
+  mediaAttached() {
+    if (!this.loadingEnabled) this.startLoad(this.config.startPosition);
+  }
+
   error(data) {
+    if (FakeHls.errorController) {
+      // hls.js 1.7.4 `onErrorOut` (error-controller.ts): the reset flag recovers, then a fatal error stops loading.
+      if (((data.errorAction?.flags ?? 0) & 16) !== 0) this.recoverMediaError();
+      if (data.fatal) this.stopLoad();
+    }
     this.emit(FakeHls.Events.ERROR, data);
   }
 }
