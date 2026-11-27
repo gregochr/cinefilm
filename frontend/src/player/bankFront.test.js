@@ -1732,4 +1732,30 @@ describe('the bank front: round four of the hooks', () => {
     await complete(server.calls.at(-1));
     expect(log).toEqual([]);
   });
+  it("hears no onDone in a listener that another's onDone unsubscribed", async () => {
+    const { server, front } = await running();
+    const log = [];
+    let offB = () => {};
+    front.subscribe(0, { onDone: () => offB() });
+    offB = front.subscribe(0, { onDone: () => log.push('B done') });
+    front.subscribe(0, { onDone: () => log.push('C done') });
+    await complete(server.calls.at(-1));
+    expect(log).toEqual(['C done']);
+  });
+
+  it('keeps a listener that subscribes inside onDone after the set has emptied', async () => {
+    const { server, front } = await running();
+    const log = [];
+    let offB = () => {};
+    front.subscribe(0, {
+      onDone: () => {
+        offB();
+        front.subscribe(0, { onAbort: () => log.push('X abort') });
+      },
+    });
+    offB = front.subscribe(0, {});
+    await complete(server.calls.at(-1));
+    front.stop();
+    expect(log).toEqual(['X abort']);
+  });
 });
