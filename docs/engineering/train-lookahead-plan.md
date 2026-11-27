@@ -88,9 +88,10 @@ buffers may be. If Chrome's audio buffer is the 12 MiB we recall, it holds about
    which `health.js` writes for a minute with no throughput sample), bad only when the bank had not reached the
    film's end, else no verdict. A minute row holds no film position, so the film's end is
    found by rebuilding each minute's position backwards from the part's `endPositionMs`, less the later minutes'
-   moved ms; the minute is at the film's end when that position plus its seconds ahead is at least the edition's
-   runtime (as `Edition.recomputeRuntime` works it out) less 60 s. Only for a part with no seek, an
-   `endPositionMs` and a known runtime; otherwise a no-fragment minute has no verdict, never bad by itself. A
+   moved ms; the minute is at the film's end when that position plus its seconds ahead (× 1000, as positions are
+   in ms) is at least the edition's runtime (as `Edition.recomputeRuntime` works it out) less 60 s. Only for a
+   part with no seek, an `endPositionMs` and a known runtime (`runtimeMs` not null and above 0: the method leaves
+   0 when the parts' durations are null); otherwise a no-fragment minute has no verdict, never bad by itself. A
    minute with no verdict (not playing, at the film's end, or not decidable), and a point with no minute, take the
    logger's internet check for the point's state: good if it answered within
    1 s, bad if over 1 s. A round with a position but no check (`probe_ms` null: a timeout, an error answer, a
@@ -191,13 +192,16 @@ Then the owner is told what the buffers allow, with question 2.
 
 1. **1a, points and states (backend):** a service building each journey's track points and their states
    (decisions 4's 60 s rule and 5). Unit tests with made-up coordinates far from any real line: each half of a
-   minute, a playing minute with no fragment (bad), the film's end within 60 s with a good check (good) and with no check
-   anywhere in the journey (unknown), a part with a seek, no `endPositionMs` or an unknown runtime with a slow
-   check (bad), a point in the overlap of two parts' rows (the later part's), a mostly-paused minute (the check decides), a slow check, a
-   missing check with and without checks elsewhere in the journey, a good minute whose round has a slow or missing
-   check (stays good), a minute with 40 s stalled and 20 s moved outside a part's first minute (bad), 40 s stalled and 0 moved (not
-   playing: the check decides), a stall in a part's first minute ignored, a
-   two-part viewing, a journey whose viewing is gone, no positions.
+   minute, a playing minute with no fragment in a decidable part (no seek, an `endPositionMs`, a known runtime,
+   well before the film's end: bad), the film's end within 60 s with a good check (good) and with no check
+   anywhere in the journey (unknown), each of a seek, no `endPositionMs`, a null runtime and a runtime of 0 on a
+   playing no-fragment minute with a good check (good) and with no check anywhere in the journey (unknown), a
+   point in the overlap of two parts' rows (the later part's), a mostly-paused no-fragment minute with a good
+   check (good), a slow check (bad), a missing check with and without checks elsewhere in the journey, a good
+   minute whose round has a slow or missing check (stays good), a minute with 40 s stalled and 20 s moved outside
+   a part's first minute (bad), 40 s stalled and 0 moved with a good check (not playing: good), a stall in a
+   part's first minute with a good check (good), a two-part viewing, a journey whose viewing is gone, no
+   positions. Where a test expects the check to decide, the check is good and the minute alone would be bad.
 2. **1b, stretches and the endpoint (backend):** decision 6 from a pure class, and `GET /api/journeys/link-map`
    (the session's cookie, `Cache-Control: no-store`; an `excludeJourney` parameter for the replay). `SECURITY.md`
    rule 7's journey paragraph rewritten (question 1 answered first). Unit tests at each boundary; an API test.
