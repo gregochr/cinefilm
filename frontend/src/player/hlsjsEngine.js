@@ -18,6 +18,7 @@
 // (rungMarks.js, stuck-rung-plan.md). While the film bank is on (outside-bank-plan.md, decision 3) hls.js plays
 // on a manual level, the rung the bank holds its next fragment at, and every rule above is suspended: the engine's
 // `bankOn`, `bankWrongRung` and `bankRelease` are how the bank drives that, and nothing calls them yet.
+import { BANK_RUNG_TEXT } from './bankRequests.js';
 import { bankedAhead } from './buffered.js';
 import { champagneBase, champagneCeiling } from './champagne.js';
 import { createFloorHold } from './floorHold.js';
@@ -37,9 +38,6 @@ export const HOLD_CHECK_MS = 2000;
 export const IN_FLIGHT_MIN_AGE_MS = 4000;
 // Fragments in a row that needed a retry before the rates for the rungs above 480p are forgotten.
 export const RETRIED_CLEARS = 4;
-// The text of the 503 the bank gives a request for a fragment it holds at another rung (outside-bank-plan.md,
-// decision 4): never from a server, so hls.js's count of failed fragments is corrected for it.
-export const BANK_RUNG_TEXT = 'bank-rung';
 // How many of the newest fragment rates the release reads.
 const RELEASE_SAMPLES = 3;
 

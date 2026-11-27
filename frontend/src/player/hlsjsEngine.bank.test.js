@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeHls } from '../test/fakeHls.js';
-import {
-  BANK_RUNG_TEXT,
-  HOLD_CHECK_MS,
-  RECONNECT_MS,
-  hlsConfig,
-  startHlsJs,
-} from './hlsjsEngine.js';
+import { BANK_RUNG_TEXT } from './bankRequests.js';
+import { HOLD_CHECK_MS, RECONNECT_MS, hlsConfig, startHlsJs } from './hlsjsEngine.js';
 import { HEALTHY_MS } from './stepGate.js';
 
 beforeEach(() => {
