@@ -26,7 +26,10 @@ class FakeInner {
     this.destroyed = false;
     this.aborted = false;
   }
+  // As hls.js 1.7.4's base-loader.ts `load` (:29-44): one use only, and it stamps `loading.start` itself.
   load(context, config, callbacks) {
+    if (this.stats.loading.start) throw new Error('Loader can only be used once.');
+    this.stats.loading.start = 12_345;
     this.context = context;
     this.callbacks = callbacks;
     this.loads.push(context);
@@ -336,9 +339,9 @@ describe('bank fLoader passes through', () => {
     const loader = new s.F({});
     const cb = s.callbacks();
     const ctx = fragContext(3);
-    loader.load(ctx, { timeout: 1 }, cb);
+    expect(() => loader.load(ctx, { timeout: 1 }, cb)).not.toThrow();
     expect(loader.inner.loads).toEqual([ctx]);
-    expect(loader.stats.loading.start).toBe(0);
+    expect(loader.stats.loading.start).toBe(12_345);
     expect(loader.inner.callbacks).toBe(cb);
     loader.abort();
     expect(loader.inner.aborted).toBe(true);
@@ -479,7 +482,10 @@ describe('bank pLoader', () => {
     const { P, callbacks, bank } = setup({ playlist: 'x' });
     const loader = new P({});
     const cb = callbacks();
-    loader.load({ url: 'https://film.test/master.m3u8', type: 'manifest' }, {}, cb);
+    expect(() =>
+      loader.load({ url: 'https://film.test/master.m3u8', type: 'manifest' }, {}, cb),
+    ).not.toThrow();
+    expect(loader.stats.loading.start).toBe(12_345);
     expect(bank.playlistText).not.toHaveBeenCalled();
     expect(loader.inner.callbacks).toBe(cb);
   });
