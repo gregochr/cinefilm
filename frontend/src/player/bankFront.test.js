@@ -1827,4 +1827,31 @@ describe('the bank front: callbacks that call back in from onAbort', () => {
     front.stop();
     expect(log).toEqual([]);
   });
+  it('makes no forced request while paused when an onAbort unsubscribes the kept listener', async () => {
+    const { server, front } = await running();
+    server.calls.at(-1).status(503);
+    await vi.advanceTimersByTimeAsync(1000);
+    const off = front.subscribe(0, {});
+    front.fetchNow();
+    await flush();
+    expect(server.calls).toHaveLength(5);
+    front.subscribe(3, { onAbort: () => off() });
+    front.start({ seq: 0, rung: 'r480' });
+    await flush();
+    expect(server.calls).toHaveLength(5);
+  });
+
+  it('makes no forced request while paused when an onAbort moves the front', async () => {
+    const { server, front } = await running();
+    server.calls.at(-1).status(503);
+    await vi.advanceTimersByTimeAsync(1000);
+    front.subscribe(0, {});
+    front.fetchNow();
+    await flush();
+    expect(server.calls).toHaveLength(5);
+    front.subscribe(3, { onAbort: () => front.movePast(4) });
+    front.start({ seq: 0, rung: 'r480' });
+    await flush();
+    expect(server.calls).toHaveLength(5);
+  });
 });

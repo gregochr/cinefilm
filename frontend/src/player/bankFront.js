@@ -447,7 +447,8 @@ export function createBankFront({
       running = true;
       syncWatch();
       abortSubscribers(dropped);
-      if (keep) forceFetch();
+      // An onAbort may have unsubscribed the kept listener or moved the front: check again.
+      if (keep && next === seq && listeners.get(seq)?.size > 0) forceFetch();
       pump();
     },
     movePast(seq) {
