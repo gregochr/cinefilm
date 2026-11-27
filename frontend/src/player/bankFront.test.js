@@ -732,14 +732,16 @@ describe('the bank front: subscribers to a fetch', () => {
     expect(server.maxOpen).toBe(1);
   });
 
-  it('ends the subscription at done: the next fetch is not reported', async () => {
+  it('ends the subscription at done: a later fetch of the same position is not reported to it', async () => {
     const { server, front } = await running();
     const l = listener();
     front.subscribe(0, l);
     await complete(server.calls.at(-1));
-    const seen = l.log.length;
+    expect(l.log.map((e) => e[0])).toEqual(['firstByte', 'progress', 'done']);
+    front.start({ seq: 0, rung: 'r480' });
+    await flush();
     await complete(server.calls.at(-1));
-    expect(l.log).toHaveLength(seen);
+    expect(l.log.map((e) => e[0])).toEqual(['firstByte', 'progress', 'done']);
   });
 
   it('attaches to the next fetch when none is in flight', async () => {
@@ -767,20 +769,26 @@ describe('the bank front: subscribers to a fetch', () => {
     expect(l.log.at(-1)[0]).toBe('done');
   });
 
-  it('hands a 404 and a 410 over at once', async () => {
+  it("hands a 404 and a 410 over at once, as the subscribers' last event", async () => {
     const lost = await running();
-    const a = listener();
-    lost.front.subscribe(0, a);
+    const a = [];
+    lost.front.subscribe(0, {
+      onServerAnswer: (s) => a.push([s]),
+      onAbort: () => a.push(['abort']),
+    });
     lost.server.calls.at(-1).status(404);
     await flush();
-    expect(a.log.map((e) => e[1])).toEqual([404]);
+    expect(a).toEqual([[404]]);
     expect(lost.seen.lost).toBe(1);
     const gone = await running();
-    const b = listener();
-    gone.front.subscribe(0, b);
+    const b = [];
+    gone.front.subscribe(0, {
+      onServerAnswer: (s) => b.push([s]),
+      onAbort: () => b.push(['abort']),
+    });
     gone.server.calls.at(-1).status(410);
     await flush();
-    expect(b.log.map((e) => e[1])).toEqual([410]);
+    expect(b).toEqual([[410]]);
     expect(gone.seen.stopped).toBe(1);
   });
 
@@ -956,6 +964,7 @@ describe('the bank front: uneven entries in the window', () => {
 describe('the bank front: retries of a fetch now', () => {
   it('retries a failed fetch now at F, exactly once more', async () => {
     const { server, front } = await running({ filmAhead: 12, need: 12 });
+    front.subscribe(0, {});
     front.fetchNow();
     await flush();
     server.calls.at(-1).fail();
@@ -970,6 +979,7 @@ describe('the bank front: retries of a fetch now', () => {
 
   it('retries a failed fetch now while paused, before RECONNECT_MS, exactly once more', async () => {
     const { server, front } = await running();
+    front.subscribe(0, {});
     server.calls.at(-1).status(503);
     await vi.advanceTimersByTimeAsync(1000);
     front.fetchNow();
@@ -983,6 +993,7 @@ describe('the bank front: retries of a fetch now', () => {
 
   it('retries a fetch now after a 503 with Retry-After at F, exactly once more', async () => {
     const { server, front } = await running({ filmAhead: 12, need: 12 });
+    front.subscribe(0, {});
     front.fetchNow();
     await flush();
     server.calls.at(-1).status(503, '1');
@@ -994,6 +1005,7 @@ describe('the bank front: retries of a fetch now', () => {
 
   it('lets a fetch now take over a retry already pending when the front no longer wants film', async () => {
     const { server, front } = await running();
+    front.subscribe(0, {});
     server.calls.at(-1).fail();
     await vi.advanceTimersByTimeAsync(500);
     front.update({ filmAhead: 12, need: 12 });
@@ -1020,20 +1032,30 @@ describe('the bank front: a subscriber to a position that already failed', () =>
     expect(late).toEqual([]);
   });
 
-  it('hears a network-error wait as an error, and nothing after a move', async () => {
+  it("does not replay a network-error wait, but a retry's own events reach the subscriber", async () => {
     const { server, front } = await running();
     server.calls.at(-1).fail();
     await flush();
     const log = [];
     front.subscribe(0, {
       onError: (kind) => log.push(['error', kind]),
-      onServerAnswer: (status) => log.push(['answer', status]),
+      onDone: () => log.push(['done']),
     });
-    expect(log).toEqual([['error', 'network']]);
+    expect(log).toEqual([]);
+    await vi.advanceTimersByTimeAsync(2000);
+    await complete(server.calls.at(-1));
+    expect(log).toEqual([['done']]);
+  });
+
+  it('forgets a replay after a move', async () => {
+    const { server, front } = await running();
+    server.calls.at(-1).status(503, '4');
+    await flush();
     front.movePast(4);
     await flush();
-    front.subscribe(0, { onError: () => log.push('stale') });
-    expect(log).toEqual([['error', 'network']]);
+    const log = [];
+    front.subscribe(0, { onServerAnswer: () => log.push('stale') });
+    expect(log).toEqual([]);
   });
 
   it('does not replay the 503 that paused the front: a subscriber and a fetch now hear only the new fetch', async () => {
@@ -1395,6 +1417,7 @@ describe('the bank front: a fetch now at the bank limit', () => {
   it('retries a failed fetch now at the limit, exactly once more', async () => {
     const { server, front } = await running({ limitBytes: 1 });
     await complete(server.calls.at(-1), { size: 10 });
+    front.subscribe(1, {});
     front.fetchNow();
     await flush();
     server.calls.at(-1).fail();
@@ -1403,5 +1426,86 @@ describe('the bank front: a fetch now at the bank limit', () => {
     expect(server.calls[5].url).toBe(segUrl('r480', 1));
     await vi.advanceTimersByTimeAsync(RECONNECT_MS * 2);
     expect(server.calls).toHaveLength(6);
+  });
+});
+
+describe('the bank front: forced retries need someone waiting', () => {
+  it('makes no forced retry at F once the subscriber has gone and the fetch fails again', async () => {
+    const { server, front } = await running({ filmAhead: 12, need: 12 });
+    const off = front.subscribe(0, {});
+    front.fetchNow();
+    await flush();
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(server.calls).toHaveLength(5);
+    off();
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(RECONNECT_MS * 4);
+    expect(server.calls).toHaveLength(5);
+  });
+
+  it('makes no forced retry when the subscriber goes while the retry is pending', async () => {
+    const { server, front } = await running({ filmAhead: 12, need: 12 });
+    const off = front.subscribe(0, {});
+    front.fetchNow();
+    await flush();
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(500);
+    off();
+    await vi.advanceTimersByTimeAsync(RECONNECT_MS * 4);
+    expect(server.calls).toHaveLength(4);
+  });
+
+  it('makes no forced request before RECONNECT_MS from the pause once the subscriber has gone', async () => {
+    const { server, front } = await running();
+    server.calls.at(-1).status(503);
+    await vi.advanceTimersByTimeAsync(1000);
+    const off = front.subscribe(0, {});
+    front.fetchNow();
+    await flush();
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(server.calls).toHaveLength(6);
+    off();
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(RECONNECT_MS - 3000 - 1);
+    expect(server.calls).toHaveLength(6);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.calls).toHaveLength(7);
+  });
+});
+
+describe('the bank front: a start at the position a subscriber waits on', () => {
+  it('serves the subscriber with exactly one new request at F', async () => {
+    const { server, front } = await running({ filmAhead: 12, need: 12 });
+    const done = [];
+    front.subscribe(0, { onDone: (segment) => done.push(segment.seq) });
+    front.fetchNow();
+    await flush();
+    const old = server.calls.at(-1);
+    front.start({ seq: 0, rung: 'r480' });
+    await flush();
+    expect(old.aborted).toBe(true);
+    expect(server.calls).toHaveLength(5);
+    expect(server.maxOpen).toBe(1);
+    await complete(server.calls.at(-1));
+    expect(done).toEqual([0]);
+    await vi.advanceTimersByTimeAsync(RECONNECT_MS * 2);
+    expect(server.calls).toHaveLength(5);
+  });
+
+  it('serves the subscriber with exactly one new request when film is wanted', async () => {
+    const { server, front } = await running();
+    const done = [];
+    front.subscribe(0, { onDone: (segment) => done.push(segment.seq) });
+    const old = server.calls.at(-1);
+    front.start({ seq: 0, rung: 'r480' });
+    await flush();
+    expect(old.aborted).toBe(true);
+    expect(server.calls).toHaveLength(5);
+    expect(server.calls[4].url).toBe(segUrl('r480', 0));
+    expect(server.maxOpen).toBe(1);
+    await complete(server.calls.at(-1));
+    expect(done).toEqual([0]);
   });
 });

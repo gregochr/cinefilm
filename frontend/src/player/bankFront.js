@@ -58,11 +58,14 @@ function parsePlaylist(text, playlistUrl) {
  * - `subscribe(seq, listener)` attaches to the front's fetch of `seq`, in flight now or the next one: the same
  *   server request serves both. The listener may have `onFirstByte()`, `onProgress(loadedBytes)`, `onDone(segment)`
  *   (a fresh `bank.getSegment(seq)`, after which the subscription ends), `onServerAnswer(status, headers)` for any
- *   answer other than 200 (the front goes on handling it itself), `onError('network' | 'timeout')` and
+ *   answer other than 200 (the front goes on handling it itself; after a 404 or 410 it is the subscribers' last
+ *   event, with no `onAbort`), `onError('network' | 'timeout')` and
  *   `onAbort()`, once, when `stop()`, `start()` or `movePast()` drops the position (the subscription ends). Nothing
  *   else is called for an aborted fetch, a first byte already past is not replayed, and a listener must not
- *   throw. A subscriber to a position that is in a Retry-After or network-error wait at that moment hears that
- *   answer or error at once, before `subscribe` returns, then the retry's own events; never a pause's answer.
+ *   throw. A subscriber to a position that is in a Retry-After wait at that moment hears that 503 at once, before
+ *   `subscribe` returns, then the retry's own events; a network-error or timeout wait and a pause's 503 are not
+ *   replayed. A forced retry goes ahead only while the position has a subscriber. `start()` at a position with
+ *   subscribers keeps them and fetches it at once, with one request.
  *   Returns the function that unsubscribes.
  */
 export function createBankFront({
@@ -266,39 +269,41 @@ export function createBankFront({
     pauseTimer = setTimer(resume, reconnectMs);
   }
 
-  function later(ms, seq, name, ...args) {
-    lastAnswer = seq === null ? null : { seq, name, args };
+  // `answer` is `{ seq, name, args }` for a wait a new subscriber is told of; null for any other.
+  function later(ms, answer = null) {
+    lastAnswer = answer;
     retryTimer = setTimer(() => {
       retryTimer = null;
       lastAnswer = null;
-      if (forced) fetchSegment();
+      // A forced retry goes ahead only while someone is waiting on the position.
+      if (forced && listeners.get(next)?.size > 0) fetchSegment();
       else pump();
     }, ms);
   }
 
   function failed(res, seq) {
     if (res.outcome !== 'status') {
-      later(NETWORK_RETRY_MS, seq, 'onError', res.outcome);
+      later(NETWORK_RETRY_MS);
     } else if (res.status === 410) {
+      listeners.delete(seq); // the answer was the subscribers' last event
       stop();
       onStopped();
     } else if (res.status === 404) {
+      listeners.delete(seq);
       stop();
       onSessionLost();
     } else if (res.status === 503 && res.retryAfter > 0) {
-      later(
-        Math.min(res.retryAfter * 1000 * 2 ** backoffs, RETRY_AFTER_CAP_MS),
+      later(Math.min(res.retryAfter * 1000 * 2 ** backoffs, RETRY_AFTER_CAP_MS), {
         seq,
-        'onServerAnswer',
-        res.status,
-        res.headers,
-      );
+        name: 'onServerAnswer',
+        args: [res.status, res.headers],
+      });
       backoffs += 1;
     } else if (res.status === 503) {
       forced = false; // only retries of a fetch now bypass the pause
       pause();
     } else {
-      later(NETWORK_RETRY_MS, seq, 'onServerAnswer', res.status, res.headers);
+      later(NETWORK_RETRY_MS);
     }
   }
 
@@ -362,6 +367,13 @@ export function createBankFront({
     });
   }
 
+  function forceFetch() {
+    if (stopped || !armed || !running) return;
+    if (!eligible.every((r) => bank.getPlaylist(r.id) !== null)) return;
+    forced = true; // a retry of this position goes ahead whatever the wants and the pause say
+    if (!busy && retryTimer === null) fetchSegment();
+  }
+
   function pump() {
     if (stopped || busy || paused || retryTimer !== null || !armed) return;
     const missing = eligible.find((r) => bank.getPlaylist(r.id) === null);
@@ -397,12 +409,14 @@ export function createBankFront({
     start({ seq, rung }) {
       if (stopped) return;
       resetPosition();
+      const waiting = listeners.get(seq)?.size > 0; // subscribers of the new position keep their fetch
       dropSubscribers((q) => q !== seq);
       next = seq;
       wantedRung = clamp(rung);
       running = true;
       syncWatch();
-      pump();
+      if (waiting) forceFetch();
+      else pump();
     },
     movePast(seq) {
       if (stopped || seq < next) return;
@@ -424,12 +438,7 @@ export function createBankFront({
     pause,
     isPaused: () => paused,
     position: () => ({ seq: next, rung: lockedRung ?? wantedRung }),
-    fetchNow() {
-      if (stopped || !armed || !running) return;
-      if (!eligible.every((r) => bank.getPlaylist(r.id) !== null)) return;
-      forced = true; // a retry of this position goes ahead whatever the wants and the pause say
-      if (!busy && retryTimer === null) fetchSegment();
-    },
+    fetchNow: forceFetch,
     subscribe(seq, listener) {
       const set = listeners.get(seq) ?? new Set();
       set.add(listener);
@@ -438,7 +447,9 @@ export function createBankFront({
         listener[lastAnswer.name]?.(...lastAnswer.args);
       return () => {
         set.delete(listener);
-        if (set.size === 0 && listeners.get(seq) === set) listeners.delete(seq);
+        if (set.size > 0) return;
+        if (listeners.get(seq) === set) listeners.delete(seq);
+        if (seq === next) forced = false; // nobody waits: no more retries bypass the checks
       };
     },
     /** `{ rung, rate, w, d, measuredS, measuredWallS }`: per film second, over the last 60 s of fetching. */
