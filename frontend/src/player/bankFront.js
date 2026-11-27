@@ -64,8 +64,10 @@ function parsePlaylist(text, playlistUrl) {
  *   else is called for an aborted fetch, a first byte already past is not replayed, and a listener must not
  *   throw. A subscriber to a position that is in a Retry-After wait at that moment hears that 503 at once, before
  *   `subscribe` returns, then the retry's own events; a network-error or timeout wait and a pause's 503 are not
- *   replayed. A forced retry goes ahead only while the position has a subscriber. `start()` at a position with
- *   subscribers keeps them and fetches it at once, with one request.
+ *   replayed. A forced retry goes ahead only while the position has a subscriber. `start()` at the position of a
+ *   fetch now with subscribers keeps them and carries the fetch on with one new request. If a listener's callback
+ *   stops, starts or moves the front, the listeners after it hear only their `onAbort`. A listener that subscribes
+ *   from inside `onDone` stays subscribed for the next fetch of that position (or its `onAbort`).
  *   Returns the function that unsubscribes.
  */
 export function createBankFront({
@@ -124,8 +126,14 @@ export function createBankFront({
     }
   }
 
+  // A listener hears an event only while it is still subscribed: one that a callback of another listener has
+  // dropped (a stop, a start or a move inside it) has heard its `onAbort` and nothing after it.
   function emit(seq, name, ...args) {
-    for (const l of [...(listeners.get(seq) ?? [])]) l[name]?.(...args);
+    const set = listeners.get(seq);
+    if (set === undefined) return;
+    for (const l of [...set]) {
+      if (listeners.get(seq) === set && set.has(l)) l[name]?.(...args);
+    }
   }
 
   // Tells the subscribers of every position `dropped` names that their fetch is gone, and forgets them.
@@ -361,8 +369,14 @@ export function createBankFront({
       forced = false;
       next = seq + 1;
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
+      // The subscribers of this position are done with it; one that subscribes from inside onDone stays.
+      const heard = [...(listeners.get(seq) ?? [])];
       emit(seq, 'onDone', bank.getSegment(seq));
-      listeners.delete(seq);
+      const set = listeners.get(seq);
+      if (set !== undefined) {
+        heard.forEach((l) => set.delete(l));
+        if (set.size === 0) listeners.delete(seq);
+      }
       resetWatch();
     });
   }
@@ -408,15 +422,16 @@ export function createBankFront({
     },
     start({ seq, rung }) {
       if (stopped) return;
+      // A fetch now for subscribers at this very position carries on, with one new request.
+      const keep = forced && seq === next && listeners.get(seq)?.size > 0;
       resetPosition();
-      const waiting = listeners.get(seq)?.size > 0; // subscribers of the new position keep their fetch
       dropSubscribers((q) => q !== seq);
       next = seq;
       wantedRung = clamp(rung);
       running = true;
       syncWatch();
-      if (waiting) forceFetch();
-      else pump();
+      if (keep) forceFetch();
+      pump();
     },
     movePast(seq) {
       if (stopped || seq < next) return;
@@ -446,9 +461,9 @@ export function createBankFront({
       if (retryTimer !== null && lastAnswer?.seq === seq)
         listener[lastAnswer.name]?.(...lastAnswer.args);
       return () => {
-        set.delete(listener);
-        if (set.size > 0) return;
-        if (listeners.get(seq) === set) listeners.delete(seq);
+        // A stale call (after onAbort, or a second one) changes nothing: the position may have new subscribers.
+        if (!set.delete(listener) || set.size > 0 || listeners.get(seq) !== set) return;
+        listeners.delete(seq);
         if (seq === next) forced = false; // nobody waits: no more retries bypass the checks
       };
     },
