@@ -442,7 +442,7 @@ export function startHlsJs({
   };
 
   // At the playhead once the video has metadata; before that it reads 0, so a resumed film restarts where it
-  // was asked to start (-1 loads from the beginning).
+  // was last seen, or asked to start (-1 loads from the beginning).
   const restart = () => {
     clearTimeout(timer);
     timer = null;
@@ -700,7 +700,7 @@ export function startHlsJs({
       data.details === ErrorDetails.MEDIA_SOURCE_REQUIRES_RESET
     ) {
       // A non-fatal reset is recovered by hls.js itself, before this handler runs, and the recovery drops the
-      // fragment loaded but not appended. (A fatal one is recovered below, by the engine.)
+      // fragment loaded but not appended. (A fatal one that carries the reset flag is recovered the same way; one that does not is recovered below.)
       dropPendingAfterReset();
     }
     if (!data.fatal) return;
