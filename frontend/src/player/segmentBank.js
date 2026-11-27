@@ -65,6 +65,11 @@ export function createSegmentBank({ limitBytes = BANK_LIMIT_BYTES } = {}) {
       heldBytes += own.byteLength;
     },
     hasSegment: (seq) => segments.has(seq),
+    /** True when some held segment has a sequence number above `seq`. */
+    hasSegmentAbove(seq) {
+      for (const s of segments.keys()) if (s > seq) return true;
+      return false;
+    },
     getSegment(seq) {
       const s = segments.get(seq);
       if (s === undefined) return null;
