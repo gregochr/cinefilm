@@ -140,7 +140,8 @@ engine (`useStream.js:341`).
    is made for that one.
 8. **Pausing and stopping.** A fatal network error, or a plain 503 to the front, **pauses** the front; it resumes
    on a successful server answer to any request or after `RECONNECT_MS`, never on a fragment answered from held film.
-   `RECONNECT_MS` runs from the pause itself; a 503 to a request made while paused does not restart it. A **410** to
+   `RECONNECT_MS` runs from the pause itself; nothing that happens while paused (a 503 to a request made while
+   paused, or another fatal network error) restarts it. A **410** to
    the front stops the bank and calls `onStopped` at once (Admin Stop, as today); a **404** calls `onSessionLost` at
    once (the rebuild starts a new engine and bank). A media error never touches the front. The bank turns **off** when the stretch is passed and no other is within 20
    minutes, or the look-ahead lapses (`train-lookahead-plan.md` decision 7's lapse rule): the front stops, held film
@@ -149,7 +150,8 @@ engine (`useStream.js:341`).
    forward beyond what is held clears it at once (release, then armed again if a stretch is near).
 9. **Keeping and dropping.** A segment is dropped once the playhead is 30 s past its end, so a refused append
    fetched again is answered. A seek forward inside what is held drops what ends more than 30 s before the target; a seek back keeps what
-   is held ahead and hls.js's requests fill the gap through the bank (decision 4).
+   is held ahead and hls.js's requests fill the gap through the bank (decision 4) while the bank is on (while it is
+   turning off, decision 8 releases).
 10. **hls.js's own depth stays as today** (120 to 480 s): every rung's measured hold is above 480 s plus the back
     buffer, so the browser's buffers never refuse; the deep part is the bank's.
 
@@ -208,11 +210,13 @@ writes every rung, and the bank fills no faster than it.
    handed to the front; arming and turn-on (not before coverage, nor while a
    playlist is missing, nor while a fragment is loading through the inner loader, then on once it lands; not at or
    above F, nor with the stretch more than 20 minutes away); a fatal `NETWORK_ERROR` pausing the front, resumed
-   by a successful server answer or `RECONNECT_MS`; marked fragments taking no samples and the front's reports reaching
+   by a successful server answer or `RECONNECT_MS`, and a second fatal `NETWORK_ERROR` while paused leaving the
+   front's request at the first pause + `RECONNECT_MS`; marked fragments taking no samples and the front's reports reaching
    `handlers.onThroughput`; 410 and 404 from the front reaching `onStopped` and `onSessionLost`; turning off
    (front stopped, held film answered, release on the first request beyond it, which makes exactly one server
    request, through the inner loader, none by the front, the release written before the inner loader's `load` is
-   called; the same for a seek back during turning off; bank cleared); a seek forward beyond
+   called; a seek back during turning off to before held film releasing the same way on its first request, and one
+   inside held film answered by the bank with no release and no server request; bank cleared); a seek forward beyond
    what is held releasing at once and arming again with a stretch near; a media error leaving the front running; a
    pinned rung never armed. **A pane check with the real hls.js 1.7.4** (a built engine bundle against a public test stream, the bank
    armed then on, the link cut by the test's own fetch): every media request after turn-on answered by the bank,
