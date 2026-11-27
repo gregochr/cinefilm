@@ -533,12 +533,12 @@ describe('the bank decider: behind and beyond the front', () => {
     expect(server.calls.at(-1).url).toBe(segUrl('r480', 3));
   });
 
-  it('a change of mode ends the wait too', async () => {
+  it('a change of mode ends the wait without sending the front anything', async () => {
     const { requests, server } = await inGap();
     const quiet = server.calls.length;
     requests.setMode('turningOff');
-    await flush();
-    expect(server.calls).toHaveLength(quiet + 1);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(server.calls).toHaveLength(quiet);
   });
 
   it('a gap before B5b has called update still moves the front and waits', async () => {
@@ -552,23 +552,33 @@ describe('the bank decider: behind and beyond the front', () => {
     requests.endGap();
   });
 
-  it('moves the front past a request beyond it and lets the inner loader have the request', async () => {
-    const { requests, front, server, bank } = await setup({ seq: 4, need: 1000 });
+  it('fetches a request beyond the front through the front alone, one open request at a time, then carries on', async () => {
+    const { requests, front, server } = await setup({ seq: 4, need: 1000 });
     await flush();
     const inFlight = server.calls.at(-1);
     expect(inFlight.url).toBe(segUrl('r480', 4));
-    const { decision } = ask(requests, 9);
-    expect(decision).toEqual({ action: 'pass' });
+    const { decision, told } = ask(requests, 9);
+    expect(decision.action).toBe('wait');
+    await flush();
     expect(inFlight.aborted).toBe(true);
+    expect(segmentCalls(server)).toEqual(urls('r480', 4, 9)); // only 9 is open, nothing beside it
+    await complete(server.calls.at(-1));
+    expect(told.map((t) => t[0])).toEqual(['success']);
+    expect(segmentCalls(server)).toEqual(urls('r480', 4, 9, 10)); // then 10, after it
+    expect(server.calls.at(-1).aborted).toBe(false);
     expect(front.position().seq).toBe(10);
-    requests.fragmentLoaded({
-      sn: 9,
-      level: L480,
-      url: 'u',
-      bytes: new Uint8Array(30).buffer,
-      timings: { start: 1, first: 2, end: 3 },
-    });
-    expect(bank.getSegment(9)).toMatchObject({ rung: 'r480', start: 36, end: 40 });
+  });
+
+  it('a retry behind the front with no held film above it starts no gap: the front carries on to F in order', async () => {
+    const { requests, server } = await setup({ seq: 10, need: 1000 });
+    await flush();
+    const { told } = ask(requests, 7);
+    await flush();
+    await complete(server.calls.at(-1));
+    expect(told.map((t) => t[0])).toEqual(['success']);
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1));
+    expect(segmentCalls(server)).toEqual(urls('r480', 10, 7, 8, 9, 10));
   });
 });
 

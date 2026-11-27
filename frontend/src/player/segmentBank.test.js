@@ -44,6 +44,14 @@ describe('the bank store (decisions 1 and 9)', () => {
     expect(bank.heldBytes()).toBe(10);
   });
 
+  it('says whether anything is held above a sequence number', () => {
+    const bank = createSegmentBank();
+    expect(bank.hasSegmentAbove(0)).toBe(false);
+    bank.putSegment(seg(5));
+    expect(bank.hasSegmentAbove(4)).toBe(true);
+    expect(bank.hasSegmentAbove(5)).toBe(false);
+  });
+
   it('replaces a copy on a later put of the same number and recounts the bytes', () => {
     const bank = bankWith([5]);
     bank.putSegment(seg(5, { rung: 'r240', size: 25 }));

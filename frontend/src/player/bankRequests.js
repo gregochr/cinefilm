@@ -26,7 +26,8 @@ const STATUS_TEXT = { 503: 'Service Unavailable', 404: 'Not Found', 410: 'Gone' 
  * - 'armed': `armed()` is true, so the loader copies what the inner loader loads to `fragmentLoaded`; every
  *   request passes.
  * - 'on': the front is started; requests are decided as below.
- * - 'turningOff': the front is stopped; held film is still answered, a request for a fragment not held calls
+ * - 'turningOff': B5b has stopped the front (`front.stop()` when leaving 'on'; the decider never stops it and
+ *   sends it no update then); held film is still answered, a request for a fragment not held calls
  *   `onRelease()` and passes, and the mode becomes 'off'.
  *
  * Rules for a request while 'on' (`pos` is `front.position().seq`):
@@ -35,11 +36,13 @@ const STATUS_TEXT = { 503: 'Service Unavailable', 404: 'Not Found', 410: 'Gone' 
  *   front.
  * - not held and `sn === pos`: waits on the front's fetch of it (`front.subscribe` and `front.fetchNow`: exactly
  *   one server request). What the front does after it (carry on, or not at F or the limit) is the front's.
- * - not held and `sn < pos` (a gap behind the front): the front is moved to `sn` and the request waits as above;
- *   the front then waits (a gap is held: `update` hands it a need of 0) until hls.js asks for film held beyond
+ * - not held and `sn < pos` with held film above `sn` (a gap behind the front): the front is moved to `sn` and
+ *   the request waits as above; the front then waits (a gap is held: `update` hands it a need of 0) until hls.js asks for film held beyond
  *   the gap, `endGap()` is called (a seek or a clear), or the mode changes; the front then returns to the end of
  *   the held film. A quiet spell does not count.
- * - not held and `sn > pos`: `front.movePast(sn)` and the request passes (the inner loader fetches it).
+ * - any other request not held (beyond the front, or behind it with no held film above): `front.start({ seq: sn })`
+ *   and the request waits as above, so every media request has the one fetcher and the front carries on past it.
+ *   `pass` is only for 'off', 'armed' and 'turningOff'.
  * A waiting request: a first byte or progress ends its first-byte limit; a 503, 404 or 410 answer to the fetch
  * (also a 503 Retry-After wait already under way) is handed over at once as that error; the fetch's own timeout
  * ends the wait with `timeout` at once; a network error is not (the limits count). If the front drops the position
@@ -84,10 +87,14 @@ export function createBankRequests({
     front.start({ seq: sn, rung });
   }
 
-  function endGap(nextSeq = null) {
-    if (!gap) return;
+  function clearGap() {
     gap = false;
     gapHighest = -1;
+  }
+
+  function endGap(nextSeq = null) {
+    if (!gap) return;
+    clearGap();
     frontUpdate(lastUpdate);
     if (nextSeq !== null) front.start({ seq: nextSeq, rung: front.position().rung });
   }
@@ -166,7 +173,7 @@ export function createBankRequests({
     setMode(next) {
       if (next === mode) return;
       mode = next;
-      if (next !== 'on') endGap();
+      if (next !== 'on') clearGap(); // B5b stops the front; no update is sent to it
       if (next === 'off') passed.clear();
     },
     armed: isArmed,
@@ -197,13 +204,9 @@ export function createBankRequests({
         return { action: 'pass' };
       }
       const pos = front.position();
-      if (sn > pos.seq) {
-        front.movePast(sn);
-        passed.set(sn, frag);
-        return { action: 'pass' };
-      }
-      if (sn < pos.seq) beginGap(sn, pos.rung);
-      else if (gap) gapHighest = Math.max(gapHighest, sn);
+      if (sn < pos.seq && bank.hasSegmentAbove(sn)) beginGap(sn, pos.rung);
+      else if (sn !== pos.seq) front.start({ seq: sn, rung: pos.rung }); // the one fetcher goes there
+      if (gap) gapHighest = Math.max(gapHighest, sn);
       return wait(request, reply);
     },
 
