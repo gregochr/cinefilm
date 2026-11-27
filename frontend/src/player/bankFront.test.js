@@ -116,12 +116,19 @@ function setup({ limitBytes, ...options } = {}) {
 }
 
 // Armed, the three playlists up to 480p answered, started at `seq` and `rung`, wanting film (need 1000 s).
-async function running({ seq = 0, rung = 'r480', filmAhead = 0, need = 1000, ...options } = {}) {
+async function running({
+  seq = 0,
+  rung = 'r480',
+  filmAhead = 0,
+  need = 1000,
+  count = 40,
+  ...options
+} = {}) {
   const t = setup(options);
   t.front.arm();
   for (let i = 0; i < 3; i += 1) {
     await flush();
-    await answerPlaylist(t.server.calls.at(-1));
+    await answerPlaylist(t.server.calls.at(-1), playlistText(count));
   }
   t.front.update({ filmAhead, need });
   t.front.start({ seq, rung });
@@ -878,5 +885,54 @@ describe('the bank front: a new position while a playlist is open', () => {
     expect(server.calls).toHaveLength(4);
     expect(server.calls[3].url).toBe(segUrl('r480', 9));
     expect(server.maxOpen).toBe(1);
+  });
+});
+
+describe('the bank front: the window keeps everything inside 60 s, whatever the count', () => {
+  it('keeps 201 four-second entries on a fast link, the first wait included', async () => {
+    const { server, front } = await running({ count: 260 });
+    await complete(server.calls.at(-1), { firstMs: 9000, bodyMs: 100 });
+    for (let i = 0; i < 200; i += 1) await complete(server.calls.at(-1), { bodyMs: 100 });
+    const w = front.window();
+    expect(w.measuredS).toBe(804);
+    expect(w.measuredWallS).toBeCloseTo(29.1, 6);
+    expect(w.w).toBeCloseTo(9 / 804, 9);
+    expect(w.d).toBeCloseTo(20.1 / 804, 9);
+  });
+
+  it('drops entries that the newer ones have pushed out of the window', async () => {
+    const { server, front } = await running({ count: 700, need: 100_000 });
+    for (let i = 0; i < 650; i += 1) await complete(server.calls.at(-1), { bodyMs: 100 });
+    const w = front.window();
+    // 0.1 s each: 600 entries hold 60 s (to float rounding, so possibly one more)
+    expect(w.measuredWallS).toBeGreaterThan(59.99);
+    expect(w.measuredWallS).toBeLessThan(60.2);
+    expect(w.measuredS).toBeGreaterThanOrEqual(2400);
+    expect(w.measuredS).toBeLessThanOrEqual(2404);
+  });
+});
+
+describe('the bank front: any successful answer ends a pause, and the rungs may come best first', () => {
+  it('ends a pause on a successful playlist answer and goes on at once', async () => {
+    const { server, front } = setup();
+    front.arm();
+    await flush();
+    front.pause();
+    expect(front.isPaused()).toBe(true);
+    await answerPlaylist(server.calls[0]);
+    expect(front.isPaused()).toBe(false);
+    expect(server.calls).toHaveLength(2);
+    expect(server.calls[1].url).toBe(RUNGS[1].playlistUrl);
+  });
+
+  it('starts above 480p and with an unknown rung at 480p when the rungs come best first', async () => {
+    const bestFirst = [...RUNGS].reverse();
+    const above = await running({ rungs: bestFirst, rung: 'r720' });
+    expect(above.server.calls.at(-1).url).toBe(segUrl('r480', 0));
+    above.front.setRung('r720');
+    await complete(above.server.calls.at(-1));
+    expect(above.server.calls.at(-1).url).toBe(segUrl('r480', 1));
+    const unknown = await running({ rungs: bestFirst, rung: 'nope' });
+    expect(unknown.server.calls.at(-1).url).toBe(segUrl('r480', 0));
   });
 });

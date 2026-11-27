@@ -25,7 +25,7 @@ function parsePlaylist(text, playlistUrl) {
     if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
       seq = Number(line.slice('#EXT-X-MEDIA-SEQUENCE:'.length));
     } else if (line.startsWith('#EXTINF:')) {
-      duration = parseFloat(line.slice('#EXTINF:'.length));
+      duration = Number.parseFloat(line.slice('#EXTINF:'.length));
     } else if (line !== '' && !line.startsWith('#') && duration !== null) {
       segments.set(seq, { url: new URL(line, base).href, start, end: start + duration });
       seq += 1;
@@ -86,7 +86,12 @@ export function createBankFront({
   let filmAhead = 0;
   let need = 0;
 
-  const clamp = (id) => (byId.has(id) ? id : eligible[eligible.length - 1]?.id);
+  // The rungs come in the server's order (best first); the front's best is the greatest height up to 480p.
+  const best = eligible.reduce(
+    (a, r) => (a === undefined || r.height > a.height ? r : a),
+    undefined,
+  );
+  const clamp = (id) => (byId.has(id) ? id : best?.id);
   const wants = () => filmAhead < need && !bank.atLimit();
 
   function syncWatch() {
@@ -268,15 +273,26 @@ export function createBankFront({
     if (segment === undefined) return; // the end of the film: nothing more to fetch
     lockedRung = rung;
     const seq = next;
-    run(segment.url, seq, (res) => {
+    // Deliberately not awaited: request() settles every failure of the fetch as an outcome, so a rejection here
+    // could only be a throw from the caller's onThroughput, which should surface, not be swallowed.
+    void run(segment.url, seq, (res) => {
       endPause(); // a successful answer ends a pause
       const timings = { start: res.startedAt, first: res.firstAt, end: res.endAt };
       // The transfer is first byte to end; everything else the stopwatch holds is waiting. A fetch in flight when
       // film stopped being wanted still counts whole.
       const d = (res.endAt - res.firstAt) / 1000;
       const wall = Math.max(elapsed(), d);
+      // A new rung starts a new measurement. Entries are dropped only once the newer ones hold the window's
+      // WINDOW_S of wall time (no count cap: a fast link can fit many entries in it).
+      if (entries.at(-1)?.rung !== rung) entries.length = 0;
       entries.push({ rung, film: segment.end - segment.start, w: wall - d, d });
-      if (entries.length > 200) entries.shift();
+      let held = 0;
+      let oldest = entries.length;
+      while (oldest > 0 && held < WINDOW_S) {
+        oldest -= 1;
+        held += entries[oldest].w + entries[oldest].d;
+      }
+      entries.splice(0, oldest);
       const { start, end } = segment;
       bank.putSegment({ seq, rung, start, end, bytes: res.bytes, timings });
       const kbps = fragmentKbps({ loading: timings, loaded: res.bytes.byteLength });
@@ -292,7 +308,9 @@ export function createBankFront({
     if (stopped || busy || paused || retryTimer !== null || !armed) return;
     const missing = eligible.find((r) => bank.getPlaylist(r.id) === null);
     if (missing !== undefined) {
-      run(missing.playlistUrl, null, (res) => {
+      // run() never rejects, as above.
+      void run(missing.playlistUrl, null, (res) => {
+        endPause(); // a successful answer to any request ends a pause
         const text = new TextDecoder().decode(res.bytes);
         bank.putPlaylist(missing.id, text);
       });
