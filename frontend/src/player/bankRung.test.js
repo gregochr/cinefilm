@@ -17,7 +17,7 @@ function input(over = {}) {
     atLimit: false,
     w: 0.25,
     d: 0.125,
-    measuredS: 60,
+    measuredWallS: 60,
     rate: 500,
     candidates: [C240, C360, C480],
     ...over,
@@ -112,9 +112,18 @@ describe('no choice', () => {
 
   it('before 20 s of fetching is measured: 19.9 s no, 20 s yes', () => {
     expect(MIN_MEASURED_S).toBe(20);
-    expect(chooseBankRung(input({ measuredS: 19.9 }))).toBeNull();
-    expect(chooseBankRung(input({ measuredS: 20 }))).not.toBeNull();
-    expect(chooseBankRung(input({ measuredS: undefined }))).toBeNull();
+    expect(chooseBankRung(input({ measuredWallS: 19.9 }))).toBeNull();
+    expect(chooseBankRung(input({ measuredWallS: 20 }))).not.toBeNull();
+    expect(chooseBankRung(input({ measuredWallS: undefined }))).toBeNull();
+  });
+
+  it('the 20 s is wall time of fetching: a wait-heavy window holding under 20 film seconds still chooses', () => {
+    // w = 2, d = 0.5: 2.5 s of wall time per film second, so 20 s of fetching holds 8 film seconds.
+    // 240p den 2 + 0.25 = 2.25 -> 100 + 200 x (0.4444 - 1) = -11.1; 360p den 2.5 -> -20; 480p den 3 -> -33.3.
+    const r = chooseBankRung(input({ w: 2, d: 0.5, measuredWallS: 20 }));
+    expect(r.id).toBe('240p');
+    expect(projectionOf(r, '240p')).toBeCloseTo(-11.11, 1);
+    expect(projectionOf(r, '480p')).toBeCloseTo(-33.33, 1);
   });
 });
 
@@ -128,6 +137,18 @@ describe('guarding the arithmetic', () => {
     expect(chooseBankRung(input({ w: 0.1, d: -0.3 }))).toBeNull();
     expect(chooseBankRung(input({ w: NaN, d: 0.3 }))).toBeNull();
     expect(chooseBankRung(input({ w: undefined, d: undefined }))).toBeNull();
+  });
+
+  it('a missing, non-finite or out-of-range need, film ahead or time to the stretch keeps the rung', () => {
+    expect(chooseBankRung(input({ need: undefined }))).toBeNull();
+    expect(chooseBankRung(input({ need: NaN }))).toBeNull();
+    expect(chooseBankRung(input({ need: 0 }))).toBeNull();
+    expect(chooseBankRung(input({ timeToStretch: NaN }))).toBeNull();
+    expect(chooseBankRung(input({ timeToStretch: -1 }))).toBeNull();
+    expect(chooseBankRung(input({ timeToStretch: Infinity }))).toBeNull();
+    expect(chooseBankRung(input({ filmAhead: undefined }))).toBeNull();
+    expect(chooseBankRung(input({ filmAhead: -5 }))).toBeNull();
+    expect(chooseBankRung(input({ filmAhead: 0 }))).not.toBeNull();
   });
 
   it('a fetched rung with no usable rate keeps the rung', () => {
