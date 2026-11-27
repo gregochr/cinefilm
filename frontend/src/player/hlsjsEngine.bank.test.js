@@ -738,6 +738,16 @@ describe('the engine holds hls.js on the bank’s level', () => {
     });
   });
 
+  describe('a non-fatal media source reset with the bank off', () => {
+    it('writes no level', () => {
+      const env = world();
+      expect(() =>
+        env.hls.error({ fatal: false, type: 'mediaError', details: 'mediaSourceRequiresReset' }),
+      ).not.toThrow();
+      expect(env.log).toEqual([]);
+    });
+  });
+
   describe('a fatal media error', () => {
     it('writes the level held at the playhead before hls.js recovers', () => {
       const env = world();
