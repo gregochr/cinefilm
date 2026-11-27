@@ -900,7 +900,7 @@ describe('the bank front: the window keeps everything inside 60 s, whatever the 
     expect(w.d).toBeCloseTo(20.1 / 804, 9);
   });
 
-  it('drops entries that the newer ones have pushed out of the window', async () => {
+  it('holds the last 60 s of wall time whatever the count', async () => {
     const { server, front } = await running({ count: 700, need: 100_000 });
     for (let i = 0; i < 650; i += 1) await complete(server.calls.at(-1), { bodyMs: 100 });
     const w = front.window();

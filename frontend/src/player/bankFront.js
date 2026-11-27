@@ -282,8 +282,9 @@ export function createBankFront({
       // film stopped being wanted still counts whole.
       const d = (res.endAt - res.firstAt) / 1000;
       const wall = Math.max(elapsed(), d);
-      // A new rung starts a new measurement. Entries are dropped only once the newer ones hold the window's
-      // WINDOW_S of wall time (no count cap: a fast link can fit many entries in it).
+      // A new rung starts a new measurement. Dropping old entries is memory upkeep only: window() itself stops
+      // at WINDOW_S of wall time, so nothing here changes a measurement. Entries go only once the newer ones hold
+      // WINDOW_S (no count cap: a fast link can fit many entries in the window).
       if (entries.at(-1)?.rung !== rung) entries.length = 0;
       entries.push({ rung, film: segment.end - segment.start, w: wall - d, d });
       let held = 0;
