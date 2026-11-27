@@ -204,7 +204,8 @@ writes every rung, and the bank fills no faster than it.
    above F, nor with the stretch more than 20 minutes away); a fatal `NETWORK_ERROR` pausing the front, resumed
    by a server answer or `RECONNECT_MS`; marked fragments taking no samples and the front's reports reaching
    `handlers.onThroughput`; 410 and 404 from the front reaching `onStopped` and `onSessionLost`; turning off
-   (front stopped, held film answered, release on the first request beyond it, bank cleared); a seek forward beyond
+   (front stopped, held film answered, release on the first request beyond it, which makes exactly one server
+   request, through the inner loader, none by the front; bank cleared); a seek forward beyond
    what is held releasing at once and arming again with a stretch near; a media error leaving the front running; a
    pinned rung never armed. **A pane check with the real hls.js 1.7.4** (a built engine bundle against a public test stream, the bank
    armed then on, the link cut by the test's own fetch): every media request after turn-on answered by the bank,
