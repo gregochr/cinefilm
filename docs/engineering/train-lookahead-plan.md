@@ -91,7 +91,8 @@ buffers may be. If Chrome's audio buffer is the 12 MiB we recall, it holds about
    moved ms; the minute is at the film's end when that position plus its seconds ahead (× 1000, as positions are
    in ms) is at least the edition's runtime (as `Edition.recomputeRuntime` works it out) less 60 s. Only for a
    part with no seek, an `endPositionMs` and a known runtime (`runtimeMs` not null and every original part has a
-   duration: the method counts an unknown duration as 0, which would put the film's end early); otherwise a no-fragment minute has no verdict, never bad by itself. A
+   duration above 0, read as the method reads it, `timelineDurationMs()` for a split film and `getDurationMs()`
+   for one file: the method counts an unknown or 0 duration as 0, which would put the film's end early); otherwise a no-fragment minute has no verdict, never bad by itself. A
    minute with no verdict (not playing, at the film's end, or not decidable), and a point with no minute, take the
    logger's internet check for the point's state: good if it answered within
    1 s, bad if over 1 s. A round with a position but no check (`probe_ms` null: a timeout, an error answer, a
@@ -195,7 +196,9 @@ Then the owner is told what the buffers allow, with question 2.
    minute, a playing minute with no fragment in a decidable part (no seek, an `endPositionMs`, a known runtime,
    well before the film's end: bad), the film's end within 60 s with a good check (good) and with no check
    anywhere in the journey (unknown), each of a seek, no `endPositionMs`, a null runtime and a two-part edition
-   with one part's duration null on a playing no-fragment minute well before the true end, with a good check
+   with one part's duration null and one with a part's duration 0, each on a playing no-fragment minute well
+   before the true end and with position + ahead below the known part's duration − 60 s (so a build that trusts
+   the summed runtime reads the minute bad), with a good check
    (good) and with no check anywhere in the journey (unknown), a point in the overlap of two parts' rows where
    the earlier part's row is good and the later's bad (bad) and the other way round (good), the boundaries (moved
    + stalled 44,999 and 45,000 ms; moved 44,999 and 45,000 ms; medians 499 and 500; position + ahead at runtime
