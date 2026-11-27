@@ -12,6 +12,11 @@ is therefore the first version only: **bank deep enough before each known stretc
 browser cannot hold.** The link's own rules choose the rung below that. Whether a cleverer rung choice is worth
 building is read from the first journey's record (PR 5), and planned then.
 
+**Changed 2026-11-27 by step 0.2:** no rung's film fits in the browser's buffers for the longest stretch (the audio
+buffer binds, 588 to 948 s). The owner chose a bank held by the player outside them: `outside-bank-plan.md`
+replaces decisions 7 to 10 and PRs 2b, 3b-1 and 3b-2 below, which stay here only as the record of what was
+reviewed. Decisions 1 to 6, step 0's other checks and the other PRs stand.
+
 ## What is true today
 
 **The player** (`frontend/src/player/`):
@@ -63,8 +68,8 @@ Three journeys, both directions. The long bad stretches fell in the same five pl
 was good, up to the device's 5 Mbit/s. Two of the five lasted longer than the eight-minute bank (the longest about
 14 minutes, so a need of 18.5), and some gaps between them are about 11 minutes. At 4.5 Mbit/s an 11-minute gap
 can bank that need at 480p (`4 + 11 × (4.5 / 1.13 − 1) ≥ 18.5`), so the link is not the limit; the browser's
-buffers may be. If Chrome's audio buffer is the 12 MiB we recall, it holds about 13 minutes at 480p's audio rate,
-17.5 at 360p's and 26 at 240p's: step 0 measures it.
+buffers may be. Step 0.2 measured them: the audio buffer holds 588 s at 480p's audio rate, 716 at 360p's and 948
+at 240p's (`outside-bank-plan.md`).
 
 ## Decisions
 
@@ -106,7 +111,8 @@ buffers may be. If Chrome's audio buffer is the 12 MiB we recall, it holds about
    through the whole extent, its length at the slowest moving speed (5 m/s or more) any track was recorded at
    inside it; with no moving sample inside it, the stretch is left out of the map until a journey crosses it. **Need:** F =
    duration × 1.25 + 60 s of film ahead; the buffers must hold F plus the 30 s back buffer.
-7. **The rule.** When a stretch is within 20 minutes of travel (decision 4's time):
+7. **The rule** (replaced by `outside-bank-plan.md`, except its lapse rule below, which that plan uses). When a
+   stretch is within 20 minutes of travel (decision 4's time):
    Rungs above 480p are never candidates while the rule holds; their fragments still in the buffer count with
    holds derived from 480p's (the audio is the same 128 kbit/s; the video hold scaled by 480p's video rate over
    theirs, the copy rung's from its own bitrate).
@@ -230,9 +236,8 @@ Then the owner is told what the buffers allow, with question 2.
    script cannot read that header, so nothing inspects it). Tests of the rejected fetch. Rule 7's browser
    paragraph rewritten.
 
-**2b, 3b-1 and 3b-2 are reviewed again before they are built,** with step 0's holds in hand: decisions 7 to 10 were
-reviewed eleven times and each round found a smaller fault in how the cap and depth meet hls.js and the step
-gate, and real holds may simplify them.
+**2b, 3b-1 and 3b-2 are replaced** by `outside-bank-plan.md`'s B1 to B5b, and 2b becomes the rule's input only (a
+stretch within 30 minutes: its need F, the time to it, whether it has begun, and when it is passed). The text below is kept as the record.
 
 5. **3b-1, the engine's cap:** the look-ahead's cap as an input, decision 10. Tests: the cap applied and lifted;
    after a lift the cap is one level above the fetch; the floor hold letting go under a 240p cap; a switch up to
@@ -281,7 +286,7 @@ that pattern.)
 - Choosing the rung from the link's measured speed before a stretch (the fuller design): planned, if the record
   shows it is needed, after the first journey with this one.
 - Choosing a train from the timetable or live running data; other trains' systems; a bank beyond the browser's
-  buffers (the Apple TV app); the journey view.
+  buffers that survives a reload (the Apple TV app); the journey view.
 
 ## Questions for the owner
 
@@ -291,7 +296,8 @@ that pattern.)
    like the operator lookup's; the position is used in the page only and never sent or stored. The player also
    receives a map of past journeys' link quality, kept in memory only. The browser never asks the device for a
    location."
-2. **Audio on the middle rungs** (only if step 0 shows the audio buffer is the limit). 64 kbit/s audio on 360p and
+2. **Answered 2026-11-27:** the owner chose the bank outside the buffers (`outside-bank-plan.md`), not lower audio;
+   question 3 falls with decision 7. As first asked: **Audio on the middle rungs** (only if step 0 shows the audio buffer is the limit). 64 kbit/s audio on 360p and
    480p, as on 240p, would let them hold as long as 240p does, at some loss of sound on those rungs: for every film,
    or only in sessions started while the feed answers (a server change either way). Or keep the sound and accept a
    lower rung before the longest stretches.
