@@ -15,8 +15,10 @@
 // the larger of the hold's floor and the re-bank's, and the re-bank starts only once hls.js is fetching the new
 // rung. hls.js does not choose a level again after one of its fragments failed until a fragment of that level
 // loads, so in Auto a mark that has stood a minute without trouble on a level not being fetched is forgotten
-// (rungMarks.js, stuck-rung-plan.md).
-import { bankedAhead } from './buffered.js';
+// (rungMarks.js, stuck-rung-plan.md). While the film bank is on (outside-bank-plan.md, decision 3) hls.js plays
+// on a manual level, the rung the bank holds its next fragment at, and every rule above is suspended: the engine's
+// `bankOn`, `bankWrongRung` and `bankRelease` are how the bank drives that, and nothing calls them yet.
+import { HOLE_S, bankedAhead } from './buffered.js';
 import { champagneBase, champagneCeiling } from './champagne.js';
 import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
@@ -35,6 +37,9 @@ export const HOLD_CHECK_MS = 2000;
 export const IN_FLIGHT_MIN_AGE_MS = 4000;
 // Fragments in a row that needed a retry before the rates for the rungs above 480p are forgotten.
 export const RETRIED_CLEARS = 4;
+// The text of the 503 the bank gives a request for a fragment it holds at another rung (outside-bank-plan.md,
+// decision 4): never from a server, so hls.js's count of failed fragments is corrected for it.
+export const BANK_RUNG_TEXT = 'bank-rung';
 // How many of the newest fragment rates the release reads.
 const RELEASE_SAMPLES = 3;
 
@@ -98,6 +103,9 @@ export function hlsConfig(startSeconds) {
     backBufferLength: 30,
     // Standard MediaSource only: iOS (ManagedMediaSource) plays natively instead.
     preferManagedMediaSource: false,
+    // Only a manual level (`loadLevel`, set while the film bank is on) is kept through an error; in Auto, which
+    // is every other case, hls.js's own rule leaves it as it was.
+    preserveManualLevelOnError: true,
     startPosition: startSeconds > 0 ? startSeconds : -1,
     // A rung penalised by a fatal-looking blip may be chosen again after the minute the step gate asks for.
     errorPenaltyExpireMs: 60000,
@@ -166,6 +174,8 @@ export function startHlsJs({
   let samplesNetwork = networkGeneration();
   let inFlight = null; // the fragment hls.js is loading, whose rate so far the release reads
   let holdTimer = null; // the one check of the in-flight rate, running while a fragment loads
+  let bank = null; // while the film bank is on: { levelAt(seconds), frontLevel() } (hls.js level indices)
+  let destroyed = false;
 
   // The one writer of `minAutoBitrate`: the larger of the hold's floor and the re-bank's.
   const writeFloor = () => {
@@ -223,7 +233,7 @@ export function startHlsJs({
   // Raises hls.js's minimum bitrate to the 360p level while the buffer is deep, the cap allows 360p, hls.js is
   // already fetching at 360p or above and no fragment is in trouble.
   const reevaluateHold = () => {
-    if (holdLevel === null) return;
+    if (bank || holdLevel === null) return;
     const bitrate = hls.levels[holdLevel]?.bitrate ?? 0; // bit/s, the variant's peak
     const rateKbps = bitrate / 1000;
     const recent = currentSamples();
@@ -263,7 +273,7 @@ export function startHlsJs({
   // `rebankDecision`. The floor is raised BEFORE the flush, so hls.js refetches at the new rung and not the old.
   // Auto only; a pinned quality never re-banks.
   const rebankStep = () => {
-    if (!auto) return;
+    if (!auto || bank) return;
     const aheadS = bankedAhead(video);
     if (rebankFloor > 0) {
       if (aheadS < REBANK_UNDO_BELOW_S) {
@@ -307,6 +317,7 @@ export function startHlsJs({
   // The one place the cap is worked out: the step gate's level, never above the champagne ceiling. A gate level
   // above the ceiling is pulled down to it, so a ceiling that comes back climbs a rung at a time.
   const applyCap = () => {
+    if (bank) return; // the bank's manual level is in charge
     if (auto && gateCap !== null) {
       currentSamples();
       const raised = champagneCeiling({
@@ -339,6 +350,33 @@ export function startHlsJs({
     gateCap = level;
     applyCap();
   };
+
+  // The first film second not yet buffered from `t` on: the end of the buffered range holding `t` (a range that
+  // starts within `slack` after `t` counts as holding it), carried over the holes hls.js plays across; `t` itself
+  // when nothing holds it. The film the bank is asked for next.
+  const afterBuffered = (t, slack) => {
+    const { buffered } = video;
+    let position = t;
+    let matched = false;
+    for (let i = 0; i < buffered.length; i += 1) {
+      if (
+        buffered.start(i) <= position + (matched ? HOLE_S : slack) &&
+        buffered.end(i) > position
+      ) {
+        position = buffered.end(i);
+        matched = true;
+      }
+    }
+    return position;
+  };
+
+  // hls.js's next fragment is the one at `position`: it is loaded at the rung the bank holds there, or, past
+  // what is held, at the rung the bank's front fetches. Written in every case, never only on a change.
+  const holdBankLevelAt = (position) => {
+    hls.loadLevel = bank.levelAt(position) ?? bank.frontLevel();
+  };
+  // The same for what follows the buffered film that holds `t`.
+  const holdBankLevelAfter = (t, slack) => holdBankLevelAt(afterBuffered(t, slack));
 
   const stopReconnecting = () => {
     clearTimeout(timer);
@@ -400,7 +438,8 @@ export function startHlsJs({
   };
   const onSeeking = () => {
     undoRebank();
-    applyCap();
+    if (bank) holdBankLevelAfter(video.currentTime, 0);
+    else applyCap();
   };
   video.addEventListener('waiting', onWaiting);
   video.addEventListener('timeupdate', onTimeUpdate);
@@ -436,6 +475,7 @@ export function startHlsJs({
     const rung = rungForLevel(session.renditions, hls.levels[data.level]);
     if (!rung) return;
     handlers.onFetching?.(rung);
+    if (bank) return; // the bank chose this level: no gate follows it, no hold reads it
     if (arrived) gate.arrived();
     if (auto) cap(gate.switched(data.level));
     reevaluateHold();
@@ -490,6 +530,18 @@ export function startHlsJs({
   });
 
   hls.on(Events.FRAG_LOADED, (_event, data) => {
+    const frag = data.frag;
+    if (
+      bank &&
+      frag &&
+      frag.sn !== 'initSegment' &&
+      (!frag.type || frag.type === 'main') &&
+      Number.isFinite(frag.start + frag.duration)
+    ) {
+      // Before hls.js chooses its next fragment: it is not appended yet, so the film after it is read from what
+      // is buffered around its end (a range that starts there joins it when it lands).
+      holdBankLevelAt(afterBuffered(frag.start + frag.duration, HOLE_S));
+    }
     stopReconnecting();
     troubled = false;
     stopHoldTimer();
@@ -510,6 +562,7 @@ export function startHlsJs({
         headroom = addSample(headroom, kbps);
       }
     }
+    if (bank) return;
     if (auto) marks.sweep(hls.levels, fetched);
     applyCap();
     // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch, and
@@ -525,6 +578,16 @@ export function startHlsJs({
       if (details.endsWith('LoadTimeOut')) handlers.onNetworkError?.({ timeout: true });
       else if (details.endsWith('LoadError')) handlers.onNetworkError?.({ timeout: false });
     }
+    if (
+      data.details === ErrorDetails.FRAG_LOAD_ERROR &&
+      data.response?.code === 503 &&
+      data.response?.text === BANK_RUNG_TEXT
+    ) {
+      // The bank's own answer, not the server's: hls.js has counted it against the rung's `fragmentError`, which
+      // sets every later retry's delay and budget, so the count is taken back.
+      const level = hls.levels?.[data.frag?.level];
+      if (level?.fragmentError > 0) level.fragmentError -= 1;
+    }
     // Fragment trouble: a timeout, or an error with no HTTP answer (a 503 while the encoder catches up is not).
     if (
       data.details === ErrorDetails.FRAG_LOAD_TIMEOUT ||
@@ -534,7 +597,7 @@ export function startHlsJs({
       marks.trouble();
       lastTroubleAt = now();
       undoRebank();
-      if (auto && fetched !== null) gateCap = gate.switched(fetched);
+      if (auto && fetched !== null && !bank) gateCap = gate.switched(fetched);
       troubled = true;
       samples = []; // what was measured before the trouble says nothing about the link now
       headroom = [];
@@ -562,15 +625,58 @@ export function startHlsJs({
     }
     if (!data.fatal) return;
     if (data.type === ErrorTypes.NETWORK_ERROR) beginReconnecting();
-    else if (data.type === ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-    else handlers.onFatal();
+    else if (data.type === ErrorTypes.MEDIA_ERROR) {
+      // The recovery loads from the playhead: at the rung the bank holds there.
+      if (bank) holdBankLevelAt(video.currentTime);
+      hls.recoverMediaError();
+    } else handlers.onFatal();
   });
 
   hls.loadSource(session.masterUrl);
   hls.attachMedia(video);
 
   return {
+    /**
+     * The film bank turns on (outside-bank-plan.md, decision 3). `lookup` is `{ levelAt(seconds), frontLevel() }`,
+     * both answering an hls.js level index: `levelAt` the level of the held fragment that covers a film second
+     * (null when none is held), `frontLevel` the level the bank's front fetches at. A re-bank under way is undone,
+     * then hls.js is put on the manual level for the film after the buffered range at the playhead. Until
+     * `bankRelease` the step gate, floor hold, champagne ceiling, re-bank and every gate lowering are suspended.
+     * Calling it while on only replaces the lookup.
+     */
+    bankOn(lookup) {
+      if (destroyed) return;
+      const wasOn = bank !== null;
+      bank = lookup;
+      if (wasOn) return;
+      undoIfRebanking(); // the floor is written before the manual level
+      holdBankLevelAfter(video.currentTime, 0);
+    },
+    /**
+     * The bank failed a request as `bank-rung` (a fragment held at another rung): hls.js is put on `level`, the
+     * rung held, before the error is raised, so the retry loads it there. The error's `fragmentError` is taken
+     * back by the ERROR handler. Does nothing while the bank is off.
+     */
+    bankWrongRung(level) {
+      if (!destroyed && bank) hls.loadLevel = level;
+    },
+    /**
+     * The bank turns off: hls.js is back on Auto, the floor and the cap are written again, and the step gate
+     * starts at `fetchedLevel`, the level the bank last fetched (the champagne ceiling still clamps it), so the
+     * climb from there is one level a minute. Does nothing while the bank is off.
+     */
+    bankRelease(fetchedLevel) {
+      if (destroyed || !bank) return;
+      bank = null;
+      hls.loadLevel = -1;
+      floorSet = null; // written again whatever it was
+      applied = null;
+      writeFloor();
+      cap(gate.start(fetchedLevel ?? fetched ?? 0));
+    },
     destroy() {
+      destroyed = true;
+      bank = null;
       clearTimeout(timer);
       timer = null;
       stopHoldTimer();
