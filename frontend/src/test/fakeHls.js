@@ -33,6 +33,7 @@ export class FakeHls {
     FRAG_LOAD_ERROR: 'fragLoadError',
     FRAG_LOAD_TIMEOUT: 'fragLoadTimeOut',
     INTERNAL_ABORTED: 'aborted',
+    MEDIA_SOURCE_REQUIRES_RESET: 'mediaSourceRequiresReset',
   };
   // The loader hls.js uses when no `fLoader` is set: a stub class, so tests can tell it from the wrapper.
   static DefaultConfig = {

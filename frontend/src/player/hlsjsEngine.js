@@ -398,6 +398,12 @@ export function startHlsJs({
     (!frag.type || frag.type === 'main') &&
     pending.sn === frag.sn &&
     pending.level === frag.level;
+  // hls.js has thrown away the fragment loaded but not appended (no event says so): the level follows the
+  // buffer as it is, not the film after the dropped fragment.
+  const dropPending = () => {
+    pending = null;
+    if (bank) holdBankLevelAtPlayhead();
+  };
   // The hole changes with pause, play and the end of a backward seek, with no event of hls.js's: the level follows.
   const followHole = () => {
     if (bank && holeS() !== lastHole) holdBankLevelAtPlayhead();
@@ -418,7 +424,7 @@ export function startHlsJs({
     timer = null;
     stopHoldTimer(); // the fragment in flight is aborted by the reload
     loadingFrag = null;
-    pending = null; // `stopLoad` throws away a fragment loaded but not appended, with no event
+    dropPending(); // `stopLoad` throws away a fragment loaded but not appended
     undoRebank();
     // What was earned before the break is earned again: the rates are forgotten and the cap falls at once.
     ceiling = champagneBase(hls.levels ?? []);
@@ -662,9 +668,17 @@ export function startHlsJs({
       }
       return;
     }
+    if (
+      data.type === ErrorTypes.MEDIA_ERROR &&
+      data.details === ErrorDetails.MEDIA_SOURCE_REQUIRES_RESET
+    ) {
+      dropPending(); // hls.js recovers by itself, fatal or not, and the recovery drops the loaded fragment
+    }
     if (!data.fatal) return;
-    if (data.type === ErrorTypes.NETWORK_ERROR) beginReconnecting();
-    else if (data.type === ErrorTypes.MEDIA_ERROR) {
+    if (data.type === ErrorTypes.NETWORK_ERROR) {
+      dropPending(); // hls.js stops loading here: the fragment loaded but not appended is gone
+      beginReconnecting();
+    } else if (data.type === ErrorTypes.MEDIA_ERROR) {
       // The recovery loads from the playhead: at the rung the bank holds there.
       pending = null; // the recovery detaches the media: a fragment loaded but not appended is thrown away
       if (bank) holdBankLevelAt(video.currentTime);

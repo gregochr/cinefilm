@@ -608,14 +608,33 @@ describe('the engine holds hls.js on the bank’s level', () => {
         expect(env.levelWrites().at(-1)).toBe(1);
       });
 
-      it('forgets it when loading restarts after a network error', () => {
+      it('forgets it at a fatal network error, and writes the level for the buffer as it is', () => {
         const env = loadedUnappended();
         env.hls.error({ fatal: true, type: 'networkError', details: 'fragLoadError' });
-        vi.advanceTimersByTime(RECONNECT_MS);
-        env.seek();
         expect(env.lookup.levelAt).toHaveBeenLastCalledWith(40);
         expect(env.levelWrites().at(-1)).toBe(1);
       });
+
+      it('writes that level again when loading restarts', () => {
+        const env = loadedUnappended();
+        env.hls.error({ fatal: true, type: 'networkError', details: 'fragLoadError' });
+        env.engine.bankWrongRung(3); // anything written in the seconds before the restart
+        vi.advanceTimersByTime(RECONNECT_MS);
+        expect(env.hls.startLoad).toHaveBeenCalledTimes(1);
+        expect(env.levelWrites().at(-1)).toBe(1);
+      });
+
+      it.each([true, false])(
+        'forgets it when hls.js recovers by itself (fatal %s), and writes the level for the buffer as it is',
+        (fatal) => {
+          const env = loadedUnappended();
+          env.lookup.levelAt.mockClear();
+          env.hls.error({ fatal, type: 'mediaError', details: 'mediaSourceRequiresReset' });
+          expect(env.lookup.levelAt).toHaveBeenCalledWith(40);
+          expect(env.levelWrites().filter((v) => v === 1).length).toBeGreaterThan(0);
+          expect(env.hls.loadLevel).toBe(1);
+        },
+      );
 
       it('forgets it when the bank turns off and on again', () => {
         const env = loadedUnappended();
