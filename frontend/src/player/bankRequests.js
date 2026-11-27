@@ -40,6 +40,8 @@ const STATUS_TEXT = { 503: 'Service Unavailable', 404: 'Not Found', 410: 'Gone' 
  *   the request waits as above; the front then waits (a gap is held: `update` hands it a need of 0) until hls.js asks for film held beyond
  *   the gap, `endGap()` is called (a seek or a clear), or the mode changes; the front then returns to the end of
  *   the held film. A quiet spell does not count.
+ * - a gap also ends, with the need restored, on a request for a fragment not held with no held film above it
+ *   (hls.js skips film it already has; held film may have been dropped behind the playhead).
  * - any other request not held (beyond the front, or behind it with no held film above): `front.start({ seq: sn })`
  *   and the request waits as above, so every media request has the one fetcher and the front carries on past it.
  *   `pass` is only for 'off', 'armed' and 'turningOff'.
@@ -204,8 +206,14 @@ export function createBankRequests({
         return { action: 'pass' };
       }
       const pos = front.position();
-      if (sn < pos.seq && bank.hasSegmentAbove(sn)) beginGap(sn, pos.rung);
+      const heldAbove = bank.hasSegmentAbove(sn);
+      // A gap holds only while held film lies above what hls.js asks for: hls.js skips film it already has, and
+      // held film may have been dropped behind the playhead. Otherwise the gap ends, and the need is restored.
+      const endsGap = gap && !heldAbove;
+      if (endsGap) clearGap();
+      if (sn < pos.seq && heldAbove) beginGap(sn, pos.rung);
       else if (sn !== pos.seq) front.start({ seq: sn, rung: pos.rung }); // the one fetcher goes there
+      if (endsGap) frontUpdate(lastUpdate);
       if (gap) gapHighest = Math.max(gapHighest, sn);
       return wait(request, reply);
     },

@@ -533,6 +533,43 @@ describe('the bank decider: behind and beyond the front', () => {
     expect(server.calls.at(-1).url).toBe(segUrl('r480', 3));
   });
 
+  it('ends the gap when hls.js skips the held film it already has: the front carries on past it', async () => {
+    const { requests, server, bank } = await setup({ seq: 41, need: 1000 });
+    for (let n = 30; n < 41; n += 1) put(bank, n);
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    for (const n of [25, 26, 27, 28, 29]) {
+      ask(requests, n);
+      await flush();
+      await complete(server.calls.at(-1));
+    }
+    const skipped = ask(requests, 41); // 30..40 are in hls.js's buffer: it asks for 41
+    await flush();
+    await complete(server.calls.at(-1));
+    expect(skipped.told.map((t) => t[0])).toEqual(['success']);
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1));
+    expect(segmentCalls(server).slice(-4)).toEqual(urls('r480', 41, 42, 43, 44));
+  });
+
+  it('ends the gap when the held film above it is dropped behind the playhead', async () => {
+    const { requests, server, bank } = await setup({ seq: 41, need: 1000 });
+    for (let n = 30; n < 41; n += 1) put(bank, n);
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    ask(requests, 25);
+    await flush();
+    await complete(server.calls.at(-1));
+    bank.dropBehind(500); // everything above 25 is gone
+    expect(bank.hasSegmentAbove(25)).toBe(false);
+    const next = ask(requests, 26);
+    await flush();
+    await complete(server.calls.at(-1));
+    expect(next.told.map((t) => t[0])).toEqual(['success']);
+    await complete(server.calls.at(-1));
+    expect(segmentCalls(server).slice(-3)).toEqual(urls('r480', 26, 27, 28));
+  });
+
   it('a change of mode ends the wait without sending the front anything', async () => {
     const { requests, server } = await inGap();
     const quiet = server.calls.length;
