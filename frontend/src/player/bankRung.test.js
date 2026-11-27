@@ -149,6 +149,17 @@ describe('guarding the arithmetic', () => {
     expect(chooseBankRung(input({ filmAhead: undefined }))).toBeNull();
     expect(chooseBankRung(input({ filmAhead: -5 }))).toBeNull();
     expect(chooseBankRung(input({ filmAhead: 0 }))).not.toBeNull();
+    expect(chooseBankRung(input({ need: Infinity }))).toBeNull();
+    expect(chooseBankRung(input({ filmAhead: Infinity }))).toBeNull();
+  });
+
+  it('an infinite rate keeps the rung, or skips just that candidate', () => {
+    expect(chooseBankRung(input({ rate: Infinity }))).toBeNull();
+    // Candidate at Infinity is skipped; 360p (den 0.375 -> 433.3) and 240p (540) reach F = 300, the higher
+    // of them is 360p.
+    const r = chooseBankRung(input({ candidates: [C240, C360, { id: 'inf', rate: Infinity }] }));
+    expect(r.id).toBe('360p');
+    expect(r.projections.map((p) => p.id)).toEqual(['240p', '360p']);
   });
 
   it('a fetched rung with no usable rate keeps the rung', () => {
