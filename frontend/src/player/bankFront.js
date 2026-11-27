@@ -50,15 +50,6 @@ function parsePlaylist(text, playlistUrl) {
  *   pause and nothing restarts it; `isPaused()` says whether it is on. The time paused counts as waiting in the
  *   window's next entry.
  * - `position()` is `{ seq, rung }`, what the front will fetch next.
- * - `fetchNow()` fetches that position at once, whether or not the front is paused, wants film or is at its
- *   limit, with one server request; nothing when a fetch is in flight, a retry is pending, or it is not armed and
- *   started. A pause is left as it is (its timer untouched) unless the fetch succeeds, which resumes the front.
- * - `subscribe(seq, listener)` attaches to the front's fetch of `seq`, in flight now or the next one: the same
- *   server request serves both. The listener may have `onFirstByte()`, `onProgress(loadedBytes)`, `onDone(segment)`
- *   (a fresh `bank.getSegment(seq)`, after which the subscription ends), `onServerAnswer(status, headers)` for any
- *   answer other than 200 (the front goes on handling it itself) and `onError('network' | 'timeout')`. Nothing is
- *   called for an aborted fetch, a first byte already past is not replayed, and a listener must not throw.
- *   Returns the function that unsubscribes.
  */
 export function createBankFront({
   rungs,
@@ -75,7 +66,6 @@ export function createBankFront({
   const eligible = rungs.filter((r) => r.height <= FRONT_MAX_HEIGHT);
   const byId = new Map(eligible.map((r) => [r.id, r]));
   const parsed = new Map();
-  const listeners = new Map();
   const entries = [];
   let armed = false;
   let running = false;
@@ -85,8 +75,8 @@ export function createBankFront({
   let current = null;
   let retryTimer = null;
   let pauseTimer = null;
-  let pausedAt = null;
-  let pauseWait = 0; // seconds paused and not yet counted in an entry's waiting
+  let pauseMark = null; // when the pause's counted time began; null while paused and not wanting film
+  let pauseWait = 0; // seconds paused, wanting film, and not yet counted in an entry's waiting
   let next = 0;
   let wantedRung = null;
   let lockedRung = null;
@@ -109,10 +99,6 @@ export function createBankFront({
     return parsed.get(id);
   }
 
-  function emit(seq, name, ...args) {
-    for (const l of [...(listeners.get(seq) ?? [])]) l[name]?.(...args);
-  }
-
   // A new position drops the segment fetch in flight; a playlist fetch is not about a position and goes on.
   function resetPosition() {
     if (current?.segment) {
@@ -125,9 +111,11 @@ export function createBankFront({
     lockedRung = null;
     waited = 0;
     backoffs = 0;
+    pauseWait = 0;
+    if (pauseMark !== null) pauseMark = now();
   }
 
-  async function attempt(url, { ctx, controller, limit, notify }) {
+  async function attempt(url, { ctx, controller, limit }) {
     const startedAt = now();
     limit(FIRST_BYTE_MS);
     const response = await fetchFn(url, {
@@ -136,24 +124,17 @@ export function createBankFront({
       signal: controller.signal,
     });
     if (response.status !== 200) {
-      notify('onServerAnswer', response.status, response.headers);
       const header = Number(response.headers?.get?.('Retry-After'));
       return { outcome: 'status', status: response.status, retryAfter: header, startedAt };
     }
     const reader = response.body.getReader();
     const chunks = [];
     let firstAt = null;
-    let loaded = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done || ctx.aborted) break;
-      if (firstAt === null) {
-        firstAt = now();
-        notify('onFirstByte');
-      }
+      firstAt ??= now();
       chunks.push(value);
-      loaded += value.byteLength;
-      notify('onProgress', loaded);
       limit(NO_PROGRESS_MS);
     }
     const endAt = now();
@@ -188,17 +169,13 @@ export function createBankFront({
       stopTimer();
       controller.abort();
     };
-    const notify = (name, ...args) => {
-      if (seq !== null && !ctx.aborted) emit(seq, name, ...args);
-    };
     current = ctx;
     const startedAt = now();
     let result;
     try {
-      result = await attempt(url, { ctx, controller, limit, notify });
+      result = await attempt(url, { ctx, controller, limit });
     } catch {
       result = { outcome: timedOut ? 'timeout' : 'network', startedAt };
-      notify('onError', result.outcome);
     }
     stopTimer();
     return ctx.aborted ? CANCELLED : result;
@@ -209,8 +186,8 @@ export function createBankFront({
     pauseTimer = null;
     if (!paused) return;
     paused = false;
-    pauseWait += Math.max(0, at - pausedAt) / 1000;
-    pausedAt = null;
+    if (pauseMark !== null) pauseWait += Math.max(0, at - pauseMark) / 1000;
+    pauseMark = null;
   }
 
   function resume() {
@@ -222,12 +199,13 @@ export function createBankFront({
   function pause() {
     if (paused) return; // the timer runs from the first pause: nothing during it restarts it
     paused = true;
-    pausedAt = now();
+    pauseMark = wants() ? now() : null;
     pauseTimer = setTimer(resume, reconnectMs);
   }
 
+  // Time spent paused is counted as the pause (decision 7), not again as attempts and waits inside it.
   function later(ms) {
-    waited += ms / 1000;
+    if (!paused) waited += ms / 1000;
     retryTimer = setTimer(() => {
       retryTimer = null;
       pump();
@@ -235,7 +213,7 @@ export function createBankFront({
   }
 
   function failed(res) {
-    waited += (now() - res.startedAt) / 1000;
+    if (!paused) waited += (now() - res.startedAt) / 1000;
     if (res.outcome !== 'status') {
       later(NETWORK_RETRY_MS);
     } else if (res.status === 410) {
@@ -297,8 +275,6 @@ export function createBankFront({
       lockedRung = null;
       next = seq + 1;
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
-      emit(seq, 'onDone', bank.getSegment(seq));
-      listeners.delete(seq);
     });
   }
 
@@ -323,7 +299,6 @@ export function createBankFront({
     resetPosition();
     if (pauseTimer !== null) clearTimer(pauseTimer);
     pauseTimer = null;
-    listeners.clear();
   }
 
   return {
@@ -348,6 +323,12 @@ export function createBankFront({
     update(input) {
       filmAhead = input.filmAhead;
       need = input.need;
+      if (!wants()) {
+        pauseWait = 0; // pause time counts only while film is wanted
+        pauseMark = null;
+      } else if (paused && pauseMark === null) {
+        pauseMark = now();
+      }
       pump();
     },
     setRung(id) {
@@ -357,19 +338,6 @@ export function createBankFront({
     pause,
     isPaused: () => paused,
     position: () => ({ seq: next, rung: lockedRung ?? wantedRung }),
-    fetchNow() {
-      if (stopped || busy || retryTimer !== null || !armed || !running) return;
-      if (eligible.every((r) => bank.getPlaylist(r.id) !== null)) fetchSegment();
-    },
-    subscribe(seq, listener) {
-      const set = listeners.get(seq) ?? new Set();
-      set.add(listener);
-      listeners.set(seq, set);
-      return () => {
-        set.delete(listener);
-        if (set.size === 0 && listeners.get(seq) === set) listeners.delete(seq);
-      };
-    },
     /** `{ rung, rate, w, d, measuredS, measuredWallS }`: per film second, over the last 60 s of fetching. */
     window() {
       const rung = entries.at(-1)?.rung ?? null;
