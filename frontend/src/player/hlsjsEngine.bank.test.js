@@ -112,6 +112,14 @@ function world({ first = 0, auto = true } = {}) {
     lookup,
     setTime: (s) => (state.time = s),
     setPaused: (paused) => (state.paused = paused),
+    play: () => {
+      state.paused = false;
+      video.dispatchEvent(new Event('play'));
+    },
+    pause: () => {
+      state.paused = true;
+      video.dispatchEvent(new Event('pause'));
+    },
     timeUpdate: () => video.dispatchEvent(new Event('timeupdate')),
     setRanges: (r) => (state.ranges = r),
     advance: (ms) => (t += ms),
@@ -413,7 +421,149 @@ describe('the engine holds hls.js on the bank’s level', () => {
     });
   });
 
+  describe('the hole that picks the next fragment', () => {
+    it('counts a range that starts within the hole after the playhead as holding it', () => {
+      const env = world();
+      env.setRanges([[0.05, 100]]);
+      env.engine.bankOn(env.lookup);
+      expect(env.lookup.levelAt).toHaveBeenLastCalledWith(100);
+    });
+
+    it('counts one that starts at the hole as holding it', () => {
+      const env = world();
+      env.hls.config.maxBufferHole = 0.5;
+      env.setRanges([[0.5, 100]]);
+      env.engine.bankOn(env.lookup);
+      expect(env.lookup.levelAt).toHaveBeenLastCalledWith(100);
+    });
+
+    it('does not count one that starts beyond the hole', () => {
+      const env = world();
+      env.hls.config.maxBufferHole = 0.5;
+      env.setRanges([[0.75, 100]]);
+      env.engine.bankOn(env.lookup);
+      expect(env.lookup.levelAt).toHaveBeenLastCalledWith(0);
+    });
+
+    it('does not count one that starts after the playhead while paused', () => {
+      const env = world();
+      env.setPaused(true);
+      env.setRanges([[0.05, 100]]);
+      env.engine.bankOn(env.lookup);
+      expect(env.lookup.levelAt).toHaveBeenLastCalledWith(0);
+    });
+
+    describe('when it changes with no event of hls.js', () => {
+      // A fragment loaded (40 to 50) with the next range 0.05 s after it: joined only when a hole is allowed.
+      const loadedBeforeRange = (env) => {
+        env.setRanges([
+          [0, 40],
+          [50.05, 200],
+        ]);
+        env.hls.emit(FakeHls.Events.FRAG_LOADED, { frag: media(5, 40) });
+      };
+
+      it('on play: the level is written again for the joined end', () => {
+        const env = world();
+        env.setPaused(true);
+        env.engine.bankOn(env.lookup);
+        loadedBeforeRange(env);
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(50);
+        env.play();
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(200);
+      });
+
+      it('on pause: the level is written again for the end without the hole', () => {
+        const env = world();
+        env.engine.bankOn(env.lookup);
+        loadedBeforeRange(env);
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(200);
+        env.pause();
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(50);
+      });
+
+      it('at the end of a backward seek, on the next time update', () => {
+        const env = world();
+        env.engine.bankOn(env.lookup);
+        env.setTime(100);
+        env.tick();
+        env.setTime(20);
+        env.seek(); // behind the last time update: no hole
+        loadedBeforeRange(env);
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(50);
+        env.tick();
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(200);
+      });
+
+      it('writes nothing when the hole has not changed', () => {
+        const env = world();
+        env.engine.bankOn(env.lookup);
+        loadedBeforeRange(env);
+        env.log.length = 0;
+        env.tick();
+        env.play();
+        expect(env.log).toEqual([]);
+      });
+
+      it('writes nothing while the bank is off', () => {
+        const env = world();
+        env.pause();
+        env.play();
+        expect(env.log).toEqual([]);
+      });
+    });
+  });
+
   describe('on a flush', () => {
+    describe('with a fragment loaded and not yet appended', () => {
+      // Film below 50 is held at level 1, above at 3; the fragment 40 to 50 has loaded, not yet appended.
+      const loadedUnappended = () => {
+        const env = world();
+        env.lookup.levelAt.mockImplementation((s) => (s < 50 ? 1 : 3));
+        env.setRanges([[0, 40]]);
+        env.engine.bankOn(env.lookup);
+        env.hls.emit(FakeHls.Events.FRAG_LOADED, { frag: media(5, 40) });
+        env.setTime(10);
+        env.setRanges([[5, 40]]);
+        return env;
+      };
+
+      it('keeps the level the loaded fragment chose when the flush reaches the film ahead', () => {
+        const env = loadedUnappended();
+        env.hls.bufferFlushed({ start: 100, end: Infinity });
+        expect(env.levelWrites().at(-1)).toBe(3);
+      });
+
+      it('writes nothing for a back-buffer flush that ends before the playhead', () => {
+        const env = loadedUnappended();
+        env.log.length = 0;
+        env.hls.bufferFlushed({ start: 0, end: 5 });
+        expect(env.log).toEqual([]);
+      });
+
+      it('forgets the fragment once it is appended', () => {
+        const env = loadedUnappended();
+        env.hls.fragBuffered(media(5, 40)); // the test leaves the ranges as they were
+        env.hls.bufferFlushed({ start: 100, end: Infinity });
+        expect(env.levelWrites().at(-1)).toBe(1);
+      });
+
+      it('forgets it at a seek', () => {
+        const env = loadedUnappended();
+        env.seek();
+        env.hls.bufferFlushed({ start: 100, end: Infinity });
+        expect(env.levelWrites().at(-1)).toBe(1);
+      });
+
+      it('forgets it when the bank turns off and on again', () => {
+        const env = loadedUnappended();
+        env.engine.bankRelease(2);
+        env.engine.bankOn(env.lookup);
+        env.hls.bufferFlushed({ start: 100, end: Infinity });
+        expect(env.levelWrites().at(-1)).toBe(1);
+      });
+    });
+
     it('rewrites the level for the new buffered end', () => {
       // A re-bank's flush is pending (floor raised, flush asked for) when the bank turns on.
       const env = world({ first: 1 });
@@ -710,6 +860,19 @@ describe('the engine holds hls.js on the bank’s level', () => {
       expect(env.levelWrites()).toEqual([]);
       expect(env.hls.autoLevelCapping).toBe(1);
     });
+
+    it.each([undefined, null, NaN, 1.5, '2'])(
+      'refuses %s as the level the bank fetched',
+      (level) => {
+        const env = world();
+        env.engine.bankOn(env.lookup);
+        env.log.length = 0;
+        expect(() => env.engine.bankRelease(level)).toThrow('bankRelease needs the level');
+        expect(env.log).toEqual([]); // still on: a valid release works
+        env.engine.bankRelease(2);
+        expect(env.levelWrites()).toEqual([-1]);
+      },
+    );
 
     it('does nothing when the bank is not on', () => {
       const env = world();

@@ -354,12 +354,15 @@ export function startHlsJs({
   // The hole hls.js plays across when it picks its next fragment (`getFwdBufferInfo`): `maxBufferHole`, none
   // while paused or just after a backward seek (the playhead is behind where the last time update left it).
   let lastTime = 0;
+  let lastHole = 0; // the hole used for the last level written
+  let pending = null; // the fragment loaded and not yet appended, { sn, level, start, end }
   const holeS = () =>
     video.paused || lastTime > video.currentTime ? 0 : (hls.config.maxBufferHole ?? 0);
 
   // The first film second hls.js has not got from `t` on, by its own rule (`buffer-helper.ts`): the end of the
   // buffered range holding `t`, ranges less than a hole apart (or touching) counting as one; `t` itself when
-  // none holds it. `extra` is a range about to be appended (a loaded fragment), added to the buffered ones.
+  // none holds it (a range starts within a hole of `t` counts as holding it, as in hls.js's `bufferedInfo`).
+  // `extra` is a range about to be appended (a loaded fragment), added to the buffered ones.
   const bufferEnd = (t, extra = null) => {
     const { buffered } = video;
     const ranges = [];
@@ -376,16 +379,22 @@ export function startHlsJs({
         last.end = Math.max(last.end, r.end);
       else merged.push({ ...r });
     }
-    return merged.find((r) => r.start <= t && t <= r.end)?.end ?? t;
+    return merged.findLast((r) => r.start <= t + hole && t < r.end)?.end ?? t;
   };
 
   // hls.js's next fragment is the one at `position`: it is loaded at the rung the bank holds there, or, past
   // what is held, at the rung the bank's front fetches. Written in every case, never only on a change.
   const holdBankLevelAt = (position) => {
+    lastHole = holeS();
     hls.loadLevel = bank.levelAt(position) ?? bank.frontLevel();
   };
   // The same for the film after the buffered range at the playhead.
-  const holdBankLevelAtPlayhead = () => holdBankLevelAt(bufferEnd(video.currentTime));
+  // A fragment loaded but not appended yet counts as buffered, so a flush that comes first cannot hide it.
+  const holdBankLevelAtPlayhead = () => holdBankLevelAt(bufferEnd(video.currentTime, pending));
+  // The hole changes with pause, play and the end of a backward seek, with no event of hls.js's: the level follows.
+  const followHole = () => {
+    if (bank && holeS() !== lastHole) holdBankLevelAtPlayhead();
+  };
 
   const stopReconnecting = () => {
     clearTimeout(timer);
@@ -443,10 +452,12 @@ export function startHlsJs({
   // The bank is full, so hls.js is mostly idle and sends no fragment events: the re-bank is read on timeupdate.
   const onTimeUpdate = () => {
     lastTime = video.currentTime;
+    followHole();
     applyCap();
     rebankStep();
   };
   const onSeeking = () => {
+    pending = null; // hls.js may drop what it was about to append
     undoRebank();
     if (bank) holdBankLevelAtPlayhead();
     else applyCap();
@@ -454,6 +465,8 @@ export function startHlsJs({
   video.addEventListener('waiting', onWaiting);
   video.addEventListener('timeupdate', onTimeUpdate);
   video.addEventListener('seeking', onSeeking);
+  video.addEventListener('play', followHole);
+  video.addEventListener('pause', followHole);
 
   hls.on(Events.MANIFEST_PARSED, (_event, data) => {
     top = data.levels.length - 1;
@@ -524,6 +537,7 @@ export function startHlsJs({
   hls.on(Events.FRAG_BUFFERED, (_event, data) => {
     endLoading(data.frag);
     const frag = data.frag;
+    if (pending && frag && pending.sn === frag.sn && pending.level === frag.level) pending = null;
     if (!frag || frag.sn === 'initSegment' || (frag.type && frag.type !== 'main')) return;
     const entry = { start: frag.start, end: frag.start + frag.duration, level: frag.level };
     banked = [...banked.filter((f) => f.start !== entry.start), entry];
@@ -533,7 +547,8 @@ export function startHlsJs({
   // hls.js sends { type, start, end } of the flush that finished; its error path sends 0 and 0.
   hls.on(Events.BUFFER_FLUSHED, (_event, data) => {
     pruneBanked();
-    if (bank) holdBankLevelAtPlayhead(); // a flush moved the buffered end the next fragment follows
+    // A flush that reaches the film ahead moves the buffered end the next fragment follows.
+    if (bank && data?.end > video.currentTime) holdBankLevelAtPlayhead();
     if (rebankFloor > 0 && data?.end === Infinity && Math.abs(data.start - flushFrom) < 0.5) {
       flushed = true;
     }
@@ -550,9 +565,13 @@ export function startHlsJs({
     ) {
       // Before hls.js chooses its next fragment: it is not appended yet, so the film after it is read from what
       // is buffered around its end (a range that starts there joins it when it lands).
-      holdBankLevelAt(
-        bufferEnd(frag.start, { start: frag.start, end: frag.start + frag.duration }),
-      );
+      pending = {
+        sn: frag.sn,
+        level: frag.level,
+        start: frag.start,
+        end: frag.start + frag.duration,
+      };
+      holdBankLevelAt(bufferEnd(frag.start, pending));
     }
     stopReconnecting();
     troubled = false;
@@ -661,6 +680,7 @@ export function startHlsJs({
       const wasOn = bank !== null;
       bank = lookup;
       if (wasOn) return;
+      pending = null;
       undoIfRebanking(); // the floor is written before the manual level
       holdBankLevelAtPlayhead();
     },
@@ -676,11 +696,16 @@ export function startHlsJs({
      * The bank turns off: hls.js is back on Auto, the floor and the cap are written again, and the step gate
      * starts at `fetchedLevel`, the level the bank last fetched (the champagne ceiling still clamps it), so the
      * climb from there is one level a minute. `fetchedLevel` is required and is the bank's own: the level hls.js is
-     * on is only the last one this engine wrote. Does nothing while the bank is off.
+     * on is only the last one this engine wrote, so B5b must pass it. Throws on anything but a level index.
+     * Does nothing while the bank is off.
      */
     bankRelease(fetchedLevel) {
+      if (!Number.isInteger(fetchedLevel)) {
+        throw new Error(`bankRelease needs the level the bank last fetched, got ${fetchedLevel}`);
+      }
       if (destroyed || !bank) return;
       bank = null;
+      pending = null;
       hls.loadLevel = -1;
       floorSet = null; // written again whatever it was
       applied = null;
@@ -698,6 +723,8 @@ export function startHlsJs({
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('seeking', onSeeking);
+      video.removeEventListener('play', followHole);
+      video.removeEventListener('pause', followHole);
       hls.destroy();
     },
   };
