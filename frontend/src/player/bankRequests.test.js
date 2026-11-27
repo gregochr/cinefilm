@@ -550,6 +550,9 @@ describe('the bank decider: behind and beyond the front', () => {
     await complete(server.calls.at(-1));
     await complete(server.calls.at(-1));
     expect(segmentCalls(server).slice(-4)).toEqual(urls('r480', 41, 42, 43, 44));
+    requests.update({ filmAhead: 0, need: 1000 }); // B5b's next update: the need is no longer held at 0
+    await complete(server.calls.at(-1));
+    expect(segmentCalls(server).at(-1)).toBe(segUrl('r480', 45));
   });
 
   it('ends the gap when the held film above it is dropped behind the playhead', async () => {
@@ -568,6 +571,9 @@ describe('the bank decider: behind and beyond the front', () => {
     expect(next.told.map((t) => t[0])).toEqual(['success']);
     await complete(server.calls.at(-1));
     expect(segmentCalls(server).slice(-3)).toEqual(urls('r480', 26, 27, 28));
+    requests.update({ filmAhead: 0, need: 1000 });
+    await complete(server.calls.at(-1));
+    expect(segmentCalls(server).at(-1)).toBe(segUrl('r480', 29));
   });
 
   it('a change of mode ends the wait without sending the front anything', async () => {
