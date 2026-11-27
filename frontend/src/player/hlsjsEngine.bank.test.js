@@ -4,11 +4,17 @@ import { BANK_RUNG_TEXT } from './bankRequests.js';
 import { HOLD_CHECK_MS, RECONNECT_MS, hlsConfig, startHlsJs } from './hlsjsEngine.js';
 import { HEALTHY_MS } from './stepGate.js';
 
+// Every engine `world()` starts: each holds a window `online` listener, video listeners and timers, released here.
+const engines = [];
+
 beforeEach(() => {
   FakeHls.reset();
   vi.useFakeTimers();
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  engines.splice(0).forEach((engine) => engine.destroy()); // destroy is safe to call twice
+  vi.useRealTimers();
+});
 
 // The engine's manual level for the film bank (outside-bank-plan.md, decision 3) on a fake hls.js. The ladder
 // has real ids, so the floor hold applies, and the champagne ceiling starts at the 480p level.
@@ -71,6 +77,7 @@ function world({ first = 0, auto = true } = {}) {
     handlers,
     now: () => t,
   });
+  engines.push(engine);
   const hls = FakeHls.last;
   // Every write to hls.js, in order, with the floor and the cap in force at that moment.
   const log = [];
