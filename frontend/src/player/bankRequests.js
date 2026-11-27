@@ -97,8 +97,9 @@ export function createBankRequests({
   function endGap(nextSeq = null) {
     if (!gap) return;
     clearGap();
-    frontUpdate(lastUpdate);
+    // Move the front first, while its need is still 0, so only the onward fetch starts, never one at the old spot.
     if (nextSeq !== null) front.start({ seq: nextSeq, rung: front.position().rung });
+    frontUpdate(lastUpdate);
   }
 
   // Answers from a held segment (a copy), or null when it is held at another rung (`wrongRung` is told first).

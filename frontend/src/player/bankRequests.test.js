@@ -503,6 +503,19 @@ describe('the bank decider: behind and beyond the front', () => {
     expect(front.position().seq).toBe(10);
   });
 
+  it('ending a gap on held film makes one server request, for the segment after the held run, none for the held one', async () => {
+    const { requests, server } = await gapSetup();
+    for (const n of [2, 3, 4, 5]) {
+      ask(requests, n);
+      await flush();
+      await complete(server.calls.at(-1));
+    }
+    const before = server.calls.length;
+    expect(ask(requests, 6).decision.action).toBe('answer');
+    await flush();
+    expect(server.calls.slice(before).map((c) => c.url)).toEqual(urls('r480', 10));
+  });
+
   it('a held request behind the gap does not end the wait', async () => {
     const { requests, bank, server } = await gapSetup();
     put(bank, 0);
