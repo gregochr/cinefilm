@@ -713,6 +713,7 @@ describe('the engine holds hls.js on the bank’s level', () => {
           recover(...args);
           env.setTime(0);
           state = 0;
+          env.setRanges([]);
         });
         env.hls.startLoad.mockClear();
         env.lookup.levelAt.mockClear();
@@ -720,7 +721,7 @@ describe('the engine holds hls.js on the bank’s level', () => {
           fatal: true,
           type: 'mediaError',
           details: 'mediaSourceRequiresReset',
-          errorAction: { action: 0, flags: 16 },
+          errorAction: { action: 2, flags: 24 }, // SendAlternateToPenaltyBox, ResetMediaSource | SwitchToSDR
         });
         expect(env.lookup.levelAt).toHaveBeenCalledTimes(1);
         expect(env.lookup.levelAt).toHaveBeenCalledWith(300);

@@ -652,7 +652,7 @@ describe('other fatal errors', () => {
 // hls.js 1.7.4 runs its own error controller before the engine hears of an error: a reset is recovered, then a
 // fatal error stops loading. The engine is told of the aftermath, with the media reset (playhead 0, no data).
 describe('recovery in the order hls.js runs it', () => {
-  const RESET = { action: 0, flags: 16 }; // `ErrorActionFlags.ResetMediaSource`
+  const RESET = { action: 2, flags: 24 }; // hls.js's: SendAlternateToPenaltyBox, ResetMediaSource | SwitchToSDR
 
   // A resumed film (asked to start at 120 s) with its playhead at 300 s and media loaded; `hls.js`'s own
   // `recoverMediaError` resets the media as the browser does.
