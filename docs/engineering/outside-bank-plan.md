@@ -94,8 +94,11 @@ engine (`useStream.js:341`).
 4. **One fetcher.** The bank loader gives every media request of hls.js to the bank, which answers from what it
    holds, waits on its own fetch of it, or fetches it **next** (hls.js's requests first). A request **behind the front**
    (held film lies after it, as after a seek back) starts a wait: the front waits until hls.js asks for held film,
-   or a seek or clear; quiet spells in between do not count. A request **at the front's next position** is simply
-   the front's next fetch, and the front carries on past it towards F. The front starts at the end of
+   or a seek or clear; quiet spells in between do not count. A request **at the front's next position** is fetched
+   once, for hls.js and the bank alike. Then: while the bank is on and below its limit, the front carries on past
+   it towards F; at the limit or at F the front does not carry on; while the front is paused the fetch is made for
+   hls.js in the first bullet's shape and its server answer resumes the front; while the bank is turning off it is
+   the request beyond held film, and decision 8's release applies. The front starts at the end of
    hls.js's buffered range holding the playhead and, whenever hls.js asks past it, moves past that. It fetches one
    segment at a time until film ahead reaches F, and tops up as the film plays.
    - **A fetch hls.js waits on** keeps today's shape: hls.js's own first-byte and load limits count from hls.js's
@@ -155,7 +158,8 @@ writes every rung, and the bank fills no faster than it.
    seeks forward inside (keeping what ends within 30 s before the target), back and beyond; the limit stopping and releasing the front; covered and not covered.
 2. **B2a, the front** (`bankFront.js`, `fetch` and the clock passed in; about 250): the front's fetches of decision
    4. Tests: the playlists fetched when armed; the start and the move past a request beyond it; one request at a
-   time; one kbit/s report per completed fetch and none for a failed one; decision 7's 60 s window (`w` and `d` per
+   time; no request once film ahead reaches F, and the next once playback brings it below F; one kbit/s report per
+   completed fetch and none for a failed one; decision 7's 60 s window (`w` and `d` per
    film second) kept at the rung fetched and counting nothing while the front does not want film; `setRung` applying
    from the next fetch only, and a start above 480p fetching at 480p; 503 with `Retry-After` and the backoff, a
    503 without it pausing (no request until `RECONNECT_MS` or a server answer), network error, the first-byte and no-progress limits, a 25 s transfer completing;
@@ -163,7 +167,10 @@ writes every rung, and the bank fills no faster than it.
 3. **B2b, requests hls.js waits on** (`bankRequests.js`; about 250): decision 4's first and third bullets and
    decision 8. Tests: hls.js's request before the front's next; the front waiting through a gap, including one
    longer than hls.js's buffer goal with hls.js quiet mid-gap (no front request until hls.js reaches held film);
-   hls.js asking at the front's own position, the front then fetching on to F while hls.js is quiet; the waiting
+   hls.js asking at the front's own position: exactly one server request for it, hls.js answered from it, then the
+   following positions in order up to F while hls.js is quiet; the same with the front already at F (one fetch,
+   then nothing until film plays out); the same while the front is paused (fetched for hls.js, its answer resuming
+   the front); the waiting
    request's limits counted from hls.js's request with the fetch carrying on; `onTimeout` when the no-progress rule
    ends the fetch; a 503, 404 or 410, or a 503 wait already under way, handed over at once; a wrong-rung request
    failed as a `bank-rung` 503; a plain 503 or fatal error pausing, resumed by a server answer or `RECONNECT_MS`
