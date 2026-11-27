@@ -196,10 +196,12 @@ Then the owner is told what the buffers allow, with question 2.
    minute, a playing minute with no fragment in a decidable part (no seek, an `endPositionMs`, a known runtime,
    well before the film's end: bad), the film's end within 60 s with a good check (good) and with no check
    anywhere in the journey (unknown), each of a seek, no `endPositionMs`, a null runtime and a two-part edition
-   with one part's duration null and one with a part's duration 0, each on a playing no-fragment minute well
+   with one part's `durationMs` and `videoDurationMs` both null and one with both 0, each on a playing no-fragment minute well
    before the true end and with position + ahead below the known part's duration − 60 s (so a build that trusts
    the summed runtime reads the minute bad), with a good check
-   (good) and with no check anywhere in the journey (unknown), a point in the overlap of two parts' rows where
+   (good) and with no check anywhere in the journey (unknown), a two-part edition where one part's `durationMs` is
+   null but its `videoDurationMs` above 0 (runtime known: the same minute with a good check is bad), one file with
+   `durationMs` 0 and `videoDurationMs` above 0 (runtime unknown: good with a good check), a point in the overlap of two parts' rows where
    the earlier part's row is good and the later's bad (bad) and the other way round (good), the boundaries (moved
    + stalled 44,999 and 45,000 ms; moved 44,999 and 45,000 ms; medians 499 and 500; position + ahead at runtime
    − 60,001 and − 60,000 ms; `probe_ms` 1,000 and 1,001), a mostly-paused no-fragment minute with a good
