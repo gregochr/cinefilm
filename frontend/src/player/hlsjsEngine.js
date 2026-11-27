@@ -404,6 +404,13 @@ export function startHlsJs({
     pending = null;
     if (bank) holdBankLevelAtPlayhead();
   };
+  // The same after hls.js reset the media itself (`recoverMediaError`, run by its error controller before this
+  // engine hears of the error): the playhead reads 0 and nothing is buffered, so the level is for the position
+  // hls.js reloads from, the playhead of the last time update.
+  const dropPendingAfterReset = () => {
+    pending = null;
+    if (bank) holdBankLevelAt(lastTime);
+  };
   // The hole changes with pause, play and the end of a backward seek, with no event of hls.js's: the level follows.
   const followHole = () => {
     if (bank && holeS() !== lastHole) holdBankLevelAtPlayhead();
@@ -669,10 +676,13 @@ export function startHlsJs({
       return;
     }
     if (
+      !data.fatal &&
       data.type === ErrorTypes.MEDIA_ERROR &&
       data.details === ErrorDetails.MEDIA_SOURCE_REQUIRES_RESET
     ) {
-      dropPending(); // hls.js recovers by itself, fatal or not, and the recovery drops the loaded fragment
+      // A non-fatal reset is recovered by hls.js itself, before this handler runs, and the recovery drops the
+      // fragment loaded but not appended. (A fatal one is recovered below, by the engine.)
+      dropPendingAfterReset();
     }
     if (!data.fatal) return;
     if (data.type === ErrorTypes.NETWORK_ERROR) {

@@ -624,17 +624,32 @@ describe('the engine holds hls.js on the bank’s level', () => {
         expect(env.levelWrites().at(-1)).toBe(1);
       });
 
-      it.each([true, false])(
-        'forgets it when hls.js recovers by itself (fatal %s), and writes the level for the buffer as it is',
-        (fatal) => {
-          const env = loadedUnappended();
-          env.lookup.levelAt.mockClear();
-          env.hls.error({ fatal, type: 'mediaError', details: 'mediaSourceRequiresReset' });
-          expect(env.lookup.levelAt).toHaveBeenCalledWith(40);
-          expect(env.levelWrites().filter((v) => v === 1).length).toBeGreaterThan(0);
-          expect(env.hls.loadLevel).toBe(1);
-        },
-      );
+      it('forgets it when hls.js resets the media by itself, and writes the level for where it reloads', () => {
+        const env = loadedUnappended();
+        env.lookup.levelAt.mockImplementation((s) => (s < 5 ? 0 : s < 50 ? 1 : 3));
+        env.tick(); // the playhead is at 10
+        // hls.js's error controller has already recovered: the media is reloaded, the playhead is 0, nothing
+        // is buffered. The engine hears of the error after that.
+        env.setTime(0);
+        env.setRanges([]);
+        env.lookup.levelAt.mockClear();
+        env.hls.error({ fatal: false, type: 'mediaError', details: 'mediaSourceRequiresReset' });
+        expect(env.lookup.levelAt).toHaveBeenCalledTimes(1);
+        expect(env.lookup.levelAt).toHaveBeenCalledWith(10);
+        expect(env.hls.loadLevel).toBe(1);
+        expect(env.hls.recoverMediaError).not.toHaveBeenCalled(); // hls.js did that, not the engine
+      });
+
+      it('recovers a fatal reset itself, with the level held at the playhead', () => {
+        const env = loadedUnappended();
+        env.lookup.levelAt.mockClear();
+        env.hls.error({ fatal: true, type: 'mediaError', details: 'mediaSourceRequiresReset' });
+        expect(env.lookup.levelAt).toHaveBeenCalledTimes(1);
+        expect(env.lookup.levelAt).toHaveBeenCalledWith(10);
+        expect(env.hls.recoverMediaError).toHaveBeenCalledTimes(1);
+        env.seek();
+        expect(env.lookup.levelAt).toHaveBeenLastCalledWith(40); // the dropped fragment is not counted
+      });
 
       it('forgets it when the bank turns off and on again', () => {
         const env = loadedUnappended();
