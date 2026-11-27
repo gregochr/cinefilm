@@ -110,7 +110,8 @@ at 240p's (`outside-bank-plan.md`).
    took through the whole merged extent (a track starting or ending inside it does not count); with no track
    through the whole extent, its length at the slowest moving speed (5 m/s or more) any track was recorded at
    inside it; with no moving sample inside it, the stretch is left out of the map until a journey crosses it. **Need:** F =
-   duration × 1.25 + 60 s of film ahead; the buffers must hold F plus the 30 s back buffer.
+   duration × 1.25 + 60 s of film ahead, held by the player's bank (`outside-bank-plan.md`), not the browser's
+   buffers.
 7. **The rule** (replaced by `outside-bank-plan.md`, except its lapse rule below, which that plan uses). When a
    stretch is within 20 minutes of travel (decision 4's time):
    Rungs above 480p are never candidates while the rule holds; their fragments still in the buffer count with
@@ -228,9 +229,8 @@ Then the owner is told what the buffers allow, with question 2.
    (the session's cookie, `Cache-Control: no-store`; an `excludeJourney` parameter for the replay). `SECURITY.md`
    rule 7's journey paragraph rewritten (question 1 answered first). Unit tests at each boundary; an API test.
 3. **2a, reading and matching (frontend, pure):** `frontend/src/player/trainFeed.js` (JSONP, trailing commas,
-   kinds and ranges, fix age) and `trackMatch.js` (decision 4). Boundary tests. (**2b, the rule's sums**,
-   `lookAhead.js`, decisions 7 and 8 with step 0's holds as a table, belongs to the 3b series below and waits for
-   its review.)
+   kinds and ranges, fix age) and `trackMatch.js` (decision 4). Boundary tests. (**2b** is now the rule's input
+   only: see the note after this list.)
 4. **3a, the feed frame,** in the shape step 0.1 allowed: a CORS `fetch`, whose header the browser enforces (an
    answer without it rejects with a TypeError, the frame posts null, the scheduler counts it as no answer; page
    script cannot read that header, so nothing inspects it). Tests of the rejected fetch. Rule 7's browser
@@ -259,8 +259,8 @@ stretch within 30 minutes: its need F, the time to it, whether it has begun, and
    (`guard.test.mjs` parses `resources.js`).
 7. **5a, the stuck-rung counters** (never built: `stuck-rung-plan.md`, "Not in this PR"): re-banks started, done
    and undone, and marks forgotten, in the record, `HealthRules` accepting them. **5b, the record says what the
-   look-ahead did:** minutes matched, each stretch's need, the bank and rung at its start, the cap set, and the
-   look-ahead's switches down apart from the link's. Both before the release, so the first journey records them.
+   look-ahead did:** minutes matched, each stretch's need, the film ahead and rung at its start, the bank's rung
+   changes, and the media requests that reached the server while the bank was on (`outside-bank-plan.md`). Both before the release, so the first journey records them.
 8. **4a, the replay's stand-ins:** the audio padding of step 0.2 made real, with tests; the stand-in answers the
    feed's address (host rules and a certificate, made with `/usr/bin/openssl` and allowed only in the rig's
    throwaway profile) and the map (the real server's answer with the replayed journey excluded, saved by the

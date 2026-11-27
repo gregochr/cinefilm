@@ -47,11 +47,11 @@ the server restart behind and delete ahead. While the bank is on, media requests
   because hls.js assigns `frag.stats = loader.stats` before `load` (`loader/fragment-loader.ts:84-102`). On success
   it reads `response.data` and `context.resetIV` (`:106-107`): `onSuccess` gets the `context` it was given. After
   any callback hls.js calls `destroy()` (`:345-353`), also from inside `load` (`:352`). hls.js keeps no media payload
-  after use (`base-stream-controller.ts:815`); a flushed or refused fragment is fetched again through the loader.
+  after use (only the init segment's, `base-stream-controller.ts:815`); a flushed or refused fragment is fetched again through the loader.
 - The payload is transferred to the demux worker (`demux/transmuxer-interface.ts:262-273`): a cache hands out a copy.
 - The bandwidth sample is `bwEstimator.sample(parsing.end − loading.start − min(first − start, ttfbEstimate),
   loaded)` (`abr-controller.ts:528-541`); with `loading.start` and `first` set back by the real fetch's own
-  durations the sample repeats the real download. `loaded === total` and `loading.first > 0` are needed (`:267`).
+  durations the sample repeats the real download. `loaded === total` (`:267`) and `loading.first > 0` (`base-stream-controller.ts:2591`) are needed.
 - **A manual level** (`hls.loadLevel = L`) makes every next fragment load at L without flushing (`hls.ts:790-803`,
   `level-controller.ts:676-677`); ABR is not consulted. `-1` returns to Auto. An error drops a manual level back to
   Auto unless `preserveManualLevelOnError` is set (`error-controller.ts:374`, `config.ts:542`). A switch to a level
@@ -138,7 +138,7 @@ engine (`useStream.js:341`).
    is still answered until hls.js asks beyond it, then the release of decision 3 and the bank is cleared. A seek
    forward beyond what is held clears it at once (release, then armed again if a stretch is near).
 9. **Keeping and dropping.** A segment is dropped once the playhead is 30 s past its end, so a refused append
-   fetched again is answered. A seek forward inside what is held drops what lies before it; a seek back keeps what
+   fetched again is answered. A seek forward inside what is held drops what ends more than 30 s before the target; a seek back keeps what
    is held ahead and hls.js's requests fill the gap through the bank (decision 4).
 10. **hls.js's own depth stays as today** (120 to 480 s): every rung's measured hold is above 480 s plus the back
     buffer, so the browser's buffers never refuse; the deep part is the bank's.
@@ -151,7 +151,7 @@ writes every rung, and the bank fills no faster than it.
 
 1. **B1, the store** (`segmentBank.js`, pure; about 250 lines of code): decisions 1 and 9, the playlists, the 600
    MB limit, the coverage test of decision 2. Tests: one copy per sequence number at its rung; dropping 30 s behind;
-   seeks forward inside, back and beyond; the limit stopping and releasing the front; covered and not covered.
+   seeks forward inside (keeping what ends within 30 s before the target), back and beyond; the limit stopping and releasing the front; covered and not covered.
 2. **B2a, the front** (`bankFront.js`, `fetch` and the clock passed in; about 250): the front's fetches of decision
    4. Tests: the playlists fetched when armed; the start and the move past a request beyond it; one request at a
    time; one kbit/s report per completed fetch and none for a failed one; decision 7's 60 s window (`w` and `d` per
@@ -187,7 +187,9 @@ writes every rung, and the bank fills no faster than it.
    bank's input as a new engine method beside `destroy`. Unit tests: `bankRung` called first after 20 s of fetching,
    then once a minute, never inside a stretch, at F or at the limit, and again for the next stretch, its answer
    handed to the front; arming and turn-on (not before coverage, nor while a
-   playlist is missing); marked fragments taking no samples and the front's reports reaching
+   playlist is missing, nor while a fragment is loading through the inner loader, then on once it lands; not at or
+   above F, nor with the stretch more than 20 minutes away); a fatal `NETWORK_ERROR` pausing the front, resumed
+   by a server answer or `RECONNECT_MS`; marked fragments taking no samples and the front's reports reaching
    `handlers.onThroughput`; 410 and 404 from the front reaching `onStopped` and `onSessionLost`; turning off
    (front stopped, held film answered, release on the first request beyond it, bank cleared); a seek forward beyond
    what is held releasing at once and arming again with a stretch near; a media error leaving the front running; a
