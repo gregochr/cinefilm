@@ -732,7 +732,7 @@ describe('the bank front: pause time counted once, and only while film is wanted
     expect(front.window()).toMatchObject({ measuredWallS: 1, w: 0.125, d: 0.125 });
   });
 
-  it('drops the time accrued when film stops being wanted, and counts again from when it is wanted', async () => {
+  it('stops the stopwatch while film is not wanted and goes on from what it held when it is wanted again', async () => {
     const { server, front } = await running();
     server.calls.at(-1).status(503);
     await vi.advanceTimersByTimeAsync(1000);
@@ -741,7 +741,8 @@ describe('the bank front: pause time counted once, and only while film is wanted
     front.update({ filmAhead: 0, need: 12 });
     await vi.advanceTimersByTimeAsync(RECONNECT_MS - 2000);
     await complete(server.calls.at(-1), { firstMs: 500, bodyMs: 500 });
-    expect(front.window()).toMatchObject({ measuredWallS: 4, w: 3.5 / 4 });
+    // 0-1 s and 2-6 s counted, 1-2 s at F not
+    expect(front.window()).toMatchObject({ measuredWallS: 5, w: 4.5 / 4, d: 0.125 });
   });
 
   it('drops the pause time of the old position on a start, and counts the pause on from the start', async () => {
@@ -752,6 +753,89 @@ describe('the bank front: pause time counted once, and only while film is wanted
     await vi.advanceTimersByTimeAsync(RECONNECT_MS - 2000);
     await complete(server.calls.at(-1), { firstMs: 500, bodyMs: 500 });
     expect(front.window()).toMatchObject({ measuredWallS: 4, w: 3.5 / 4 });
+  });
+});
+
+describe('the bank front: the stopwatch of wall time spent wanting film', () => {
+  it('holds a plain fetch whole: waiting before the first byte, then the transfer', async () => {
+    const { server, front } = await running();
+    await complete(server.calls.at(-1), { firstMs: 1500, bodyMs: 500 });
+    expect(front.window()).toMatchObject({
+      measuredS: 4,
+      measuredWallS: 2,
+      w: 1.5 / 4,
+      d: 0.5 / 4,
+    });
+  });
+
+  it('holds a Retry-After backoff as waiting', async () => {
+    const { server, front } = await running();
+    server.calls.at(-1).status(503, '1');
+    await vi.advanceTimersByTimeAsync(1000);
+    server.calls.at(-1).status(503, '1');
+    await vi.advanceTimersByTimeAsync(2000);
+    await complete(server.calls.at(-1), { firstMs: 500, bodyMs: 500 });
+    expect(front.window()).toMatchObject({ measuredWallS: 4, w: 3.5 / 4, d: 0.125 });
+  });
+
+  it('holds a network error and its 2 s retry as waiting', async () => {
+    const { server, front } = await running();
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(2000);
+    await complete(server.calls.at(-1), { firstMs: 500, bodyMs: 500 });
+    expect(front.window()).toMatchObject({ measuredWallS: 3, w: 2.5 / 4, d: 0.125 });
+  });
+
+  it('counts a Retry-After wait overlapped by an outside pause once: 6 s of wall time, 6 s of waiting', async () => {
+    const { server, front } = await running();
+    server.calls.at(-1).status(503, '4');
+    await vi.advanceTimersByTimeAsync(1000);
+    front.pause();
+    await vi.advanceTimersByTimeAsync(RECONNECT_MS);
+    await complete(server.calls.at(-1));
+    expect(front.window()).toMatchObject({ measuredS: 4, measuredWallS: 6, w: 6 / 4, d: 0 });
+  });
+
+  it('keeps the time of an attempt that began before an outside pause and failed during it', async () => {
+    const { server, front } = await running();
+    await vi.advanceTimersByTimeAsync(3000);
+    front.pause();
+    server.calls.at(-1).fail();
+    await vi.advanceTimersByTimeAsync(RECONNECT_MS);
+    await complete(server.calls.at(-1));
+    expect(front.window()).toMatchObject({ measuredS: 4, measuredWallS: 8, w: 8 / 4, d: 0 });
+  });
+
+  it('counts nothing at the bank limit, and goes on once film is dropped', async () => {
+    const { server, bank, front } = await running({ limitBytes: 1500 });
+    await complete(server.calls.at(-1), { size: 1000, firstMs: 500, bodyMs: 500 });
+    await complete(server.calls.at(-1), { size: 1000, firstMs: 500, bodyMs: 500 });
+    expect(bank.atLimit()).toBe(true);
+    await vi.advanceTimersByTimeAsync(100_000);
+    bank.dropBehind(40);
+    front.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1), { firstMs: 500, bodyMs: 500 });
+    expect(front.window()).toMatchObject({
+      measuredS: 12,
+      measuredWallS: 3,
+      w: 1.5 / 12,
+      d: 1.5 / 12,
+    });
+  });
+
+  it('starts it over on a move to a new position', async () => {
+    const { server, front } = await running();
+    await vi.advanceTimersByTimeAsync(5000);
+    front.movePast(8);
+    await flush();
+    await complete(server.calls.at(-1), { firstMs: 500, bodyMs: 500 });
+    expect(front.window()).toMatchObject({
+      measuredS: 4,
+      measuredWallS: 1,
+      w: 0.5 / 4,
+      d: 0.5 / 4,
+    });
   });
 });
 

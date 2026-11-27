@@ -75,18 +75,37 @@ export function createBankFront({
   let current = null;
   let retryTimer = null;
   let pauseTimer = null;
-  let pauseMark = null; // when the pause's counted time began; null while paused and not wanting film
-  let pauseWait = 0; // seconds paused, wanting film, and not yet counted in an entry's waiting
+  // The stopwatch of decision 7: wall seconds since the last completed entry (or the last new position) in which
+  // the front wanted film or had a segment fetch in flight, whether it was waiting, retrying, paused or fetching.
+  let watch = 0;
+  let watchMark = null; // when the running stretch began; null while it is stopped
   let next = 0;
   let wantedRung = null;
   let lockedRung = null;
-  let waited = 0; // seconds waiting on the position being fetched: failed attempts, first bytes, retry waits
   let backoffs = 0;
   let filmAhead = 0;
   let need = 0;
 
   const clamp = (id) => (byId.has(id) ? id : eligible[eligible.length - 1]?.id);
   const wants = () => filmAhead < need && !bank.atLimit();
+
+  function syncWatch() {
+    const on = !stopped && running && (wants() || (busy && current?.segment === true));
+    if (on && watchMark === null) {
+      watchMark = now();
+    } else if (!on && watchMark !== null) {
+      watch += (now() - watchMark) / 1000;
+      watchMark = null;
+    }
+  }
+
+  const elapsed = () => watch + (watchMark === null ? 0 : (now() - watchMark) / 1000);
+
+  function resetWatch() {
+    watch = 0;
+    watchMark = null;
+    syncWatch();
+  }
 
   // The parsed segments of a rung: from its playlist as fetched now, or as the bank already holds it (a new front
   // over a bank that kept its playlists). Undefined only when the playlist is not held.
@@ -109,10 +128,8 @@ export function createBankFront({
     if (retryTimer !== null) clearTimer(retryTimer);
     retryTimer = null;
     lockedRung = null;
-    waited = 0;
     backoffs = 0;
-    pauseWait = 0;
-    if (pauseMark !== null) pauseMark = now();
+    resetWatch();
   }
 
   async function attempt(url, { ctx, controller, limit }) {
@@ -181,13 +198,11 @@ export function createBankFront({
     return ctx.aborted ? CANCELLED : result;
   }
 
-  function endPause(at = now()) {
+  function endPause() {
     if (pauseTimer !== null) clearTimer(pauseTimer);
     pauseTimer = null;
     if (!paused) return;
     paused = false;
-    if (pauseMark !== null) pauseWait += Math.max(0, at - pauseMark) / 1000;
-    pauseMark = null;
   }
 
   function resume() {
@@ -199,13 +214,10 @@ export function createBankFront({
   function pause() {
     if (paused) return; // the timer runs from the first pause: nothing during it restarts it
     paused = true;
-    pauseMark = wants() ? now() : null;
     pauseTimer = setTimer(resume, reconnectMs);
   }
 
-  // Time spent paused is counted as the pause (decision 7), not again as attempts and waits inside it.
   function later(ms) {
-    if (!paused) waited += ms / 1000;
     retryTimer = setTimer(() => {
       retryTimer = null;
       pump();
@@ -213,7 +225,6 @@ export function createBankFront({
   }
 
   function failed(res) {
-    if (!paused) waited += (now() - res.startedAt) / 1000;
     if (res.outcome !== 'status') {
       later(NETWORK_RETRY_MS);
     } else if (res.status === 410) {
@@ -234,17 +245,18 @@ export function createBankFront({
 
   async function run(url, seq, done) {
     busy = true;
-    const res = await request(url, seq);
+    const pending = request(url, seq);
+    syncWatch(); // a segment fetch in flight counts even when film is no longer wanted
+    const res = await pending;
     if (res === CANCELLED) return;
     busy = false;
     if (res.outcome === 'ok') {
-      const spent = waited;
-      waited = 0;
       backoffs = 0;
-      done(res, spent);
+      done(res);
       pump();
     } else {
       failed(res);
+      syncWatch();
     }
   }
 
@@ -256,17 +268,14 @@ export function createBankFront({
     if (segment === undefined) return; // the end of the film: nothing more to fetch
     lockedRung = rung;
     const seq = next;
-    run(segment.url, seq, (res, spent) => {
-      endPause(res.startedAt); // a successful answer ends a pause; the fetch's own time is counted below
+    run(segment.url, seq, (res) => {
+      endPause(); // a successful answer ends a pause
       const timings = { start: res.startedAt, first: res.firstAt, end: res.endAt };
-      const wait = spent + pauseWait + (res.firstAt - res.startedAt) / 1000;
-      pauseWait = 0;
-      entries.push({
-        rung,
-        film: segment.end - segment.start,
-        w: wait,
-        d: (res.endAt - res.firstAt) / 1000,
-      });
+      // The transfer is first byte to end; everything else the stopwatch holds is waiting. A fetch in flight when
+      // film stopped being wanted still counts whole.
+      const d = (res.endAt - res.firstAt) / 1000;
+      const wall = Math.max(elapsed(), d);
+      entries.push({ rung, film: segment.end - segment.start, w: wall - d, d });
       if (entries.length > 200) entries.shift();
       const { start, end } = segment;
       bank.putSegment({ seq, rung, start, end, bytes: res.bytes, timings });
@@ -275,6 +284,7 @@ export function createBankFront({
       lockedRung = null;
       next = seq + 1;
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
+      resetWatch();
     });
   }
 
@@ -312,6 +322,7 @@ export function createBankFront({
       next = seq;
       wantedRung = clamp(rung);
       running = true;
+      syncWatch();
       pump();
     },
     movePast(seq) {
@@ -323,12 +334,7 @@ export function createBankFront({
     update(input) {
       filmAhead = input.filmAhead;
       need = input.need;
-      if (!wants()) {
-        pauseWait = 0; // pause time counts only while film is wanted
-        pauseMark = null;
-      } else if (paused && pauseMark === null) {
-        pauseMark = now();
-      }
+      syncWatch();
       pump();
     },
     setRung(id) {
