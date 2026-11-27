@@ -94,11 +94,13 @@ engine (`useStream.js:341`).
 4. **One fetcher.** The bank loader gives every media request of hls.js to the bank, which answers from what it
    holds, waits on its own fetch of it, or fetches it **next** (hls.js's requests first). A request **behind the front**
    (held film lies after it, as after a seek back) starts a wait: the front waits until hls.js asks for held film,
-   or a seek or clear; quiet spells in between do not count. A request **at the front's next position** is fetched
-   once, for hls.js and the bank alike. Then: while the bank is on and below its limit, the front carries on past
-   it towards F; at the limit or at F the front does not carry on; while the front is paused the fetch is made for
-   hls.js in the first bullet's shape and its server answer resumes the front; while the bank is turning off it is
-   the request beyond held film, and decision 8's release applies. The front starts at the end of
+   or a seek or clear; quiet spells in between do not count. A request **at the front's next position**, while the
+   bank is on, is fetched once by the bank, for hls.js and the bank alike, and held (even if it takes the bank over
+   its limit). Then: below the limit, the front carries on past it towards F; at the limit or at F the front does
+   not carry on; while the front is paused the fetch is made at once for hls.js in the first bullet's shape, and only
+   a successful answer resumes the front (at the following position); a plain 503 is handed to hls.js and the front
+   stays paused; a 404 or 410 follows decision 8. **While the bank is turning off** it fetches nothing: that request
+   is the one beyond held film, the release of decision 8 comes first, and the request goes to the inner loader. The front starts at the end of
    hls.js's buffered range holding the playhead and, whenever hls.js asks past it, moves past that. It fetches one
    segment at a time until film ahead reaches F, and tops up as the film plays.
    - **A fetch hls.js waits on** keeps today's shape: hls.js's own first-byte and load limits count from hls.js's
@@ -135,7 +137,7 @@ engine (`useStream.js:341`).
    manual level follows by decision 3. When a stretch is passed and the next is within 20 minutes, the same choice
    is made for that one.
 8. **Pausing and stopping.** A fatal network error, or a plain 503 to the front, **pauses** the front; it resumes
-   on a server answer to any request or after `RECONNECT_MS`, never on a fragment the bank answered. A **410** to
+   on a successful server answer to any request or after `RECONNECT_MS`, never on a fragment the bank answered. A **410** to
    the front stops the bank and calls `onStopped` at once (Admin Stop, as today); a **404** calls `onSessionLost` at
    once (the rebuild starts a new engine and bank). A media error never touches the front. The bank turns **off** when the stretch is passed and no other is within 20
    minutes, or the look-ahead lapses (`train-lookahead-plan.md` decision 7's lapse rule): the front stops, held film
@@ -169,8 +171,10 @@ writes every rung, and the bank fills no faster than it.
    longer than hls.js's buffer goal with hls.js quiet mid-gap (no front request until hls.js reaches held film);
    hls.js asking at the front's own position: exactly one server request for it, hls.js answered from it, then the
    following positions in order up to F while hls.js is quiet; the same with the front already at F (one fetch,
-   then nothing until film plays out); the same while the front is paused (fetched for hls.js, its answer resuming
-   the front); the waiting
+   then nothing until film plays out); the same with the bank at its 600 MB limit (one request, hls.js answered,
+   the segment held, then nothing until film plays out); the same while the front is paused (fetched at once,
+   before `RECONNECT_MS`, exactly one server request; after a 200 the front's next request is the following
+   position; after a plain 503 the front stays paused); the waiting
    request's limits counted from hls.js's request with the fetch carrying on; `onTimeout` when the no-progress rule
    ends the fetch; a 503, 404 or 410, or a 503 wait already under way, handed over at once; a wrong-rung request
    failed as a `bank-rung` 503; a plain 503 or fatal error pausing, resumed by a server answer or `RECONNECT_MS`
