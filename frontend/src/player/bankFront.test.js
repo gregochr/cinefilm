@@ -2233,6 +2233,20 @@ describe('the bank front: boundary copies, round two', () => {
     expect(lastUrl(t.server)).toBe(segUrl('r360', 2));
   });
 
+  it('keeps the time of a failed copy out of the next segment window entry', async () => {
+    const { server, front } = await running({ rung: 'r240' });
+    front.setRung('r360');
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1)); // 1 at 360p; the copy of 0 in flight
+    await vi.advanceTimersByTimeAsync(5000);
+    server.calls.at(-1).fail(); // five seconds spent on the copy
+    await flush();
+    await complete(server.calls.at(-1), { firstMs: 100, bodyMs: 100 }); // 2 at 360p
+    const { w, d, measuredS } = front.window();
+    expect(measuredS).toBe(8);
+    expect((w + d) * measuredS).toBeLessThan(1); // only the segments' own time
+  });
+
   it('cuts loose a waiter on a copy in flight at a start or a move', async () => {
     const started = await waitingOnCopy();
     started.front.start({ seq: 10, rung: 'r360' });

@@ -378,6 +378,7 @@ export function createBankFront({
     forced = wasForced;
     abortBoundary();
     boundaryDue = null;
+    resetWatch(); // as a landed copy: its time is not the next segment's waiting
     afterBoundary(); // a plain 503 has paused the front: a request waiting on the next position goes anyway
   }
 
