@@ -3,6 +3,7 @@ import {
   HOME_LATENCY_MS,
   QUESTION,
   classify,
+  isAway,
   isRelay,
   needsLookup,
   questionText,
@@ -79,6 +80,22 @@ describe('needsLookup', () => {
     expect(needsLookup(undefined)).toBe(false);
     expect(needsLookup(NaN)).toBe(false);
     expect(needsLookup('48')).toBe(false);
+  });
+});
+
+describe('isAway', () => {
+  it('is true away from home once a latency that calls for a lookup is known', () => {
+    expect(isAway({ environment: 'train', latencyMs: 150 })).toBe(true);
+    expect(isAway({ environment: 'away', latencyMs: 20 })).toBe(true);
+    expect(isAway({ environment: 'unknown', latencyMs: 48 })).toBe(true);
+  });
+
+  it('is false at home, and false while no latency is known (nothing is asked yet)', () => {
+    expect(isAway({ environment: 'home', latencyMs: 5 })).toBe(false);
+    expect(isAway({ environment: 'home', latencyMs: 150 })).toBe(false);
+    expect(isAway({ environment: 'unknown', latencyMs: null })).toBe(false);
+    expect(isAway({ environment: 'train', latencyMs: 19 })).toBe(false);
+    expect(isAway()).toBe(false);
   });
 });
 

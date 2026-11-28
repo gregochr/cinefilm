@@ -13,6 +13,15 @@ export function needsLookup(latencyMs) {
 }
 
 /**
+ * Whether the viewer is known to be away from home: a latency was measured and calls for a lookup, and the
+ * environment is not 'home'. 'unknown' counts as away only once such a latency is known (an unanswered question,
+ * a failed lookup); with no latency yet it is not known, so the train look-ahead stays quiet until it is.
+ */
+export function isAway({ environment, latencyMs } = {}) {
+  return environment !== 'home' && needsLookup(latencyMs);
+}
+
+/**
  * `{ environment, ask }`. No latency: unknown. Under 20 ms: home. Otherwise the remembered `answer` ('train' or
  * 'away') decides; with none the environment is unknown and the question is due.
  */

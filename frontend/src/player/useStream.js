@@ -61,6 +61,7 @@ export function useStream({
   initialSeekMs,
   onToast,
   health = NO_HEALTH,
+  lookahead = null,
 }) {
   const [stream, setStream] = useState({ mode: 'loading', rung: null, renditions: [] });
   const [reconnecting, setReconnecting] = useState(false);
@@ -80,9 +81,9 @@ export function useStream({
   // Whether the new source should start playing once it has metadata: true for the first load (autoplay), and
   // after a restart or reload whatever the viewer had at that moment (a paused film stays paused).
   const resumeRef = useRef({ play: true, held: false });
-  const latest = useRef({ edition, audioStreamId, getPositionMs, onToast, health });
+  const latest = useRef({ edition, audioStreamId, getPositionMs, onToast, health, lookahead });
   useEffect(() => {
-    latest.current = { edition, audioStreamId, getPositionMs, onToast, health };
+    latest.current = { edition, audioStreamId, getPositionMs, onToast, health, lookahead };
   });
 
   const editionId = edition.id;
@@ -151,6 +152,7 @@ export function useStream({
 
     // Give up on HLS for this film: stop the engine, drop the session and direct-play from here.
     const abandon = () => {
+      latest.current.lookahead?.detach(engine);
       engine?.destroy();
       forget();
       failToDirect();
@@ -163,6 +165,7 @@ export function useStream({
       stoppedAtRef.current = currentPosition();
       // The stopped card must not sit under Safari's native fullscreen player (iPhone): leave it first.
       leaveNativeFullscreen(video);
+      latest.current.lookahead?.detach(engine);
       engine?.destroy();
       engine = null;
       session = null;
@@ -350,6 +353,8 @@ export function useStream({
       }
       if (engine) {
         latest.current.health.engine(engine.kind);
+        // The look-ahead hands this engine its input at once (the bank's rule, `outside-bank-plan.md`).
+        latest.current.lookahead?.attach(engine);
       } else {
         forget();
         failToDirect();
@@ -368,6 +373,7 @@ export function useStream({
       cancelled = true;
       waiter.dispose();
       holdPlayState();
+      latest.current.lookahead?.detach(engine);
       engine?.destroy();
       if (session) {
         sessionsApi.remove(session.sessionId, { keepalive: true }).catch(() => {});

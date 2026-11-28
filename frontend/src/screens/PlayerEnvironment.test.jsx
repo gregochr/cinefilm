@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { measureThroughput } from '../player/probe.js';
 import { NETWORKS_KEY } from '../state/networks.js';
 import { FakeHls } from '../test/fakeHls.js';
+import { feedText, northTrack } from '../test/lookaheadFixtures.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 import { installStorage } from '../test/storage.js';
 import { resetThroughputState } from '../player/throughput.js';
@@ -16,6 +17,22 @@ import { resetThroughputState } from '../player/throughput.js';
 // stand-ins the streaming tests use.
 vi.mock('hls.js/light', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
 vi.mock('../player/probe.js', () => ({ measureThroughput: vi.fn() }));
+
+// The real hls.js engine, with `bankInput` replaced by a spy that does nothing, so a test sees what the look-ahead
+// hands the engine without the bank acting on it.
+const bankInputs = vi.hoisted(() => []);
+vi.mock('../player/hlsjsEngine.js', async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    startHlsJs(options) {
+      const engine = original.startHlsJs(options);
+      engine.bankInput = vi.fn();
+      bankInputs.push(engine.bankInput);
+      return engine;
+    },
+  };
+});
 
 class FakeObserver {
   static instances = [];
@@ -38,6 +55,7 @@ let storage;
 beforeEach(() => {
   FakeHls.reset();
   FakeObserver.instances = [];
+  bankInputs.length = 0;
   latency = 48;
   window.MediaSource = class {};
   measureThroughput.mockReset().mockResolvedValue(null);
@@ -551,5 +569,73 @@ describe('a new viewing in the same player', () => {
     await reportWhere(fetchMock, { editionId: 12, environment: 'home', operator: null });
     noCard();
     expect(storage.getItem(NETWORKS_KEY)).toBeNull();
+  });
+});
+
+describe('the train look-ahead: only away from home, only with an engine', () => {
+  const MAP = '/api/journeys/link-map';
+  const FEED_FRAME = 'train-feed-frame';
+  const mapRequests = (fetchMock) => fetchMock.mock.calls.filter(([url]) => url === MAP);
+
+  async function openOnAuto() {
+    const film = heat({ direct: false });
+    const fetchMock = installFetch((method, url, init) =>
+      url === MAP ? respond({ tracks: [northTrack()] }) : serve({ film })(method, url, init),
+    );
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1));
+    return { fetchMock, video };
+  }
+
+  it('asks nothing at home (3 ms): no feed frame, no map request, the engine handed nothing', async () => {
+    latency = 3;
+    const { fetchMock, video } = await openOnAuto();
+    await startFilm(video);
+    await reportWhere(fetchMock, { environment: 'home', latencyMs: 3 });
+    await inAct(() => window.dispatchEvent(new Event('online')));
+    expect(screen.queryByTestId(FEED_FRAME)).not.toBeInTheDocument();
+    expect(mapRequests(fetchMock)).toHaveLength(0);
+    expect(bankInputs[0]).not.toHaveBeenCalled();
+  });
+
+  it('asks the train once away from home (48 ms), through one frame, and not for the map before an answer', async () => {
+    const { fetchMock } = await openOnAuto();
+    expect(await screen.findByTestId(FEED_FRAME)).toBeInTheDocument();
+    expect(screen.getAllByTestId(FEED_FRAME)).toHaveLength(1);
+    expect(mapRequests(fetchMock)).toHaveLength(0);
+  });
+
+  it('hands the engine the input once the train answers and the map is matched', async () => {
+    const { fetchMock } = await openOnAuto();
+    const frame = await screen.findByTestId(FEED_FRAME);
+    await inAct(() =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { cinefilmFeed: feedText() },
+          origin: 'null',
+          source: frame.contentWindow,
+        }),
+      ),
+    );
+    await vi.waitFor(() => expect(mapRequests(fetchMock)).toHaveLength(1));
+    await vi.waitFor(() => {
+      const [input] = bankInputs[0].mock.calls.at(-1);
+      expect(input).toMatchObject({ need: 300, stretchBegun: false });
+      expect(input.timeToStretch).toBeGreaterThan(590);
+      expect(input.timeToStretch).toBeLessThanOrEqual(600);
+    });
+  });
+
+  it('asks nothing when the film direct-plays: there is no engine to hand an input to', async () => {
+    const { fetchMock, video } = await open();
+    await startFilm(video);
+    // The environment has settled as away (a latency that calls for a lookup, no network named): the look-ahead
+    // would be running here but for the missing engine.
+    await reportWhere(fetchMock, { environment: 'unknown', latencyMs: 48 });
+    await screen.findByTestId('operator-lookup');
+    await inAct(() => window.dispatchEvent(new Event('online')));
+    expect(screen.queryByTestId(FEED_FRAME)).not.toBeInTheDocument();
+    expect(mapRequests(fetchMock)).toHaveLength(0);
   });
 });

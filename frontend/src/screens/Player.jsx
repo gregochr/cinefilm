@@ -32,7 +32,7 @@ import { ErrorState } from '../components/StateMessages.jsx';
 import { bankedAhead } from '../player/buffered.js';
 import { useAutoHide } from '../player/autohide.js';
 import { exitFullscreen, toggleFullscreen } from '../player/fullscreen.js';
-import { QUESTION, questionText } from '../player/environment.js';
+import { QUESTION, isAway, questionText } from '../player/environment.js';
 import { clampVolume, keyToAction, resolveEscape } from '../player/keymap.js';
 import { indicatorModel } from '../player/indicator.js';
 import { AUTO, ORIGINAL, resolveQuality, rungName, topRung } from '../player/ladder.js';
@@ -68,6 +68,7 @@ import { useSubtitleTiming } from '../state/useSubtitleTiming.js';
 import { useSubtitleWrong } from '../state/useSubtitleWrong.js';
 import { useHealthReport } from '../player/useHealthReport.js';
 import { useEnvironment } from '../player/useEnvironment.js';
+import { useLookahead } from '../player/useLookahead.js';
 
 /** `HTMLTrackElement.readyState`: the cues are in, or the fetch failed. */
 const TRACK_LOADED = 2;
@@ -207,6 +208,8 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   // Decided once for each viewing, when its player mounts (the film has just loaded, so the server is evidently
   // reachable). Another film or edition in the same Player is a new viewing and is measured again.
   const environment = useEnvironment();
+  // The train look-ahead runs only away from home (decision 1 of its plan) and hands each engine its input.
+  const lookahead = useLookahead({ active: isAway(environment) });
   const stream = useStream({
     videoRef,
     edition,
@@ -216,6 +219,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     initialSeekMs,
     onToast: setToast,
     health,
+    lookahead,
   });
   const { pendingSeekRef, stoppedAtRef } = stream;
   const activeRung = stream.rung ?? (quality === AUTO ? ORIGINAL : quality);
