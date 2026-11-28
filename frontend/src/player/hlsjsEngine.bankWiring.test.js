@@ -3,8 +3,8 @@ import { FakeHls } from '../test/fakeHls.js';
 import { chooseBankRung } from './bankRung.js';
 import { RECONNECT_MS, startHlsJs } from './hlsjsEngine.js';
 
-// The real store, front, decider and loaders, wired by the engine, over a fake hls.js, a fake server and a fake
-// inner loader. The modules below are wrapped only to capture what the engine builds, so a test can spy on it.
+// The real bank wired by the engine over a fake hls.js, server and inner loader; the modules are wrapped only to
+// capture what the engine builds.
 const made = vi.hoisted(() => ({
   fronts: [],
   requests: [],
@@ -46,7 +46,6 @@ const playlistText = () =>
     (_, i) => `#EXTINF:4.000,\nseg-${i}.ts`,
   ).join('\n')}\n#EXT-X-ENDLIST\n`;
 
-// hls.js's default loader, as far as the bank's loaders touch it: `stats` at construction, one `load`, recorded.
 class InnerLoader {
   static loads = [];
   static order = [];
@@ -87,7 +86,6 @@ class WiringHls extends FakeHls {
   static DefaultConfig = { loader: InnerLoader };
 }
 
-// A fake fetch: each call stays open until the test answers it.
 function makeServer() {
   const server = { calls: [] };
   server.fetch = (url, init) =>
@@ -101,7 +99,6 @@ function makeServer() {
         waiting.splice(0).forEach((w) => w.rej(err));
       });
       call.status = (status) => resolve({ status, headers: { get: () => null } });
-      // The body is one chunk; the stream ends when the test calls `end` (time passes on the fake clock before).
       call.respond = (bytes) => {
         let sent = false;
         const reader = {
@@ -284,7 +281,6 @@ async function armed(env, { held = 10, input = ARM, time = 5 } = {}) {
   env.setTime(time);
 }
 
-// Armed, covered and turned on: the front's fetch of the first film not held is pending.
 async function turnedOn(env, options = {}) {
   await armed(env, options);
   env.engine.bankInput(NEAR);
@@ -318,7 +314,6 @@ describe('the bank is never armed', () => {
     expect(env.levelWrites()).toEqual([]); // no manual level
     expect(handled.frag.stats.bankAnswered).toBeUndefined();
     expect(env.handlers.onThroughput).toHaveBeenCalledTimes(1); // today's sample, untouched
-    // A media playlist request goes to the inner loader too.
     new env.hls.config.pLoader(env.hls.config).load(
       { type: 'level', level: 2, url: playlistUrl('480p') },
       {},
@@ -379,6 +374,15 @@ describe('turning on', () => {
     await turnedOn(low);
     expect(segmentCalls(low)).toEqual([segUrl('240p', 10)]);
     expect(low.levelWrites()).toEqual(['loadLevel:0']);
+  });
+
+  it('starts at 480p when hls.js is above it', async () => {
+    const env = world();
+    await armed(env);
+    env.hls.fetchLevel(3); // above the bank's rungs
+    env.engine.bankInput(NEAR);
+    await flush();
+    expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]);
   });
 
   it('keeps nothing of a fragment above 480p, so the bank never covers it', async () => {
@@ -471,7 +475,6 @@ describe('answering hls.js', () => {
     expect(asked.frag.stats.bankAnswered).toBe(true);
     expect(InnerLoader.loads).toHaveLength(loads);
     expect(env.server.calls).toHaveLength(calls);
-    // The held media playlist is answered too.
     const playlist = { onSuccess: vi.fn() };
     new env.hls.config.pLoader(env.hls.config).load(
       { type: 'level', level: 2, url: playlistUrl('480p') },
@@ -528,7 +531,6 @@ describe('the front’s answers from the server', () => {
 describe('pausing', () => {
   const fatal = (env) =>
     env.hls.error({ fatal: true, type: 'networkError', details: 'fragLoadError' });
-  // The front is at F with the first fetch done and idle; the film wanted then goes up.
   async function idleFront(env) {
     await armed(env);
     env.engine.bankInput({ ...NEAR, need: 38 });
@@ -566,7 +568,6 @@ describe('pausing', () => {
     env.hls.emit(FakeHls.Events.FRAG_LOADED, { frag: held.frag });
     expect(env.front().isPaused()).toBe(true);
     expect(segmentCalls(env)).toHaveLength(1);
-    // The init segment came from the server: a successful answer.
     env.hls.emit(FakeHls.Events.FRAG_LOADED, {
       frag: { sn: 'initSegment', stats: { loaded: 10, loading: { start: 0, first: 1, end: 2 } } },
     });
@@ -841,7 +842,6 @@ describe('a seek inside held film while hls.js waits on the bank', () => {
 });
 
 describe('the front never fetches film the store holds', () => {
-  // Segment numbers the server was asked for after the playlists.
   const asked = (env) => segmentCalls(env).map((url) => Number(/seg-(\d+)\.ts/.exec(url)[1]));
 
   it('does not walk through held film after a gap is filled and the playhead seeks inside it', async () => {
