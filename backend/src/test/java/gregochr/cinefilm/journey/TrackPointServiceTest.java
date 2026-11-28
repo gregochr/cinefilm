@@ -270,7 +270,7 @@ class TrackPointServiceTest {
     void aNullKnownRuntimeLeavesANoFragmentMinuteToTheCheckAndNotToTheStoredRuntimeOrAPartCountedAsZero() {
         Edition unknownPart = new Edition();
         unknownPart.setId(5L);
-        unknownPart.setRuntimeMs(100_000);
+        unknownPart.setRuntimeMs(7_200_000);
         MediaFile one = new MediaFile();
         one.setId(1L);
         one.setPartNumber(1);
