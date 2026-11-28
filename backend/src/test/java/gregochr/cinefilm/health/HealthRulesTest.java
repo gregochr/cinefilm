@@ -28,13 +28,15 @@ class HealthRulesTest {
         "netErrors", "timeouts", "kbpsSamples", "rungMs", "minutes", "client"};
 
     private static final String[] NULLABLE_TOP_LEVEL = {"operator", "latencyMs", "engine", "startupMs", "kbpsLow",
-        "kbpsMedian", "kbpsHigh", "startPositionMs", "endPositionMs"};
+        "kbpsMedian", "kbpsHigh", "startPositionMs", "endPositionMs", "rebanksStarted", "rebanksDone",
+        "rebanksUndone", "marksForgotten"};
 
     /** Every figure at the top level except seq and editionId (those start at 1), nullable or not. */
     private static final String[] FIGURES = {"elapsedMs", "latencyMs", "startupMs", "watchedMs", "stallCount",
         "stallMs", "longestStallMs", "seekCount", "seekWaitMs", "reloadCount", "reloadMs", "reconnectCount",
         "reconnectMs", "recoveries", "stepsDown", "stepsUp", "netErrors", "timeouts", "kbpsLow", "kbpsMedian",
-        "kbpsHigh", "kbpsSamples", "startPositionMs", "endPositionMs"};
+        "kbpsHigh", "kbpsSamples", "startPositionMs", "endPositionMs", "rebanksStarted", "rebanksDone",
+        "rebanksUndone", "marksForgotten"};
 
     private static void assertValid(ObjectNode node) {
         assertThatCode(() -> HealthRules.validate(report(node))).doesNotThrowAnyException();
@@ -102,6 +104,14 @@ class HealthRulesTest {
     void aNullableFieldThatIsNullPasses(String field) {
         ObjectNode node = example();
         node.putNull(field);
+        assertValid(node);
+    }
+
+    @ParameterizedTest
+    @MethodSource("nullableTopLevel")
+    void aNullableFieldThatIsMissingPasses(String field) {
+        ObjectNode node = example();
+        node.remove(field);
         assertValid(node);
     }
 

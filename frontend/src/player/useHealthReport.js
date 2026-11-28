@@ -31,6 +31,8 @@ const INPUTS = [
   'recovered',
   'fellBack',
   'networkError',
+  'rebank',
+  'marksForgotten',
   'throughput',
 ];
 

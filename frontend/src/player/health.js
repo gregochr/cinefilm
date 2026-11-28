@@ -80,6 +80,10 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
   let stepsUp = 0;
   let netErrors = 0;
   let timeouts = 0;
+  let rebanksStarted = 0;
+  let rebanksDone = 0;
+  let rebanksUndone = 0;
+  let marksForgotten = 0;
   let samples = [];
   const rungMs = new Map();
   const minutes = new Map(); // minute -> { moved, stalled, samples, rung, ahead, fetched }
@@ -218,6 +222,10 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       stepsUp: whole(stepsUp),
       netErrors: whole(netErrors),
       timeouts: whole(timeouts),
+      rebanksStarted: whole(rebanksStarted),
+      rebanksDone: whole(rebanksDone),
+      rebanksUndone: whole(rebanksUndone),
+      marksForgotten: whole(marksForgotten),
       kbpsLow: wholeOrNull(percentile(sorted, 10)),
       kbpsMedian: wholeOrNull(percentile(sorted, 50)),
       kbpsHigh: wholeOrNull(percentile(sorted, 90)),
@@ -403,6 +411,22 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       advance();
       if (timeout) timeouts += 1;
       else netErrors += 1;
+      changed();
+    },
+    // What the stuck-rung and re-bank rules did, as totals of the playback: 'started', 'done' or 'undone' (one
+    // re-bank is one of started and then one of done or undone), and the marks forgotten in a sweep.
+    rebank(kind) {
+      advance();
+      if (kind === 'started') rebanksStarted += 1;
+      else if (kind === 'done') rebanksDone += 1;
+      else if (kind === 'undone') rebanksUndone += 1;
+      else return;
+      changed();
+    },
+    marksForgotten(n) {
+      advance();
+      if (!(n > 0)) return;
+      marksForgotten += n;
       changed();
     },
     throughput(kbps) {

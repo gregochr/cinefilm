@@ -134,8 +134,10 @@ export function hlsConfig(startSeconds) {
 /**
  * Starts `session` on `video`. `handlers`: onLevel(rung, { initial }), onThroughput(kbps),
  * onReconnecting(boolean), onSessionLost(), onFatal(), and the optional onStopped() (a 410: Admin stopped this
- * playback, so nothing is recovered), onNetworkError({ timeout }) and
- * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played). In Auto, on a ladder
+ * playback, so nothing is recovered), onNetworkError({ timeout }),
+ * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played),
+ * onRebank('started' | 'done' | 'undone') (once for each, at the one place it happens; 'undone' only for a re-bank
+ * that was under way) and onMarksForgotten(n) (n hls.js fragment-error marks forgotten in one sweep). In Auto, on a ladder
  * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above while it is fetching there
  * and has had no fragment trouble; the cap never climbs above the level being fetched by more than one.
  * `fetch` is the film bank's (default: the browser's). Returns { destroy, bankInput } and the bank's own
@@ -284,6 +286,8 @@ export function startHlsJs({
   // or the playhead is not to be trusted (a seek, a restart, a stall, trouble, a new network, destroy) always
   // start it; the others use `undoIfRebanking`.
   const undoRebank = () => {
+    // Only a re-bank under way is undone: most callers run whether or not there is one, and count once.
+    if (rebankFloor > 0) handlers.onRebank?.('undone');
     rebankFloor = 0;
     writeFloor();
     lastUndoAt = now();
@@ -374,6 +378,7 @@ export function startHlsJs({
       if (aheadS < REBANK_UNDO_BELOW_S) {
         undoRebank();
       } else if (flushed && aheadS >= REBANK_DONE_AT_S) {
+        handlers.onRebank?.('done');
         rebankFloor = 0; // no cool-down: the next rung can come after the quiet time
         lastRebankAt = now();
         writeFloor();
@@ -398,6 +403,7 @@ export function startHlsJs({
       lastUndoAt,
     });
     if (!decision) return;
+    handlers.onRebank?.('started');
     rebankFloor = hls.levels[decision.level].bitrate;
     flushed = false;
     flushFrom = decision.from;
@@ -724,7 +730,10 @@ export function startHlsJs({
       }
     }
     if (bank) return;
-    if (auto) marks.sweep(hls.levels, fetched);
+    if (auto) {
+      const forgotten = marks.sweep(hls.levels, fetched).length;
+      if (forgotten > 0) handlers.onMarksForgotten?.(forgotten);
+    }
     applyCap();
     // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch, and
     // the step gate never runs ahead of the ceiling.

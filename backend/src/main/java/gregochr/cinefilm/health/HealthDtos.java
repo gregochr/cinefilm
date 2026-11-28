@@ -22,6 +22,10 @@ public final class HealthDtos {
      * {@code startPositionMs} and {@code endPositionMs} are the film position of the first and the latest beat; both
      * are optional (a report from a player that predates them has none, and a null is left out of the stored text, so
      * such a report is stored exactly as before) and, when present, from 0 to 2,000,000,000.
+     * {@code rebanksStarted}, {@code rebanksDone}, {@code rebanksUndone} and {@code marksForgotten} are the totals of
+     * the playback's re-banks started, finished and undone and of the hls.js fragment-error marks the player forgot
+     * (stuck-rung and step-up-bank plans). They follow the same rule: optional, a missing one meaning 0, and from 0 to
+     * 2,000,000,000 when present.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record HealthReport(Long seq, Long editionId, Long elapsedMs, String environment, String operator,
@@ -33,7 +37,11 @@ public final class HealthDtos {
                                Long kbpsMedian, Long kbpsHigh, Long kbpsSamples, Map<String, Long> rungMs,
                                List<List<Long>> minutes, ClientInfo client,
                                @JsonInclude(JsonInclude.Include.NON_NULL) Long startPositionMs,
-                               @JsonInclude(JsonInclude.Include.NON_NULL) Long endPositionMs) {
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long endPositionMs,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long rebanksStarted,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long rebanksDone,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long rebanksUndone,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long marksForgotten) {
     }
 
     /**

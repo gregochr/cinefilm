@@ -75,6 +75,10 @@ describe('the report', () => {
       stepsUp: 0,
       netErrors: 0,
       timeouts: 0,
+      rebanksStarted: 0,
+      rebanksDone: 0,
+      rebanksUndone: 0,
+      marksForgotten: 0,
       kbpsLow: null,
       kbpsMedian: null,
       kbpsHigh: null,
@@ -1621,5 +1625,56 @@ describe('seq and version', () => {
     const d = reconnect.h.version();
     reconnect.at(1000);
     expect(reconnect.h.version()).not.toBe(d);
+  });
+});
+
+describe('the stuck-rung and re-bank counters', () => {
+  it('counts each re-bank event and each mark forgotten as totals of the playback', () => {
+    const m = make();
+    m.h.rebank('started');
+    m.h.rebank('done');
+    m.h.rebank('started');
+    m.h.rebank('undone');
+    m.h.rebank('started');
+    m.h.marksForgotten(2);
+    m.h.marksForgotten(1);
+    expect(m.report()).toMatchObject({
+      rebanksStarted: 3,
+      rebanksDone: 1,
+      rebanksUndone: 1,
+      marksForgotten: 3,
+    });
+  });
+
+  it('is a change of the report, so a changed counter is sent', () => {
+    const m = make();
+    const before = m.h.version();
+    m.h.rebank('started');
+    const afterRebank = m.h.version();
+    m.h.marksForgotten(1);
+    expect(afterRebank).toBeGreaterThan(before);
+    expect(m.h.version()).toBeGreaterThan(afterRebank);
+  });
+
+  it.each([['other'], [undefined], [null]])('ignores a re-bank of kind %s', (kind) => {
+    const m = make();
+    const before = m.h.version();
+    m.h.rebank(kind);
+    expect(m.h.version()).toBe(before);
+    expect(m.report()).toMatchObject({ rebanksStarted: 0, rebanksDone: 0, rebanksUndone: 0 });
+  });
+
+  it.each([[0], [-1], [NaN], [undefined], ['x']])('ignores %s marks forgotten', (n) => {
+    const m = make();
+    const before = m.h.version();
+    m.h.marksForgotten(n);
+    expect(m.h.version()).toBe(before);
+    expect(m.report().marksForgotten).toBe(0);
+  });
+
+  it('keeps the counts whole numbers within the cap', () => {
+    const m = make();
+    m.h.marksForgotten(3_000_000_000);
+    expect(m.report().marksForgotten).toBe(2000000000);
   });
 });
