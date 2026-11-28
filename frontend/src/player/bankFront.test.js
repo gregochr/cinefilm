@@ -2030,3 +2030,165 @@ describe('the bank front: finish', () => {
     expect(server.calls.at(-1).aborted).toBe(true);
   });
 });
+
+describe('the bank front: boundary copies, round two', () => {
+  const lastUrl = (server) => server.calls.at(-1).url;
+  // Segment 1 fetched at 360p after 0 at 240p, with film no longer wanted: the copy of 0 is due, not started.
+  async function due() {
+    const t = await running({ rung: 'r240' });
+    t.front.setRung('r360');
+    await complete(t.server.calls.at(-1)); // 0 at 240p; 1 at 360p in flight
+    t.front.update({ filmAhead: 0, need: 0 });
+    await complete(t.server.calls.at(-1)); // 1 at 360p
+    await flush();
+    expect(t.server.calls).toHaveLength(5); // 3 playlists, 0 and 1: no copy yet
+    return t;
+  }
+
+  it('forgets a due copy at a start or a move', async () => {
+    const started = await due();
+    started.front.start({ seq: 10, rung: 'r360' });
+    started.front.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    expect(lastUrl(started.server)).toBe(segUrl('r360', 10));
+    expect(started.server.calls.filter((c) => c.url === segUrl('r360', 0))).toHaveLength(0);
+    const moved = await due();
+    moved.front.movePast(10);
+    moved.front.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    expect(lastUrl(moved.server)).toBe(segUrl('r360', 11));
+    expect(moved.server.calls.filter((c) => c.url === segUrl('r360', 0))).toHaveLength(0);
+  });
+
+  it('keeps an out-of-order fetch out of the window and out of the copies, but reports its rate', async () => {
+    const { server, front, bank, seen } = await running({ rung: 'r360' });
+    await complete(server.calls.at(-1), { size: 100_000, firstMs: 10, bodyMs: 1000 });
+    const before = front.window();
+    expect(before.measuredS).toBe(4);
+    const kbps = seen.kbps.length;
+    front.update({ filmAhead: 0, need: 0 });
+    front.start({ seq: 10, rung: 'r480', outOfOrder: true });
+    front.subscribe(10, {});
+    front.fetchNow();
+    await flush();
+    await complete(server.calls.at(-1), { size: 100_000, firstMs: 10, bodyMs: 1000 });
+    expect(bank.getSegment(10).rung).toBe('r480');
+    expect(front.window()).toEqual(before); // not reset by the other rung, nothing added
+    expect(seen.kbps).toHaveLength(kbps + 1);
+    front.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    expect(lastUrl(server)).toBe(segUrl('r480', 11)); // no copy of 9 (not held) or anything behind
+  });
+
+  it('keeps a boundary copy out of the window', async () => {
+    const { server, front } = await running({ rung: 'r240' });
+    front.setRung('r360');
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1), { size: 100_000, firstMs: 10, bodyMs: 1000 }); // 1 at 360p
+    const before = front.window();
+    expect(lastUrl(server)).toBe(segUrl('r360', 0));
+    await complete(server.calls.at(-1), { size: 100_000, firstMs: 10, bodyMs: 1000 }); // the copy of 0
+    expect(front.window()).toEqual(before);
+  });
+
+  it('does not hold a waiter up with the retry wait of a failed boundary copy, and keeps it due', async () => {
+    const { server, front } = await running({ rung: 'r240' });
+    front.setRung('r360');
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1)); // 1 at 360p; the copy of 0 in flight
+    server.calls.at(-1).fail();
+    await flush();
+    const callsBefore = server.calls.length;
+    const done = vi.fn();
+    front.subscribe(2, { onDone: done });
+    front.fetchNow();
+    await flush();
+    expect(server.calls).toHaveLength(callsBefore + 1); // at once, not after the 2 s retry wait
+    expect(lastUrl(server)).toBe(segUrl('r360', 2));
+    await complete(server.calls.at(-1));
+    expect(done).toHaveBeenCalledTimes(1);
+    expect(front.boundaryFetching()).toBeNull(); // the front moved on: the copy is no longer worth it
+  });
+
+  it('does not let a failed boundary copy raise the next position backoff', async () => {
+    const { server, front } = await running({ rung: 'r240' });
+    front.setRung('r360');
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1));
+    server.calls.at(-1).status(503, '1'); // the copy: a 503 with Retry-After
+    await flush();
+    front.subscribe(2, {});
+    front.fetchNow();
+    await flush();
+    server.calls.at(-1).status(503, '1');
+    await vi.advanceTimersByTimeAsync(1000); // the first backoff step: 1 s
+    expect(server.calls.filter((c) => c.url === segUrl('r360', 2))).toHaveLength(2);
+  });
+
+  it('tells a boundary subscriber when the copy lands, and keeps the copy in flight for it', async () => {
+    const { server, bank, front } = await running({ rung: 'r240' });
+    front.setRung('r360');
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1));
+    expect(front.boundaryFetching()).toEqual({ seq: 0, rung: 'r360' });
+    const done = vi.fn();
+    const off = front.subscribeBoundary(0, { onDone: done });
+    front.subscribe(2, {});
+    front.fetchNow(); // a waiter on the next position does not cut a copy hls.js waits on
+    await flush();
+    expect(server.calls.at(-1).aborted).toBe(false);
+    await complete(server.calls.at(-1), { size: 31 });
+    expect(done).toHaveBeenCalledTimes(1);
+    expect(done.mock.calls[0][0].bytes.byteLength).toBe(31);
+    expect(bank.getBoundary(0, 'r360')).not.toBeNull();
+    expect(lastUrl(server)).toBe(segUrl('r360', 2)); // then the waiter's fetch goes
+    expect(front.boundaryFetching()).toBeNull();
+    off();
+  });
+
+  it('tells a boundary subscriber when the copy is cut', async () => {
+    const { server, front } = await running({ rung: 'r240' });
+    front.setRung('r360');
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1));
+    const abort = vi.fn();
+    front.subscribeBoundary(0, { onAbort: abort });
+    front.start({ seq: 9, rung: 'r360' });
+    expect(abort).toHaveBeenCalledTimes(1);
+    const again = await running({ rung: 'r240' });
+    again.front.setRung('r360');
+    await complete(again.server.calls.at(-1));
+    await complete(again.server.calls.at(-1));
+    const stop = vi.fn();
+    again.front.subscribeBoundary(0, { onAbort: stop });
+    again.front.stop();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('after finish, a failed boundary copy is not tried again', async () => {
+    const { server, front } = await running({ rung: 'r240' });
+    front.setRung('r360');
+    await complete(server.calls.at(-1));
+    await complete(server.calls.at(-1));
+    server.calls.at(-1).fail(); // the copy fails: a retry is pending
+    await flush();
+    const calls = server.calls.length;
+    front.finish();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(server.calls).toHaveLength(calls);
+    expect(front.isFinished()).toBe(true);
+  });
+
+  it('reports a fetch in flight or a retry pending as fetching, and nothing once it ended', async () => {
+    const { server, front } = await running();
+    const first = front.subscribe(0, {});
+    expect(front.fetching()).toBe(0);
+    server.calls.at(-1).fail();
+    await flush();
+    expect(front.fetching()).toBe(0); // the retry wait
+    front.finish();
+    first(); // nobody waits any more: the retry is not made
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(front.fetching()).toBeNull();
+  });
+});

@@ -41,7 +41,8 @@ const STATUS_TEXT = { 503: 'Service Unavailable', 404: 'Not Found', 410: 'Gone' 
  *   rung, as a gap of one (stored over the held copy of `sn` only), and the front goes back to its own rung and
  *   past the held run when hls.js asks for the held `sn + 1`. Before that fetch, a boundary copy of `sn` at the
  *   asked rung (`bank.getBoundary`, fetched by the front after the first segment of a new rung) answers it with
- *   no request. While turning off, a boundary request releases like any other, unless it is the fragment the
+ *   no request, and a copy still being fetched is waited on (`front.boundaryFetching`, `front.subscribeBoundary`: one
+ *   server request serves hls.js too). While turning off, a boundary request releases like any other, unless it is the fragment the
  *   front has in flight.
  * - not held and `sn === pos`: waits on the front's fetch of it (`front.subscribe` and `front.fetchNow`: exactly
  *   one server request). What the front does after it (carry on, or not at F or the limit) is the front's.
@@ -91,14 +92,14 @@ export function createBankRequests({
     if (input !== null) front.update(input);
   }
 
-  function beginGap(sn, rung) {
+  function beginGap(sn, rung, outOfOrder = false) {
     if (!gap) {
       gap = true;
       // Before start(): it pumps at once, and a fetch of its own is not wanted while the gap is held.
       frontUpdate(lastUpdate && { ...lastUpdate, need: 0 });
     }
     gapHighest = Math.max(gapHighest, sn);
-    front.start({ seq: sn, rung });
+    front.start({ seq: sn, rung, outOfOrder });
   }
 
   function clearGap() {
@@ -137,7 +138,8 @@ export function createBankRequests({
 
   const rungError = () => ({ code: 503, text: BANK_RUNG_TEXT });
 
-  function wait(request, reply) {
+  // `boundary`: the request waits on the boundary copy the front is fetching, not on the next position's fetch.
+  function wait(request, reply, boundary = false) {
     const { sn } = request;
     let finished = false;
     let unsubscribe = null;
@@ -165,7 +167,7 @@ export function createBankRequests({
     firstByteTimer = setTimer(timeout, firstByteMs);
     loadTimer = setTimer(timeout, loadMs);
     // A Retry-After wait already under way is told to the listener before subscribe returns.
-    unsubscribe = front.subscribe(sn, {
+    unsubscribe = (boundary ? front.subscribeBoundary : front.subscribe)(sn, {
       onFirstByte: stopFirstByte,
       onProgress: stopFirstByte,
       onDone: (segment) =>
@@ -186,7 +188,7 @@ export function createBankRequests({
       unsubscribe();
       return { action: 'wait', cancel: () => {} };
     }
-    front.fetchNow();
+    if (!boundary) front.fetchNow();
     return {
       action: 'wait',
       cancel: () => {
@@ -199,7 +201,7 @@ export function createBankRequests({
   // goes back to its own rung and to the end of the held run when hls.js asks for the held `sn + 1`.
   function fetchAtAskedRung(request, reply, askedRung) {
     ownRung ??= front.chosenRung();
-    beginGap(request.sn, askedRung);
+    beginGap(request.sn, askedRung, true);
     return wait(request, reply);
   }
 
@@ -243,6 +245,10 @@ export function createBankRequests({
         if (askedRung !== null && held.rung !== askedRung) {
           const copy = bank.getBoundary(sn, askedRung);
           if (copy !== null) return { action: 'answer', bytes: copy.bytes, timings: copy.timings };
+          const inFlight = front.boundaryFetching();
+          // The copy is on its way: the one fetch serves hls.js too.
+          if (inFlight?.seq === sn && inFlight.rung === askedRung)
+            return wait(request, reply, true);
           if (bank.rungOf(sn + 1) === askedRung) {
             if (mode === 'turningOff') {
               // The front fetches nothing new: only the fetch it has in flight can serve it.

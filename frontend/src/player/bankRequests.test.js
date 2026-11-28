@@ -855,6 +855,68 @@ describe('the bank decider: the rung boundary', () => {
     expect(ask(requests, 4, L480).decision.action).toBe('answer');
     expect(front.position()).toEqual({ seq: 5, rung: 'r240' });
   });
+
+  it('while turning off, releases a request for a fragment whose fetch failed and was not retried', async () => {
+    const { requests, front, server, seen } = await setup({ seq: 5, need: 1000 });
+    await flush();
+    requests.setMode('turningOff');
+    front.finish();
+    server.calls.at(-1).fail(); // nobody waits: no retry
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(front.fetching()).toBeNull();
+    expect(ask(requests, 5, L480).decision).toEqual({ action: 'pass' });
+    expect(seen.release).toEqual(['release']);
+    expect(segmentCalls(server)).toEqual(urls('r480', 5));
+  });
+
+  it('while turning off, releases the retry of a fragment whose waiter was handed a 503', async () => {
+    const { requests, front, server, seen } = await setup({ seq: 5, need: 1000 });
+    const waiter = ask(requests, 5, L480);
+    requests.setMode('turningOff');
+    front.finish();
+    server.calls.at(-1).status(503, '1');
+    await flush();
+    expect(waiter.told).toEqual([['error', { code: 503, text: 'Service Unavailable' }]]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(ask(requests, 5, L480).decision).toEqual({ action: 'pass' });
+    expect(seen.release).toEqual(['release']);
+  });
+
+  it('makes no request for the segment before after the on-demand fetch and the end of its gap', async () => {
+    const { requests, bank, server } = await setup({ seq: 6, rung: 'r360' });
+    put(bank, 2, 'r240');
+    put(bank, 3, 'r360');
+    put(bank, 4, 'r480');
+    requests.update({ filmAhead: 0, need: 1000 });
+    ask(requests, 3, L480);
+    await flush();
+    await complete(server.calls.at(-1));
+    expect(ask(requests, 4, L480).decision.action).toBe('answer');
+    await flush();
+    expect(segmentCalls(server)).toEqual([
+      ...urls('r360', 6),
+      ...urls('r480', 3),
+      ...urls('r360', 5),
+    ]);
+  });
+
+  it('waits on the boundary copy being fetched, with exactly one server request for the segment at that rung', async () => {
+    const { requests, bank, server } = await setup({ seq: 4, rung: 'r480' });
+    put(bank, 3, 'r240');
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1)); // 4 at 480p: the copy of 3 at 480p goes next
+    expect(segmentCalls(server)).toEqual([...urls('r480', 4), ...urls('r480', 3)]);
+    const again = ask(requests, 3, L480);
+    expect(again.decision.action).toBe('wait');
+    await flush();
+    await complete(server.calls.at(-1), { size: 66 });
+    expect(again.told.map((t) => t[0])).toEqual(['success']);
+    expect(again.told[0][1].byteLength).toBe(66);
+    expect(bank.rungOf(3)).toBe('r240');
+    expect(server.calls.filter((c) => c.url === segUrl('r480', 3))).toHaveLength(1);
+    expect(server.calls.every((c) => !c.aborted)).toBe(true);
+  });
 });
 
 describe('the bank decider: turning off and the playlists', () => {
@@ -886,7 +948,11 @@ describe('the bank decider: turning off and the playlists', () => {
 describe('the bank decider: optional hooks', () => {
   it('runs without a wrongRung or onRelease hook', () => {
     const bank = createSegmentBank();
-    const front = { position: () => ({ seq: 0, rung: 'r480' }), fetching: () => null };
+    const front = {
+      position: () => ({ seq: 0, rung: 'r480' }),
+      fetching: () => null,
+      boundaryFetching: () => null,
+    };
     const requests = createBankRequests({ bank, front, levelOfRung, rungOfLevel });
     requests.setMode('on');
     put(bank, 3, 'r360');
