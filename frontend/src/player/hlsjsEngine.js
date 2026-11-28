@@ -817,7 +817,8 @@ export function startHlsJs({
     const level = fetchedBankLevel();
     episode = null;
     phase = 'idle';
-    done.front.stop();
+    done.requests.abandonWaits(); // hls.js abandons them itself: the front's stop is no timeout of theirs
+    if (!done.frontStopped) done.front.stop();
     done.requests.setMode('off');
     engine.bankRelease(level);
     store.clear();
@@ -850,6 +851,7 @@ export function startHlsJs({
     episode = {
       front,
       requests,
+      frontStopped: false,
       rungIds: rungs.map((r) => r.id),
       candidates: rungs.map((r) => ({ id: r.id, rate: r.kbps })),
     };
@@ -915,6 +917,12 @@ export function startHlsJs({
     if (choice !== null) front.setRung(choice.id);
   };
 
+  const stopIdleFront = () => {
+    if (episode.frontStopped || loadingFrag !== null) return;
+    episode.frontStopped = true;
+    episode.front.stop();
+  };
+
   // Moves the bank along its phases; run on the look-ahead's input, the playhead, and every fragment event.
   const bankStep = () => {
     if (destroyed || store === null) return;
@@ -927,13 +935,18 @@ export function startHlsJs({
     if (phase === 'armed') {
       if (!within(input, BANK_ARM_WITHIN_S)) closeEpisode();
       else if (within(input, BANK_ON_WITHIN_S) && readyToTurnOn(input)) turnOn(input);
+    } else if (phase === 'turningOff') {
+      stopIdleFront();
     } else if (phase === 'on') {
       // Off when the stretch is passed and none is within 20 minutes, or when the look-ahead lapses: the front
       // stops, held film is still answered, and the first request for film not held releases (the decider).
       if (input === null || (!input.stretchBegun && input.timeToStretch > BANK_ON_WITHIN_S)) {
-        episode.front.stop();
+        // Nothing new is fetched from here (need 0), but a fetch hls.js waits on is not cut: the front stops
+        // once hls.js has nothing in flight.
+        episode.requests.update({ filmAhead: filmAheadNow(), need: 0 });
         episode.requests.setMode('turningOff');
         phase = 'turningOff';
+        stopIdleFront();
       } else {
         episode.requests.update({ filmAhead: filmAheadNow(), need: needOf(input) });
         chooseFrontRung(input);
@@ -946,8 +959,17 @@ export function startHlsJs({
   // releases on its first request, as any request for film not held does.
   const bankSeek = () => {
     if (episode === null) return;
-    const verdict = store.seek(video.currentTime);
-    episode.requests.endGap();
+    const target = video.currentTime;
+    const verdict = store.seek(target);
+    const { front, requests } = episode;
+    // Inside held film the front goes to the film after the run holding the target, so a gap it was filling is
+    // left (the need is still 0 inside a gap, so nothing is fetched at the old spot; `endGap` restores it).
+    const next = phase === 'on' && verdict === 'inside' ? store.nextAfterRun(target) : null;
+    if (next !== null && next !== front.position().seq) {
+      requests.abandonWaits();
+      front.start({ seq: next, rung: front.position().rung });
+    }
+    requests.endGap();
     if (verdict !== 'beyond') return;
     if (phase === 'armed') {
       store.clear();
@@ -1023,6 +1045,7 @@ export function startHlsJs({
       destroyed = true;
       bank = null;
       if (episode !== null) {
+        episode.requests.abandonWaits();
         episode.front.stop();
         episode.requests.setMode('off');
         episode = null;

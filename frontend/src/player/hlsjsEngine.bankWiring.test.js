@@ -53,8 +53,8 @@ const rungs = [
 ];
 const playlistUrl = (id) => `https://film.test/api/s/1/${id}/index.m3u8`;
 const segUrl = (id, n) => `https://film.test/api/s/1/${id}/seg-${n}.ts`;
-const levelsOf = () =>
-  rungs.map(({ id, height, bitrate }) => ({ height, bitrate, uri: playlistUrl(id) }));
+const levelsOf = (ladder = rungs) =>
+  ladder.map(({ id, height, bitrate }) => ({ height, bitrate, uri: playlistUrl(id) }));
 const playlistText = () =>
   `#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n${Array.from(
     { length: 200 },
@@ -173,7 +173,7 @@ const ARM = { need: 600, timeToStretch: 1500, stretchBegun: false }; // 25 minut
 const NEAR = { need: 600, timeToStretch: 900, stretchBegun: false }; // 15 minutes
 
 // A <video> whose playhead and buffered ranges the test sets, over a fake hls.js on level `fetched` (480p).
-function world({ auto = true, fetched = 2 } = {}) {
+function world({ auto = true, fetched = 2, ladder = rungs } = {}) {
   const video = document.createElement('video');
   const state = { time: 0, ranges: [] };
   Object.defineProperty(video, 'currentTime', { get: () => state.time });
@@ -198,7 +198,7 @@ function world({ auto = true, fetched = 2 } = {}) {
   const engine = startHlsJs({
     Hls: WiringHls,
     video,
-    session: { masterUrl: '/m.m3u8', renditions: rungs },
+    session: { masterUrl: '/m.m3u8', renditions: ladder },
     auto,
     startSeconds: 0,
     handlers,
@@ -216,7 +216,7 @@ function world({ auto = true, fetched = 2 } = {}) {
       levelAccessor.set.call(hls, v);
     },
   });
-  hls.manifest(levelsOf(), fetched);
+  hls.manifest(levelsOf(ladder), fetched);
   hls.fetchLevel(fetched);
   InnerLoader.order.length = 0;
   return {
@@ -937,6 +937,156 @@ describe('seeks', () => {
     const env = world();
     env.seekTo(500);
     expect(made.stores[0].heldBytes()).toBe(0);
+  });
+});
+
+const AFTER = { need: 600, timeToStretch: 3000, stretchBegun: false };
+
+describe('a request hls.js waits on the front’s fetch for', () => {
+  const unhurt = (env, waiter) => {
+    expect(waiter.callbacks.onTimeout).not.toHaveBeenCalled();
+    expect(env.handlers.onNetworkError).not.toHaveBeenCalled();
+    expect(env.hls.levels.map((l) => l.fragmentError)).toEqual([0, 0, 0, 0]);
+    expect(InnerLoader.loads).toHaveLength(10); // no second request through the inner loader
+  };
+
+  it('is answered, not cut, when the bank turns off, and the front stops after it', async () => {
+    const env = world();
+    await turnedOn(env);
+    const waiter = request(env, 10);
+    await flush();
+    vi.spyOn(env.front(), 'stop');
+    env.engine.bankInput(AFTER);
+    await flush();
+    expect(env.front().stop).not.toHaveBeenCalled();
+    expect(env.server.calls.at(-1).aborted).toBe(false);
+    await answerSegment(env.server.calls.at(-1), 700);
+    expect(waiter.callbacks.onSuccess).toHaveBeenCalledTimes(1);
+    land(env, waiter);
+    expect(env.front().stop).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]); // one request, and nothing new
+    unhurt(env, waiter);
+  });
+
+  it('ends without a timeout when hls.js abandons it on a seek past held film', async () => {
+    const env = world();
+    await turnedOn(env);
+    const waiter = request(env, 10);
+    await flush();
+    env.seekTo(500);
+    waiter.loader.abort(); // hls.js aborts the fragment it is loading right after, in the same event
+    await vi.advanceTimersByTimeAsync(10);
+    expect(waiter.callbacks.onAbort).toHaveBeenCalledTimes(1);
+    expect(env.server.calls.at(-1).aborted).toBe(true);
+    expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]);
+    unhurt(env, waiter);
+  });
+
+  it('gets a timeout after a seek only when hls.js never abandons it', async () => {
+    const env = world();
+    await turnedOn(env);
+    const waiter = request(env, 10);
+    await flush();
+    env.seekTo(500);
+    expect(waiter.callbacks.onTimeout).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(waiter.callbacks.onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends without a timeout when the engine is destroyed and hls.js destroys the loader', async () => {
+    const env = world();
+    await turnedOn(env);
+    const waiter = request(env, 10);
+    await flush();
+    env.engine.destroy();
+    waiter.loader.destroy(); // hls.destroy() does this
+    await vi.advanceTimersByTimeAsync(10);
+    expect(env.server.calls.at(-1).aborted).toBe(true);
+    expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]);
+    unhurt(env, waiter);
+  });
+});
+
+describe('a seek inside held film while the front fills a gap', () => {
+  it('moves the front past the held run, with no request behind the playhead', async () => {
+    const env = world();
+    await armed(env, { held: 20 });
+    env.setTime(60);
+    env.engine.bankInput(NEAR); // on: the front starts at 20
+    await flush();
+    const gap = request(env, 3); // film not held behind the front, with held film above it: a gap
+    await flush();
+    expect(segmentCalls(env).at(-1)).toBe(segUrl('480p', 3));
+    await answerSegment(env.server.calls.at(-1));
+    expect(gap.callbacks.onSuccess).toHaveBeenCalledTimes(1);
+    const before = env.server.calls.length;
+    expect(env.front().position().seq).toBe(4);
+    env.seekTo(50); // forward, inside held film (7 to 19)
+    await flush();
+    expect(env.front().position().seq).toBeGreaterThanOrEqual(20);
+    expect(env.server.calls.slice(before).map((c) => c.url)).toEqual([segUrl('480p', 20)]);
+    await answerSegment(env.server.calls.at(-1));
+    expect(segmentCalls(env).slice(2)).not.toContain(segUrl('480p', 4));
+  });
+});
+
+describe('what answering from the bank leaves out', () => {
+  it('takes no sample from answered fragments, so the floor after a release is not raised by them', async () => {
+    const env = world();
+    await turnedOn(env); // ten slow loads through the inner loader: the only real samples
+    for (let sn = 11; sn <= 19; sn += 1) {
+      env.store().putSegment({
+        seq: sn,
+        rung: '480p',
+        start: sn * 4,
+        end: sn * 4 + 4,
+        bytes: new ArrayBuffer(1_000_000),
+        timings: { start: 0, first: 50, end: 250 }, // 32,000 kbit/s replayed
+      });
+      const answered = request(env, sn);
+      await flush();
+      env.hls.emit(FakeHls.Events.FRAG_LOADED, { frag: answered.frag });
+    }
+    env.state.ranges = [[0, 400]]; // a deep buffer: the hold would engage on fast samples
+    env.engine.bankInput(AFTER);
+    request(env, 60); // the release
+    expect(env.hls.config.minAutoBitrate).toBe(0);
+    expect(env.hls.autoLevelCapping).toBe(2);
+  });
+});
+
+describe('the level the release falls back to', () => {
+  it('is the rung of the front’s last completed fetch', async () => {
+    const env = world();
+    await turnedOn(env);
+    env.front().setRung('360p');
+    await answerSegment(env.server.calls.at(-1)); // segment 10, at 480p
+    await flush();
+    expect(segmentCalls(env).at(-1)).toBe(segUrl('360p', 11));
+    await answerSegment(env.server.calls.at(-1)); // segment 11, at 360p
+    env.engine.bankInput(AFTER);
+    request(env, 60);
+    expect(env.hls.autoLevelCapping).toBe(1);
+  });
+
+  it('is the rung the front will fetch at when it has completed none', async () => {
+    const env = world({ fetched: 1 });
+    await turnedOn(env);
+    env.engine.bankInput(AFTER);
+    request(env, 60);
+    expect(env.hls.autoLevelCapping).toBe(1);
+  });
+});
+
+describe('a ladder with no rung up to 480p', () => {
+  it('never arms the bank', async () => {
+    const ladder = [rungs[3], rung('1080p', 1080, 6_000_000)];
+    const env = world({ ladder, fetched: 0 });
+    env.engine.bankInput(ARM);
+    await flush();
+    expect(env.server.calls).toHaveLength(0);
+    expect(made.fronts).toHaveLength(0);
   });
 });
 
