@@ -698,7 +698,39 @@ describe('the engine holds hls.js on the bank’s level', () => {
         expect(env.hls.loadLevel).toBe(2);
       });
 
-      it('recovers a fatal reset itself, with the level held at the playhead', () => {
+      // hls.js's error controller recovers a flagged fatal reset and stops loading before the engine hears of it:
+      // the media is reset (playhead 0, no data), so the level is for the playhead as last seen, and the engine
+      // recovers nothing a second time.
+      it('writes the level for the playhead last seen when hls.js recovered a fatal reset', () => {
+        FakeHls.errorController = true;
+        const env = loadedUnappended();
+        let state = 4;
+        Object.defineProperty(env.video, 'readyState', { get: () => state });
+        env.setTime(300);
+        env.tick(); // the playhead is seen at 300 s
+        const recover = env.hls.recoverMediaError.getMockImplementation();
+        env.hls.recoverMediaError.mockImplementation((...args) => {
+          recover(...args);
+          env.setTime(0);
+          state = 0;
+          env.setRanges([]);
+        });
+        env.hls.startLoad.mockClear();
+        env.lookup.levelAt.mockClear();
+        env.hls.error({
+          fatal: true,
+          type: 'mediaError',
+          details: 'mediaSourceRequiresReset',
+          errorAction: { action: 2, flags: 24 }, // SendAlternateToPenaltyBox, ResetMediaSource | SwitchToSDR
+        });
+        expect(env.lookup.levelAt).toHaveBeenCalledTimes(1);
+        expect(env.lookup.levelAt).toHaveBeenCalledWith(300);
+        expect(env.hls.recoverMediaError).toHaveBeenCalledTimes(1); // hls.js's own
+        expect(env.hls.startLoad).toHaveBeenLastCalledWith(300);
+      });
+
+      // No reset flag (a payload real hls.js does not send for this error): guards the engine's own recovery.
+      it('recovers a fatal reset without the flag itself, with the level held at the playhead', () => {
         const env = loadedUnappended();
         env.lookup.levelAt.mockClear();
         env.hls.error({ fatal: true, type: 'mediaError', details: 'mediaSourceRequiresReset' });

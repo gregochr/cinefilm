@@ -18,7 +18,12 @@ beforeEach(() => {
   FakeHls.reset();
   vi.useFakeTimers();
 });
-afterEach(() => vi.useRealTimers());
+// Every engine `start()` makes: each holds a window `online` listener, video listeners and timers, released here.
+const engines = [];
+afterEach(() => {
+  engines.splice(0).forEach((engine) => engine.destroy()); // destroy is safe to call twice
+  vi.useRealTimers();
+});
 
 // A ladder the champagne ceiling (champagne.js) leaves alone: every height is 480 lines or less, so Auto may
 // reach the top by the step gate alone. The ids are labels here; champagneCeiling is tested on real ladders below.
@@ -60,6 +65,7 @@ function start(over = {}) {
     now: () => t,
     ...over,
   });
+  engines.push(engine);
   return { engine, video, handlers, hls: FakeHls.last, advance: (ms) => (t += ms) };
 }
 
@@ -640,6 +646,106 @@ describe('other fatal errors', () => {
     const { hls, handlers } = start();
     hls.error({ fatal: true, type: 'otherError' });
     expect(handlers.onFatal).toHaveBeenCalledTimes(1);
+  });
+});
+
+// hls.js 1.7.4 runs its own error controller before the engine hears of an error: a reset is recovered, then a
+// fatal error stops loading. The engine is told of the aftermath, with the media reset (playhead 0, no data).
+describe('recovery in the order hls.js runs it', () => {
+  const RESET = { action: 2, flags: 24 }; // hls.js's: SendAlternateToPenaltyBox, ResetMediaSource | SwitchToSDR
+
+  // A resumed film (asked to start at 120 s) with its playhead at 300 s and media loaded; `hls.js`'s own
+  // `recoverMediaError` resets the media as the browser does.
+  function playing() {
+    FakeHls.errorController = true;
+    const state = { time: 300, readyState: 4 };
+    const env = start({ startSeconds: 120 });
+    Object.defineProperty(env.video, 'currentTime', { get: () => state.time });
+    Object.defineProperty(env.video, 'readyState', { get: () => state.readyState });
+    env.hls.manifest(levels, 1);
+    env.video.dispatchEvent(new Event('timeupdate')); // the playhead is seen at 300 s
+    const recover = env.hls.recoverMediaError.getMockImplementation();
+    env.hls.recoverMediaError.mockImplementation((...args) => {
+      recover(...args);
+      state.time = 0;
+      state.readyState = 0;
+    });
+    env.hls.startLoad.mockClear();
+    return { ...env, state };
+  }
+
+  it('starts loading again from the playhead after a fatal media error that hls.js stopped', () => {
+    const { hls, handlers } = playing();
+    hls.error({ fatal: true, type: 'mediaError', details: 'bufferAppendError' });
+    expect(hls.recoverMediaError).toHaveBeenCalledTimes(1);
+    expect(hls.loadingEnabled).toBe(true);
+    expect(hls.startLoad).toHaveBeenCalledTimes(1);
+    expect(hls.startLoad).toHaveBeenCalledWith(300);
+    expect(handlers.onFatal).not.toHaveBeenCalled();
+  });
+
+  it('does not reset the media a second time for a fatal reset hls.js has recovered', () => {
+    const { hls } = playing();
+    hls.error({
+      fatal: true,
+      type: 'mediaError',
+      details: 'mediaSourceRequiresReset',
+      errorAction: RESET,
+    });
+    expect(hls.recoverMediaError).toHaveBeenCalledTimes(1); // hls.js's own
+    expect(hls.loadingEnabled).toBe(true); // hls.js stopped it after the recovery
+    expect(hls.startLoad).toHaveBeenLastCalledWith(300);
+  });
+
+  it('adds no second start when hls.js recovered with loading running', () => {
+    const { hls } = playing();
+    FakeHls.errorController = false; // nothing stopped loading before the engine's own recovery
+    hls.error({ fatal: true, type: 'mediaError', details: 'bufferAppendError' });
+    expect(hls.startLoad).toHaveBeenCalledTimes(1); // the recovery's own
+  });
+
+  it('reloads a resumed film from the playhead, not from where it was asked to start', () => {
+    const { hls } = playing();
+    expect(hls.config.startPosition).toBe(300);
+    hls.error({ fatal: true, type: 'mediaError', details: 'bufferAppendError' });
+    hls.stopLoad(); // anything that stops it before the media is attached again
+    hls.mediaAttached(); // hls.js reloads from its configured start position
+    expect(hls.startLoad).toHaveBeenLastCalledWith(300);
+  });
+
+  it('restarts after a fatal network error and a reset from the playhead too', () => {
+    const { hls } = playing();
+    hls.error({
+      fatal: true,
+      type: 'networkError',
+      details: 'fragLoadError',
+      response: { code: 0 },
+    });
+    hls.error({
+      fatal: false,
+      type: 'mediaError',
+      details: 'mediaSourceRequiresReset',
+      errorAction: RESET,
+    });
+    hls.mediaAttached();
+    expect(hls.startLoad).toHaveBeenLastCalledWith(300);
+    vi.advanceTimersByTime(RECONNECT_MS);
+    expect(hls.startLoad).toHaveBeenLastCalledWith(300); // the media has not loaded: no readyState
+  });
+
+  it('follows a seek to the start, which hls.js reloads from the beginning', () => {
+    const { hls, video, state } = playing();
+    state.time = 0;
+    video.dispatchEvent(new Event('seeking'));
+    expect(hls.config.startPosition).toBe(-1);
+  });
+
+  it('keeps the last playhead while the media is reset and has no data', () => {
+    const { hls, video, state } = playing();
+    state.time = 0;
+    state.readyState = 0;
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.startPosition).toBe(300);
   });
 });
 
