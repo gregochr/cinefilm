@@ -24,7 +24,8 @@ function readStretch(raw) {
   return { from, to, need };
 }
 
-const readAll = (list, read) => (Array.isArray(list) ? list.map(read).filter(Boolean) : []);
+const readAll = (list, read) =>
+  Array.isArray(list) ? list.map((item) => read(item)).filter(Boolean) : [];
 
 function readTrack(raw) {
   if (raw === null || typeof raw !== 'object') return null;
