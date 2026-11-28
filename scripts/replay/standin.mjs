@@ -30,7 +30,8 @@ import { createByteCounter, createLink, minuteAt, rateAt } from './link.mjs';
 import { WIRE } from './trace.mjs';
 import { createPlayhead, WAIT_MAX_MS } from './playhead.mjs';
 
-const POLL_MS = 100;
+/** How often a held request looks again: PollingSegmentWaiter.POLL (a test reads the Java). */
+export const POLL_MS = 100;
 import { buildSegment } from './ts.mjs';
 
 const HEADROOM = 1.25; // StartRung.java
@@ -434,15 +435,15 @@ function sendNotReady(ctx, rung, n, detail) {
 }
 
 // Waits for the encoder to make the segment, as SessionManager.segmentLive does: until it is made, or six seconds
-// from the request's arrival, or when no run is going (SessionManager.settled), whichever a poll finds first: the
-// server's waiter looks every 100 ms (PollingSegmentWaiter.java:14,33-35), so a stop that a later request causes ends
-// every held wait within one poll. The answer says how long it
-// waited and, on the request that restarted the encoder, why.
-function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted }) {
+// from the request's arrival, or when no run is going, or when the session has gone (SessionManager.settled,
+// :437-441), whichever a poll finds first: the server's waiter looks every 100 ms (PollingSegmentWaiter.java:14,33-35),
+// so a stop that a later request causes ends every held wait within one poll. A session that was DELETEd is a 404
+// "No such session" (:439-441). The answer says how long it waited and, on the request that restarted the encoder, why.
+function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted, live }) {
   let timer = null;
   let answered = false;
   ctx.env.waiting += 1;
-  const answer = (made) => {
+  const answer = (made, gone = false) => {
     if (answered) return;
     answered = true;
     ctx.env.waiting -= 1;
@@ -452,7 +453,8 @@ function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted }) {
       ...(restart ? { restart } : {}), ...(deleted ? { deleted: true } : {}), ...(waited > 0 ? { waitMs: waited } : {}),
     };
     try {
-      if (made) sendSegment(ctx, rung, n, detail);
+      if (gone) sendJson(ctx, { error: 'No such session' }, { status: 404, kind: 'segment', detail: { rung: rung.id, segment: n, ...detail } });
+      else if (made) sendSegment(ctx, rung, n, detail);
       else sendNotReady(ctx, rung, n, detail);
     } catch {
       fail(ctx.res); // from a timer, nothing above catches it
@@ -460,6 +462,10 @@ function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted }) {
   };
   const check = () => {
     if (answered) return;
+    if (!live()) {
+      answer(false, true);
+      return;
+    }
     if (encoder.complete(n)) {
       answer(true);
       return;
@@ -476,7 +482,7 @@ function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted }) {
   check();
 }
 
-function sessionSegment(ctx, { session, match }) {
+function sessionSegment(ctx, { session, match, id }) {
   const { env } = ctx;
   const rung = env.rungs.find((r) => r.id === match[1]);
   const n = Number(match[2]);
@@ -487,7 +493,9 @@ function sessionSegment(ctx, { session, match }) {
   }
   const arrived = Date.now();
   const { restart, deleted } = session.encoder.request(n);
-  waitForSegment(ctx, { encoder: session.encoder, rung, n, arrived, restart, deleted });
+  waitForSegment(ctx, {
+    encoder: session.encoder, rung, n, arrived, restart, deleted, live: () => env.sessions.get(id) === session,
+  });
   return true;
 }
 
@@ -512,7 +520,7 @@ function sessionRoute(ctx, match) {
   for (const route of SESSION_ROUTES) {
     const found = route.pattern.exec(rest);
     // A route returns false when the address named something it does not have (a rung, a segment).
-    if (found && route.handle(ctx, { session, match: found })) return;
+    if (found && route.handle(ctx, { session, match: found, id: match[1] })) return;
   }
   sendJson(ctx, { error: 'Not found' }, { status: 404 });
 }

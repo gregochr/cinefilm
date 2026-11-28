@@ -112,7 +112,8 @@ each session:
   a stopped run made is not complete and a request for it restarts the encoder there.
 - **Segments more than two minutes behind the playhead are deleted.** A request for one inside the live run's span only
   waits and is answered 503, marked `deleted` in `requests.json`, when a poll finds the run stopped (the server's waiter
-  looks every 100 ms, and so does the stand-in, on its own clock, for every held request) or after six seconds;
+  looks every 100 ms, and so does the stand-in, on its own clock, for every held request; a test reads the Java's
+  interval) or after six seconds, and with 404 "No such session" when its session has been ended;
   nothing makes it again until a request before the run's start restarts the encoder. Such a request pulls the
   playhead back, so the run is stopped for being ahead of it.
 - **Segments lost and asked again** are the `deleted` requests and the `lost-stop` restarts; `summary.txt` gives both

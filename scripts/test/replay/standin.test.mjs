@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { after, describe, test } from 'node:test';
 import {
-  ladder, masterPlaylist, mediaPlaylist, startRung, startStandIn,
+  POLL_MS, ladder, masterPlaylist, mediaPlaylist, startRung, startStandIn,
 } from '../../replay/standin.mjs';
 import { WIRE } from '../../replay/trace.mjs';
 import { AUDIO_KBPS, buildSegment } from '../../replay/ts.mjs';
@@ -589,6 +589,16 @@ describe('the audio rates, read from the server\'s source', () => {
   });
 });
 
+describe('the poll of a held request, read from the server\'s source', () => {
+  test('is the interval of PollingSegmentWaiter, 100 ms', () => {
+    const source = readFileSync(new URL('../../../backend/src/main/java/gregochr/cinefilm/transcode/PollingSegmentWaiter.java', import.meta.url), 'utf8');
+    const found = /static final Duration POLL = Duration\.ofMillis\((\d+)\);/.exec(source);
+    assert.ok(found, 'PollingSegmentWaiter.java no longer declares POLL in the form this test reads');
+    assert.equal(POLL_MS, Number(found[1]));
+    assert.ok(/Thread\.sleep\(pollMillis\)/.test(source));
+  });
+});
+
 describe('the server\'s one playhead per session', () => {
   // A slow encoder and a short wait: a request is answered 503 (what the real server answers a segment not made in
   // its six seconds), and the restarts are logged.
@@ -702,6 +712,21 @@ describe('the server\'s one playhead per session', () => {
     assert.deepEqual(segments(standIn).map((r) => r.restart), [undefined, 'behind']);
   });
 
+  test('a held request whose session was ended is answered 404 at the next poll, as the server answers it', async () => {
+    const standIn = await start({ encoderSpeed: 0.0001, waitMaxMs: 60_000 });
+    const { sessionId } = await newSession(standIn);
+    const held = request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be held');
+    const began = performance.now();
+    assert.equal((await request(standIn.port, { method: 'DELETE', path: `/api/sessions/${sessionId}` })).status, 204);
+    const answer = await held;
+    assert.equal(answer.status, 404);
+    assert.deepEqual(json(answer), { error: 'No such session' });
+    assert.ok(performance.now() - began < 500, `held ${performance.now() - began} ms`);
+    assert.equal(segments(standIn)[0].status, 404);
+    assert.equal((await stateOf(standIn)).waiting, 0);
+  });
+
   test('a start time outside the film is refused as the server refuses it, and a number is read as a Long', async () => {
     const standIn = await start();
     const film = standIn.segmentCount * standIn.segmentMs;
@@ -748,7 +773,8 @@ describe('the server\'s one playhead per session', () => {
     const player = ask(5); // lost (below 65 is deleted): the playhead goes back, so the run is 3 minutes ahead and stops
     const answers = await Promise.all([bank, player]);
     assert.deepEqual(answers.map((a) => a.status), [503, 503]);
-    assert.ok(performance.now() - began < 1500, `held ${performance.now() - began} ms`);
+    assert.ok(performance.now() - began < 500, // one poll (100 ms) and the round trips; POLL_MS is pinned to the Java below
+       `held ${performance.now() - began} ms`);
     const [lostRequest, bankRequest] = [segments(standIn).find((r) => r.segment === 5), segments(standIn).find((r) => r.segment === 100)];
     assert.equal(lostRequest.deleted, true);
     assert.equal(bankRequest.waitMs, 200); // 130,000 to 130,200 on the clock the test set

@@ -237,10 +237,10 @@ describe('segments behind the playhead', () => {
   });
 });
 
-describe('a fight that shows in no restart', () => {
+describe('a segment lost and asked again', () => {
   // The bank asks 35 segments ahead of the player: the playhead goes to the bank's segment, the player's own
   // segments fall more than 2 minutes behind it and are deleted, and the player asking for one pulls the playhead back.
-  function fight() {
+  function lostScenario() {
     const made = make({ speed: 19 });
     made.wait(9000); // 42 segments made
     assert.deepEqual(made.playhead.request(10), { restart: null });
@@ -249,7 +249,7 @@ describe('a fight that shows in no restart', () => {
   }
 
   test('a request for a segment made and deleted is told apart: no restart, never ready, and `deleted`', () => {
-    const { playhead, wait } = fight();
+    const { playhead, wait } = lostScenario();
     wait(100);
     assert.equal(playhead.complete(12), false); // below 15 is deleted now
     assert.deepEqual(playhead.request(12), { restart: null, deleted: true });
@@ -259,7 +259,7 @@ describe('a fight that shows in no restart', () => {
   });
 
   test('a segment the run has not made yet is not `deleted`, and is not once it is made', () => {
-    const { playhead, wait } = fight();
+    const { playhead, wait } = lostScenario();
     assert.deepEqual(playhead.request(50), { restart: null }); // reached by the run, not made yet
     wait(3300);
     playhead.request(45);
@@ -267,8 +267,8 @@ describe('a fight that shows in no restart', () => {
     assert.deepEqual(playhead.request(50), { restart: null });
   });
 
-  test('the run is then stopped for being ahead of the playhead, and the restart is named for the fight', () => {
-    const { playhead, wait } = fight();
+  test('the run is then stopped for being ahead of the playhead, and the restart is a `lost-stop`', () => {
+    const { playhead, wait } = lostScenario();
     playhead.request(12);
     wait(3300); // the run reaches its 58th segment: 3 minutes past the playhead now at 12
     assert.equal(playhead.running(), false);
@@ -276,15 +276,15 @@ describe('a fight that shows in no restart', () => {
     assert.equal(playhead.state().restarts, 1);
   });
 
-  test('a run that stopped on its own before the player came back is a fight too, for a lost segment', () => {
-    const { playhead, wait } = fight();
+  test('a run that stopped on its own before the player came back is a `lost-stop` too, for a lost segment', () => {
+    const { playhead, wait } = lostScenario();
     wait(20_000); // the bank's playhead at 45: the run stops at its 91st segment, long before the player asks again
     assert.equal(playhead.running(), false);
     assert.deepEqual(playhead.request(12), { restart: 'lost-stop' });
   });
 
   test('a restart clears what was lost at or after it: the segment is then only one the run has not made', () => {
-    const { playhead } = fight();
+    const { playhead } = lostScenario();
     assert.deepEqual(playhead.request(200), { restart: 'ahead' });
     assert.deepEqual(playhead.request(5), { restart: 'behind' }); // the new run's start is 5: 12 is lost no more
     assert.deepEqual(playhead.request(12), { restart: null });
