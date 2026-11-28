@@ -54,6 +54,10 @@ const RESET_MEDIA_SOURCE = 16;
 export const BANK_ARM_WITHIN_S = 1800;
 export const BANK_ON_WITHIN_S = 1200;
 export const BANK_CHOICE_EVERY_MS = 60000;
+// While an episode runs the engine steps the bank this often, in ms, on the last `bankInput`: the front takes
+// nothing from a timer of its own, so this tick is what hands it the film ahead and the need (`update`) as the
+// film plays, whatever hls.js is or is not doing.
+export const BANK_TICK_MS = 1000;
 
 // kbit/s of one loaded fragment, timed from `loading.start` so the wait for the first byte counts; null when
 // there is nothing to measure.
@@ -153,11 +157,43 @@ export function startHlsJs({
   const config = hlsConfig(startSeconds);
   // The film bank's loaders wrap today's, and ask `decider` about every request: with no bank episode it passes them
   // all, so nothing changes until a stretch is near. A pinned rung never has a bank: today's loader alone.
+  const waiting = new Set(); // the requests hls.js waits on the bank for
   let episode = null; // while the bank is armed, on or turning off: { front, requests, rungIds, candidates }
   const decider = {
     armed: () => episode?.requests.armed() ?? false,
-    fragmentRequest: (request, reply) =>
-      episode === null ? { action: 'pass' } : episode.requests.fragmentRequest(request, reply),
+    fragmentRequest(request, reply) {
+      if (episode === null) return { action: 'pass' };
+      // The requests hls.js is waiting on, until each is answered, failed, timed out or aborted.
+      const token = {};
+      let over = false;
+      const ended = () => {
+        over = true;
+        waiting.delete(token);
+      };
+      const decision = episode.requests.fragmentRequest(request, {
+        success: (...args) => {
+          ended();
+          reply.success(...args);
+        },
+        error: (...args) => {
+          ended();
+          reply.error(...args);
+        },
+        timeout: () => {
+          ended();
+          reply.timeout();
+        },
+      });
+      if (decision.action !== 'wait') return decision;
+      if (!over) waiting.add(token);
+      return {
+        ...decision,
+        cancel: () => {
+          ended();
+          decision.cancel?.();
+        },
+      };
+    },
     fragmentLoaded: (loaded) => episode?.requests.fragmentLoaded(loaded),
     playlistText: (context) => episode?.requests.playlistText(context) ?? null,
   };
@@ -810,15 +846,18 @@ export function startHlsJs({
     return bankLevelOfRung(front.window().rung ?? front.position().rung);
   };
 
-  // Ends the episode: the front stops (aborting its fetch and timers), hls.js is released from the manual level
-  // (a no-op while it was never on), and what is held is dropped. Held playlists stay.
+  // Ends the episode: the front finishes (the fetch in flight runs to its end for whoever waits on it, nothing new
+  // starts), hls.js is released from the manual level (a no-op while it was never on), and what is held is
+  // dropped. Held playlists stay.
   const closeEpisode = () => {
     const done = episode;
     const level = fetchedBankLevel();
     episode = null;
     phase = 'idle';
-    done.requests.abandonWaits(); // hls.js abandons them itself: the front's stop is no timeout of theirs
-    if (!done.frontStopped) done.front.stop();
+    pendingSeek = false;
+    waiting.clear();
+    clearInterval(done.tick);
+    done.front.finish();
     done.requests.setMode('off');
     engine.bankRelease(level);
     store.clear();
@@ -851,7 +890,7 @@ export function startHlsJs({
     episode = {
       front,
       requests,
-      frontStopped: false,
+      tick: setInterval(bankStep, BANK_TICK_MS),
       rungIds: rungs.map((r) => r.id),
       candidates: rungs.map((r) => ({ id: r.id, rate: r.kbps })),
     };
@@ -895,7 +934,7 @@ export function startHlsJs({
       lastChoiceAt = null;
       return;
     }
-    const { front, candidates } = episode;
+    const { front, requests, candidates } = episode;
     const filmAhead = filmAheadNow();
     const need = needOf(input);
     const measured = front.window();
@@ -914,13 +953,21 @@ export function startHlsJs({
       rate: measured.rate,
       candidates,
     });
-    if (choice !== null) front.setRung(choice.id);
+    if (choice !== null) requests.setRung(choice.id);
   };
 
-  const stopIdleFront = () => {
-    if (episode.frontStopped || loadingFrag !== null) return;
-    episode.frontStopped = true;
-    episode.front.stop();
+  // A seek inside held film moves the front past the run holding the target, so a gap it was filling is left. The
+  // move cuts the fetch under way, which hls.js may be waiting on, so it waits until no request of hls.js waits on
+  // the bank; the need stays 0 inside a gap meanwhile, and `endGap` then restores it.
+  let pendingSeek = false;
+  const settleSeek = () => {
+    pendingSeek = false;
+    const { front, requests } = episode;
+    const next = store.nextAfterRun(video.currentTime);
+    if (next !== null && next !== front.position().seq) {
+      front.start({ seq: next, rung: front.chosenRung() });
+    }
+    requests.endGap();
   };
 
   // Moves the bank along its phases; run on the look-ahead's input, the playhead, and every fragment event.
@@ -935,19 +982,17 @@ export function startHlsJs({
     if (phase === 'armed') {
       if (!within(input, BANK_ARM_WITHIN_S)) closeEpisode();
       else if (within(input, BANK_ON_WITHIN_S) && readyToTurnOn(input)) turnOn(input);
-    } else if (phase === 'turningOff') {
-      stopIdleFront();
     } else if (phase === 'on') {
       // Off when the stretch is passed and none is within 20 minutes, or when the look-ahead lapses: the front
-      // stops, held film is still answered, and the first request for film not held releases (the decider).
+      // finishes the fetch in flight (answering whoever waits on it) and starts nothing new, held film is still
+      // answered, and the first request for film not held releases (the decider).
       if (input === null || (!input.stretchBegun && input.timeToStretch > BANK_ON_WITHIN_S)) {
-        // Nothing new is fetched from here (need 0), but a fetch hls.js waits on is not cut: the front stops
-        // once hls.js has nothing in flight.
         episode.requests.update({ filmAhead: filmAheadNow(), need: 0 });
+        episode.front.finish();
         episode.requests.setMode('turningOff');
         phase = 'turningOff';
-        stopIdleFront();
       } else {
+        if (pendingSeek && waiting.size === 0) settleSeek();
         episode.requests.update({ filmAhead: filmAheadNow(), need: needOf(input) });
         chooseFrontRung(input);
       }
@@ -961,15 +1006,12 @@ export function startHlsJs({
     if (episode === null) return;
     const target = video.currentTime;
     const verdict = store.seek(target);
-    const { front, requests } = episode;
-    // Inside held film the front goes to the film after the run holding the target, so a gap it was filling is
-    // left (the need is still 0 inside a gap, so nothing is fetched at the old spot; `endGap` restores it).
-    const next = phase === 'on' && verdict === 'inside' ? store.nextAfterRun(target) : null;
-    if (next !== null && next !== front.position().seq) {
-      requests.abandonWaits();
-      front.start({ seq: next, rung: front.position().rung });
+    if (verdict === 'inside' && phase === 'on') {
+      if (waiting.size === 0) settleSeek();
+      else pendingSeek = true;
+      return;
     }
-    requests.endGap();
+    episode.requests.endGap();
     if (verdict !== 'beyond') return;
     if (phase === 'armed') {
       store.clear();
@@ -1044,13 +1086,6 @@ export function startHlsJs({
     destroy() {
       destroyed = true;
       bank = null;
-      if (episode !== null) {
-        episode.requests.abandonWaits();
-        episode.front.stop();
-        episode.requests.setMode('off');
-        episode = null;
-      }
-      store?.clear();
       clearTimeout(timer);
       timer = null;
       stopHoldTimer();
@@ -1061,7 +1096,14 @@ export function startHlsJs({
       video.removeEventListener('seeking', onSeeking);
       video.removeEventListener('play', followHole);
       video.removeEventListener('pause', followHole);
-      hls.destroy();
+      hls.destroy(); // destroys the loaders first: a request waiting on the front ends with no timeout
+      if (episode !== null) {
+        clearInterval(episode.tick);
+        episode.front.stop(); // a destroy is the full cut
+        episode.requests.setMode('off');
+        episode = null;
+      }
+      store?.clear();
     },
   };
   return engine;

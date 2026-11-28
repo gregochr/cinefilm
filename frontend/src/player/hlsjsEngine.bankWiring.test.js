@@ -719,7 +719,7 @@ describe('choosing the rung', () => {
     const env = world();
     await turnedOn(env);
     const front = env.front();
-    vi.spyOn(front, 'setRung');
+    vi.spyOn(env.requests(), 'setRung');
     const window = vi.spyOn(front, 'window').mockReturnValue(measured(19.9));
     tick(env);
     expect(chooseBankRung).not.toHaveBeenCalled();
@@ -742,7 +742,7 @@ describe('choosing the rung', () => {
       '360p',
       '480p',
     ]);
-    expect(front.setRung).toHaveBeenCalledWith('240p'); // only 240p’s projection reaches F
+    expect(env.requests().setRung).toHaveBeenCalledWith('240p'); // only 240p’s projection reaches F
     await vi.advanceTimersByTimeAsync(59_000);
     tick(env);
     expect(chooseBankRung).toHaveBeenCalledTimes(1);
@@ -754,11 +754,11 @@ describe('choosing the rung', () => {
   it('keeps the front’s rung when no choice is made', async () => {
     const env = world();
     await turnedOn(env);
-    vi.spyOn(env.front(), 'setRung');
+    vi.spyOn(env.requests(), 'setRung');
     vi.spyOn(env.front(), 'window').mockReturnValue(measured(30, { w: 0, d: 0 }));
     tick(env);
     expect(chooseBankRung).toHaveBeenCalledTimes(1);
-    expect(env.front().setRung).not.toHaveBeenCalled();
+    expect(env.requests().setRung).not.toHaveBeenCalled();
   });
 
   it('never chooses inside a stretch, and chooses again at once for the next one', async () => {
@@ -798,15 +798,17 @@ describe('choosing the rung', () => {
 describe('turning off', () => {
   const AFTER = { need: 600, timeToStretch: 3000, stretchBegun: false };
 
-  it('stops the front, still answers held film, and releases on the first request beyond it', async () => {
+  it('finishes the front, still answers held film, and releases on the first request beyond it', async () => {
     const env = world();
     await turnedOn(env);
     const front = env.front();
+    vi.spyOn(front, 'finish');
     vi.spyOn(front, 'stop');
     const calls = env.server.calls.length;
     env.engine.bankInput(AFTER);
-    expect(front.stop).toHaveBeenCalledTimes(1);
-    expect(env.server.calls.at(-1).aborted).toBe(true);
+    expect(front.finish).toHaveBeenCalledTimes(1);
+    expect(front.stop).not.toHaveBeenCalled();
+    expect(env.server.calls.at(-1).aborted).toBe(false); // the fetch in flight is not cut
     expect(env.levelWrites()).toEqual(['loadLevel:2']); // not released yet
     const held = request(env, 3);
     await flush();
@@ -831,17 +833,17 @@ describe('turning off', () => {
   it('turns off when the look-ahead lapses', async () => {
     const env = world();
     await turnedOn(env);
-    vi.spyOn(env.front(), 'stop');
+    vi.spyOn(env.front(), 'finish');
     env.engine.bankInput(null);
-    expect(env.front().stop).toHaveBeenCalledTimes(1);
+    expect(env.front().finish).toHaveBeenCalledTimes(1);
   });
 
   it('stays on inside a stretch, whatever its time says', async () => {
     const env = world();
     await turnedOn(env);
-    vi.spyOn(env.front(), 'stop');
+    vi.spyOn(env.front(), 'finish');
     env.engine.bankInput({ ...AFTER, stretchBegun: true });
-    expect(env.front().stop).not.toHaveBeenCalled();
+    expect(env.front().finish).not.toHaveBeenCalled();
   });
 
   it('releases on the first request when a seek back goes to before held film', async () => {
@@ -894,12 +896,12 @@ describe('seeks', () => {
     const env = world();
     await turnedOn(env);
     const first = env.front();
-    vi.spyOn(first, 'stop');
+    vi.spyOn(first, 'finish');
     vi.spyOn(env.requests(), 'endGap');
     const endGap = env.requests().endGap;
     env.seekTo(500);
     expect(endGap).toHaveBeenCalledTimes(1);
-    expect(first.stop).toHaveBeenCalledTimes(1);
+    expect(first.finish).toHaveBeenCalledTimes(1);
     expect(InnerLoader.order).toContain('loadLevel:-1');
     expect(env.store().heldBytes()).toBe(0);
     expect(made.fronts).toHaveLength(2); // armed again for the stretch still near
@@ -913,14 +915,13 @@ describe('seeks', () => {
     env.engine.bankInput(NEAR);
     await flush();
     vi.spyOn(env.requests(), 'endGap');
-    vi.spyOn(env.front(), 'stop');
-    env.seekTo(50);
+    vi.spyOn(env.front(), 'finish');
+    env.seekTo(50); // no request of hls.js waits on the bank: settled at once
     expect(env.requests().endGap).toHaveBeenCalledTimes(1);
-    expect(env.front().stop).not.toHaveBeenCalled();
+    expect(env.front().finish).not.toHaveBeenCalled();
     expect(env.store().hasSegment(19)).toBe(true);
     env.seekTo(2); // back: what is held ahead is kept
     expect(env.store().hasSegment(19)).toBe(true);
-    expect(env.requests().endGap).toHaveBeenCalledTimes(2);
   });
 
   it('clears the copies on a seek beyond them while only armed, and keeps the bank armed', async () => {
@@ -950,7 +951,7 @@ describe('a request hls.js waits on the front’s fetch for', () => {
     expect(InnerLoader.loads).toHaveLength(10); // no second request through the inner loader
   };
 
-  it('is answered, not cut, when the bank turns off, and the front stops after it', async () => {
+  it('is answered, not cut, when the bank turns off, and the front is finished after it', async () => {
     const env = world();
     await turnedOn(env);
     const waiter = request(env, 10);
@@ -959,11 +960,12 @@ describe('a request hls.js waits on the front’s fetch for', () => {
     env.engine.bankInput(AFTER);
     await flush();
     expect(env.front().stop).not.toHaveBeenCalled();
+    expect(env.front().isFinished()).toBe(false);
     expect(env.server.calls.at(-1).aborted).toBe(false);
     await answerSegment(env.server.calls.at(-1), 700);
     expect(waiter.callbacks.onSuccess).toHaveBeenCalledTimes(1);
     land(env, waiter);
-    expect(env.front().stop).toHaveBeenCalledTimes(1);
+    expect(env.front().isFinished()).toBe(true);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]); // one request, and nothing new
     unhurt(env, waiter);
@@ -978,20 +980,23 @@ describe('a request hls.js waits on the front’s fetch for', () => {
     waiter.loader.abort(); // hls.js aborts the fragment it is loading right after, in the same event
     await vi.advanceTimersByTimeAsync(10);
     expect(waiter.callbacks.onAbort).toHaveBeenCalledTimes(1);
-    expect(env.server.calls.at(-1).aborted).toBe(true);
+    expect(env.server.calls.at(-1).aborted).toBe(false); // the front's fetch is finished, not cut
+    await answerSegment(env.server.calls.at(-1));
+    expect(waiter.callbacks.onSuccess).not.toHaveBeenCalled();
     expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]);
     unhurt(env, waiter);
   });
 
-  it('gets a timeout after a seek only when hls.js never abandons it', async () => {
+  it('is still answered by the fetch the front finishes when hls.js does not abandon it on a seek', async () => {
     const env = world();
     await turnedOn(env);
     const waiter = request(env, 10);
     await flush();
     env.seekTo(500);
+    await answerSegment(env.server.calls.at(-1), 700);
+    expect(waiter.callbacks.onSuccess).toHaveBeenCalledTimes(1);
     expect(waiter.callbacks.onTimeout).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(waiter.callbacks.onTimeout).toHaveBeenCalledTimes(1);
+    expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]);
   });
 
   it('ends without a timeout when the engine is destroyed and hls.js destroys the loader', async () => {
@@ -999,8 +1004,8 @@ describe('a request hls.js waits on the front’s fetch for', () => {
     await turnedOn(env);
     const waiter = request(env, 10);
     await flush();
+    env.hls.destroy.mockImplementation(() => waiter.loader.destroy()); // hls.destroy() destroys its loaders
     env.engine.destroy();
-    waiter.loader.destroy(); // hls.destroy() does this
     await vi.advanceTimersByTimeAsync(10);
     expect(env.server.calls.at(-1).aborted).toBe(true);
     expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]);
@@ -1028,6 +1033,87 @@ describe('a seek inside held film while the front fills a gap', () => {
     expect(env.server.calls.slice(before).map((c) => c.url)).toEqual([segUrl('480p', 20)]);
     await answerSegment(env.server.calls.at(-1));
     expect(segmentCalls(env).slice(2)).not.toContain(segUrl('480p', 4));
+  });
+});
+
+describe('a seek inside held film while hls.js waits on the bank', () => {
+  it('lets the waiting request be answered, then moves the front past the held run', async () => {
+    const env = world();
+    await armed(env, { held: 20 });
+    env.setTime(60);
+    env.engine.bankInput(NEAR);
+    await flush();
+    const gap = request(env, 3); // a gap: its fetch at the front, which hls.js waits on
+    await flush();
+    const gapCall = env.server.calls.at(-1);
+    expect(gapCall.url).toBe(segUrl('480p', 3));
+    vi.spyOn(env.requests(), 'endGap');
+    env.seekTo(50); // forward, inside held film
+    await flush();
+    expect(gapCall.aborted).toBe(false); // the fetch hls.js waits on is not cut
+    expect(env.requests().endGap).not.toHaveBeenCalled();
+    await answerSegment(gapCall);
+    expect(gap.callbacks.onSuccess).toHaveBeenCalledTimes(1);
+    const before = env.server.calls.length;
+    await vi.advanceTimersByTimeAsync(1000); // the engine's tick settles the seek
+    expect(env.requests().endGap).toHaveBeenCalledTimes(1);
+    expect(env.front().position().seq).toBeGreaterThanOrEqual(20);
+    expect(env.server.calls.slice(before).map((c) => c.url)).toEqual([segUrl('480p', 20)]);
+  });
+
+  it('settles at once when the waiting request is abandoned', async () => {
+    const env = world();
+    await armed(env, { held: 20 });
+    env.setTime(60);
+    env.engine.bankInput(NEAR);
+    await flush();
+    const gap = request(env, 3);
+    await flush();
+    env.seekTo(50);
+    gap.loader.abort(); // hls.js abandons it on the seek
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(env.front().position().seq).toBeGreaterThanOrEqual(20);
+  });
+});
+
+describe('a request that times out while hls.js waits on the bank', () => {
+  it('no longer holds back a seek inside held film', async () => {
+    const env = world();
+    await armed(env, { held: 20 });
+    env.setTime(60);
+    env.engine.bankInput(NEAR);
+    await flush();
+    const gap = request(env, 3);
+    await flush();
+    await vi.advanceTimersByTimeAsync(10_000); // hls.js's first-byte limit
+    expect(gap.callbacks.onTimeout).toHaveBeenCalledTimes(1);
+    env.seekTo(50);
+    expect(env.front().position().seq).toBeGreaterThanOrEqual(20); // settled at once
+  });
+});
+
+describe('the engine’s tick', () => {
+  it('hands the front the film ahead and the need every second while the bank is on', async () => {
+    const env = world();
+    await turnedOn(env);
+    vi.spyOn(env.front(), 'update');
+    env.state.time = 20; // the film plays: no event of the video is sent
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(env.front().update).toHaveBeenCalledTimes(1);
+    expect(env.front().update).toHaveBeenLastCalledWith({ filmAhead: 20, need: 600 });
+    env.state.time = 25;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(env.front().update).toHaveBeenCalledTimes(3);
+    expect(env.front().update).toHaveBeenLastCalledWith({ filmAhead: 15, need: 600 });
+  });
+
+  it('stops with the episode', async () => {
+    const env = world();
+    await turnedOn(env);
+    vi.spyOn(env.front(), 'update');
+    env.engine.destroy();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(env.front().update).not.toHaveBeenCalled();
   });
 });
 
@@ -1060,7 +1146,7 @@ describe('the level the release falls back to', () => {
   it('is the rung of the front’s last completed fetch', async () => {
     const env = world();
     await turnedOn(env);
-    env.front().setRung('360p');
+    env.requests().setRung('360p');
     await answerSegment(env.server.calls.at(-1)); // segment 10, at 480p
     await flush();
     expect(segmentCalls(env).at(-1)).toBe(segUrl('360p', 11));
