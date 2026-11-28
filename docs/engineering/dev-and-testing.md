@@ -325,6 +325,29 @@ Once per change to the ladder or the buffer (`train-link-plan.md`):
   48 ms and the operator "Example Rail Wi-Fi", so the card shows on any film until it is answered; **Forget** in
   Admin brings it back.
 
+## Train look-ahead: what to look at by hand
+
+The look-ahead (`train-lookahead-plan.md`, PR 3c) asks the train's feed, which resolves only on a train, so on the
+Mac no answer ever comes back, and no stand-in answer ships in the site on purpose (the replay rig's stand-in is
+PR 4a). What can be seen by hand is when it asks and what it never asks. Dev server, Chrome, a film on Auto, the
+Network panel open (filter `link-map`), and the Elements panel to watch for the `train-feed-frame` iframe:
+
+1. **At home** (no throttle: latency under 20 ms): no `train-feed-frame` appears, and no `link-map` request.
+2. **Away**: switch the throttle to a custom profile with 150 ms latency, reload the film (on Auto, so hls.js
+   runs: with the film direct-playing, or on Safari's native player, nothing is asked, as there is no engine to
+   hand an input to). Once the latency measurement ends (a second or so), one `train-feed-frame` appears, then goes
+   (the answer is null, off the train). No `link-map` request, ever: the map is asked for only after a feed answer
+   that parses. Until a fix has parsed nothing repeats: one ask per trigger. (On a train, after the first parsed
+   fix, the asks go on every 30 s whatever an answer is; the tests cover that.)
+3. **A network change**: set Offline, then the 150 ms profile again: one more frame
+   per `online` or `offline` event, never two at once.
+   An Admin Stop or a switch to direct play ends the asking until an engine is back.
+4. Leave the player (Back): no frame is left in the page and no timer keeps asking.
+
+The whole path with an answer (feed, map, match, input to the engine, a rebuilt engine given it at once) is covered
+by `useLookahead.test.jsx` and `useStream.lookahead.test.js`, with made-up coordinates; the first full look is
+PR 4's replay rig. Nothing about the position goes to the console, the health record or any request.
+
 ## Review before every push (Codex runs only on the PR)
 
 Codex's review quota is small and shared by local and PR runs; it ran out twice on 2026-11-12/13. So Codex reviews
