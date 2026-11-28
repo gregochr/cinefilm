@@ -33,6 +33,9 @@ const INPUTS = [
   'networkError',
   'rebank',
   'marksForgotten',
+  'lookaheadHeld',
+  'bankRungChanged',
+  'bankBypassed',
   'throughput',
 ];
 

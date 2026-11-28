@@ -41,7 +41,7 @@ class OwnLoad {
   }
 }
 
-function createBankLoader(Inner, bank, now, beginLoad) {
+function createBankLoader(Inner, bank, now, beginLoad, onPass) {
   return class BankLoader {
     constructor(config) {
       // In the constructor: hls.js reads and writes `loader.stats` before it calls `load`.
@@ -94,6 +94,7 @@ function createBankLoader(Inner, bank, now, beginLoad) {
       if (handed === 'pass') {
         this.own = null;
         this.inner.stats.loading.start = 0;
+        onPass?.(context);
         this.inner.load(context, config, this.armedCallbacks(context, callbacks));
       }
     }
@@ -169,8 +170,10 @@ function fillStats(stats, timings, size, now) {
  * Returns `{ fLoader, pLoader }`: loader classes for hls.js's config. `InnerF` and `InnerP` are the loader
  * classes that load what the bank does not answer (today's fLoader, hls.js's default loader). `bank` is the
  * decider described above. `now` is the clock `stats` are written in (hls.js's own is `performance.now()`).
+ * `onPass(context)`, optional, is called for each media request the fLoader hands to `InnerF` (the request goes
+ * to the server through hls.js's own loader, not answered by the bank); never for a playlist.
  */
-export function createBankLoaders({ InnerF, InnerP, bank, now = () => performance.now() }) {
+export function createBankLoaders({ InnerF, InnerP, bank, now = () => performance.now(), onPass }) {
   const deliverAnswer = (loader, context, callbacks, bytes, timings) => {
     const stats = loader.inner.stats;
     fillStats(stats, timings, bytes.byteLength, now);
@@ -222,7 +225,7 @@ export function createBankLoaders({ InnerF, InnerP, bank, now = () => performanc
   };
 
   return {
-    fLoader: createBankLoader(InnerF, bank, now, fragmentStart),
+    fLoader: createBankLoader(InnerF, bank, now, fragmentStart, onPass),
     pLoader: createBankLoader(InnerP, bank, now, playlistStart),
   };
 }

@@ -3,6 +3,7 @@ package gregochr.cinefilm.health;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.health.HealthDtos.ClientInfo;
 import gregochr.cinefilm.health.HealthDtos.HealthReport;
+import gregochr.cinefilm.health.HealthDtos.LookaheadStretch;
 import gregochr.cinefilm.transcode.Ladder;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,9 @@ public final class HealthRules {
 
     /** Most entries {@code minutes} may hold (six hours). */
     static final int MAX_MINUTES = 360;
+
+    /** Most entries {@code lookaheadStretches} may hold. */
+    static final int MAX_STRETCHES = 50;
 
     /** A {@code minutes} row: minute, median kbit/s, rung played, ms moved, ms stalled. */
     private static final int MINUTE_FIELDS = 5;
@@ -57,7 +61,8 @@ public final class HealthRules {
             r.recoveries(), r.stepsDown(), r.stepsUp(), r.netErrors(), r.timeouts(), r.kbpsSamples()));
         refuseUnless(optionalFigures(r.latencyMs(), r.startupMs(), r.kbpsLow(), r.kbpsMedian(), r.kbpsHigh(),
             r.startPositionMs(), r.endPositionMs(), r.rebanksStarted(), r.rebanksDone(), r.rebanksUndone(),
-            r.marksForgotten()));
+            r.marksForgotten(), r.lookaheadMinutes(), r.bankRungChanges(), r.bankBypassRequests()));
+        refuseUnless(stretches(r.lookaheadStretches()));
         refuseUnless(rungMs(r.rungMs()));
         refuseUnless(minutes(r.minutes()));
         refuseUnless(client(r.client()));
@@ -97,6 +102,22 @@ public final class HealthRules {
         }
         for (Map.Entry<String, Long> entry : rungMs.entrySet()) {
             if (!RUNGS.contains(entry.getKey()) || !atLeast(entry.getValue(), 0)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean stretches(List<LookaheadStretch> stretches) {
+        if (stretches == null) {
+            return true;
+        }
+        if (stretches.size() > MAX_STRETCHES) {
+            return false;
+        }
+        for (LookaheadStretch stretch : stretches) {
+            if (stretch == null || !figures(stretch.needS(), stretch.aheadS())
+                || (stretch.rung() != null && !RUNGS.contains(stretch.rung()))) {
                 return false;
             }
         }

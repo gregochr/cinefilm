@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BEAT_GRACE_MS,
   MAX_MINUTES,
   MAX_NUMBER,
   MAX_SAMPLES,
+  MAX_STRETCHES,
   MAX_STEP_MS,
   createHealth,
 } from './health.js';
@@ -79,6 +80,10 @@ describe('the report', () => {
       rebanksDone: 0,
       rebanksUndone: 0,
       marksForgotten: 0,
+      lookaheadMinutes: 0,
+      lookaheadStretches: [],
+      bankRungChanges: 0,
+      bankBypassRequests: 0,
       kbpsLow: null,
       kbpsMedian: null,
       kbpsHigh: null,
@@ -1676,5 +1681,188 @@ describe('the stuck-rung and re-bank counters', () => {
     const m = make();
     m.h.marksForgotten(3_000_000_000);
     expect(m.report().marksForgotten).toBe(2000000000);
+  });
+});
+
+describe('the look-ahead and the bank’s record', () => {
+  // The only keys a report and a stretch may have: nothing positional (SECURITY.md rule 7).
+  const REPORT_KEYS = [
+    'autoplayRefused',
+    'bankBypassRequests',
+    'bankRungChanges',
+    'client',
+    'editionId',
+    'elapsedMs',
+    'endPositionMs',
+    'engine',
+    'environment',
+    'fellBack',
+    'kbpsHigh',
+    'kbpsLow',
+    'kbpsMedian',
+    'kbpsSamples',
+    'latencyMs',
+    'longestStallMs',
+    'lookaheadMinutes',
+    'lookaheadStretches',
+    'marksForgotten',
+    'minutes',
+    'netErrors',
+    'operator',
+    'quality',
+    'rebanksDone',
+    'rebanksStarted',
+    'rebanksUndone',
+    'recoveries',
+    'reconnectCount',
+    'reconnectMs',
+    'reloadCount',
+    'reloadMs',
+    'rungMs',
+    'seekCount',
+    'seekWaitMs',
+    'seq',
+    'stallCount',
+    'stallMs',
+    'startPositionMs',
+    'startupMs',
+    'stepsDown',
+    'stepsUp',
+    'timeouts',
+    'watchedMs',
+  ];
+  const STRETCH_KEYS = ['aheadS', 'needS', 'rung'];
+
+  it('counts a minute once however many inputs it holds, in whole minutes from the start like `minutes`', () => {
+    const m = make();
+    m.at(1000);
+    m.h.lookaheadHeld();
+    m.at(59_999);
+    m.h.lookaheadHeld();
+    m.h.lookaheadHeld();
+    expect(m.report().lookaheadMinutes).toBe(1);
+    m.at(60_000);
+    m.h.lookaheadHeld();
+    m.at(5 * 60_000 + 1);
+    m.h.lookaheadHeld(); // minutes in between had no input, and count for nothing
+    expect(m.report().lookaheadMinutes).toBe(3);
+  });
+
+  it('caps the minutes it counts at the cap on `minutes`', () => {
+    const m = make();
+    for (let n = 0; n < MAX_MINUTES + 5; n += 1) {
+      m.at(n * 60_000);
+      m.h.lookaheadHeld();
+    }
+    expect(m.report().lookaheadMinutes).toBe(MAX_MINUTES);
+  });
+
+  const stretch =
+    (needS, rung = '480p') =>
+    () => ({ needS, aheadS: 5, rung });
+
+  it('lists each stretch reached once, when an input says it has begun after one that did not', () => {
+    const m = make();
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, stretch(600));
+    m.h.lookaheadHeld(true, stretch(601)); // the same stretch, input after input
+    m.h.lookaheadHeld(true, stretch(602));
+    expect(m.report().lookaheadStretches).toEqual([{ needS: 600, aheadS: 5, rung: '480p' }]);
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, stretch(900, '240p'));
+    expect(m.report().lookaheadStretches.map((s) => s.needS)).toEqual([600, 900]);
+  });
+
+  it('counts the first input as a stretch when it has begun, and calls describe only when one is reached', () => {
+    const m = make();
+    const describe = vi.fn(stretch(300));
+    m.h.lookaheadHeld(true, describe);
+    m.h.lookaheadHeld(true, describe);
+    m.h.lookaheadHeld(false, describe);
+    expect(describe).toHaveBeenCalledTimes(1);
+    expect(m.report().lookaheadStretches).toHaveLength(1);
+  });
+
+  it('keeps the begun state for the whole playback, so an input handed again inside a stretch adds nothing', () => {
+    const m = make();
+    m.h.lookaheadHeld(true, stretch(600)); // one engine
+    m.h.lookaheadHeld(true, stretch(600)); // the engine that replaced it, handed the same input
+    expect(m.report().lookaheadStretches).toHaveLength(1);
+  });
+
+  it('writes whole seconds and a rung name or null, whatever describe gives', () => {
+    const m = make();
+    m.h.lookaheadHeld(true, () => ({ needS: 600.4, aheadS: 35.6, rung: '480p' }));
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, () => ({ needS: -5, aheadS: 'x', rung: 'bogus' }));
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, () => ({ needS: 3_000_000_000, aheadS: 0, rung: null }));
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, () => undefined);
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true); // no describe: nothing listed
+    expect(m.report().lookaheadStretches).toEqual([
+      { needS: 600, aheadS: 36, rung: '480p' },
+      { needS: 0, aheadS: 0, rung: null },
+      { needS: MAX_NUMBER, aheadS: 0, rung: null },
+      { needS: 0, aheadS: 0, rung: null },
+    ]);
+  });
+
+  it('keeps no more than MAX_STRETCHES, the first ones, and a stretch past it is no change', () => {
+    const m = make();
+    for (let n = 0; n < MAX_STRETCHES; n += 1) {
+      m.h.lookaheadHeld(false);
+      m.h.lookaheadHeld(true, stretch(n, '240p'));
+    }
+    m.h.lookaheadHeld(false);
+    const before = m.h.version();
+    m.h.lookaheadHeld(true, stretch(999, '240p'));
+    const list = m.report().lookaheadStretches;
+    expect(list).toHaveLength(MAX_STRETCHES);
+    expect(list.at(-1).needS).toBe(MAX_STRETCHES - 1);
+    expect(m.h.version()).toBe(before);
+  });
+
+  it('counts the rung changes and the bypassed requests, whole numbers', () => {
+    const m = make();
+    m.h.bankRungChanged();
+    m.h.bankRungChanged();
+    m.h.bankBypassed();
+    expect(m.report()).toMatchObject({ bankRungChanges: 2, bankBypassRequests: 1 });
+  });
+
+  it('is a change of the report each time, so a changed figure is sent, and a repeat minute is not', () => {
+    const m = make();
+    let last = m.h.version();
+    const moved = (fn) => {
+      fn();
+      const next = m.h.version();
+      const grew = next > last;
+      last = next;
+      return grew;
+    };
+    expect(moved(() => m.h.lookaheadHeld())).toBe(true);
+    expect(moved(() => m.h.lookaheadHeld())).toBe(false);
+    expect(moved(() => m.h.lookaheadHeld(true, stretch(1)))).toBe(true);
+    expect(moved(() => m.h.bankRungChanged())).toBe(true);
+    expect(moved(() => m.h.bankBypassed())).toBe(true);
+  });
+
+  it('puts no position in the report: the report’s keys and each stretch’s are exactly the allowed sets', () => {
+    const m = make();
+    m.h.lookaheadHeld();
+    m.h.lookaheadHeld(true, () => ({
+      needS: 600,
+      aheadS: 35,
+      rung: '480p',
+      lat: 1,
+      lng: 2,
+      from: 3,
+      to: 4,
+    }));
+    const report = m.report();
+    expect(Object.keys(report).sort()).toEqual([...REPORT_KEYS].sort());
+    expect(Object.keys(report.lookaheadStretches[0]).sort()).toEqual(STRETCH_KEYS);
   });
 });

@@ -79,7 +79,7 @@ class TrackPointServiceTest {
     private HealthReport report(Long seekCount, Long endPositionMs, List<List<Long>> minutes) {
         return new HealthReport(1L, 5L, null, null, null, null, null, null, null, null, null, null, null, null,
             seekCount, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-            null, minutes, null, null, endPositionMs, null, null, null, null);
+            null, minutes, null, null, endPositionMs, null, null, null, null, null, null, null, null);
     }
 
     private PlaybackHealth stored(long id, long editionId, Instant startedAt, HealthReport report) {

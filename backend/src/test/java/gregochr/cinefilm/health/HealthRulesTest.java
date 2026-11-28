@@ -5,11 +5,13 @@ import static gregochr.cinefilm.health.HealthSamples.example;
 import static gregochr.cinefilm.health.HealthSamples.fullMinute;
 import static gregochr.cinefilm.health.HealthSamples.minutes;
 import static gregochr.cinefilm.health.HealthSamples.report;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.health.HealthDtos.HealthReport;
+import gregochr.cinefilm.health.HealthDtos.LookaheadStretch;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,14 +31,15 @@ class HealthRulesTest {
 
     private static final String[] NULLABLE_TOP_LEVEL = {"operator", "latencyMs", "engine", "startupMs", "kbpsLow",
         "kbpsMedian", "kbpsHigh", "startPositionMs", "endPositionMs", "rebanksStarted", "rebanksDone",
-        "rebanksUndone", "marksForgotten"};
+        "rebanksUndone", "marksForgotten", "lookaheadMinutes", "lookaheadStretches", "bankRungChanges",
+        "bankBypassRequests"};
 
     /** Every figure at the top level except seq and editionId (those start at 1), nullable or not. */
     private static final String[] FIGURES = {"elapsedMs", "latencyMs", "startupMs", "watchedMs", "stallCount",
         "stallMs", "longestStallMs", "seekCount", "seekWaitMs", "reloadCount", "reloadMs", "reconnectCount",
         "reconnectMs", "recoveries", "stepsDown", "stepsUp", "netErrors", "timeouts", "kbpsLow", "kbpsMedian",
         "kbpsHigh", "kbpsSamples", "startPositionMs", "endPositionMs", "rebanksStarted", "rebanksDone",
-        "rebanksUndone", "marksForgotten"};
+        "rebanksUndone", "marksForgotten", "lookaheadMinutes", "bankRungChanges", "bankBypassRequests"};
 
     private static void assertValid(ObjectNode node) {
         assertThatCode(() -> HealthRules.validate(report(node))).doesNotThrowAnyException();
@@ -485,6 +488,83 @@ class HealthRulesTest {
         ObjectNode over = example();
         ((ArrayNode) minutes(over).get(2)).set(position, over.numberNode(MAX + 1));
         assertRefused(over);
+    }
+
+    // lookaheadStretches
+
+    private static ObjectNode withStretches(ObjectNode... entries) {
+        ObjectNode node = example();
+        ArrayNode list = node.putArray("lookaheadStretches");
+        for (ObjectNode entry : entries) {
+            list.add(entry);
+        }
+        return node;
+    }
+
+    private static ObjectNode stretch(long needS, long aheadS, String rung) {
+        ObjectNode entry = HealthSamples.JSON.createObjectNode();
+        entry.put("needS", needS).put("aheadS", aheadS);
+        if (rung == null) {
+            entry.putNull("rung");
+        } else {
+            entry.put("rung", rung);
+        }
+        return entry;
+    }
+
+    @Test
+    void aStretchEntryWithEveryRungAndOneWithNoRungPasses() {
+        for (String rung : new String[] {"original", "1080p", "720p", "480p", "360p", "240p"}) {
+            assertValid(withStretches(stretch(900, 120, rung)));
+        }
+        assertValid(withStretches(stretch(0, 0, null)));
+        assertValid(withStretches());
+    }
+
+    @Test
+    void theListOfStretchesIsCappedAtFifty() {
+        ObjectNode fifty = example();
+        ArrayNode list = fifty.putArray("lookaheadStretches");
+        for (int i = 0; i < 50; i++) {
+            list.add(stretch(900, 120, "480p"));
+        }
+        assertValid(fifty);
+        list.add(stretch(900, 120, "480p"));
+        assertRefused(fifty);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"auto", "2160p", "", "480P"})
+    void aStretchWithABadRungNameIsRefused(String rung) {
+        assertRefused(withStretches(stretch(900, 120, rung)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"needS", "aheadS"})
+    void aStretchFigureIsRequiredAndBoundedLikeEveryFigure(String field) {
+        assertValid(withStretches((ObjectNode) stretch(1, 1, "480p").put(field, MAX)));
+        assertRefused(withStretches((ObjectNode) stretch(1, 1, "480p").put(field, -1)));
+        assertRefused(withStretches((ObjectNode) stretch(1, 1, "480p").put(field, MAX + 1)));
+        assertRefused(withStretches((ObjectNode) stretch(1, 1, "480p").putNull(field)));
+        ObjectNode missing = stretch(1, 1, "480p");
+        missing.remove(field);
+        assertRefused(withStretches(missing));
+    }
+
+    @Test
+    void aNullEntryInTheListIsRefused() {
+        ObjectNode node = example();
+        node.putArray("lookaheadStretches").addNull();
+        assertRefused(node);
+    }
+
+    @Test
+    void aFieldThatIsNotAStretchFieldIsNotKept() {
+        ObjectNode entry = stretch(900, 120, "480p");
+        entry.put("lat", 1.5).put("from", 10);
+        HealthReport parsed = report(withStretches(entry));
+
+        assertThat(parsed.lookaheadStretches()).containsExactly(new LookaheadStretch(900L, 120L, "480p"));
     }
 
     // nothing but a refusal

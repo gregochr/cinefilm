@@ -174,7 +174,15 @@ function world({ auto = true, fetched = 2, ladder = rungs } = {}) {
     'onStopped',
     'onFatal',
   ];
-  const handlers = Object.fromEntries([...names, 'onNetworkError'].map((n) => [n, vi.fn()]));
+  const handlers = Object.fromEntries(
+    [...names, 'onNetworkError', 'onLookaheadHeld', 'onBankRungChange', 'onBankBypass'].map((n) => [
+      n,
+      vi.fn(),
+    ]),
+  );
+  // What each input handed the record, described at once as the record does.
+  const seen = [];
+  handlers.onLookaheadHeld = vi.fn((begun, describe) => seen.push({ begun, stretch: describe() }));
   const server = makeServer();
   const engine = startHlsJs({
     Hls: WiringHls,
@@ -201,6 +209,7 @@ function world({ auto = true, fetched = 2, ladder = rungs } = {}) {
   InnerLoader.order.length = 0;
   return {
     engine,
+    seen,
     video,
     hls,
     handlers,
@@ -1022,5 +1031,236 @@ describe('destroy', () => {
     expect(on.server.calls.at(-1).aborted).toBe(true);
     expect(on.store().heldBytes()).toBe(0);
     on.engine.bankInput(NEAR); // after destroy: nothing happens
+  });
+});
+
+describe('the record of what the look-ahead and the bank did', () => {
+  const BEGUN = { need: 600, timeToStretch: 0, stretchBegun: true };
+  const measured = (over = {}) => ({
+    rung: '480p',
+    rate: 1328,
+    w: 0,
+    d: 1.25,
+    measuredS: 40,
+    measuredWallS: 40,
+    ...over,
+  });
+
+  it('reports each input that is not null, and nothing for null or with the rung pinned', async () => {
+    const env = world();
+    env.engine.bankInput(null);
+    expect(env.handlers.onLookaheadHeld).not.toHaveBeenCalled();
+    env.engine.bankInput(ARM);
+    env.engine.bankInput(NEAR);
+    env.engine.bankInput(BEGUN);
+    expect(env.handlers.onLookaheadHeld).toHaveBeenCalledTimes(3);
+    const pinned = world({ auto: false });
+    pinned.engine.bankInput(BEGUN);
+    expect(pinned.handlers.onLookaheadHeld).not.toHaveBeenCalled();
+  });
+
+  it('hands the record whether the stretch has begun, and a description of it with the need, the film ahead and the bank’s rung', async () => {
+    const env = world();
+    await turnedOn(env);
+    env.seen.length = 0;
+    env.engine.bankInput(NEAR);
+    env.engine.bankInput({ ...BEGUN, timeToStretch: -0.4, need: 600.4 });
+    expect(env.seen.map((x) => x.begun)).toEqual([false, true]);
+    expect(env.seen[1].stretch).toEqual({ needS: 600, aheadS: 35, rung: '480p' });
+    expect(Object.keys(env.seen[1].stretch).sort()).toEqual(['aheadS', 'needS', 'rung']);
+  });
+
+  it('describes the rung hls.js fetches when no bank episode runs, and null when it is not known', async () => {
+    const env = world();
+    env.engine.bankInput(BEGUN);
+    expect(env.seen[0].stretch).toEqual({ needS: 600, aheadS: 0, rung: '480p' });
+    const unknown = world();
+    unknown.hls.levels[2] = { height: 999, bitrate: 1 }; // a level that is no rung of the ladder
+    unknown.engine.bankInput(BEGUN);
+    expect(unknown.seen[0].stretch.rung).toBeNull();
+  });
+
+  it('describes the bank front’s rung while an episode runs', async () => {
+    const env = world();
+    await turnedOn(env);
+    vi.spyOn(env.front(), 'window').mockReturnValue({ ...measured(), rung: '360p' });
+    env.engine.bankInput(BEGUN);
+    expect(env.seen.at(-1).stretch.rung).toBe('360p');
+  });
+
+  it('counts a rung change when the bank chooses another rung, not the same one again', async () => {
+    const env = world();
+    await turnedOn(env);
+    vi.spyOn(env.front(), 'window').mockReturnValue(measured());
+    env.engine.bankInput(NEAR); // 480p to 240p: only 240p's projection reaches F
+    expect(env.handlers.onBankRungChange).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    env.engine.bankInput(NEAR); // chosen again, already 240p
+    expect(chooseBankRung).toHaveBeenCalledTimes(2);
+    expect(env.handlers.onBankRungChange).toHaveBeenCalledTimes(1);
+  });
+
+  describe('a choice made while a boundary fetch holds the front on the asked rung', () => {
+    // Held: sn 5 at 480p and sn 6 at 360p. hls.js, on 360p, asks again for sn 5: a boundary fetch at the asked 360p
+    // holds the front there, and the rung the bank keeps for the return is 480p.
+    const holdingGap = async (env) => {
+      await turnedOn(env);
+      env.store().putSegment({
+        seq: 6,
+        rung: '360p',
+        start: 24,
+        end: 28,
+        bytes: new ArrayBuffer(10),
+        timings: { start: 0, first: 1, end: 2 },
+      });
+      vi.spyOn(env.front(), 'window').mockReturnValue(measured());
+      request(env, 5, 1);
+      await flush();
+      expect(env.server.calls.at(-1).url).toBe(segUrl('360p', 5));
+      expect(env.front().chosenRung()).toBe('360p');
+    };
+
+    it('is not a change when the choice is the rung the bank is keeping', async () => {
+      const env = world();
+      await holdingGap(env);
+      chooseBankRung.mockReturnValueOnce({ id: '480p' });
+      env.engine.bankInput(NEAR);
+      expect(chooseBankRung).toHaveBeenCalledTimes(1);
+      expect(env.handlers.onBankRungChange).not.toHaveBeenCalled();
+    });
+
+    it('is a change when the choice differs from the rung the bank is keeping, even if it is the asked one', async () => {
+      const env = world();
+      await holdingGap(env);
+      chooseBankRung.mockReturnValueOnce({ id: '360p' });
+      env.engine.bankInput(NEAR);
+      expect(chooseBankRung).toHaveBeenCalledTimes(1);
+      expect(env.handlers.onBankRungChange).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('counts no rung change while the bank is only armed', async () => {
+    const env = world();
+    await armed(env);
+    vi.spyOn(env.front(), 'window').mockReturnValue(measured());
+    env.engine.bankInput(ARM);
+    expect(chooseBankRung).not.toHaveBeenCalled();
+    expect(env.handlers.onBankRungChange).not.toHaveBeenCalled();
+  });
+
+  describe('a media request that reaches the server outside the bank', () => {
+    const initRequest = (env) => {
+      const frag = { ...fragOf(0, 2), sn: 'initSegment' };
+      const loader = new env.hls.config.fLoader(env.hls.config);
+      frag.stats = loader.stats;
+      const context = { url: segUrl('480p', 0), type: 'media-fragment', frag };
+      loader.load(context, {}, { onSuccess: vi.fn(), onError: vi.fn(), onTimeout: vi.fn() });
+    };
+
+    it('is counted while the bank is on', async () => {
+      const env = world();
+      await turnedOn(env);
+      initRequest(env);
+      expect(InnerLoader.loads).toHaveLength(11);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
+    it('is counted while the bank is turning off, but not the release', async () => {
+      const env = world();
+      await turnedOn(env);
+      env.engine.bankInput(AFTER);
+      initRequest(env);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+      request(env, 30); // film not held: the bank releases, and the request is today's again
+      expect(InnerLoader.loads).toHaveLength(12);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not counted for what the bank answers, what its own fetcher fetches, or loads while it is off or armed', async () => {
+      const env = world();
+      loadThroughInner(env, 2); // no bank yet
+      await armed(env); // copies through the inner loader while armed
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+      env.engine.bankInput(NEAR);
+      await flush();
+      const calls = env.server.calls.length;
+      const held = request(env, 3); // answered from the bank
+      request(env, 40); // not held: waits on the front's one fetch
+      await flush();
+      expect(held.callbacks.onSuccess).toHaveBeenCalledTimes(1);
+      expect(env.server.calls.length).toBeGreaterThan(calls);
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+    });
+
+    it('is counted when hls.js passes its own request after a seek beyond held film cut off a front fetch in flight', async () => {
+      const env = world();
+      await turnedOn(env);
+      env.seekTo(400); // beyond what is held: the episode closes, its fetch in flight goes on
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+      request(env, 100);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not counted when the episode closed while its front fetched only a playlist', async () => {
+      const env = world();
+      env.engine.bankInput(ARM);
+      await flush(); // armed: the first playlist fetch is in flight
+      expect(env.server.calls).toHaveLength(1);
+      env.engine.bankInput(null); // the look-ahead lapses: the episode closes, that fetch goes on
+      request(env, 0);
+      expect(InnerLoader.loads).toHaveLength(1);
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+    });
+
+    it('is counted while the closed episode’s front still fetches a boundary copy', async () => {
+      const env = world();
+      await turnedOn(env);
+      env.requests().setRung('360p'); // the front's next fetch is at 360p
+      await answerSegment(env.server.calls.at(-1)); // 10 at 480p
+      await answerSegment(env.server.calls.at(-1)); // 11 at 360p: the boundary copy of 10 is due
+      expect(env.front().boundaryFetching()).toEqual({ seq: 10, rung: '360p' });
+      const calls = env.server.calls.length;
+      const closed = env.front();
+      env.seekTo(400); // beyond held film: the episode closes, the copy goes on
+      expect(closed.fetching()).toBeNull();
+      expect(closed.boundaryFetching()).not.toBeNull();
+      request(env, 100);
+      expect(env.server.calls).toHaveLength(calls);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not counted after that front has finished', async () => {
+      const env = world();
+      await turnedOn(env);
+      env.seekTo(400);
+      await answerSegment(env.server.calls.at(-1));
+      request(env, 100);
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+    });
+
+    it('is not counted for a release, even with the front fetching another segment', async () => {
+      const env = world();
+      await turnedOn(env);
+      env.engine.bankInput(AFTER);
+      request(env, 30);
+      expect(InnerLoader.loads).toHaveLength(11);
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+      request(env, 31); // the next request is idle, the front still finishing: that one is a bypass
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not counted when idle and no bank front ever ran', async () => {
+      const env = world();
+      loadThroughInner(env, 3);
+      request(env, 50);
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+    });
+
+    it('is not counted when the engine has no handler for it', async () => {
+      const env = world();
+      await turnedOn(env);
+      delete env.handlers.onBankBypass;
+      expect(() => initRequest(env)).not.toThrow();
+    });
   });
 });
