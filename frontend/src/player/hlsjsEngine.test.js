@@ -140,7 +140,8 @@ describe('hls.js settings', () => {
     const { hls } = start();
     expect(hls.config.fLoader).toBeTypeOf('function');
     const loader = new hls.config.fLoader({});
-    expect(loader.inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
+    expect(loader.inner.inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
+    expect(new hls.config.pLoader({}).inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
     expect(hlsConfig(0).fLoader).toBeUndefined(); // set where Hls is at hand
   });
 

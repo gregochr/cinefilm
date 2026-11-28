@@ -206,7 +206,8 @@ writes every rung, and the bank fills no faster than it. Step 0.3 done 2026-11-2
    release writing the floor and cap again (R equal to the old floor, `applied` above R) and, with a kept 240p gate
    and 480p fetched, a cap of 480p.
 7. **B5b, wiring** (`hlsjsEngine.js`; about 200): decisions 2, 6, 7's timing, 8 and 10, the loaders installed, the
-   bank's input as a new engine method beside `destroy`. Unit tests: `bankRung` called first after 20 s of fetching,
+   bank's input as a new engine method beside `destroy`. The front has no timer of its own, so while an episode
+   runs the engine steps the bank every second (`BANK_TICK_MS`), handing it the film ahead and the need. Unit tests: `bankRung` called first after 20 s of fetching,
    then once a minute, never inside a stretch, at F or at the limit, and again for the next stretch, its answer
    handed to the front; arming and turn-on (not before coverage, nor while a
    playlist is missing, nor while a fragment is loading through the inner loader, then on once it lands; not at or

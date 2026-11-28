@@ -17,8 +17,13 @@
 // loads, so in Auto a mark that has stood a minute without trouble on a level not being fetched is forgotten
 // (rungMarks.js, stuck-rung-plan.md). While the film bank is on (outside-bank-plan.md, decision 3) hls.js plays
 // on a manual level, the rung the bank holds its next fragment at, and every rule above is suspended: the engine's
-// `bankOn`, `bankWrongRung` and `bankRelease` are how the bank drives that, and nothing calls them yet.
-import { BANK_RUNG_TEXT } from './bankRequests.js';
+// `bankOn`, `bankWrongRung` and `bankRelease` are how the bank drives that. `bankInput` is the look-ahead's input:
+// it arms the bank, turns it on and off and times the front's rung choice (decisions 2, 6, 7 and 8); with the
+// rung pinned, or while no stretch is near, none of it runs and the loaders pass everything through.
+import { FRONT_MAX_HEIGHT, createBankFront } from './bankFront.js';
+import { createBankLoaders } from './bankLoader.js';
+import { BANK_RUNG_TEXT, createBankRequests } from './bankRequests.js';
+import { MIN_MEASURED_S, chooseBankRung } from './bankRung.js';
 import { bankedAhead } from './buffered.js';
 import { champagneBase, champagneCeiling } from './champagne.js';
 import { createFloorHold } from './floorHold.js';
@@ -27,6 +32,7 @@ import { RECONNECT_MS } from './reconnect.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
 import { REBANK_DONE_AT_S, REBANK_UNDO_BELOW_S, rebankDecision } from './rebank.js';
 import { createRungMarks } from './rungMarks.js';
+import { KEEP_BEHIND_S, createSegmentBank } from './segmentBank.js';
 import { createStepGate } from './stepGate.js';
 import { addSample, fragmentKbps, lowerMiddle, networkGeneration } from './throughput.js';
 
@@ -43,6 +49,14 @@ const RELEASE_SAMPLES = 3;
 // hls.js 1.7.4's `ErrorActionFlags.ResetMediaSource`: its error controller has already run `recoverMediaError` for
 // an error carrying it (a const enum there, so no run-time export).
 const RESET_MEDIA_SOURCE = 16;
+// The bank is armed with a stretch this near (the 20 minutes of the rule plus hls.js's 480 s and the back buffer)
+// and turned on with one this near, in seconds; the front's rung is chosen once a minute, in ms.
+export const BANK_ARM_WITHIN_S = 1800;
+export const BANK_ON_WITHIN_S = 1200;
+export const BANK_CHOICE_EVERY_MS = 60000;
+// While an episode runs the engine steps the bank this often, in ms, on the last `bankInput`: the front has no
+// timer of its own, so this tick hands it the film ahead and the need (`update`) as the film plays.
+export const BANK_TICK_MS = 1000;
 
 // kbit/s of one loaded fragment, timed from `loading.start` so the wait for the first byte counts; null when
 // there is nothing to measure.
@@ -124,7 +138,8 @@ export function hlsConfig(startSeconds) {
  * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played). In Auto, on a ladder
  * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above while it is fetching there
  * and has had no fragment trouble; the cap never climbs above the level being fetched by more than one.
- * Returns { destroy }.
+ * `fetch` is the film bank's (default: the browser's). Returns { destroy, bankInput } and the bank's own
+ * `bankOn`, `bankWrongRung` and `bankRelease`.
  */
 export function startHlsJs({
   Hls,
@@ -136,12 +151,66 @@ export function startHlsJs({
   now = () => Date.now(),
   clock = () => performance.now(), // the clock hls.js stamps `loading.start` with
   reconnectMs = RECONNECT_MS,
+  fetch: fetchFn,
 }) {
   const config = hlsConfig(startSeconds);
+  // The film bank's loaders wrap today's, and ask `decider` about every request: with no bank episode it passes them
+  // all, so nothing changes until a stretch is near. A pinned rung never has a bank: today's loader alone.
+  const waiting = new Set(); // the requests hls.js waits on the bank for
+  const finishing = new Set(); // fronts of closed episodes still finishing a fetch; a destroy stops them
+  let episode = null; // while the bank is armed, on or turning off: { front, requests, rungIds, candidates }
+  const decider = {
+    armed: () => episode?.requests.armed() ?? false,
+    fragmentRequest(request, reply) {
+      if (episode === null) return { action: 'pass' };
+      // The requests hls.js is waiting on, until each is answered, failed, timed out or aborted.
+      const token = {};
+      let over = false;
+      const ended = () => {
+        over = true;
+        waiting.delete(token);
+      };
+      const decision = episode.requests.fragmentRequest(request, {
+        success: (...args) => {
+          ended();
+          reply.success(...args);
+        },
+        error: (...args) => {
+          ended();
+          reply.error(...args);
+        },
+        timeout: () => {
+          ended();
+          reply.timeout();
+        },
+      });
+      if (decision.action !== 'wait') return decision;
+      if (!over) waiting.add(token);
+      return {
+        ...decision,
+        cancel: () => {
+          ended();
+          decision.cancel?.();
+        },
+      };
+    },
+    fragmentLoaded: (loaded) => episode?.requests.fragmentLoaded(loaded),
+    playlistText: (context) => episode?.requests.playlistText(context) ?? null,
+  };
+  const innerF = createNoProgressLoader(Hls.DefaultConfig.loader);
+  const loaders = auto
+    ? createBankLoaders({
+        InnerF: innerF,
+        InnerP: Hls.DefaultConfig.loader,
+        bank: decider,
+        now: clock,
+      })
+    : null;
   const hls = new Hls({
     ...config,
     // `fLoader` is set here, not in `hlsConfig`, because only here is `Hls` at hand.
-    fLoader: createNoProgressLoader(Hls.DefaultConfig.loader),
+    fLoader: loaders ? loaders.fLoader : innerF,
+    ...(loaders ? { pLoader: loaders.pLoader } : {}),
   });
   const gate = createStepGate({ now });
   const marks = createRungMarks({ now });
@@ -152,6 +221,18 @@ export function startHlsJs({
   let ceiling = 0; // the champagne ceiling last worked out
   let initial = true;
   let lost = false;
+  // Admin stopped this playback (410), or the session is gone (404): once, whichever of hls.js's requests or the
+  // film bank's front hears it first.
+  const endStopped = () => {
+    if (lost) return;
+    lost = true;
+    handlers.onStopped?.();
+  };
+  const endLost = () => {
+    if (lost) return;
+    lost = true;
+    handlers.onSessionLost();
+  };
   let reconnecting = false;
   let timer = null; // the one pending restart, if any
   const hold = createFloorHold();
@@ -177,6 +258,10 @@ export function startHlsJs({
   let holdTimer = null; // the one check of the in-flight rate, running while a fragment loads
   let bank = null; // while the film bank is on: { levelAt(seconds), frontLevel() } (hls.js level indices)
   let destroyed = false;
+  const store = auto ? createSegmentBank() : null; // the film bank's segments and playlists
+  let phase = 'idle'; // the bank's: idle, armed, on, turningOff
+  let lookahead = null; // the last bankInput
+  let lastChoiceAt = null; // when the front's rung was last chosen (clock ms), null: not yet for this stretch
   // Where loading resumes: the playhead as last seen with media loaded (-1: from the start), else the start asked
   // for. hls.js reloads from `config.startPosition` when it reattaches the media on its own (after a reset), and the
   // playhead reads 0 by then, so that setting follows the playhead too and never takes the film back to where it began.
@@ -494,10 +579,12 @@ export function startHlsJs({
     followHole();
     applyCap();
     rebankStep();
+    bankStep();
   };
   const onSeeking = () => {
     rememberPlayhead();
     undoRebank();
+    bankSeek();
     if (bank) holdBankLevelAtPlayhead();
     else applyCap();
   };
@@ -577,6 +664,7 @@ export function startHlsJs({
     endLoading(data.frag);
     const frag = data.frag;
     if (isPending(frag)) pending = null;
+    bankStep(); // nothing is in flight now: the bank may turn on
     if (!frag || frag.sn === 'initSegment' || (frag.type && frag.type !== 'main')) return;
     const entry = { start: frag.start, end: frag.start + frag.duration, level: frag.level };
     banked = [...banked.filter((f) => f.start !== entry.start), entry];
@@ -615,9 +703,12 @@ export function startHlsJs({
     stopReconnecting();
     troubled = false;
     stopHoldTimer();
-    const kbps = fragmentKbps(data.frag?.stats);
+    // A fragment the bank answered says nothing about the link (decision 6): the front's own fetches report.
+    const answered = data.frag?.stats?.bankAnswered === true;
+    if (!answered) episode?.front.serverAnswered(); // a successful server answer ends the front's pause
+    const kbps = answered ? null : fragmentKbps(data.frag?.stats);
     if (kbps) handlers.onThroughput(kbps);
-    if (data.frag?.sn !== 'initSegment') {
+    if (data.frag?.sn !== 'initSegment' && !answered) {
       currentSamples();
       samples = addSample(samples, loadedKbps(data.frag?.stats));
       if (data.frag?.stats?.retry > 0) {
@@ -680,18 +771,12 @@ export function startHlsJs({
     if (String(data.details ?? '').startsWith('frag')) endLoading(data.frag); // a failed fragment is not loading
     if (data.response?.code === 410) {
       // Admin stopped this playback on purpose: no new session, no retry (owner 2026-11-15).
-      if (!lost) {
-        lost = true;
-        handlers.onStopped?.();
-      }
+      endStopped();
       return;
     }
     if (data.response?.code === 404) {
       // The session expired (or was replaced): the caller makes a new one at the current position.
-      if (!lost) {
-        lost = true;
-        handlers.onSessionLost();
-      }
+      endLost();
       return;
     }
     if (
@@ -703,9 +788,11 @@ export function startHlsJs({
       // fragment loaded but not appended. (A fatal one that carries the reset flag is recovered the same way; one that does not is recovered below.)
       dropPendingAfterReset();
     }
+    bankStep(); // a failed fragment is not in flight any more
     if (!data.fatal) return;
     if (data.type === ErrorTypes.NETWORK_ERROR) {
       dropPending(); // hls.js stops loading here: the fragment loaded but not appended is gone
+      if (phase === 'on') episode.front.pause(); // decision 8: the clock runs from the first pause only
       beginReconnecting();
     } else if (data.type === ErrorTypes.MEDIA_ERROR) {
       // hls.js's error controller runs before this handler: for a reset it has recovered already, and for every
@@ -724,10 +811,257 @@ export function startHlsJs({
     } else handlers.onFatal();
   });
 
+  // ---- The film bank's wiring (outside-bank-plan.md, decisions 2, 6, 7 and 8) ----
+  // One episode per stretch: armed (the front fetches the playlists, the loaders keep copies of what hls.js loads),
+  // on, turning off (held film is still answered), then none. The store outlives it, as do its playlists.
+  const { renditions } = session;
+  const rungOfLevelIndex = (level) => rungForLevel(renditions, hls.levels[level]);
+  // The rung hls.js level `level` is, as far as the bank keeps it (480p and below), else null.
+  const bankRungOfLevel = (level) => {
+    const id = rungOfLevelIndex(level);
+    return renditions.find((r) => r.id === id)?.height <= FRONT_MAX_HEIGHT ? id : null;
+  };
+  const bankLevelOfRung = (id) => hls.levels.findIndex((l) => rungForLevel(renditions, l) === id);
+  const bankRungs = () =>
+    hls.levels.flatMap((level) => {
+      const rendition = renditions.find((r) => r.id === rungForLevel(renditions, level));
+      return rendition?.height <= FRONT_MAX_HEIGHT
+        ? [
+            {
+              id: rendition.id,
+              height: rendition.height,
+              kbps: level.bitrate / 1000,
+              playlistUrl: level.uri,
+            },
+          ]
+        : [];
+    });
+  const filmAheadNow = () => Math.max(bankedAhead(video), store.filmAheadHeld(video.currentTime));
+  const needOf = (input) => (input.need > 0 ? input.need : 0);
+  const within = (input, seconds) => input !== null && input.timeToStretch <= seconds;
+
+  // The rung the bank last fetched at, as the level hls.js falls back to on a release.
+  const fetchedBankLevel = () => {
+    const { front } = episode;
+    return bankLevelOfRung(front.window().rung ?? front.position().rung);
+  };
+
+  // Ends the episode: the front finishes (its fetch in flight answers whoever waits on it, nothing new starts),
+  // hls.js is released from the manual level (a no-op if never on) and what is held is dropped; playlists stay.
+  const closeEpisode = () => {
+    const done = episode;
+    const level = fetchedBankLevel();
+    episode = null;
+    phase = 'idle';
+    pendingSeek = false;
+    waiting.clear();
+    clearInterval(done.tick);
+    done.seal(); // what its fetch in flight lands is for its waiters only, never the store
+    done.front.finish();
+    if (!done.front.isFinished()) finishing.add(done.front);
+    done.requests.setMode('off');
+    engine.bankRelease(level);
+    store.clear();
+  };
+
+  const startEpisode = () => {
+    const rungs = bankRungs();
+    if (rungs.length === 0) return;
+    const policy = config.fragLoadPolicy.default;
+    // The episode's own view of the store: once sealed (the episode closed and the store cleared) a finishing
+    // front's puts are kept for its subscribers (`getSegment`) and dropped from the store.
+    let sealed = false;
+    const shadow = new Map();
+    const view = {
+      ...store,
+      putSegment(segment) {
+        if (sealed) shadow.set(segment.seq, segment);
+        else store.putSegment(segment);
+      },
+      putBoundary(...args) {
+        if (!sealed) store.putBoundary(...args);
+      },
+      getSegment(seq) {
+        const own = shadow.get(seq);
+        if (own === undefined) return store.getSegment(seq);
+        return { ...own, bytes: own.bytes.slice(0), timings: { ...own.timings } };
+      },
+    };
+    const front = createBankFront({
+      rungs,
+      bank: view,
+      fetch: fetchFn,
+      now: clock,
+      reconnectMs,
+      onThroughput: (kbps) => handlers.onThroughput(kbps),
+      onStopped: endStopped,
+      onSessionLost: endLost,
+    });
+    const requests = createBankRequests({
+      bank: view,
+      front,
+      levelOfRung: bankLevelOfRung,
+      rungOfLevel: bankRungOfLevel,
+      wrongRung: (level) => engine.bankWrongRung(level),
+      onRelease: closeEpisode, // before the inner loader's `load`: the decider calls it first
+      firstByteMs: policy.maxTimeToFirstByteMs,
+      loadMs: policy.maxLoadTimeMs,
+    });
+    episode = {
+      front,
+      requests,
+      tick: setInterval(bankStep, BANK_TICK_MS),
+      seal: () => {
+        sealed = true;
+      },
+      rungIds: rungs.map((r) => r.id),
+      candidates: rungs.map((r) => ({ id: r.id, rate: r.kbps })),
+    };
+    requests.setMode('armed');
+    front.arm();
+    phase = 'armed';
+  };
+
+  // Every condition of decision 2 but the stretch's time: the playlists are held, film ahead is below F, hls.js
+  // has no media request in flight, and the bank covers playhead − 30 s to the end of the buffered range.
+  const readyToTurnOn = (input) =>
+    store.allPlaylistsHeld(episode.rungIds) &&
+    filmAheadNow() < needOf(input) &&
+    loadingFrag === null &&
+    store.covers(video.currentTime, bufferEnd(video.currentTime, pending));
+
+  const turnOn = (input) => {
+    const { front, requests } = episode;
+    requests.update({ filmAhead: filmAheadNow(), need: needOf(input) });
+    // At the first film after the held run, at hls.js's rung (the front's own choice when that is above 480p).
+    front.start({
+      seq: store.nextAfterRun(Math.max(0, video.currentTime - KEEP_BEHIND_S)),
+      rung: rungOfLevelIndex(fetched),
+    });
+    engine.bankOn({
+      levelAt: (seconds) => {
+        const id = store.rungAt(seconds);
+        return id === null ? null : bankLevelOfRung(id);
+      },
+      frontLevel: () => bankLevelOfRung(front.position().rung),
+    });
+    requests.setMode('on');
+    phase = 'on';
+    lastChoiceAt = null;
+  };
+
+  // Decision 7's timing: the first choice after MIN_MEASURED_S of measured fetching, then once a minute, never
+  // inside a stretch, at F or at the limit; the next stretch is chosen afresh.
+  const chooseFrontRung = (input) => {
+    if (input.stretchBegun) {
+      lastChoiceAt = null;
+      return;
+    }
+    const { front, requests, candidates } = episode;
+    const filmAhead = filmAheadNow();
+    const need = needOf(input);
+    const measured = front.window();
+    if (store.atLimit() || filmAhead >= need || measured.measuredWallS < MIN_MEASURED_S) return;
+    if (lastChoiceAt !== null && clock() - lastChoiceAt < BANK_CHOICE_EVERY_MS) return;
+    lastChoiceAt = clock();
+    const choice = chooseBankRung({
+      filmAhead,
+      timeToStretch: input.timeToStretch,
+      need,
+      stretchBegun: false,
+      atLimit: false,
+      w: measured.w,
+      d: measured.d,
+      measuredWallS: measured.measuredWallS,
+      rate: measured.rate,
+      candidates,
+    });
+    if (choice !== null) requests.setRung(choice.id);
+  };
+
+  // A seek inside held film moves the front past the run holding the target, so a gap it was filling is left. The
+  // move cuts the fetch under way, which hls.js may be waiting on, so it waits until no request of hls.js waits on
+  // the bank; the need stays 0 inside a gap meanwhile, and `endGap` then restores it.
+  let pendingSeek = false;
+  const settleSeek = () => {
+    pendingSeek = false;
+    const { front, requests } = episode;
+    const next = store.nextAfterRun(video.currentTime);
+    if (next !== null && next !== front.position().seq) {
+      front.start({ seq: next, rung: front.chosenRung() });
+    }
+    requests.endGap();
+  };
+
+  // Moves the bank along its phases; run on the look-ahead's input, the playhead, and every fragment event.
+  const bankStep = () => {
+    if (destroyed || store === null) return;
+    const input = lookahead;
+    for (const front of finishing) if (front.isFinished()) finishing.delete(front);
+    if (phase === 'idle') {
+      if (within(input, BANK_ARM_WITHIN_S)) startEpisode();
+      return;
+    }
+    store.dropBehind(video.currentTime); // keeps playhead − 30 s, so a refused append fetched again is answered
+    if (phase === 'armed') {
+      if (!within(input, BANK_ARM_WITHIN_S)) closeEpisode();
+      else if (within(input, BANK_ON_WITHIN_S) && readyToTurnOn(input)) turnOn(input);
+    } else if (phase === 'on') {
+      // Off when the stretch is passed and none is within 20 minutes, or when the look-ahead lapses: the front
+      // finishes the fetch in flight (answering whoever waits on it) and starts nothing new, held film is still
+      // answered, and the first request for film not held releases (the decider).
+      if (input === null || (!input.stretchBegun && input.timeToStretch > BANK_ON_WITHIN_S)) {
+        episode.requests.update({ filmAhead: filmAheadNow(), need: 0 });
+        episode.front.finish();
+        episode.requests.setMode('turningOff');
+        phase = 'turningOff';
+      } else {
+        if (pendingSeek && waiting.size === 0) settleSeek();
+        episode.requests.update({ filmAhead: filmAheadNow(), need: needOf(input) });
+        chooseFrontRung(input);
+      }
+    }
+  };
+
+  // A seek: a forward one beyond what is held releases at once and clears (and the bank is armed again with a
+  // stretch near); inside held film nothing is released, and while turning off a seek back to before held film
+  // releases on its first request, as any request for film not held does.
+  const bankSeek = () => {
+    if (episode === null) return;
+    const target = video.currentTime;
+    const verdict = store.seek(target);
+    if (verdict === 'inside' && phase === 'on') {
+      if (waiting.size === 0) settleSeek();
+      else pendingSeek = true;
+      return;
+    }
+    episode.requests.endGap();
+    if (verdict !== 'beyond') return;
+    if (phase === 'armed') {
+      store.clear();
+    } else {
+      closeEpisode();
+      bankStep();
+    }
+  };
+
   hls.loadSource(session.masterUrl);
   hls.attachMedia(video);
 
-  return {
+  const engine = {
+    /**
+     * The look-ahead's input (outside-bank-plan.md, decision 2): `{ need, timeToStretch, stretchBegun }`, or null
+     * when no stretch is near or the look-ahead has lapsed. `need` is F, the film ahead wanted before the
+     * stretch, in seconds; `timeToStretch` is the seconds to the stretch (0 or less once it has begun);
+     * `stretchBegun` says it has. Call it whenever it changes and about once a second: the bank is armed with a
+     * stretch within 30 minutes, turned on within 20 (when every playlist up to 480p is held, film ahead is
+     * below F, no fragment is in flight and the bank covers the buffer), and turned off when the stretch is
+     * passed with none within 20 minutes, or on null. Does nothing with the rung pinned (Auto off).
+     */
+    bankInput(input) {
+      lookahead = input;
+      bankStep();
+    },
     /**
      * The film bank turns on (outside-bank-plan.md, decision 3). `lookup` is `{ levelAt(seconds), frontLevel() }`,
      * both answering an hls.js level index: `levelAt` the level of the held fragment that covers a film second
@@ -786,7 +1120,17 @@ export function startHlsJs({
       video.removeEventListener('seeking', onSeeking);
       video.removeEventListener('play', followHole);
       video.removeEventListener('pause', followHole);
-      hls.destroy();
+      hls.destroy(); // destroys the loaders first: a request waiting on the front ends with no timeout
+      if (episode !== null) {
+        clearInterval(episode.tick);
+        episode.front.stop(); // a destroy is the full cut
+        episode.requests.setMode('off');
+        episode = null;
+      }
+      for (const front of finishing) front.stop();
+      finishing.clear();
+      store?.clear();
     },
   };
+  return engine;
 }

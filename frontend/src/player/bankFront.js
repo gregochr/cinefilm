@@ -432,10 +432,30 @@ export function createBankFront({
     if (kbps !== null) onThroughput(kbps);
   }
 
+  // Tells the subscribers of `seq` it is held: one at a time, each leaving the set before it is called, so a stop,
+  // start or move inside one aborts only those not yet called; one that subscribes from inside onDone stays.
+  function answer(seq) {
+    const set = listeners.get(seq);
+    for (const l of [...(set ?? [])]) {
+      if (listeners.get(seq) !== set || !set.delete(l)) continue;
+      l.onDone?.(bank.getSegment(seq));
+    }
+    if (set?.size === 0 && listeners.get(seq) === set) listeners.delete(seq);
+  }
+
   function fetchSegment() {
     const rung = lockedRung ?? wantedRung;
     const segments = segmentsOf(rung);
     if (segments === undefined) return;
+    // The in-order path never fetches film the store holds, at any rung: it goes on after the held run, answering
+    // those who wait on a seq it passes. An out-of-order fetch is asked for at a rung.
+    while (!outOfOrder && bank.hasSegment(next)) {
+      const at = next;
+      next += 1;
+      answer(at);
+      // A listener may have stopped, finished, started or moved the front, or begun a fetch: that is the new state.
+      if (stopped || finishing || busy || next !== at + 1) return;
+    }
     const segment = segments.get(next);
     if (segment === undefined) return; // the end of the film: nothing more to fetch
     lockedRung = rung;
@@ -459,14 +479,7 @@ export function createBankFront({
         boundaryDue = { seq: seq - 1, rung };
       }
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
-      // One listener at a time, each leaving the set before it is called, so a stop, start or move inside one
-      // aborts only those not yet called; one that subscribes from inside onDone stays for the next fetch.
-      const set = listeners.get(seq);
-      for (const l of [...(set ?? [])]) {
-        if (listeners.get(seq) !== set || !set.delete(l)) continue;
-        l.onDone?.(bank.getSegment(seq));
-      }
-      if (set?.size === 0 && listeners.get(seq) === set) listeners.delete(seq);
+      answer(seq);
       resetWatch();
     });
   }

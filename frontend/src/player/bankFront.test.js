@@ -2079,6 +2079,53 @@ describe('the bank front: boundary copies, round two', () => {
     expect(lastUrl(server)).toBe(segUrl('r480', 11)); // no copy of 9 (not held) or anything behind
   });
 
+  const hold = (bank, seqs, rung = 'r480') => {
+    const timings = { start: 0, first: 1, end: 2 };
+    for (const seq of seqs) {
+      bank.putSegment({ seq, rung, start: 0, end: 4, bytes: new ArrayBuffer(10), timings });
+    }
+  };
+
+  it('never fetches film the store holds on the in-order path, but an out-of-order fetch of it still happens', async () => {
+    const { server, front, bank } = await running({ seq: 4 });
+    hold(bank, [5, 6, 7], 'r360');
+    await complete(server.calls.at(-1)); // 4
+    expect(lastUrl(server)).toBe(segUrl('r480', 8)); // 5 to 7 are held: gone past them
+    expect(server.calls.filter((c) => /seg-[567]\.ts/.test(c.url))).toHaveLength(0);
+    front.update({ filmAhead: 0, need: 0 });
+    front.start({ seq: 6, rung: 'r480', outOfOrder: true }); // on demand, at the asked rung
+    front.subscribe(6, {});
+    front.fetchNow();
+    await flush();
+    expect(lastUrl(server)).toBe(segUrl('r480', 6));
+  });
+
+  it.each([
+    ['stop', (front) => front.stop(), [1, 2], []],
+    ['finish', (front) => front.finish(), [1, 2], []],
+    ['start', (front) => front.start({ seq: 20, rung: 'r480' }), [1, 2], [20]],
+    ['fetchNow with only 1 held', (front) => front.fetchNow(), [1], [2]],
+    [
+      'pause and start',
+      (front) => {
+        front.pause();
+        front.start({ seq: 20, rung: 'r480' });
+      },
+      [1, 2],
+      [],
+    ],
+  ])('stays in step when a listener of a skipped seq calls %s', async (_n, act, held, fetched) => {
+    const { server, front, bank } = await running();
+    hold(bank, held);
+    front.subscribe(1, { onDone: () => act(front) });
+    const before = server.calls.length;
+    await complete(server.calls.at(-1)); // 0 lands, the front skips the held run: the listener acts
+    expect(server.calls.slice(before).map((c) => c.url)).toEqual(
+      fetched.map((n) => segUrl('r480', n)),
+    );
+    expect(server.maxOpen).toBe(1);
+  });
+
   it('keeps a boundary copy out of the window', async () => {
     const { server, front } = await running({ rung: 'r240' });
     front.setRung('r360');
