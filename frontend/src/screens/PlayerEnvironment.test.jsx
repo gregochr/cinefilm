@@ -628,9 +628,13 @@ describe('the train look-ahead: only away from home, only with an engine', () =>
   });
 
   it('asks nothing when the film direct-plays: there is no engine to hand an input to', async () => {
-    const { fetchMock } = await open();
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const { fetchMock, video } = await open();
+    await startFilm(video);
+    // The environment has settled as away (a latency that calls for a lookup, no network named): the look-ahead
+    // would be running here but for the missing engine.
+    await reportWhere(fetchMock, { environment: 'unknown', latencyMs: 48 });
     await screen.findByTestId('operator-lookup');
+    await inAct(() => window.dispatchEvent(new Event('online')));
     expect(screen.queryByTestId(FEED_FRAME)).not.toBeInTheDocument();
     expect(mapRequests(fetchMock)).toHaveLength(0);
   });
