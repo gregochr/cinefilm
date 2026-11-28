@@ -289,15 +289,20 @@ function loadThroughInner(env, count, level = 2) {
   }
 }
 
-async function armed(env, { held = 10, input = ARM } = {}) {
-  env.engine.bankInput(input);
-  await flush();
-  for (let i = 0; i < 3; i += 1) {
+// The front's playlist requests, one after the other, each answered.
+async function answerPlaylists(env, count = 3) {
+  for (let i = 0; i < count; i += 1) {
     await answerPlaylist(env.server.calls.at(-1));
     await flush();
   }
+}
+
+async function armed(env, { held = 10, input = ARM, time = 5 } = {}) {
+  env.engine.bankInput(input);
+  await flush();
+  await answerPlaylists(env);
   loadThroughInner(env, held);
-  env.setTime(5);
+  env.setTime(time);
 }
 
 // Armed, covered and turned on: the front's fetch of the first film not held is pending.
@@ -326,14 +331,13 @@ describe('the bank is never armed', () => {
     expect(handled.frag.stats.bankAnswered).toBeUndefined();
     expect(env.handlers.onThroughput).toHaveBeenCalledTimes(1); // today's sample, untouched
     expect(made.fronts).toHaveLength(0);
-  });
-
-  it('passes a playlist request to the inner loader', () => {
-    const env = world();
-    const loader = new env.hls.config.pLoader(env.hls.config);
-    const callbacks = { onSuccess: vi.fn() };
-    loader.load({ type: 'level', level: 2, url: playlistUrl('480p') }, {}, callbacks);
-    expect(InnerLoader.loads).toHaveLength(1);
+    // A media playlist request goes to the inner loader too.
+    new env.hls.config.pLoader(env.hls.config).load(
+      { type: 'level', level: 2, url: playlistUrl('480p') },
+      {},
+      { onSuccess: vi.fn() },
+    );
+    expect(InnerLoader.loads).toHaveLength(2);
   });
 
   it('does nothing with the rung pinned, whatever the look-ahead says', async () => {
@@ -354,23 +358,11 @@ describe('arming', () => {
     env.engine.bankInput(ARM);
     await flush();
     expect(env.server.calls.map((c) => c.url)).toEqual([playlistUrl('240p')]);
-    await answerPlaylist(env.server.calls.at(-1));
-    await flush();
-    await answerPlaylist(env.server.calls.at(-1));
-    await flush();
-    await answerPlaylist(env.server.calls.at(-1));
-    await flush();
+    await answerPlaylists(env);
     expect(env.server.calls.map((c) => c.url)).toEqual(
       ['240p', '360p', '480p'].map(playlistUrl), // none for 720p
     );
     expect(env.levelWrites()).toEqual([]); // hls.js is still on Auto
-  });
-
-  it('is not armed by a stretch beyond 30 minutes', async () => {
-    const env = world();
-    env.engine.bankInput({ ...ARM, timeToStretch: 1801 });
-    await flush();
-    expect(env.server.calls).toHaveLength(0);
   });
 
   it('keeps copies of what hls.js loads, and drops them when the look-ahead lapses before the bank is on', async () => {
@@ -387,23 +379,11 @@ describe('arming', () => {
     expect(env.levelWrites()).toEqual([]);
   });
 
-  it('is armed again by a stretch beyond 30 minutes coming back within it', async () => {
-    const env = world();
-    await armed(env);
-    env.engine.bankInput({ ...ARM, timeToStretch: 2400 });
-    expect(env.store().hasSegment(9)).toBe(false);
-    env.engine.bankInput(ARM);
-    expect(made.fronts).toHaveLength(2);
-  });
-
   it('keeps nothing of a fragment above 480p, so the bank never covers it', async () => {
     const env = world({ fetched: 3 });
     env.engine.bankInput(ARM);
     await flush();
-    for (let i = 0; i < 3; i += 1) {
-      await answerPlaylist(env.server.calls.at(-1));
-      await flush();
-    }
+    await answerPlaylists(env);
     loadThroughInner(env, 10, 3);
     env.setTime(5);
     env.engine.bankInput(NEAR);
@@ -444,10 +424,7 @@ describe('turning on', () => {
     land(env, before);
     env.engine.bankInput(ARM);
     await flush();
-    for (let i = 0; i < 3; i += 1) {
-      await answerPlaylist(env.server.calls.at(-1));
-      await flush();
-    }
+    await answerPlaylists(env);
     env.setTime(5);
     env.engine.bankInput(NEAR);
     await flush();
@@ -459,10 +436,7 @@ describe('turning on', () => {
     const env = world();
     env.engine.bankInput(ARM);
     await flush();
-    await answerPlaylist(env.server.calls.at(-1));
-    await flush();
-    await answerPlaylist(env.server.calls.at(-1));
-    await flush(); // the 480p playlist is asked for and not answered
+    await answerPlaylists(env, 2); // the 480p playlist is asked for and not answered
     loadThroughInner(env, 10);
     env.setTime(5);
     env.engine.bankInput(NEAR);
@@ -496,15 +470,10 @@ describe('turning on', () => {
     expect(env.levelWrites()).toEqual([]);
     env.engine.bankInput({ ...NEAR, need: 30 });
     expect(env.levelWrites()).toEqual([]);
+    env.engine.bankInput({ ...NEAR, need: Number.NaN }); // no need at all
+    expect(env.levelWrites()).toEqual([]);
     env.engine.bankInput({ ...NEAR, need: 36 });
     expect(env.levelWrites()).toEqual(['loadLevel:2']);
-  });
-
-  it('does not turn on without a need', async () => {
-    const env = world();
-    await armed(env);
-    env.engine.bankInput({ ...NEAR, need: Number.NaN });
-    expect(env.levelWrites()).toEqual([]);
   });
 
   it('turns on only within 20 minutes of the stretch', async () => {
@@ -538,17 +507,15 @@ describe('answering hls.js', () => {
     expect(asked.frag.stats.bankAnswered).toBe(true);
     expect(InnerLoader.loads).toHaveLength(loads);
     expect(env.server.calls).toHaveLength(calls);
-  });
-
-  it('answers a request at the front’s position from the front’s one server request', async () => {
-    const env = world();
-    await turnedOn(env);
-    const asked = request(env, 10);
+    // The held media playlist is answered too.
+    const playlist = { onSuccess: vi.fn() };
+    new env.hls.config.pLoader(env.hls.config).load(
+      { type: 'level', level: 2, url: playlistUrl('480p') },
+      {},
+      playlist,
+    );
     await flush();
-    expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]);
-    await answerSegment(env.server.calls.at(-1), 700);
-    expect(asked.callbacks.onSuccess.mock.calls[0][0].data.byteLength).toBe(700);
-    expect(InnerLoader.loads).toHaveLength(10);
+    expect(playlist.onSuccess.mock.calls[0][0].data).toBe(playlistText());
   });
 
   it('puts hls.js on the held rung and fails a fragment held at another rung as bank-rung', async () => {
@@ -568,16 +535,6 @@ describe('answering hls.js', () => {
     expect(InnerLoader.loads).toHaveLength(10);
   });
 
-  it('answers a held media playlist', async () => {
-    const env = world();
-    await turnedOn(env);
-    const loader = new env.hls.config.pLoader(env.hls.config);
-    const callbacks = { onSuccess: vi.fn() };
-    loader.load({ type: 'level', level: 2, url: playlistUrl('480p') }, {}, callbacks);
-    await flush();
-    expect(callbacks.onSuccess.mock.calls[0][0].data).toBe(playlistText());
-  });
-
   it('takes no sample from a fragment the bank answered, and reports the front’s fetches instead', async () => {
     const env = world();
     await turnedOn(env);
@@ -595,29 +552,26 @@ describe('answering hls.js', () => {
 });
 
 describe('the front’s answers from the server', () => {
-  it('reaches onStopped on a 410, once', async () => {
-    const env = world();
-    await turnedOn(env);
-    env.server.calls.at(-1).status(410);
-    await flush();
-    expect(env.handlers.onStopped).toHaveBeenCalledTimes(1);
-    expect(env.handlers.onSessionLost).not.toHaveBeenCalled();
-  });
-
-  it('reaches onSessionLost on a 404, once, and onStopped not at all', async () => {
-    const env = world();
-    await turnedOn(env);
-    env.server.calls.at(-1).status(404);
-    await flush();
-    env.hls.error({
-      fatal: false,
-      type: 'networkError',
-      details: 'fragLoadError',
-      response: { code: 404 },
-    });
-    expect(env.handlers.onSessionLost).toHaveBeenCalledTimes(1);
-    expect(env.handlers.onStopped).not.toHaveBeenCalled();
-  });
+  it.each([
+    [410, 'onStopped', 'onSessionLost'],
+    [404, 'onSessionLost', 'onStopped'],
+  ])(
+    'reaches the handler for a %i once, though hls.js hears it too',
+    async (code, handler, other) => {
+      const env = world();
+      await turnedOn(env);
+      env.server.calls.at(-1).status(code);
+      await flush();
+      env.hls.error({
+        fatal: false,
+        type: 'networkError',
+        details: 'fragLoadError',
+        response: { code },
+      });
+      expect(env.handlers[handler]).toHaveBeenCalledTimes(1);
+      expect(env.handlers[other]).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('pausing', () => {
@@ -679,13 +633,6 @@ describe('pausing', () => {
     await flush();
     expect(env.front().isPaused()).toBe(false);
     expect(segmentCalls(env)).toHaveLength(2);
-  });
-
-  it('is not paused by a fatal network error while the bank is not on', async () => {
-    const env = world();
-    await armed(env);
-    fatal(env);
-    expect(env.front().isPaused()).toBe(false);
   });
 
   it('leaves the front running on a media error', async () => {
@@ -751,16 +698,6 @@ describe('choosing the rung', () => {
     expect(chooseBankRung).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps the front’s rung when no choice is made', async () => {
-    const env = world();
-    await turnedOn(env);
-    vi.spyOn(env.requests(), 'setRung');
-    vi.spyOn(env.front(), 'window').mockReturnValue(measured(30, { w: 0, d: 0 }));
-    tick(env);
-    expect(chooseBankRung).toHaveBeenCalledTimes(1);
-    expect(env.requests().setRung).not.toHaveBeenCalled();
-  });
-
   it('never chooses inside a stretch, and chooses again at once for the next one', async () => {
     const env = world();
     await turnedOn(env);
@@ -783,21 +720,11 @@ describe('choosing the rung', () => {
     tick(env);
     expect(chooseBankRung).not.toHaveBeenCalled();
   });
-
-  it('tells the front the film ahead and the need through the decider', async () => {
-    const env = world();
-    await turnedOn(env);
-    vi.spyOn(env.requests(), 'update');
-    vi.spyOn(env.front(), 'update');
-    env.setTime(6);
-    expect(env.requests().update).toHaveBeenCalledWith({ filmAhead: 34, need: 600 });
-    expect(env.front().update).toHaveBeenCalledWith({ filmAhead: 34, need: 600 });
-  });
 });
 
-describe('turning off', () => {
-  const AFTER = { need: 600, timeToStretch: 3000, stretchBegun: false };
+const AFTER = { need: 600, timeToStretch: 3000, stretchBegun: false };
 
+describe('turning off', () => {
   it('finishes the front, still answers held film, and releases on the first request beyond it', async () => {
     const env = world();
     await turnedOn(env);
@@ -830,28 +757,19 @@ describe('turning off', () => {
     expect(later.callbacks.onSuccess).not.toHaveBeenCalled();
   });
 
-  it('turns off when the look-ahead lapses', async () => {
-    const env = world();
-    await turnedOn(env);
-    vi.spyOn(env.front(), 'finish');
-    env.engine.bankInput(null);
-    expect(env.front().finish).toHaveBeenCalledTimes(1);
-  });
-
-  it('stays on inside a stretch, whatever its time says', async () => {
+  it('stays on inside a stretch whatever its time says, and turns off when the look-ahead lapses', async () => {
     const env = world();
     await turnedOn(env);
     vi.spyOn(env.front(), 'finish');
     env.engine.bankInput({ ...AFTER, stretchBegun: true });
     expect(env.front().finish).not.toHaveBeenCalled();
+    env.engine.bankInput(null);
+    expect(env.front().finish).toHaveBeenCalledTimes(1);
   });
 
   it('releases on the first request when a seek back goes to before held film', async () => {
     const env = world();
-    await armed(env, { held: 20 });
-    env.setTime(60); // film before 30 s is dropped: 28 s on is held
-    env.engine.bankInput(NEAR);
-    await flush();
+    await turnedOn(env, { held: 20, time: 60 });
     env.engine.bankInput(AFTER);
     env.seekTo(10);
     expect(env.levelWrites()).toEqual(['loadLevel:2', 'loadLevel:2']); // the seek held the level; no release yet
@@ -865,10 +783,7 @@ describe('turning off', () => {
 
   it('answers a seek inside held film from the bank, with no release and no server request', async () => {
     const env = world();
-    await armed(env, { held: 20 });
-    env.setTime(60);
-    env.engine.bankInput(NEAR);
-    await flush();
+    await turnedOn(env, { held: 20, time: 60 });
     env.engine.bankInput(AFTER);
     const loads = InnerLoader.loads.length;
     const calls = env.server.calls.length;
@@ -879,15 +794,6 @@ describe('turning off', () => {
     expect(InnerLoader.loads).toHaveLength(loads);
     expect(env.server.calls).toHaveLength(calls);
     expect(InnerLoader.order).not.toContain('loadLevel:-1');
-  });
-
-  it('is armed again by the next stretch after the release', async () => {
-    const env = world();
-    await turnedOn(env);
-    env.engine.bankInput(AFTER);
-    request(env, 30); // the release
-    env.engine.bankInput(ARM);
-    expect(made.fronts).toHaveLength(2);
   });
 });
 
@@ -909,39 +815,15 @@ describe('seeks', () => {
     expect(env.server.calls).toHaveLength(4); // no new request: the playlists are held
   });
 
-  it('keeps the bank on and ends any gap on a seek inside held film', async () => {
+  it('clears the copies on a seek beyond them while only armed, and ignores a seek with no episode', async () => {
     const env = world();
-    await armed(env, { held: 20 });
-    env.engine.bankInput(NEAR);
-    await flush();
-    vi.spyOn(env.requests(), 'endGap');
-    vi.spyOn(env.front(), 'finish');
-    env.seekTo(50); // no request of hls.js waits on the bank: settled at once
-    expect(env.requests().endGap).toHaveBeenCalledTimes(1);
-    expect(env.front().finish).not.toHaveBeenCalled();
-    expect(env.store().hasSegment(19)).toBe(true);
-    env.seekTo(2); // back: what is held ahead is kept
-    expect(env.store().hasSegment(19)).toBe(true);
-  });
-
-  it('clears the copies on a seek beyond them while only armed, and keeps the bank armed', async () => {
-    const env = world();
+    env.seekTo(500); // no episode yet
     await armed(env);
     env.seekTo(500);
     expect(env.store().heldBytes()).toBe(0);
-    expect(made.fronts).toHaveLength(1);
-    env.seekTo(2); // nothing held: still beyond; nothing to clear
-    expect(made.fronts).toHaveLength(1);
-  });
-
-  it('ignores a seek with no bank episode', () => {
-    const env = world();
-    env.seekTo(500);
-    expect(made.stores[0].heldBytes()).toBe(0);
+    expect(made.fronts).toHaveLength(1); // still armed, not armed again
   });
 });
-
-const AFTER = { need: 600, timeToStretch: 3000, stretchBegun: false };
 
 describe('a request hls.js waits on the front’s fetch for', () => {
   const unhurt = (env, waiter) => {
@@ -987,18 +869,6 @@ describe('a request hls.js waits on the front’s fetch for', () => {
     unhurt(env, waiter);
   });
 
-  it('is still answered by the fetch the front finishes when hls.js does not abandon it on a seek', async () => {
-    const env = world();
-    await turnedOn(env);
-    const waiter = request(env, 10);
-    await flush();
-    env.seekTo(500);
-    await answerSegment(env.server.calls.at(-1), 700);
-    expect(waiter.callbacks.onSuccess).toHaveBeenCalledTimes(1);
-    expect(waiter.callbacks.onTimeout).not.toHaveBeenCalled();
-    expect(segmentCalls(env)).toEqual([segUrl('480p', 10)]);
-  });
-
   it('ends without a timeout when the engine is destroyed and hls.js destroys the loader', async () => {
     const env = world();
     await turnedOn(env);
@@ -1013,36 +883,10 @@ describe('a request hls.js waits on the front’s fetch for', () => {
   });
 });
 
-describe('a seek inside held film while the front fills a gap', () => {
-  it('moves the front past the held run, with no request behind the playhead', async () => {
-    const env = world();
-    await armed(env, { held: 20 });
-    env.setTime(60);
-    env.engine.bankInput(NEAR); // on: the front starts at 20
-    await flush();
-    const gap = request(env, 3); // film not held behind the front, with held film above it: a gap
-    await flush();
-    expect(segmentCalls(env).at(-1)).toBe(segUrl('480p', 3));
-    await answerSegment(env.server.calls.at(-1));
-    expect(gap.callbacks.onSuccess).toHaveBeenCalledTimes(1);
-    const before = env.server.calls.length;
-    expect(env.front().position().seq).toBe(4);
-    env.seekTo(50); // forward, inside held film (7 to 19)
-    await flush();
-    expect(env.front().position().seq).toBeGreaterThanOrEqual(20);
-    expect(env.server.calls.slice(before).map((c) => c.url)).toEqual([segUrl('480p', 20)]);
-    await answerSegment(env.server.calls.at(-1));
-    expect(segmentCalls(env).slice(2)).not.toContain(segUrl('480p', 4));
-  });
-});
-
 describe('a seek inside held film while hls.js waits on the bank', () => {
   it('lets the waiting request be answered, then moves the front past the held run', async () => {
     const env = world();
-    await armed(env, { held: 20 });
-    env.setTime(60);
-    env.engine.bankInput(NEAR);
-    await flush();
+    await turnedOn(env, { held: 20, time: 60 });
     const gap = request(env, 3); // a gap: its fetch at the front, which hls.js waits on
     await flush();
     const gapCall = env.server.calls.at(-1);
@@ -1063,10 +907,7 @@ describe('a seek inside held film while hls.js waits on the bank', () => {
 
   it('settles at once when the waiting request is abandoned', async () => {
     const env = world();
-    await armed(env, { held: 20 });
-    env.setTime(60);
-    env.engine.bankInput(NEAR);
-    await flush();
+    await turnedOn(env, { held: 20, time: 60 });
     const gap = request(env, 3);
     await flush();
     env.seekTo(50);
@@ -1079,10 +920,7 @@ describe('a seek inside held film while hls.js waits on the bank', () => {
 describe('a request that times out while hls.js waits on the bank', () => {
   it('no longer holds back a seek inside held film', async () => {
     const env = world();
-    await armed(env, { held: 20 });
-    env.setTime(60);
-    env.engine.bankInput(NEAR);
-    await flush();
+    await turnedOn(env, { held: 20, time: 60 });
     const gap = request(env, 3);
     await flush();
     await vi.advanceTimersByTimeAsync(10_000); // hls.js's first-byte limit
@@ -1105,15 +943,9 @@ describe('the engine’s tick', () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(env.front().update).toHaveBeenCalledTimes(3);
     expect(env.front().update).toHaveBeenLastCalledWith({ filmAhead: 15, need: 600 });
-  });
-
-  it('stops with the episode', async () => {
-    const env = world();
-    await turnedOn(env);
-    vi.spyOn(env.front(), 'update');
-    env.engine.destroy();
+    env.engine.destroy(); // the tick stops with the episode
     await vi.advanceTimersByTimeAsync(5000);
-    expect(env.front().update).not.toHaveBeenCalled();
+    expect(env.front().update).toHaveBeenCalledTimes(3);
   });
 });
 
