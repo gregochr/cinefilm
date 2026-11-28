@@ -23,7 +23,7 @@ describe('options: what is given', () => {
   test('with nothing given: from minute 0 for 15 minutes on the sampled trace, media padding, the trace\'s own weight', () => {
     assert.deepEqual(options([]), {
       start: 0, minutes: 15, trace: 'sampled', name: 'run-0-15-sampled', tmp: tmpdir(), fill: 'media', wire: WIRE,
-      encoder: null, rebuild: false,
+      encoder: null, encoderStartMs: 0, rebuild: false,
     });
     assert.equal(WIRE, 1.08);
   });
@@ -31,11 +31,11 @@ describe('options: what is given', () => {
   test('every option given', () => {
     const given = options([
       '--start', '24', '--minutes', '15', '--trace', 'cautious', '--fill', 'null', '--wire', '1.5',
-      '--name', 'my.run_2-b', '--tmp', '/some/folder', '--encoder', '19.5', '--rebuild',
+      '--name', 'my.run_2-b', '--tmp', '/some/folder', '--encoder', '19.5', '--encoder-start-ms', '1500', '--rebuild',
     ]);
     assert.deepEqual(given, {
       start: 24, minutes: 15, trace: 'cautious', name: 'my.run_2-b', tmp: '/some/folder', fill: 'null', wire: 1.5,
-      encoder: 19.5, rebuild: true,
+      encoder: 19.5, encoderStartMs: 1500, rebuild: true,
     });
   });
 
@@ -94,6 +94,15 @@ describe('options: each refusal, with its exact message', () => {
     const message = '--encoder must be off or a number from 1 to 200';
     for (const bad of ['0', '0.9', '201', '-5', 'fast', '', '19x', '1e2']) {
       assert.throws(() => options(['--encoder', bad]), { message }, bad);
+    }
+  });
+
+  test('--encoder-start-ms is a whole number of milliseconds from 0 to 60000', () => {
+    assert.equal(options(['--encoder-start-ms', '0']).encoderStartMs, 0);
+    assert.equal(options(['--encoder-start-ms', '60000']).encoderStartMs, 60000);
+    const message = '--encoder-start-ms must be a whole number from 0 to 60000';
+    for (const bad of ['-1', '60001', '1.5', 'slow', '']) {
+      assert.throws(() => options(['--encoder-start-ms', bad]), { message }, bad);
     }
   });
 
@@ -261,15 +270,18 @@ describe('summarise: the modelled encoder', () => {
     { kind: 'segment', ms: 2000, rung: '480p', aborted: false, status: 200, restart: 'ahead', waitMs: 900 },
     { kind: 'segment', ms: 3000, rung: '360p', aborted: false, status: 200, restart: 'behind' },
     { kind: 'segment', ms: 4000, rung: '360p', aborted: false, status: 200, restart: 'stopped', waitMs: 40 },
-    { kind: 'segment', ms: 5000, rung: '360p', aborted: true, status: 503, waitMs: 6000 },
+    { kind: 'segment', ms: 4500, rung: '360p', aborted: false, status: 200, restart: 'fight-stop' },
+    { kind: 'segment', ms: 5000, rung: '360p', aborted: true, status: 503, waitMs: 6000, deleted: true },
+    { kind: 'segment', ms: 5500, rung: '360p', aborted: false, status: 503, waitMs: 6000, deleted: true },
     { kind: 'api', ms: 6000, restart: 'ahead' },
   ];
   const line = (opt, requests) => run({ opt, requests }).filter((l) => l.startsWith('the encoder'));
 
-  test('says what it did when it was on: restarts by reason, segments waited for, answers of 503', () => {
+  test('says what it did when it was on: restarts by reason, requests for deleted segments, waits, 503s, and the fights', () => {
     assert.deepEqual(line({ ...OPT, encoder: 19 }, ENCODER), [
-      'the encoder at 19 times real time: 3 restarts (1 ahead, 1 behind, 1 after it stopped), '
-      + '3 segments waited for, 1 answered 503',
+      'the encoder at 19 times real time: 4 restarts (1 ahead, 1 behind, 1 after it stopped, '
+      + '1 after a stop a deleted segment\'s request caused), 2 requests for a segment made and then deleted, '
+      + '4 segments waited for, 2 answered 503; fetchers fighting: 5',
     ]);
   });
 

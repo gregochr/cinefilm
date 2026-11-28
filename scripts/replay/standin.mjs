@@ -344,6 +344,13 @@ function probeRefusal(probe) {
   return probe < 0 ? 'Invalid probe' : null;
 }
 
+// SessionService.create, :125-128: "startMs is outside the film" for a start before 0 or at or past the film's end.
+function startRefusal(startMs, env) {
+  if (startMs === undefined || startMs === null) return null;
+  if (typeof startMs !== 'number' || !Number.isFinite(startMs)) return INVALID_REQUEST.error;
+  return startMs < 0 || startMs >= env.segmentCount * env.segmentMs ? 'startMs is outside the film' : null;
+}
+
 function sessionRefusal(body, rungs) {
   return qualityRefusal(body.quality, rungs) ?? probeRefusal(body.probeKbps);
 }
@@ -356,7 +363,7 @@ async function createSession(ctx) {
     refuse(ctx);
     return;
   }
-  const refusal = sessionRefusal(body.value, env.rungs);
+  const refusal = sessionRefusal(body.value, env.rungs) ?? startRefusal(body.value.startMs, env);
   if (refusal) {
     sendJson(ctx, { error: refusal }, { status: 400, kind: 'session' });
     return;
@@ -366,7 +373,8 @@ async function createSession(ctx) {
   const start = pinned ?? startRung(env.rungs, probe);
   const id = randomUUID();
   const encoder = env.encoderSpeed === null ? null : createPlayhead({
-    segmentCount: env.segmentCount, segmentMs: env.segmentMs, speed: env.encoderSpeed, now: Date.now,
+    segmentCount: env.segmentCount, segmentMs: env.segmentMs, speed: env.encoderSpeed, now: () => Date.now(),
+    startSegment: Math.floor((body.value.startMs ?? 0) / env.segmentMs), startupMs: env.encoderStartMs,
   });
   env.sessions.set(id, { start, pinned: pinned ? pinned.id : null, encoder });
   sendJson(ctx, {
@@ -416,7 +424,7 @@ function sendNotReady(ctx, rung, n, detail) {
 // Waits for the encoder to make the segment, as SessionManager.segmentLive does: until it is made, or six seconds
 // from the request's arrival, or at once when no run is going (SessionManager.settled). The answer says how long it
 // waited and, on the request that restarted the encoder, why.
-function waitForSegment(ctx, { encoder, rung, n, arrived, restart }) {
+function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted }) {
   let timer = null;
   let answered = false;
   ctx.env.waiting += 1;
@@ -426,7 +434,9 @@ function waitForSegment(ctx, { encoder, rung, n, arrived, restart }) {
     ctx.env.waiting -= 1;
     clearTimeout(timer);
     const waited = Date.now() - arrived;
-    const detail = { ...(restart ? { restart } : {}), ...(waited > 0 ? { waitMs: waited } : {}) };
+    const detail = {
+      ...(restart ? { restart } : {}), ...(deleted ? { deleted: true } : {}), ...(waited > 0 ? { waitMs: waited } : {}),
+    };
     try {
       if (made) sendSegment(ctx, rung, n, detail);
       else sendNotReady(ctx, rung, n, detail);
@@ -463,8 +473,8 @@ function sessionSegment(ctx, { session, match }) {
     return true;
   }
   const arrived = Date.now();
-  const { restart } = session.encoder.request(n);
-  waitForSegment(ctx, { encoder: session.encoder, rung, n, arrived, restart });
+  const { restart, deleted } = session.encoder.request(n);
+  waitForSegment(ctx, { encoder: session.encoder, rung, n, arrived, restart, deleted });
   return true;
 }
 
@@ -683,17 +693,18 @@ function listen(server, port) {
  * segment's size: 1 is the rung's average bitrate alone; the default, WIRE, adds the MPEG-TS wrapping that trace.mjs
  * assumes when it turns a stalled minute's film into kbit/s, so film and trace then weigh the same. `port: 0` takes
  * any free port; the answer says which. `encoderSpeed` (how many times faster than real time the server's encoder
- * runs; null leaves it out) models the server's one playhead per session (playhead.mjs); `waitMaxMs` is how long a
+ * runs; null leaves it out) models the server's one playhead per session (playhead.mjs); `encoderStartMs` is the time from an encoder run's start to its first segment (default 0); `waitMaxMs` is how long a
  * request waits for a segment before 503, the server's six seconds unless a test shortens it.
  */
 export async function startStandIn({
   port, distDir, filmPath, template, trace, startMinute = 0, rttMs = 115, sourceBitrate = 10_000_000, fill = 'media',
-  wire = WIRE, encoderSpeed = null, waitMaxMs = WAIT_MAX_MS,
+  wire = WIRE, encoderSpeed = null, encoderStartMs = 0, waitMaxMs = WAIT_MAX_MS,
 }) {
   if (!validWire(wire)) throw new Error('wire is a number from 1 to 1.5');
   if (encoderSpeed !== null && !(Number.isFinite(encoderSpeed) && encoderSpeed > 0)) {
     throw new Error('encoderSpeed is null or a number above 0');
   }
+  if (!(Number.isFinite(encoderStartMs) && encoderStartMs >= 0)) throw new Error('encoderStartMs is a number from 0');
   if (!(Number.isFinite(waitMaxMs) && waitMaxMs > 0)) throw new Error('waitMaxMs is a number above 0');
   const files = readBuild(distDir);
   const index = files.get('/index.html')?.body;
@@ -703,7 +714,7 @@ export async function startStandIn({
   const segmentMs = Math.round(template.seconds * 1000);
   const env = {
     rungs, segmentMs, segmentCount: Math.floor(film.editions[0].runtimeMs / segmentMs), film, template, trace,
-    startMinute, rttMs, fill, wire, encoderSpeed, waitMaxMs, files, index, t0: null, open: false, link: null, waiting: 0,
+    startMinute, rttMs, fill, wire, encoderSpeed, encoderStartMs, waitMaxMs, files, index, t0: null, open: false, link: null, waiting: 0,
     sessions: new Map(), viewings: new Map(), requests: [], healthReports: [], counter: createByteCounter(),
   };
   env.link = createLink(() => rateBps(env));

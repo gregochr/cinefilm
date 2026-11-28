@@ -689,6 +689,55 @@ describe('the server\'s one playhead per session', () => {
       await assert.rejects(start({ encoderSpeed: bad }), { message: 'encoderSpeed is null or a number above 0' });
       await assert.rejects(start({ waitMaxMs: bad }), { message: 'waitMaxMs is a number above 0' });
     }
+    for (const bad of [-1, NaN, Infinity]) {
+      await assert.rejects(start({ encoderStartMs: bad }), { message: 'encoderStartMs is a number from 0' });
+    }
+  });
+
+  test('a session made at a start time runs from its segment: no restart on its first request, behind before it', async () => {
+    const standIn = await start(SLOW);
+    const { sessionId } = await newSession(standIn, { quality: 'auto', probeKbps: 5000, startMs: 600_000 }); // segment 150
+    await request(standIn.port, { path: segmentOf(sessionId, '480p', 150) });
+    await request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    assert.deepEqual(segments(standIn).map((r) => r.restart), [undefined, 'behind']);
+  });
+
+  test('a start time outside the film is refused as the server refuses it, and one that is not a number is not read', async () => {
+    const standIn = await start();
+    const film = standIn.segmentCount * standIn.segmentMs;
+    for (const startMs of [-1, film]) {
+      const answer = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs });
+      assert.equal(answer.status, 400);
+      assert.deepEqual(json(answer), { error: 'startMs is outside the film' });
+    }
+    const odd = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: '600' });
+    assert.equal(odd.status, 400);
+    assert.deepEqual(json(odd), { error: 'Invalid request' });
+    assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: film - 1 })).status, 200);
+    assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: null })).status, 200);
+  });
+
+  test('a request for a segment made and then deleted is logged as `deleted`, with no restart, then 503', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() }); // the encoder's clock is the one the test sets
+    const start0 = Date.now();
+    const standIn = await start({ encoderSpeed: 19, waitMaxMs: 40 });
+    const { sessionId } = await newSession(standIn);
+    // Ask, and let the clock run past the wait while the request is held.
+    const ask = async (n, at) => {
+      t.mock.timers.setTime(start0 + at);
+      const before = segments(standIn).length;
+      const answered = request(standIn.port, { path: segmentOf(sessionId, '480p', n) });
+      await waitFor(async () => (await stateOf(standIn)).waiting === 1 || segments(standIn).length > before, 'the request');
+      t.mock.timers.setTime(start0 + at + 100);
+      return answered;
+    };
+    assert.equal((await ask(10, 9000)).status, 200); // 42 segments are made by 9 s
+    assert.equal((await ask(45, 9000)).status, 503); // the bank: reached by the run, not made yet: the playhead goes to 45
+    assert.equal((await ask(12, 9200)).status, 503); // below 15 is deleted now, and it is inside the run's span
+    const log = segments(standIn);
+    assert.deepEqual(log.map((r) => r.segment), [10, 45, 12]);
+    assert.deepEqual(log.map((r) => r.restart), [undefined, undefined, undefined]);
+    assert.deepEqual(log.map((r) => r.deleted), [undefined, undefined, true]);
   });
 
   test('an error while making a segment the encoder has made is the fixed 500, from a timer too', async () => {

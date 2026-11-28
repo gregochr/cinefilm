@@ -17,6 +17,8 @@
 //   --encoder   off, or how many times faster than real time the server's encoder runs (1 to 200; about 19 at 480p
 //               on the real one): then the server's one encoder playhead per session is modelled, and a request
 //               far from the playhead restarts the encoder there (playhead.mjs)         default off
+//   --encoder-start-ms  with --encoder: the time from an encoder run's start (a restart or a new session) to its first
+//               segment, in ms (0 to 60000); not measured on the real server                default 0
 //   --rebuild   build the app again first (do this after the checkout changes)
 //
 // Ctrl-C (or SIGTERM) ends the replay early. Its results are written once the driver has looked at the film for the
@@ -66,7 +68,7 @@ const RUNG_IDS = ['original', '1080p', '720p', '480p', '360p', '240p'];
 
 // ---- options -----------------------------------------------------------------------------------------------------
 
-const VALUE_OPTIONS = new Set(['start', 'minutes', 'trace', 'name', 'fill', 'wire', 'tmp', 'encoder']);
+const VALUE_OPTIONS = new Set(['start', 'minutes', 'trace', 'name', 'fill', 'wire', 'tmp', 'encoder', 'encoder-start-ms']);
 const WHOLE = /^\d{1,9}$/;
 const DECIMAL = /^\d{1,3}(?:\.\d{1,6})?$/;
 const FLAT = /^flat:\d{1,7}$/;
@@ -137,6 +139,12 @@ function encoderOption(given) {
   return Number(text);
 }
 
+function encoderStartOption(given) {
+  const text = given.get('encoder-start-ms') ?? '0';
+  if (!WHOLE.test(text) || Number(text) > 60000) throw new Error('--encoder-start-ms must be a whole number from 0 to 60000');
+  return Number(text);
+}
+
 function nameOption(given, fallback) {
   const text = given.get('name') ?? fallback;
   if (!isRunName(text)) {
@@ -166,6 +174,7 @@ export function options(argv) {
     fill: oneOf(given, 'fill', 'media', ['media', 'null']),
     wire: wireOption(given),
     encoder: encoderOption(given),
+    encoderStartMs: encoderStartOption(given),
     rebuild: given.has('rebuild'),
   };
 }
@@ -287,16 +296,21 @@ function requestLines(requests) {
   return lines;
 }
 
-// What the modelled encoder did (playhead.mjs), only when it was on: restarts by what forced them, segments waited
-// for, and answers of 503.
+// What the modelled encoder did (playhead.mjs), only when it was on. A fight between fetchers is a restart for being
+// ahead or behind the run, a restart after a stop that a request for a deleted segment caused, and a request for a
+// segment made and then deleted (the server only waits for it, then answers 503); a restart after an ordinary stop
+// is the server's usual way.
 function encoderLines(opt, requests) {
   if (!opt.encoder) return [];
   const segments = requests.filter((r) => r.kind === 'segment');
   const why = (reason) => segments.filter((r) => r.restart === reason).length;
   const restarts = segments.filter((r) => r.restart).length;
+  const deleted = segments.filter((r) => r.deleted).length;
+  const fight = why('ahead') + why('behind') + why('fight-stop') + deleted;
   return [`the encoder at ${opt.encoder} times real time: ${restarts} restarts (${why('ahead')} ahead, ${why('behind')} behind, `
-    + `${why('stopped')} after it stopped), ${segments.filter((r) => r.waitMs).length} segments waited for, `
-    + `${segments.filter((r) => r.status === 503).length} answered 503`];
+    + `${why('stopped')} after it stopped, ${why('fight-stop')} after a stop a deleted segment's request caused), `
+    + `${deleted} requests for a segment made and then deleted, ${segments.filter((r) => r.waitMs).length} segments waited for, `
+    + `${segments.filter((r) => r.status === 503).length} answered 503; fetchers fighting: ${fight}`];
 }
 
 function endLines(samples, pageErrors) {
@@ -708,6 +722,7 @@ async function main(argv, stop, held) {
   const standIn = await startOnPort({
     port: PORT, distDir: DIST, filmPath: FILM, template, trace, startMinute: opt.start, fill: opt.fill, wire: opt.wire,
     encoderSpeed: opt.encoder,
+    encoderStartMs: opt.encoderStartMs,
   });
   let failed = false;
   // A failure is excused by a stop asked for before it, or within the short wait that follows it (see `stopAsked`);
