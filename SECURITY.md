@@ -94,7 +94,7 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    `pathSegment`, which encodes it as a single segment and refuses `.` and `..`, so an id from a link or a response
    cannot send a request to another endpoint. Two things are used as the server gives them and are not ids: a
    playback session's `masterUrl` and a stored artwork path (`/api/art/…`).
-   **The operator lookup** is the browser's one request to a host other than CineFilm and TMDB's images: when the
+   **The operator lookup** is one of the browser's two requests to other hosts than CineFilm and TMDB's images (the other is the train feed, below): when the
    player opens away from home it asks `https://ipinfo.io/json` which network operator the device is on. It is
    made from a hidden `sandbox="allow-scripts"` frame built from `srcdoc`, with `credentials: 'omit'` and
    `referrerPolicy: 'no-referrer'`, so the request carries `Origin: null`, no referrer and no cookie: the service
@@ -103,8 +103,19 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    message only from that frame's own window and only when the message's origin is the string `null`, which is
    what a sandboxed frame reports: a frame that had lost its sandbox would report the app's own origin and be
    ignored, so the lookup fails closed. It keeps only `org`, as text of 1 to 100 characters, and stores an answer
-   against it in `localStorage` only. The browser never asks for a location. Any other outside request from
-   the browser needs a note in the PR.
+   against it in `localStorage` only.
+   **The train feed** is the browser's other outside request. On a train, the player may read the train's own Wi-Fi
+   system for its position only from the frame described here; the position must be used in the page only and never
+   sent or stored. The browser never asks the device for a location. The frame is the same hidden
+   `sandbox="allow-scripts"` frame built
+   from `srcdoc`, with a CORS `fetch` (never `no-cors`: the browser enforces the feed's own
+   `Access-Control-Allow-Origin`, and an answer without it is no answer), `credentials: 'omit'` and
+   `referrerPolicy: 'no-referrer'`, so the request carries `Origin: null`, no referrer and no cookie. Never give it
+   `allow-same-origin`, and never make the request from the page itself. The page takes a message only from that
+   frame's own window and only when its origin is the string `null`, so a frame that had lost its sandbox is ignored
+   and the ask fails closed. The answer is text of at most 65,536 characters, untrusted and parsed elsewhere; there is one ask
+   at a time, with a timeout, and the frame is removed afterwards. The module takes the feed's address as a
+   parameter. Any other outside request from the browser needs a note in the PR.
    **Journey data.** The server stores a journey's positions, and which train it was, only when the owner imports a
    train feed logger file in Admin (`POST /api/admin/journeys`). They are then in the database, in its dumps (rule 9)
    and in Admin's answers, and nowhere else. The device's addresses never leave the laptop, and the server refuses
