@@ -1101,13 +1101,23 @@ describe('the record of what the look-ahead and the bank did', () => {
   });
 
   describe('a choice made while a boundary fetch holds the front on the asked rung', () => {
+    // Held: sn 5 at 480p and sn 6 at 360p. hls.js, on 360p, asks again for sn 5: a boundary fetch at the asked 360p
+    // holds the front there, and the rung the bank keeps for the return is 480p.
     const holdingGap = async (env) => {
       await turnedOn(env);
+      env.store().putSegment({
+        seq: 6,
+        rung: '360p',
+        start: 24,
+        end: 28,
+        bytes: new ArrayBuffer(10),
+        timings: { start: 0, first: 1, end: 2 },
+      });
       vi.spyOn(env.front(), 'window').mockReturnValue(measured());
-      // The front's own rung is 480p; a boundary fetch holds it on the asked 360p, so `requests` keeps 480p.
-      vi.spyOn(env.front(), 'chosenRung').mockReturnValue('360p');
-      vi.spyOn(env.requests(), 'chosenRung').mockReturnValue('480p');
-      vi.spyOn(env.requests(), 'setRung');
+      request(env, 5, 1);
+      await flush();
+      expect(env.server.calls.at(-1).url).toBe(segUrl('360p', 5));
+      expect(env.front().chosenRung()).toBe('360p');
     };
 
     it('is not a change when the choice is the rung the bank is keeping', async () => {
@@ -1115,7 +1125,7 @@ describe('the record of what the look-ahead and the bank did', () => {
       await holdingGap(env);
       chooseBankRung.mockReturnValueOnce({ id: '480p' });
       env.engine.bankInput(NEAR);
-      expect(env.requests().setRung).toHaveBeenCalledWith('480p');
+      expect(chooseBankRung).toHaveBeenCalledTimes(1);
       expect(env.handlers.onBankRungChange).not.toHaveBeenCalled();
     });
 
@@ -1124,6 +1134,7 @@ describe('the record of what the look-ahead and the bank did', () => {
       await holdingGap(env);
       chooseBankRung.mockReturnValueOnce({ id: '360p' });
       env.engine.bankInput(NEAR);
+      expect(chooseBankRung).toHaveBeenCalledTimes(1);
       expect(env.handlers.onBankRungChange).toHaveBeenCalledTimes(1);
     });
   });
@@ -1188,6 +1199,17 @@ describe('the record of what the look-ahead and the bank did', () => {
       expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
       request(env, 100);
       expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not counted when the episode closed while its front fetched only a playlist', async () => {
+      const env = world();
+      env.engine.bankInput(ARM);
+      await flush(); // armed: the first playlist fetch is in flight
+      expect(env.server.calls).toHaveLength(1);
+      env.engine.bankInput(null); // the look-ahead lapses: the episode closes, that fetch goes on
+      request(env, 0);
+      expect(InnerLoader.loads).toHaveLength(1);
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
     });
 
     it('is not counted after that front has finished', async () => {

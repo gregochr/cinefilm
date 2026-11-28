@@ -144,8 +144,8 @@ export function hlsConfig(startSeconds) {
  * { needS, aheadS, rung } in whole seconds, `rung` the bank's rung id or null; the record calls it once per
  * stretch, at the first input saying it has begun after one that did not),
  * onBankRungChange() (the bank chose another rung while on) and onBankBypass() (a media request went to the
- * server through hls.js's own loader while the bank was on or turning off, or while a bank front still had a
- * fetch in flight; the release and the bank's own fetcher are never counted). In Auto, on a ladder
+ * server through hls.js's own loader while the bank was on or turning off, or while a closed episode's front still
+ * had a segment fetch in flight; the release and the bank's own fetcher are never counted). In Auto, on a ladder
  * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above while it is fetching there
  * and has had no fragment trouble; the cap never climbs above the level being fetched by more than one.
  * `fetch` is the film bank's (default: the browser's). Returns { destroy, bankInput } and the bank's own
@@ -279,11 +279,11 @@ export function startHlsJs({
   const store = auto ? createSegmentBank() : null; // the film bank's segments and playlists
   let phase = 'idle'; // the bank's: idle, armed, on, turningOff
   let releasing = false; // the decider is releasing: the pass about to follow is not counted as a bypass
-  // A bank front (the episode's, or one of a closed episode still finishing) has a fetch in flight.
+  // A front of a closed episode that is still finishing has a segment fetch in flight (its playlist fetches and
+  // its retry waits for them are not: hls.js is not fetching against them). While an episode runs the phase
+  // says so, and an armed front has fetched no segment.
   const frontBusy = () =>
-    (episode !== null &&
-      (episode.front.fetching() !== null || episode.front.boundaryFetching() !== null)) ||
-    [...finishing].some((front) => !front.isFinished());
+    [...finishing].some((front) => front.fetching() !== null || front.boundaryFetching() !== null);
   let lookahead = null; // the last bankInput
   let lastChoiceAt = null; // when the front's rung was last chosen (clock ms), null: not yet for this stretch
   // Where loading resumes: the playhead as last seen with media loaded (-1: from the start), else the start asked
