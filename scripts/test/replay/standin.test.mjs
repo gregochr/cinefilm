@@ -569,7 +569,7 @@ const FULL_REPORT = {
   engine: 'hlsjs', quality: 'auto', autoplayRefused: false, startupMs: 900, watchedMs: 590_000, stallCount: 2,
   stallMs: 4000, longestStallMs: 3000, seekCount: 1, seekWaitMs: 500, reloadCount: 0, reloadMs: 0, reconnectCount: 0,
   reconnectMs: 0, recoveries: 0, fellBack: false, stepsDown: 3, stepsUp: 2, netErrors: 1, timeouts: 1, kbpsLow: 100,
-  kbpsMedian: 900, kbpsHigh: 5000, kbpsSamples: 40, startPositionMs: 12_000, endPositionMs: 600_000, rungMs: { '720p': 1000, '360p': 2000 },
+  kbpsMedian: 900, kbpsHigh: 5000, kbpsSamples: 40, startPositionMs: 12_000, endPositionMs: 600_000, rebanksStarted: 2, rebanksDone: 1, rebanksUndone: 1, marksForgotten: 3, rungMs: { '720p': 1000, '360p': 2000 },
   minutes: [[0, 900, 4, 50_000, 1000], [1, 800, 3, 40_000, 0, 12, 3]],
   client: { userAgent: 'Mozilla/5.0 (A Test Browser)', screen: '1920x1080', cores: 8, touch: false },
 };
@@ -594,6 +594,22 @@ describe('a health report', () => {
     assert.equal(operator, 'A Network Operator Ltd');
     assert.equal(client.cores, 8);
     assert.deepEqual(entry.report, kept);
+  });
+
+  test('keeps every number field of the server HealthReport record, so the list cannot drift behind it', async () => {
+    const source = readFileSync(new URL('../../../backend/src/main/java/gregochr/cinefilm/health/HealthDtos.java', import.meta.url), 'utf8');
+    const head = source.slice(source.indexOf('public record HealthReport('));
+    const components = head.slice(head.indexOf('(') + 1, head.indexOf(') {'))
+      .replace(/@\w+\([^)]*\)/g, '')
+      .split(',')
+      .map((c) => c.trim().split(/\s+/))
+      .filter((parts) => parts.length === 2);
+    const numbers = components.filter(([type]) => type === 'Long').map(([, name]) => name);
+    assert.ok(numbers.length >= 30, `read ${numbers.length} number fields from HealthReport`);
+    assert.ok(numbers.includes('marksForgotten') && numbers.includes('seq'));
+    const standIn = await start();
+    const { entry } = await report(standIn, Object.fromEntries(numbers.map((name) => [name, 1])));
+    assert.deepEqual(Object.keys(entry.report).sort(), [...numbers].sort());
   });
 
   test('drops the operator, the client block and any other key, whatever it is called', async () => {

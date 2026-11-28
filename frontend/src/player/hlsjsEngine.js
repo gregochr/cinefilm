@@ -137,7 +137,8 @@ export function hlsConfig(startSeconds) {
  * playback, so nothing is recovered), onNetworkError({ timeout }),
  * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played),
  * onRebank('started' | 'done' | 'undone') (once for each, at the one place it happens; 'undone' only for a re-bank
- * that was under way) and onMarksForgotten(n) (n hls.js fragment-error marks forgotten in one sweep). In Auto, on a ladder
+ * that was under way and only while the record is still open: one under way when the playback ends is neither
+ * done nor undone, so started may exceed done + undone by one) and onMarksForgotten(n) (n hls.js fragment-error marks forgotten in one sweep). In Auto, on a ladder
  * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above while it is fetching there
  * and has had no fragment trouble; the cap never climbs above the level being fetched by more than one.
  * `fetch` is the film bank's (default: the browser's). Returns { destroy, bankInput } and the bank's own

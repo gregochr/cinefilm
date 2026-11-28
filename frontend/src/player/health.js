@@ -413,8 +413,9 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       else netErrors += 1;
       changed();
     },
-    // What the stuck-rung and re-bank rules did, as totals of the playback: 'started', 'done' or 'undone' (one
-    // re-bank is one of started and then one of done or undone), and the marks forgotten in a sweep.
+    // What the stuck-rung and re-bank rules did, as totals of the playback: 'started', 'done' or 'undone' (a
+    // re-bank is started and then done or undone; one still under way when the playback ends is neither, so
+    // started may exceed done + undone by one), and the marks forgotten in a sweep.
     rebank(kind) {
       advance();
       if (kind === 'started') rebanksStarted += 1;
