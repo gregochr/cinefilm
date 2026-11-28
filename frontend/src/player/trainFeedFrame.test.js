@@ -87,19 +87,11 @@ describe('the frame', () => {
     expect(await promise).toBeNull();
   });
 
-  it('asks the address with a CORS fetch, no credentials and no referrer', () => {
+  it('is a whole document with the referrer policy set', () => {
     const html = frameHtml(URL_A);
-    expect(html).toContain(`fetch(${JSON.stringify(URL_A)}`);
-    expect(html).toContain('credentials: "omit"');
-    expect(html).toContain('referrerPolicy: "no-referrer"');
-    expect(html).not.toContain('no-cors');
     expect(html).toContain('<meta name="referrer" content="no-referrer">');
     expect(html.startsWith('<!doctype html>')).toBe(true);
     expect(html.endsWith('</script>')).toBe(true);
-    expect(html).toContain(`t.length <= ${MAX_FEED_CHARS}`);
-    expect(html).toContain(
-      '.catch(function () { parent.postMessage({ cinefilmFeed: null }, "*"); })',
-    );
   });
 
   it.each([
@@ -112,6 +104,95 @@ describe('the frame', () => {
     expect(literal).not.toContain('<');
     expect(JSON.parse(literal)).toBe(url);
     expect(html.match(/<\/script>/gi)).toHaveLength(1);
+  });
+});
+
+// Runs the frame's own script against stubs and returns what it asked and what it posted.
+const runFrame = (url, fetchStub) => {
+  const html = frameHtml(url);
+  const script = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
+  const posts = [];
+  const fetchCalls = [];
+  const fetchSpy = (...args) => {
+    fetchCalls.push(args);
+    return fetchStub(...args);
+  };
+  const parent = { postMessage: (...args) => posts.push(args) };
+  new Function('fetch', 'parent', script)(fetchSpy, parent);
+  return { posts, fetchCalls };
+};
+const response = (ok, text) => ({ ok, text: () => Promise.resolve(text) });
+
+describe("the frame's own script", () => {
+  it('asks the address with a CORS fetch, no credentials, no referrer and no cache', () => {
+    const { fetchCalls } = runFrame(URL_A, () => new Promise(() => {}));
+    expect(fetchCalls).toEqual([
+      [URL_A, { credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' }],
+    ]);
+    expect(fetchCalls[0][1]).not.toHaveProperty('mode');
+  });
+
+  it('posts the text of an answer', async () => {
+    const { posts } = runFrame(URL_A, () => Promise.resolve(response(true, '{"a":1}')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(posts).toEqual([[{ cinefilmFeed: '{"a":1}' }, '*']]);
+  });
+
+  it('posts an answer of exactly the cap, and an empty one', async () => {
+    const text = 'z'.repeat(MAX_FEED_CHARS);
+    let run = runFrame(URL_A, () => Promise.resolve(response(true, text)));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(run.posts).toEqual([[{ cinefilmFeed: text }, '*']]);
+    run = runFrame(URL_A, () => Promise.resolve(response(true, '')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(run.posts).toEqual([[{ cinefilmFeed: '' }, '*']]);
+  });
+
+  it('posts null for an answer over the cap', async () => {
+    const { posts } = runFrame(URL_A, () =>
+      Promise.resolve(response(true, 'z'.repeat(MAX_FEED_CHARS + 1))),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(posts).toEqual([[{ cinefilmFeed: null }, '*']]);
+  });
+
+  it('posts null for a response that is not ok, without reading its body', async () => {
+    const text = vi.fn(() => Promise.resolve('body'));
+    const { posts } = runFrame(URL_A, () => Promise.resolve({ ok: false, text }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(posts).toEqual([[{ cinefilmFeed: null }, '*']]);
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it('posts null at once when the fetch rejects (a missing CORS header is a TypeError)', async () => {
+    const { posts } = runFrame(URL_A, () => Promise.reject(new TypeError('Failed to fetch')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(posts).toEqual([[{ cinefilmFeed: null }, '*']]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('posts null when reading the body rejects', async () => {
+    const { posts } = runFrame(URL_A, () =>
+      Promise.resolve({ ok: true, text: () => Promise.reject(new TypeError('aborted')) }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(posts).toEqual([[{ cinefilmFeed: null }, '*']]);
+  });
+
+  it('posts nothing while the fetch is pending, and once only when it settles late', async () => {
+    let settle;
+    const { posts } = runFrame(
+      URL_A,
+      () =>
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+    );
+    await vi.advanceTimersByTimeAsync(FEED_TIMEOUT_MS * 2);
+    expect(posts).toEqual([]);
+    settle(response(true, 'late'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(posts).toEqual([[{ cinefilmFeed: 'late' }, '*']]);
   });
 });
 
