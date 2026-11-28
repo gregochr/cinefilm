@@ -108,7 +108,7 @@ describe('the frame', () => {
 });
 
 // Runs the frame's own script against stubs and returns what it asked and what it posted.
-const runFrame = (url, fetchStub) => {
+const runFrame = (url, fetchStub, { onPost } = {}) => {
   const html = frameHtml(url);
   const script = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
   const posts = [];
@@ -117,7 +117,12 @@ const runFrame = (url, fetchStub) => {
     fetchCalls.push(args);
     return fetchStub(...args);
   };
-  const parent = { postMessage: (...args) => posts.push(args) };
+  const parent = {
+    postMessage: (...args) => {
+      posts.push(args);
+      onPost?.(...args);
+    },
+  };
   new Function('fetch', 'parent', script)(fetchSpy, parent);
   return { posts, fetchCalls };
 };
@@ -168,7 +173,6 @@ describe("the frame's own script", () => {
     const { posts } = runFrame(URL_A, () => Promise.reject(new TypeError('Failed to fetch')));
     await vi.advanceTimersByTimeAsync(0);
     expect(posts).toEqual([[{ cinefilmFeed: null }, '*']]);
-    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('posts null when reading the body rejects', async () => {
@@ -197,13 +201,39 @@ describe("the frame's own script", () => {
 });
 
 describe('the answer', () => {
-  it('is the text the frame posts, untouched', async () => {
+  // The real frame script, whose posts reach the page as the browser would deliver them.
+  const runRealFrame = (fetchStub) => {
+    const source = frameNow().contentWindow;
+    runFrame(URL_A, fetchStub, {
+      onPost: (data) =>
+        window.dispatchEvent(new MessageEvent('message', { data, origin: 'null', source })),
+    });
+  };
+
+  it('is the text the real frame script posts for an answer, untouched', async () => {
+    const promise = askTrainFeed(URL_A);
+    runRealFrame(() => Promise.resolve(response(true, ' {"a": 1}\n')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await promise).toBe(' {"a": 1}\n');
+  });
+
+  it('is null at once when the real frame script meets a rejected fetch (a missing CORS header is a TypeError)', async () => {
+    const promise = askTrainFeed(URL_A);
+    const state = settled(promise);
+    runRealFrame(() => Promise.reject(new TypeError('Failed to fetch')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.done).toBe(true);
+    expect(await promise).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('is the text when the frame posts it', async () => {
     const promise = askTrainFeed(URL_A);
     answer(' {"a": 1}\n');
     expect(await promise).toBe(' {"a": 1}\n');
   });
 
-  it('is null when the fetch rejected (a missing CORS header is a TypeError) and the frame posted null', async () => {
+  it('is null when the frame posts null', async () => {
     const promise = askTrainFeed(URL_A);
     answer(null);
     expect(await promise).toBeNull();
