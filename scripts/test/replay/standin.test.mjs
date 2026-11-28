@@ -598,9 +598,10 @@ describe('a health report', () => {
 
   test('keeps every number field of the server HealthReport record, so the list cannot drift behind it', async () => {
     const source = readFileSync(new URL('../../../backend/src/main/java/gregochr/cinefilm/health/HealthDtos.java', import.meta.url), 'utf8');
-    // Comments and annotations out first, so neither hides a component.
+    // Strings, then comments and annotations, out first, so none can hide or cut a component.
     const text = source
       .slice(source.indexOf('public record HealthReport('))
+      .replace(/"(?:\\.|[^"\\])*"/g, '""')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/[^\n]*/g, '')
       .replace(/@\w+(\.\w+)*(\s*\([^)]*\))?/g, '');
@@ -611,25 +612,34 @@ describe('a health report', () => {
       if (text[end] === '(') depth += 1;
       if (text[end] === ')' && (depth -= 1) === 0) break;
     }
+    assert.ok(open > 0 && /^\s*\{/.test(text.slice(end + 1)), 'could not read the HealthReport record');
     // Split at the commas outside any generic's brackets.
     const pieces = [];
     let angle = 0;
     let from = open + 1;
-    let commas = 0;
     for (let i = open + 1; i < end; i += 1) {
       if (text[i] === '<') angle += 1;
       if (text[i] === '>') angle -= 1;
       if (text[i] === ',' && angle === 0) {
-        commas += 1;
         pieces.push(text.slice(from, i));
         from = i + 1;
       }
     }
     pieces.push(text.slice(from, end));
-    const components = pieces.map((piece) => piece.trim().split(/\s+/)).map((words) => ({ type: words.at(-2), name: words.at(-1) }));
-    assert.ok(components.every(({ type, name }) => type && name), 'a component of HealthReport could not be read');
-    assert.equal(components.length, commas + 1, 'a component was lost reading HealthReport');
-    const NUMERIC = new Set(['Long', 'long', 'Integer', 'int', 'Short', 'short', 'Double', 'double', 'Float', 'float', 'BigDecimal']);
+    // The type is the simple name (no package), generics kept; the name is the last word.
+    const components = pieces.map((piece) => {
+      const [, type, name] = /^(\S[\s\S]*?)\s+(\w+)$/.exec(piece.trim()) ?? [];
+      return { type: type?.replace(/(?:\w+\.)+/g, '').replace(/\s+/g, ' '), name };
+    });
+    const NUMERIC = new Set([
+      'Long', 'long', 'Integer', 'int', 'Short', 'short', 'Byte', 'byte', 'Double', 'double', 'Float', 'float',
+      'BigDecimal', 'BigInteger', 'OptionalLong', 'OptionalInt', 'OptionalDouble',
+    ]);
+    const KNOWN = /^(Boolean|boolean|String|Map<.*>|List<.*>|ClientInfo)$/;
+    for (const { type, name } of components) {
+      assert.ok(type && name, 'could not read the HealthReport record');
+      assert.ok(NUMERIC.has(type) || KNOWN.test(type), `unknown component type ${type} ${name}: add it to the numeric or the known list`);
+    }
     const numbers = components.filter(({ type }) => NUMERIC.has(type)).map(({ name }) => name);
     assert.ok(numbers.length >= 30, `read ${numbers.length} number fields from HealthReport`);
     assert.ok(numbers.includes('marksForgotten') && numbers.includes('seq'));
