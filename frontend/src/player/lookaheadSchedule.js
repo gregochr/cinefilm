@@ -95,7 +95,7 @@ export function createLookaheadSchedule({
     const mine = epoch;
     const own = new AbortController();
     mapController = own;
-    loadMap(own.signal)
+    void loadMap(own.signal)
       .catch(() => [])
       .then((loaded) => {
         if (mine !== epoch) return;
@@ -103,7 +103,8 @@ export function createLookaheadSchedule({
         if (!Array.isArray(loaded) || loaded.length === 0) return; // failed: a trigger tries again
         tracks = loaded;
         place(lastFix.fix, lastFix.atMs); // a map is asked for only after a fix
-      });
+      })
+      .catch(() => {}); // the state was cleaned up first; a throw below it must not become an unhandled rejection
   };
 
   const onAnswer = (text) => {
@@ -143,7 +144,7 @@ export function createLookaheadSchedule({
     const mine = epoch;
     const own = new AbortController();
     controller = own;
-    ask(own.signal)
+    void ask(own.signal)
       .catch(() => null)
       .then((text) => {
         if (mine !== epoch) return; // stopped meanwhile: `stop` has cleaned up
@@ -154,7 +155,8 @@ export function createLookaheadSchedule({
           return;
         }
         onAnswer(text);
-      });
+      })
+      .catch(() => {}); // the state was cleaned up first; a throw below it must not become an unhandled rejection
   }
 
   return {

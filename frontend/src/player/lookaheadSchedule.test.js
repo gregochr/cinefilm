@@ -528,6 +528,51 @@ describe('once the train is known', () => {
   });
 });
 
+describe('a handler that throws', () => {
+  const throwing = () => ({
+    noteMatch: () => {
+      throw new Error('broken');
+    },
+    input: () => null,
+  });
+  const unhandled = vi.fn();
+  beforeEach(() => {
+    unhandled.mockClear();
+    process.on('unhandledRejection', unhandled);
+  });
+  afterEach(() => process.off('unhandledRejection', unhandled));
+
+  it('leaves no unhandled rejection and no ask held when the answer cannot be placed', async () => {
+    const ask = vi.fn(() => Promise.resolve(feedText()));
+    const loadMap = vi.fn(() => Promise.resolve([northTrack()]));
+    const schedule = createLookaheadSchedule({ ask, loadMap, createInput: throwing });
+    schedule.attach(engineOf());
+    schedule.begin();
+    await settle(); // the answer, then the map, whose placing throws
+    await settle();
+    schedule.trigger(); // the ask is not held: this asks at once
+    expect(ask).toHaveBeenCalledTimes(2);
+    await settle();
+    expect(unhandled).not.toHaveBeenCalled();
+  });
+
+  it('leaves no unhandled rejection when the next ask cannot be started after an answer', async () => {
+    const asks = [];
+    const ask = vi.fn(() => {
+      if (asks.length === 1) throw new Error('no frame');
+      asks.push(1);
+      return Promise.resolve(null);
+    });
+    const schedule = createLookaheadSchedule({ ask, loadMap: () => Promise.resolve([]) });
+    schedule.attach(engineOf());
+    schedule.begin();
+    schedule.trigger(); // aborted: the settled ask starts another, which throws inside the handler
+    await settle();
+    await settle();
+    expect(unhandled).not.toHaveBeenCalled();
+  });
+});
+
 describe('only with an engine that can take the input', () => {
   it('ignores an engine without bankInput (the native player): no ask, no map, no throw', async () => {
     const { schedule, ask, loadMap } = build({ attached: false });
