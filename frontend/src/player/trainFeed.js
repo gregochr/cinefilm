@@ -2,6 +2,9 @@
 // The answer is JSONP ("cb({...});") with trailing commas in places, and its numbers are written as text.
 // Nothing here keeps, sends or stores a position.
 
+/** The train's own position answer (it resolves only on the train); `trainFeedFrame.js` asks for it. */
+export const TRAIN_FEED_URL = 'https://www.ombord.info/api/jsonp/position/';
+
 const MAX_TEXT = 100_000;
 // Seconds since 1970: 2020-01-01 to 2100-01-01, the range the journey file's own `feedAt` uses.
 const TIME_LOW = 1_577_836_800;
