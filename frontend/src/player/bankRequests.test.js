@@ -900,6 +900,48 @@ describe('the bank decider: the rung boundary', () => {
     ]);
   });
 
+  it('cuts a waiter on a failed copy loose, then makes exactly one on-demand request when on', async () => {
+    const { requests, bank, server } = await setup({ seq: 4, rung: 'r480' });
+    put(bank, 3, 'r240');
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1)); // 4 at 480p: the copy of 3 goes next
+    const first = ask(requests, 3, L480);
+    await flush();
+    server.calls.at(-1).fail();
+    await flush();
+    expect(first.told).toEqual([['timeout']]);
+    const again = ask(requests, 3, L480); // hls.js's retry
+    await flush();
+    await complete(server.calls.at(-1));
+    expect(again.told.map((t) => t[0])).toEqual(['success']);
+    expect(segmentCalls(server)).toEqual([
+      ...urls('r480', 4),
+      ...urls('r480', 3),
+      ...urls('r480', 3),
+    ]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(segmentCalls(server)).toHaveLength(3);
+  });
+
+  it('cuts a waiter on a failed copy loose, then releases its retry while turning off', async () => {
+    const { requests, front, bank, server, seen } = await setup({ seq: 4, rung: 'r480' });
+    put(bank, 3, 'r240');
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1));
+    const first = ask(requests, 3, L480);
+    await flush();
+    requests.setMode('turningOff');
+    front.finish();
+    server.calls.at(-1).fail();
+    await flush();
+    expect(first.told).toEqual([['timeout']]);
+    expect(ask(requests, 3, L480).decision).toEqual({ action: 'pass' });
+    expect(seen.release).toEqual(['release']);
+    expect(segmentCalls(server)).toHaveLength(2);
+  });
+
   it('waits on the boundary copy being fetched, with exactly one server request for the segment at that rung', async () => {
     const { requests, bank, server } = await setup({ seq: 4, rung: 'r480' });
     put(bank, 3, 'r240');
