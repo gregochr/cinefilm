@@ -702,7 +702,7 @@ describe('the server\'s one playhead per session', () => {
     assert.deepEqual(segments(standIn).map((r) => r.restart), [undefined, 'behind']);
   });
 
-  test('a start time outside the film is refused as the server refuses it, and one that is not a number is not read', async () => {
+  test('a start time is read as Jackson reads a Long: a string of digits is a number, any other string is unreadable', async () => {
     const standIn = await start();
     const film = standIn.segmentCount * standIn.segmentMs;
     for (const startMs of [-1, film]) {
@@ -710,11 +710,52 @@ describe('the server\'s one playhead per session', () => {
       assert.equal(answer.status, 400);
       assert.deepEqual(json(answer), { error: 'startMs is outside the film' });
     }
-    const odd = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: '600' });
-    assert.equal(odd.status, 400);
-    assert.deepEqual(json(odd), { error: 'Invalid request' });
+    for (const startMs of ['abc', '', '6e2', true, {}, []]) {
+      const odd = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs });
+      assert.equal(odd.status, 400, JSON.stringify(startMs));
+      assert.deepEqual(json(odd), { error: 'Invalid request' });
+    }
+    assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: '600' })).status, 200);
+    const outside = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: String(film) });
+    assert.deepEqual(json(outside), { error: 'startMs is outside the film' });
     assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: film - 1 })).status, 200);
     assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: null })).status, 200);
+  });
+
+  test('a start time given as a string of digits starts the run there, as the number does', async () => {
+    const standIn = await start(SLOW);
+    const { sessionId } = await newSession(standIn, { quality: 'auto', probeKbps: 5000, startMs: '600000' });
+    await request(standIn.port, { path: segmentOf(sessionId, '480p', 150) });
+    assert.equal(segments(standIn)[0].restart, undefined);
+  });
+
+  test('a request for a lost segment is answered 503 when the run stops, not when its six seconds are up', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const start0 = Date.now();
+    const standIn = await start({ encoderSpeed: 100 }); // 40 ms a segment
+    const { sessionId } = await newSession(standIn);
+    const at = (ms) => t.mock.timers.setTime(start0 + ms);
+    // The request, once the stand-in is holding it: the answer is in `answered`.
+    const held = async (n) => {
+      const answered = request(standIn.port, { path: segmentOf(sessionId, '480p', n) });
+      await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be held');
+      return { answered };
+    };
+    at(1500); // 37 segments made
+    assert.equal((await request(standIn.port, { path: segmentOf(sessionId, '480p', 10) })).status, 200);
+    const bank = await held(45); // reached by the run, made 1,840 ms in
+    at(1900);
+    assert.equal((await bank.answered).status, 200); // the bank's playhead is now at 45: below 15 is deleted
+    const began = performance.now();
+    const player = await held(12); // lost; the playhead goes back to 12, so the run is to stop at its 58th segment: 2,320 ms
+    at(2500);
+    const answer = await player.answered;
+    // Held until the stop, about 420 ms of real time on the timer the model gave, not the six seconds of the wait.
+    assert.ok(performance.now() - began < 3000, `held ${performance.now() - began} ms`);
+    assert.equal(answer.status, 503);
+    const [, , entry] = segments(standIn);
+    assert.equal(entry.deleted, true);
+    assert.equal(entry.waitMs, 600); // 1,900 to 2,500 on the clock the test set
   });
 
   test('a request for a segment made and then deleted is logged as `deleted`, with no restart, then 503', async (t) => {

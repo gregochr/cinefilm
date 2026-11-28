@@ -146,7 +146,8 @@ export function createPlayhead({ segmentCount, segmentMs, speed, now, startSegme
         return { restart: null, deleted: true };
       }
       let why = 'ahead';
-      if (run.status !== 'running') why = run.fight ? 'fight-stop' : 'stopped';
+      // A stop with a lost segment asked for is the fetchers' doing even if the run stopped before the player came back.
+      if (run.status !== 'running') why = run.fight || lost.has(n) ? 'fight-stop' : 'stopped';
       else if (n < run.start) why = 'behind';
       restart(n);
       return { restart: why };
@@ -172,6 +173,16 @@ export function createPlayhead({ segmentCount, segmentMs, speed, now, startSegme
       const needed = n - run.start + 1;
       if (needed > cap()) return null;
       return Math.max(0, Math.ceil(startupMs + (needed * segmentMs) / speed - (now() - run.startedAt)));
+    },
+    /**
+     * The milliseconds until the run stops (it makes the segment that puts it past the limit, or its last), 0 when it
+     * has, null when it is not going to (it is already stopped). SessionManager.settled, :437-441, ends a wait then.
+     */
+    stopsInMs() {
+      advance();
+      if (run.status !== 'running') return null;
+      const target = Math.min(cap(), last + 1 - run.start);
+      return Math.max(0, Math.ceil(startupMs + (target * segmentMs) / speed - (now() - run.startedAt)));
     },
     /** The playhead's segment and how many times the encoder has been restarted. */
     state() {

@@ -258,7 +258,7 @@ describe('a fight that shows in no restart', () => {
     assert.equal(playhead.state().restarts, 0);
   });
 
-  test('a segment that was never made is not `deleted`, and one made again is not either', () => {
+  test('a segment the run has not made yet is not `deleted`, and is not once it is made', () => {
     const { playhead, wait } = fight();
     assert.deepEqual(playhead.request(50), { restart: null }); // reached by the run, not made yet
     wait(3300);
@@ -276,10 +276,52 @@ describe('a fight that shows in no restart', () => {
     assert.equal(playhead.state().restarts, 1);
   });
 
+  test('a run that stopped on its own before the player came back is a fight too, for a lost segment', () => {
+    const { playhead, wait } = fight();
+    wait(20_000); // the bank's playhead at 45: the run stops at its 91st segment, long before the player asks again
+    assert.equal(playhead.running(), false);
+    assert.deepEqual(playhead.request(12), { restart: 'fight-stop' });
+  });
+
+  test('a restart clears what was lost at or after it: the segment is then only one the run has not made', () => {
+    const { playhead } = fight();
+    assert.deepEqual(playhead.request(200), { restart: 'ahead' });
+    assert.deepEqual(playhead.request(5), { restart: 'behind' }); // the new run's start is 5: 12 is lost no more
+    assert.deepEqual(playhead.request(12), { restart: null });
+  });
+
   test('a stop with no such request before it is only stopped', () => {
     const { playhead, wait } = make();
     wait(20_000);
     assert.deepEqual(playhead.request(46), { restart: 'stopped' });
+  });
+});
+
+describe('stopsInMs', () => {
+  test('is the time until the run makes the segment that puts it past the limit, null once it has stopped', () => {
+    const { playhead, wait } = make(); // 200 ms a segment, 46 allowed from a playhead at 0
+    assert.equal(playhead.stopsInMs(), 9200);
+    wait(9000);
+    assert.equal(playhead.stopsInMs(), 200);
+    wait(200);
+    assert.equal(playhead.stopsInMs(), null);
+  });
+
+  test('follows the playhead: a playhead gone back brings the stop forward, and the end of the film is a stop', () => {
+    const { playhead, wait } = make({ speed: 19 });
+    wait(9000);
+    playhead.request(45);
+    assert.equal(playhead.stopsInMs(), Math.ceil((91 * 4000) / 19 - 9000));
+    playhead.request(12); // a lost segment: the playhead goes back
+    assert.equal(playhead.stopsInMs(), Math.ceil((58 * 4000) / 19 - 9000));
+    const short = make({ segmentCount: 10 });
+    assert.equal(short.playhead.stopsInMs(), 2000);
+  });
+
+  test('counts the start-up time', () => {
+    const clock = { t: 0 };
+    const playhead = createPlayhead({ segmentCount: 1800, segmentMs: SEGMENT_MS, speed: 20, now: () => clock.t, startupMs: 700 });
+    assert.equal(playhead.stopsInMs(), 9900);
   });
 });
 

@@ -345,9 +345,18 @@ function probeRefusal(probe) {
 }
 
 // SessionService.create, :125-128: "startMs is outside the film" for a start before 0 or at or past the film's end.
-function startRefusal(startMs, env) {
-  if (startMs === undefined || startMs === null) return null;
-  if (typeof startMs !== 'number' || !Number.isFinite(startMs)) return INVALID_REQUEST.error;
+// CreateRequest.startMs is a Long, which Jackson's default mapper also reads from a string of digits ("600" is 600 ms,
+// as CreditsAdminDtos and SettingsDtos rely on); any other string is HttpMessageNotReadableException, which the
+// server answers "Invalid request" (ApiExceptionHandler.java:52-55). null: the field is absent.
+function startMsOf(value) {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+  return typeof value === 'string' && /^-?\d{1,15}$/.test(value) ? Number(value) : NaN;
+}
+
+function startRefusal(value, env) {
+  const startMs = startMsOf(value);
+  if (Number.isNaN(startMs)) return INVALID_REQUEST.error;
   return startMs < 0 || startMs >= env.segmentCount * env.segmentMs ? 'startMs is outside the film' : null;
 }
 
@@ -374,7 +383,7 @@ async function createSession(ctx) {
   const id = randomUUID();
   const encoder = env.encoderSpeed === null ? null : createPlayhead({
     segmentCount: env.segmentCount, segmentMs: env.segmentMs, speed: env.encoderSpeed, now: () => Date.now(),
-    startSegment: Math.floor((body.value.startMs ?? 0) / env.segmentMs), startupMs: env.encoderStartMs,
+    startSegment: Math.floor(startMsOf(body.value.startMs) / env.segmentMs), startupMs: env.encoderStartMs,
   });
   env.sessions.set(id, { start, pinned: pinned ? pinned.id : null, encoder });
   sendJson(ctx, {
@@ -455,8 +464,10 @@ function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted }) {
       answer(false);
       return;
     }
+    // Until the segment is made, the wait ends, or the run stops (the server's waiter polls `settled`, which is true then).
     const ready = encoder.readyInMs(n);
-    timer = setTimeout(check, Math.max(1, Math.min(left, ready ?? left)));
+    const stops = encoder.stopsInMs();
+    timer = setTimeout(check, Math.max(1, Math.min(left, ready ?? left, stops ?? left)));
   };
   // The player went before the answer: the request is logged as it would be, cut short.
   ctx.res.on('close', () => answer(false));

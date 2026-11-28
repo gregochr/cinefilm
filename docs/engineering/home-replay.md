@@ -104,18 +104,22 @@ each session:
   end, so it is made again. Each restart is logged on the request that caused it, in `requests.json` (`restart`) and
   counted in `summary.txt`, by reason: `ahead` (more than ten past the run's newest: a seek forward, or one fetcher
   ahead of another), `behind` (before the run's first: a seek back or a fetcher behind), `stopped` (the run had
-  stopped) and `fight-stop` (it had stopped after a request for a deleted segment moved the playhead back, below).
+  stopped) and `fight-stop` (the run had stopped and either a request for a deleted segment had moved the playhead back
+  before it did, or the segment now asked for is one that was made and then deleted: the fetchers' doing, even when
+  the run stopped by itself before the player came back; see below).
 - **The encoder stops** when its newest segment is more than three minutes past the playhead, so a player that
   watches on restarts it every few minutes with a `stopped` restart: that is the real server's way. A stop deletes the
   segment the encoder was writing, and a segment is complete only when the next one's file exists, so the last segment
   a stopped run made is not complete and a request for it restarts the encoder there.
 - **Segments more than two minutes behind the playhead are deleted.** A request for one inside the live run's span only
-  waits and is answered 503, marked `deleted` in `requests.json`; nothing makes it again until a request before the
+  waits and is answered 503, marked `deleted` in `requests.json`, as soon as the run stops (the server's waiter ends
+  a wait then) or after six seconds; nothing makes it again until a request before the
   run's start restarts the encoder. This is how a fight shows with no restart in it: a fetcher far ahead of the
   player drags the playhead forward, the player's own segments fall behind and are deleted, and each of the player's
   requests for one pulls the playhead back, starves the player and gets the run stopped for being ahead.
 - **A fight between fetchers** is therefore `ahead` + `behind` + `fight-stop` restarts + requests marked `deleted`;
-  `summary.txt` says the figure. `stopped` alone is not one.
+  `summary.txt` says the figure. `stopped` alone is not one: it is the run stopping for being three minutes ahead of a
+  playhead that moved on in the ordinary way.
 
 A request's `waitMs` is how long it waited. The model is brought up to date when a request arrives, so the two-second
 sweep is not modelled (the encoder stops on the first segment past the limit); nor are the lag between rungs, a
