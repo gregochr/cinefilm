@@ -100,7 +100,7 @@ engine (`useStream.js:341`).
    its limit). Then: below the limit, the front carries on past it towards F; at the limit or at F the front does
    not carry on; while the front is paused the fetch is made at once for hls.js in the first bullet's shape, and only
    a successful answer resumes the front (at the following position); a plain 503 is handed to hls.js and the front
-   stays paused; a 404 or 410 follows decision 8. **While the bank is turning off** it fetches nothing: any request
+   stays paused; a 404 or 410 follows decision 8. **While the bank is turning off** it fetches nothing, except that the fetch in flight when it turned off finishes, and a request for that fragment waits on it: any other request
    for a fragment not held (beyond held film, or behind it after a seek back) releases first (decision 8) and goes
    to the inner loader. The front starts at the end of
    hls.js's buffered range holding the playhead and, whenever hls.js asks past it, moves past that. It fetches one
@@ -144,8 +144,8 @@ engine (`useStream.js:341`).
    paused, or another fatal network error) restarts it. A **410** to
    the front stops the bank and calls `onStopped` at once (Admin Stop, as today); a **404** calls `onSessionLost` at
    once (the rebuild starts a new engine and bank). A media error never touches the front. The bank turns **off** when the stretch is passed and no other is within 20
-   minutes, or the look-ahead lapses (`train-lookahead-plan.md` decision 7's lapse rule): the front stops, held film
-   is still answered until hls.js asks for a fragment not held (beyond it, or behind it after a seek back), then
+   minutes, or the look-ahead lapses (`train-lookahead-plan.md` decision 7's lapse rule): the front **finishes** the
+   fetch in flight, answering whoever waits on it, makes no new fetch, then stops, and held film is still answered until hls.js asks for a fragment not held (beyond it, or behind it after a seek back), then
    the release of decision 3 and the bank is cleared. A seek
    forward beyond what is held clears it at once (release, then armed again if a stretch is near).
 9. **Keeping and dropping.** A segment is dropped once the playhead is 30 s past its end, so a refused append
@@ -154,6 +154,7 @@ engine (`useStream.js:341`).
    turning off, decision 8 releases).
 10. **hls.js's own depth stays as today** (120 to 480 s): every rung's measured hold is above 480 s plus the back
     buffer, so the browser's buffers never refuse; the deep part is the bank's.
+11. **Boundary copies.** hls.js on a manual level, at a change of level, asks again for the fragment whose span on the new level's own timeline holds the buffered end. hls.js corrects fragment times from the media only on the loaded level, and the buffered end can fall a few milliseconds short of the cut. So where the bank holds sn s at rung A and s+1 at rung B, hls.js at B asks for s at B, and a `bank-rung` answer sends it back to A for s+1: a livelock, seen with real hls.js 1.7.4 (found in B5b's pane check). The front therefore fetches, right after the first segment of a new rung, the segment before it at that rung as a boundary copy, held beside it (still counted against the limit). The decider answers that re-ask from the copy. Only without a copy is the segment fetched at the asked rung on demand, through the one fetcher. This is an exception to decision 1's one copy per sequence number, at most one extra copy per change of rung. A copy not landed by the time the front is three segments past it is dropped (a fetch then would send the server's playhead backwards), and the on-demand fetch covers a later re-ask. A failed copy is dropped, never retried: whoever waits on it is cut loose, the front goes on, and the on-demand fetch covers the re-ask.
 
 ## Pull requests (each aimed at 1,200 changed lines, tests included)
 

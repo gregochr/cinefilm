@@ -638,6 +638,367 @@ describe('the bank decider: behind and beyond the front', () => {
   });
 });
 
+describe('the bank decider: the rung boundary', () => {
+  const L240 = 0;
+  const L360 = 1;
+  const kinds = (told) => told.map((t) => t[0]);
+  // Held: 3 at 360p, 4 at 480p (a rung change inside the bank); the front is past them, at 5.
+  async function boundarySetup(options = {}) {
+    const t = await setup({ seq: 5, rung: 'r480', ...options });
+    put(t.bank, 3, 'r360');
+    put(t.bank, 4, 'r480');
+    return t;
+  }
+
+  it('fetches the re-asked segment once at the asked rung after a bank-rung 503 for its neighbour, then answers the neighbour', async () => {
+    const { requests, bank, server, seen } = await boundarySetup();
+    const next = ask(requests, 4, L360); // hls.js at 360p asks for 4, held at 480p
+    expect(next.decision).toEqual({ action: 'wait' });
+    expect(next.told).toEqual([['error', { code: 503, text: BANK_RUNG_TEXT }]]);
+    expect(seen.wrong).toEqual([L480]);
+    expect(segmentCalls(server)).toEqual([]);
+
+    const again = ask(requests, 3, L480); // the level change: hls.js asks for 3 again, now at 480p
+    expect(again.decision.action).toBe('wait');
+    await flush();
+    expect(segmentCalls(server)).toEqual(urls('r480', 3));
+    await complete(server.calls.at(-1), { size: 321 });
+    expect(kinds(again.told)).toEqual(['success']);
+    expect(again.told[0][1].byteLength).toBe(321);
+    expect(seen.wrong).toEqual([L480]); // the breaker is not a wrong-rung answer
+    expect(bank.rungOf(3)).toBe('r480'); // what hls.js appended is what is held
+
+    const onward = ask(requests, 4, L480);
+    expect(onward.decision.action).toBe('answer');
+    await flush();
+    expect(segmentCalls(server)).toEqual(urls('r480', 3)); // no request for 4
+  });
+
+  it('the reverse order: the re-asked segment first gets its one fetch, and its neighbour is then answered with no 503', async () => {
+    const { requests, server, seen } = await boundarySetup();
+    const again = ask(requests, 3, L480);
+    await flush();
+    await complete(server.calls.at(-1));
+    expect(kinds(again.told)).toEqual(['success']);
+    const onward = ask(requests, 4, L480);
+    expect(onward.decision.action).toBe('answer');
+    expect(seen.wrong).toEqual([]);
+    expect(segmentCalls(server)).toEqual(urls('r480', 3));
+  });
+
+  it('keeps the bank-rung 503 and makes no fetch for a lone wrong-rung request with no neighbour held at the asked rung', async () => {
+    const { requests, bank, server, seen } = await setup({ seq: 5 });
+    put(bank, 3, 'r360');
+    put(bank, 4, 'r360'); // the neighbour is at the held rung, not at the asked one
+    const lone = ask(requests, 3, L480);
+    expect(lone.decision).toEqual({ action: 'wait' });
+    expect(lone.told).toEqual([['error', { code: 503, text: BANK_RUNG_TEXT }]]);
+    expect(seen.wrong).toEqual([L360]);
+    put(bank, 8, 'r360'); // nothing held after 8
+    const last = ask(requests, 8, L480);
+    expect(last.told).toEqual([['error', { code: 503, text: BANK_RUNG_TEXT }]]);
+    await flush();
+    expect(segmentCalls(server)).toEqual([]);
+  });
+
+  it('never replaces the held neighbour, and the front goes back to its own rung, past the held run, with no request at the old position', async () => {
+    const { requests, bank, server, front } = await setup({ seq: 5, rung: 'r360', need: 0 });
+    put(bank, 3, 'r240');
+    put(bank, 4, 'r480');
+    const before = bank.getSegment(4);
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    expect(segmentCalls(server)).toEqual(urls('r360', 5)); // the front fetching at its own rung
+
+    const again = ask(requests, 3, L480);
+    await flush();
+    expect(segmentCalls(server)).toEqual([...urls('r360', 5), ...urls('r480', 3)]);
+    await complete(server.calls.at(-1));
+    expect(kinds(again.told)).toEqual(['success']);
+    expect(segmentCalls(server)).toHaveLength(2); // held as a gap: nothing at 4 or 5 meanwhile
+
+    expect(ask(requests, 4, L480).decision.action).toBe('answer');
+    await flush();
+    expect(bank.getSegment(4)).toEqual(before);
+    expect(segmentCalls(server)).toEqual([
+      ...urls('r360', 5),
+      ...urls('r480', 3),
+      ...urls('r360', 5),
+    ]);
+    expect(front.position()).toEqual({ seq: 5, rung: 'r360' });
+    expect(server.calls.at(-1).aborted).toBe(false);
+    expect(bank.rungOf(4)).toBe('r480');
+  });
+
+  it('costs one request again at the next boundary and never refetches the later segments', async () => {
+    const { requests, bank, server } = await boundarySetup();
+    put(bank, 5, 'r480');
+    put(bank, 6, 'r240');
+    put(bank, 7, 'r360');
+    // First boundary: 3 (360p) then 4 (480p).
+    ask(requests, 3, L480);
+    await flush();
+    await complete(server.calls.at(-1));
+    for (const n of [4, 5]) expect(ask(requests, n, L480).decision.action).toBe('answer');
+    // Second boundary: 5 and 6 are held at 480p and 240p, then 7 at 360p; hls.js moves down to 240p and asks 6.
+    expect(ask(requests, 6, L240).decision.action).toBe('answer');
+    // The level change to 360p re-asks 6, whose neighbour 7 is held at 360p.
+    ask(requests, 6, L360);
+    await flush();
+    await complete(server.calls.at(-1));
+    for (const n of [7]) expect(ask(requests, n, L360).decision.action).toBe('answer');
+    expect(segmentCalls(server)).toEqual([...urls('r480', 3), ...urls('r360', 6)]);
+  });
+
+  it('answers the re-ask from a boundary copy with no request and no 503', async () => {
+    const { requests, bank, server, seen } = await boundarySetup();
+    bank.putBoundary(3, 'r480', new Uint8Array(55).buffer, { start: 1, first: 2, end: 3 });
+    const again = ask(requests, 3, L480);
+    expect(again.decision.action).toBe('answer');
+    expect(again.decision.bytes.byteLength).toBe(55);
+    expect(again.decision.timings).toEqual({ start: 1, first: 2, end: 3 });
+    expect(ask(requests, 4, L480).decision.action).toBe('answer');
+    expect(bank.rungOf(3)).toBe('r360'); // the held copy is untouched
+    expect(seen.wrong).toEqual([]);
+    await flush();
+    expect(segmentCalls(server)).toEqual([]);
+  });
+
+  it('while turning off, releases and passes a boundary request with no copy, sending the front nothing', async () => {
+    const { requests, front, server, seen } = await boundarySetup();
+    const update = vi.spyOn(front, 'update');
+    requests.setMode('turningOff');
+    requests.update({ filmAhead: 5, need: 100 });
+    expect(update).not.toHaveBeenCalled();
+    expect(ask(requests, 3, L480).decision).toEqual({ action: 'pass' });
+    expect(seen.release).toEqual(['release']);
+    expect(requests.armed()).toBe(false);
+    expect(segmentCalls(server)).toEqual([]);
+  });
+
+  it('while turning off, answers a boundary request from a copy, and waits on the fetch in flight for its fragment', async () => {
+    const { requests, bank, front, server, seen } = await boundarySetup({ need: 1000 });
+    await flush();
+    expect(segmentCalls(server)).toEqual(urls('r480', 5)); // the front's fetch in flight
+    bank.putBoundary(3, 'r480', new Uint8Array(5).buffer, { start: 1, first: 2, end: 3 });
+    requests.setMode('turningOff');
+    front.finish();
+    expect(ask(requests, 3, L480).decision.action).toBe('answer');
+    const inFlight = ask(requests, 5, L480);
+    expect(inFlight.decision.action).toBe('wait');
+    await complete(server.calls.at(-1), { size: 77 });
+    expect(inFlight.told.map((t) => t[0])).toEqual(['success']);
+    expect(seen.release).toEqual([]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(segmentCalls(server)).toEqual(urls('r480', 5)); // nothing new
+    expect(ask(requests, 6, L480).decision).toEqual({ action: 'pass' }); // any other request releases
+    expect(seen.release).toEqual(['release']);
+  });
+
+  it('while turning off, a boundary request for the fragment in flight waits on it', async () => {
+    const { requests, front, server, seen } = await boundarySetup();
+    ask(requests, 3, L480); // the breaker's fetch of 3 at 480p
+    await flush();
+    requests.setMode('turningOff');
+    front.finish();
+    const again = ask(requests, 3, L480);
+    expect(again.decision.action).toBe('wait');
+    await complete(server.calls.at(-1));
+    expect(again.told.map((t) => t[0])).toEqual(['success']);
+    expect(seen.release).toEqual([]);
+  });
+
+  it('after the breaker, a request for film not held moves the front on its own rung, not the asked one', async () => {
+    const { requests, bank, server, front } = await setup({ seq: 5, rung: 'r360' });
+    put(bank, 3, 'r240');
+    put(bank, 4, 'r480');
+    ask(requests, 3, L480);
+    await flush();
+    await complete(server.calls.at(-1));
+    const next = ask(requests, 7, L360); // s + 2 is not held: the gap ends without s + 1 being asked
+    expect(next.decision.action).toBe('wait');
+    await flush();
+    expect(server.calls.at(-1).url).toBe(segUrl('r360', 7));
+    expect(front.chosenRung()).toBe('r360');
+  });
+
+  it('keeps a rung chosen during the boundary fetch for the return', async () => {
+    const { requests, bank, server, front } = await setup({ seq: 5, rung: 'r360' });
+    put(bank, 3, 'r240');
+    put(bank, 4, 'r480');
+    ask(requests, 3, L480);
+    await flush();
+    requests.setRung('r240'); // the bank's choice while the front is on the asked rung
+    expect(front.chosenRung()).toBe('r480');
+    await complete(server.calls.at(-1));
+    expect(ask(requests, 4, L480).decision.action).toBe('answer');
+    expect(front.position()).toEqual({ seq: 5, rung: 'r240' });
+    requests.setRung('r360'); // no boundary fetch: straight to the front
+    expect(front.chosenRung()).toBe('r360');
+  });
+
+  it('hands a failed boundary fetch to hls.js and stays consistent for its retry', async () => {
+    const { requests, bank, server, front } = await setup({ seq: 5, rung: 'r360' });
+    put(bank, 3, 'r240');
+    put(bank, 4, 'r480');
+    const first = ask(requests, 3, L480);
+    await flush();
+    server.calls.at(-1).status(503);
+    await flush();
+    expect(first.told).toEqual([['error', { code: 503, text: 'Service Unavailable' }]]);
+    requests.setRung('r240'); // still inside the gap: kept
+    const retry = ask(requests, 3, L480);
+    await flush();
+    expect(segmentCalls(server)).toEqual([...urls('r480', 3), ...urls('r480', 3)]);
+    await complete(server.calls.at(-1));
+    expect(retry.told.map((t) => t[0])).toEqual(['success']);
+    expect(ask(requests, 4, L480).decision.action).toBe('answer');
+    expect(front.position()).toEqual({ seq: 5, rung: 'r240' });
+  });
+
+  it('while turning off, releases a request for a fragment whose fetch failed and was not retried', async () => {
+    const { requests, front, server, seen } = await setup({ seq: 5, need: 1000 });
+    await flush();
+    requests.setMode('turningOff');
+    front.finish();
+    server.calls.at(-1).fail(); // nobody waits: no retry
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(front.fetching()).toBeNull();
+    expect(ask(requests, 5, L480).decision).toEqual({ action: 'pass' });
+    expect(seen.release).toEqual(['release']);
+    expect(segmentCalls(server)).toEqual(urls('r480', 5));
+  });
+
+  it('while turning off, releases the retry of a fragment whose waiter was handed a 503', async () => {
+    const { requests, front, server, seen } = await setup({ seq: 5, need: 1000 });
+    const waiter = ask(requests, 5, L480);
+    requests.setMode('turningOff');
+    front.finish();
+    server.calls.at(-1).status(503, '1');
+    await flush();
+    expect(waiter.told).toEqual([['error', { code: 503, text: 'Service Unavailable' }]]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(ask(requests, 5, L480).decision).toEqual({ action: 'pass' });
+    expect(seen.release).toEqual(['release']);
+  });
+
+  it('makes no request for the segment before after the on-demand fetch and the end of its gap', async () => {
+    const { requests, bank, server } = await setup({ seq: 6, rung: 'r360' });
+    put(bank, 2, 'r240');
+    put(bank, 3, 'r360');
+    put(bank, 4, 'r480');
+    requests.update({ filmAhead: 0, need: 1000 });
+    ask(requests, 3, L480);
+    await flush();
+    await complete(server.calls.at(-1));
+    expect(ask(requests, 4, L480).decision.action).toBe('answer');
+    await flush();
+    expect(segmentCalls(server)).toEqual([
+      ...urls('r360', 6),
+      ...urls('r480', 3),
+      ...urls('r360', 5),
+    ]);
+  });
+
+  it('cuts a waiter on a failed copy loose, then makes exactly one on-demand request when on', async () => {
+    const { requests, bank, server } = await setup({ seq: 4, rung: 'r480' });
+    put(bank, 3, 'r240');
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1)); // 4 at 480p: the copy of 3 goes next
+    const first = ask(requests, 3, L480);
+    await flush();
+    server.calls.at(-1).fail();
+    await flush();
+    expect(first.told).toEqual([['timeout']]);
+    const again = ask(requests, 3, L480); // hls.js's retry
+    await flush();
+    await complete(server.calls.at(-1));
+    expect(again.told.map((t) => t[0])).toEqual(['success']);
+    expect(ask(requests, 4, L480).decision.action).toBe('answer'); // the gap ends: film is wanted again
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    // 4, the failed copy of 3, the front on to 5 at once, the on-demand 3, then onward from 5: the copy is never
+    // requested again.
+    expect(segmentCalls(server)).toEqual([
+      ...urls('r480', 4),
+      ...urls('r480', 3),
+      ...urls('r480', 5),
+      ...urls('r480', 3),
+      ...urls('r480', 5),
+    ]);
+  });
+
+  it('cuts a waiter on a failed copy loose, then releases its retry while turning off', async () => {
+    const { requests, front, bank, server, seen } = await setup({ seq: 4, rung: 'r480' });
+    put(bank, 3, 'r240');
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1));
+    const first = ask(requests, 3, L480);
+    await flush();
+    requests.setMode('turningOff');
+    front.finish();
+    server.calls.at(-1).fail();
+    await flush();
+    expect(first.told).toEqual([['timeout']]);
+    expect(ask(requests, 3, L480).decision).toEqual({ action: 'pass' });
+    expect(seen.release).toEqual(['release']);
+    expect(segmentCalls(server)).toHaveLength(2);
+  });
+
+  it('answers hls.js with the copy even when its segment was evicted while it downloaded', async () => {
+    const { requests, bank, server } = await setup({ seq: 4, rung: 'r480' });
+    put(bank, 3, 'r240');
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1)); // 4 at 480p: the copy of 3 goes next
+    const again = ask(requests, 3, L480);
+    await flush();
+    bank.dropBehind(60);
+    expect(bank.hasSegment(3)).toBe(false);
+    await complete(server.calls.at(-1), { size: 66 });
+    expect(again.told.map((t) => t[0])).toEqual(['success']);
+    expect(again.told[0][1].byteLength).toBe(66);
+  });
+
+  it('fails the wait with an ordinary error, never a throw, when handed no segment', () => {
+    const bank = createSegmentBank();
+    const front = {
+      position: () => ({ seq: 0, rung: 'r480' }),
+      fetching: () => null,
+      boundaryFetching: () => null,
+      fetchNow: () => {},
+      subscribe: (_seq, listener) => {
+        listener.onDone(null);
+        return () => {};
+      },
+    };
+    const requests = createBankRequests({ bank, front, levelOfRung, rungOfLevel });
+    requests.setMode('on');
+    const { told } = ask(requests, 0);
+    expect(told).toEqual([['error', { code: 503, text: 'Service Unavailable' }]]);
+  });
+
+  it('waits on the boundary copy being fetched, with exactly one server request for the segment at that rung', async () => {
+    const { requests, bank, server } = await setup({ seq: 4, rung: 'r480' });
+    put(bank, 3, 'r240');
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1)); // 4 at 480p: the copy of 3 at 480p goes next
+    expect(segmentCalls(server)).toEqual([...urls('r480', 4), ...urls('r480', 3)]);
+    const again = ask(requests, 3, L480);
+    expect(again.decision.action).toBe('wait');
+    await flush();
+    await complete(server.calls.at(-1), { size: 66 });
+    expect(again.told.map((t) => t[0])).toEqual(['success']);
+    expect(again.told[0][1].byteLength).toBe(66);
+    expect(bank.rungOf(3)).toBe('r240');
+    expect(server.calls.filter((c) => c.url === segUrl('r480', 3))).toHaveLength(1);
+    expect(server.calls.every((c) => !c.aborted)).toBe(true);
+  });
+});
+
 describe('the bank decider: turning off and the playlists', () => {
   it('answers held film while turning off, releases once on the first request for film it does not hold, and fetches nothing', async () => {
     const { requests, bank, server, seen } = await setup({ seq: 4 });
@@ -667,7 +1028,11 @@ describe('the bank decider: turning off and the playlists', () => {
 describe('the bank decider: optional hooks', () => {
   it('runs without a wrongRung or onRelease hook', () => {
     const bank = createSegmentBank();
-    const front = { position: () => ({ seq: 0, rung: 'r480' }) };
+    const front = {
+      position: () => ({ seq: 0, rung: 'r480' }),
+      fetching: () => null,
+      boundaryFetching: () => null,
+    };
     const requests = createBankRequests({ bank, front, levelOfRung, rungOfLevel });
     requests.setMode('on');
     put(bank, 3, 'r360');

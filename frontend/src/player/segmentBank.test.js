@@ -40,6 +40,8 @@ describe('the bank store (decisions 1 and 9)', () => {
     expect(held.timings).toEqual({ start: 100, first: 140, end: 300 });
     expect(bank.hasSegment(3)).toBe(true);
     expect(bank.hasSegment(4)).toBe(false);
+    expect(bank.rungOf(3)).toBe('r480');
+    expect(bank.rungOf(4)).toBeNull();
     expect(bank.getSegment(4)).toBeNull();
     expect(bank.heldBytes()).toBe(10);
   });
@@ -247,5 +249,54 @@ describe('the bank store (decisions 1 and 9)', () => {
       expect(bank.filmAheadHeld(1)).toBeCloseTo(15.01, 6);
       expect(bank.covers(0, 16.01)).toBe(true);
     });
+  });
+});
+
+describe('the segment bank: boundary copies', () => {
+  const timings = { start: 1, first: 2, end: 3 };
+  const bytes = (n) => new Uint8Array(n).fill(9).buffer;
+  const put = (bank, seq, rung = 'r240', size = 10) =>
+    bank.putSegment({ seq, rung, start: seq * 4, end: seq * 4 + 4, bytes: bytes(size), timings });
+
+  it('holds one copy at a second rung, a fresh copy each time, counted in the held bytes', () => {
+    const bank = createSegmentBank();
+    put(bank, 3);
+    bank.putBoundary(3, 'r360', bytes(7), timings);
+    expect(bank.heldBytes()).toBe(17);
+    expect(bank.boundaryRungOf(3)).toBe('r360');
+    const copy = bank.getBoundary(3, 'r360');
+    expect(copy).toMatchObject({ seq: 3, rung: 'r360', start: 12, end: 16, timings });
+    expect(copy.bytes.byteLength).toBe(7);
+    expect(copy.bytes).not.toBe(bank.getBoundary(3, 'r360').bytes);
+    expect(bank.getBoundary(3, 'r480')).toBeNull();
+    expect(bank.getSegment(3).rung).toBe('r240'); // the held copy is untouched
+    bank.putBoundary(3, 'r480', bytes(5), timings); // a later one replaces it
+    expect(bank.heldBytes()).toBe(15);
+    expect(bank.getBoundary(3, 'r360')).toBeNull();
+  });
+
+  it('ignores a copy for a segment not held or held at that rung', () => {
+    const bank = createSegmentBank();
+    bank.putBoundary(3, 'r360', bytes(7), timings);
+    put(bank, 3);
+    bank.putBoundary(3, 'r240', bytes(7), timings);
+    expect(bank.heldBytes()).toBe(10);
+    expect(bank.boundaryRungOf(3)).toBeNull();
+  });
+
+  it('is dropped with its segment: dropBehind, a replacement and a clear', () => {
+    const bank = createSegmentBank();
+    for (const n of [0, 1, 20, 21]) {
+      put(bank, n);
+      bank.putBoundary(n, 'r360', bytes(4), timings);
+    }
+    expect(bank.heldBytes()).toBe(56);
+    bank.dropBehind(100); // 0 and 1 end 90+ s before
+    expect(bank.heldBytes()).toBe(28);
+    put(bank, 20, 'r360'); // a new copy of the segment drops its old boundary copy
+    expect(bank.heldBytes()).toBe(24);
+    expect(bank.boundaryRungOf(20)).toBeNull();
+    bank.clear();
+    expect(bank.heldBytes()).toBe(0);
   });
 });
