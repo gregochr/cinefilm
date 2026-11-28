@@ -22,7 +22,8 @@ export function createSegmentBank({ limitBytes = BANK_LIMIT_BYTES } = {}) {
   let heldBytes = 0;
 
   function drop(seq) {
-    heldBytes -= segments.get(seq).size;
+    const gone = segments.get(seq);
+    heldBytes -= gone.size + (gone.boundary?.size ?? 0);
     segments.delete(seq);
   }
 
@@ -61,10 +62,50 @@ export function createSegmentBank({ limitBytes = BANK_LIMIT_BYTES } = {}) {
     putSegment({ seq, rung, start, end, bytes, timings }) {
       if (segments.has(seq)) drop(seq);
       const own = bytes.slice(0);
-      segments.set(seq, { seq, rung, start, end, bytes: own, size: own.byteLength, timings });
+      segments.set(seq, {
+        seq,
+        rung,
+        start,
+        end,
+        bytes: own,
+        size: own.byteLength,
+        timings,
+        boundary: null,
+      });
       heldBytes += own.byteLength;
     },
+    /**
+     * A boundary copy: the held segment `seq` also at a second rung, fetched after the first segment of a new rung
+     * because hls.js, on a change of level, asks again for the segment before it at the new level. At most one per
+     * segment (a later one replaces it); counted in `heldBytes` and dropped with its segment. Ignored when `seq` is
+     * not held or is held at `rung` already.
+     */
+    putBoundary(seq, rung, bytes, timings) {
+      const s = segments.get(seq);
+      if (s === undefined || s.rung === rung) return;
+      heldBytes -= s.boundary?.size ?? 0;
+      const own = bytes.slice(0);
+      s.boundary = { rung, bytes: own, size: own.byteLength, timings };
+      heldBytes += own.byteLength;
+    },
+    /** A fresh copy of the boundary copy of `seq` at `rung` (as `getSegment`, at that rung); null when none. */
+    getBoundary(seq, rung) {
+      const s = segments.get(seq);
+      if (s === undefined || s.boundary?.rung !== rung) return null;
+      return {
+        seq: s.seq,
+        rung,
+        start: s.start,
+        end: s.end,
+        bytes: s.boundary.bytes.slice(0),
+        timings: { ...s.boundary.timings },
+      };
+    },
+    /** The rung of the boundary copy of `seq`; null when it has none. */
+    boundaryRungOf: (seq) => segments.get(seq)?.boundary?.rung ?? null,
     hasSegment: (seq) => segments.has(seq),
+    /** The rung of the held segment `seq`, without copying its bytes; null when it is not held. */
+    rungOf: (seq) => segments.get(seq)?.rung ?? null,
     /** True when some held segment has a sequence number above `seq`. */
     hasSegmentAbove(seq) {
       for (const s of segments.keys()) if (s > seq) return true;

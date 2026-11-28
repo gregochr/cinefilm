@@ -107,6 +107,10 @@ export function createBankFront({
   let lastAnswer = null; // the answer or error that started the retry wait now pending: { seq, name, args }
   let filmAhead = 0;
   let need = 0;
+  // A segment the front has just fetched at a new rung leaves the one before it to fetch at that rung (a boundary
+  // copy, `segmentBank.js`): { seq, rung }, or null.
+  let boundaryDue = null;
+  let finishing = false; // `finish()` was called: nothing new is fetched
 
   // The rungs come in the server's order (best first); the front's best is the greatest height up to 480p.
   const best = eligible.reduce(
@@ -233,9 +237,9 @@ export function createBankFront({
   }
 
   // One request. Whatever its answer, an aborted one is reported as cancelled and nothing of it is used.
-  async function request(url, seq) {
+  async function request(url, seq, boundary = false) {
     const controller = new AbortController();
-    const ctx = { aborted: false, segment: seq !== null };
+    const ctx = { aborted: false, segment: seq !== null, boundary };
     let timer = null;
     let timedOut = false;
     const stopTimer = () => {
@@ -255,7 +259,7 @@ export function createBankFront({
       controller.abort();
     };
     const notify = (name, ...args) => {
-      if (seq !== null && !ctx.aborted) emit(seq, name, ...args);
+      if (seq !== null && !boundary && !ctx.aborted) emit(seq, name, ...args);
     };
     current = ctx;
     const startedAt = now();
@@ -295,8 +299,8 @@ export function createBankFront({
     retryTimer = setTimer(() => {
       retryTimer = null;
       lastAnswer = null;
-      // A forced retry goes ahead only while someone is waiting on the position.
-      if (forced && listeners.get(next)?.size > 0) {
+      // A forced retry goes ahead only while someone is waiting on the position; so does a retry while finishing.
+      if ((forced || finishing) && listeners.get(next)?.size > 0) {
         fetchSegment();
       } else {
         forced = false; // nobody waits any more
@@ -306,7 +310,9 @@ export function createBankFront({
   }
 
   function failed(res, seq) {
-    if (res.outcome !== 'status') {
+    if (finishing && res.outcome !== 'status') {
+      if (listeners.get(seq)?.size > 0) later(NETWORK_RETRY_MS);
+    } else if (res.outcome !== 'status') {
       later(NETWORK_RETRY_MS);
     } else if (res.status === 410) {
       listeners.delete(seq); // the answer was the subscribers' last event
@@ -317,6 +323,7 @@ export function createBankFront({
       stop();
       onSessionLost();
     } else if (res.status === 503 && res.retryAfter > 0) {
+      if (finishing && !(listeners.get(seq)?.size > 0)) return; // nobody waits: stop at once
       later(Math.min(res.retryAfter * 1000 * 2 ** backoffs, RETRY_AFTER_CAP_MS), {
         seq,
         name: 'onServerAnswer',
@@ -331,9 +338,9 @@ export function createBankFront({
     }
   }
 
-  async function run(url, seq, done) {
+  async function run(url, seq, done, boundary = false) {
     busy = true;
-    const pending = request(url, seq);
+    const pending = request(url, seq, boundary);
     syncWatch(); // a segment fetch in flight counts even when film is no longer wanted
     const res = await pending;
     if (res === CANCELLED) return;
@@ -346,6 +353,31 @@ export function createBankFront({
       failed(res, seq);
       syncWatch();
     }
+  }
+
+  // The window's entry for a completed fetch (decision 7) and its throughput for the health record.
+  function record(rung, segment, res) {
+    // The transfer is first byte to end; everything else the stopwatch holds is waiting. A fetch in flight when
+    // film stopped being wanted still counts whole.
+    const d = (res.endAt - res.firstAt) / 1000;
+    const wall = Math.max(elapsed(), d);
+    // A new rung starts a new measurement. Dropping old entries is memory upkeep only: window() itself stops
+    // at WINDOW_S of wall time, so nothing here changes a measurement. Entries go only once the newer ones hold
+    // WINDOW_S (no count cap: a fast link can fit many entries in the window).
+    if (entries.at(-1)?.rung !== rung) entries.length = 0;
+    entries.push({ rung, film: segment.end - segment.start, w: wall - d, d });
+    let held = 0;
+    let oldest = entries.length;
+    while (oldest > 0 && held < WINDOW_S) {
+      oldest -= 1;
+      held += entries[oldest].w + entries[oldest].d;
+    }
+    entries.splice(0, oldest);
+  }
+
+  function report(timings, res) {
+    const kbps = fragmentKbps({ loading: timings, loaded: res.bytes.byteLength });
+    if (kbps !== null) onThroughput(kbps);
   }
 
   function fetchSegment() {
@@ -361,29 +393,15 @@ export function createBankFront({
     void run(segment.url, seq, (res) => {
       endPause(); // a successful answer ends a pause
       const timings = { start: res.startedAt, first: res.firstAt, end: res.endAt };
-      // The transfer is first byte to end; everything else the stopwatch holds is waiting. A fetch in flight when
-      // film stopped being wanted still counts whole.
-      const d = (res.endAt - res.firstAt) / 1000;
-      const wall = Math.max(elapsed(), d);
-      // A new rung starts a new measurement. Dropping old entries is memory upkeep only: window() itself stops
-      // at WINDOW_S of wall time, so nothing here changes a measurement. Entries go only once the newer ones hold
-      // WINDOW_S (no count cap: a fast link can fit many entries in the window).
-      if (entries.at(-1)?.rung !== rung) entries.length = 0;
-      entries.push({ rung, film: segment.end - segment.start, w: wall - d, d });
-      let held = 0;
-      let oldest = entries.length;
-      while (oldest > 0 && held < WINDOW_S) {
-        oldest -= 1;
-        held += entries[oldest].w + entries[oldest].d;
-      }
-      entries.splice(0, oldest);
+      record(rung, segment, res);
       const { start, end } = segment;
       bank.putSegment({ seq, rung, start, end, bytes: res.bytes, timings });
-      const kbps = fragmentKbps({ loading: timings, loaded: res.bytes.byteLength });
-      if (kbps !== null) onThroughput(kbps);
+      report(timings, res);
       lockedRung = null;
       forced = false;
       next = seq + 1;
+      const before = bank.rungOf(seq - 1);
+      if (before !== null && before !== rung) boundaryDue = { seq: seq - 1, rung };
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
       // One listener at a time, each leaving the set before it is called, so a stop, start or move inside one
       // aborts only those not yet called; one that subscribes from inside onDone stays for the next fetch.
@@ -397,15 +415,57 @@ export function createBankFront({
     });
   }
 
+  // True while a boundary copy is still due: its segment is held at another rung and has no copy at this one.
+  function boundaryNeeded() {
+    if (boundaryDue === null) return false;
+    const { seq, rung } = boundaryDue;
+    const held = bank.rungOf(seq);
+    if (held === null || held === rung || bank.boundaryRungOf(seq) === rung) boundaryDue = null;
+    return boundaryDue !== null;
+  }
+
+  // The segment before one just fetched at a new rung, at that rung, through the same one fetcher: hls.js asks for
+  // it again after a change of level. Its failure is handled as any fetch's, and it stays due until it lands.
+  function fetchBoundary() {
+    const { seq, rung } = boundaryDue;
+    const segment = segmentsOf(rung)?.get(seq);
+    if (segment === undefined) {
+      boundaryDue = null;
+      return;
+    }
+    void run(
+      segment.url,
+      seq,
+      (res) => {
+        endPause();
+        const timings = { start: res.startedAt, first: res.firstAt, end: res.endAt };
+        record(rung, segment, res);
+        bank.putBoundary(seq, rung, res.bytes, timings);
+        report(timings, res);
+        boundaryDue = null;
+        resetWatch();
+        // A request waiting on the position was held up by this fetch: it goes next whatever the wants say.
+        if (forced && !finishing && listeners.get(next)?.size > 0) fetchSegment();
+      },
+      true,
+    );
+  }
+
   function forceFetch() {
-    if (stopped || !armed || !running) return;
+    if (stopped || finishing || !armed || !running) return;
     if (!eligible.every((r) => bank.getPlaylist(r.id) !== null)) return;
     forced = true; // a retry of this position goes ahead whatever the wants and the pause say
+    if (busy && current?.boundary) {
+      // A request waits on the position: the boundary copy gives way (it stays due).
+      current.cancel();
+      current = null;
+      busy = false;
+    }
     if (!busy && retryTimer === null) fetchSegment();
   }
 
   function pump() {
-    if (stopped || busy || paused || retryTimer !== null || !armed) return;
+    if (stopped || finishing || busy || paused || retryTimer !== null || !armed) return;
     const missing = eligible.find((r) => bank.getPlaylist(r.id) === null);
     if (missing !== undefined) {
       // run() never rejects, as above.
@@ -414,6 +474,8 @@ export function createBankFront({
         const text = new TextDecoder().decode(res.bytes);
         bank.putPlaylist(missing.id, text);
       });
+    } else if (running && wants() && boundaryNeeded()) {
+      fetchBoundary();
     } else if (running && wants()) {
       forced = false; // an ordinary fetch: its retries obey the wants and the pause
       fetchSegment();
@@ -422,6 +484,7 @@ export function createBankFront({
 
   function stop() {
     stopped = true;
+    boundaryDue = null;
     current?.cancel();
     current = null;
     busy = false;
@@ -437,7 +500,7 @@ export function createBankFront({
       pump();
     },
     start({ seq, rung }) {
-      if (stopped) return;
+      if (stopped || finishing) return;
       // A fetch now for subscribers at this very position carries on, with one new request.
       const keep = forced && seq === next && listeners.get(seq)?.size > 0;
       resetPosition();
@@ -452,7 +515,7 @@ export function createBankFront({
       pump();
     },
     movePast(seq) {
-      if (stopped || seq < next) return;
+      if (stopped || finishing || seq < next) return;
       resetPosition();
       const dropped = detachSubscribers((q) => q <= seq);
       next = seq + 1;
@@ -468,10 +531,31 @@ export function createBankFront({
     setRung(id) {
       wantedRung = clamp(id);
     },
+    /**
+     * Ends the front without cutting what is under way: no new fetch is started (no pump, no boundary copy, no
+     * retry for a position nobody waits on), a fetch in flight runs to its end (its subscribers hear it as
+     * ever and a success is stored), and a retry of that same position (a 503 with Retry-After, a network error)
+     * goes ahead only while a subscriber still waits. `stop()` is the cut; only a destroy uses it.
+     */
+    finish() {
+      if (stopped || finishing) return;
+      finishing = true;
+      if (retryTimer !== null && !(listeners.get(next)?.size > 0)) {
+        clearTimer(retryTimer);
+        retryTimer = null;
+        lastAnswer = null;
+      }
+    },
+    /** True once `finish()` was called and nothing is left under way: no fetch in flight, no retry pending. */
+    isFinished: () => finishing && !busy && retryTimer === null,
+    /** The sequence number of the segment fetch under way now (a retry wait included), or null. */
+    fetching: () => (lockedRung !== null ? next : null),
     serverAnswered: resume,
     pause,
     isPaused: () => paused,
     position: () => ({ seq: next, rung: lockedRung ?? wantedRung }),
+    /** The rung the front has chosen (`start`, `setRung`), not the one a fetch in flight is locked to. */
+    chosenRung: () => wantedRung,
     fetchNow: forceFetch,
     subscribe(seq, listener) {
       const set = listeners.get(seq) ?? new Set();

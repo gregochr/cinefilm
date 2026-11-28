@@ -26,14 +26,23 @@ const STATUS_TEXT = { 503: 'Service Unavailable', 404: 'Not Found', 410: 'Gone' 
  * - 'armed': `armed()` is true, so the loader copies what the inner loader loads to `fragmentLoaded`; every
  *   request passes.
  * - 'on': the front is started; requests are decided as below.
- * - 'turningOff': B5b has stopped the front (`front.stop()` when leaving 'on'; the decider never stops it and
- *   sends it no update then); held film is still answered, a request for a fragment not held calls
- *   `onRelease()` and passes, and the mode becomes 'off'.
+ * - 'turningOff': B5b has called `front.finish()` when leaving 'on' (the decider never ends it and sends it no
+ *   update then): the fetch in flight finishes and a request for that fragment waits on it as usual; held film is
+ *   still answered, any other request for a fragment not held calls `onRelease()` and passes, and the mode
+ *   becomes 'off'.
  *
  * Rules for a request while 'on' (`pos` is `front.position().seq`):
  * - held at the requested rung: answered from the bank; held at another rung: `wrongRung(heldLevel)`, then the
  *   request fails with `{ code: 503, text: BANK_RUNG_TEXT }`; nothing goes to the server. Neither resumes the
  *   front.
+ * - the rung boundary: `sn` held at another rung while the bank holds `sn + 1` at the asked rung is hls.js's
+ *   re-ask after a level change (it takes `sn` again when its buffered end falls short of the cut). It is not
+ *   failed, which would send hls.js back to `sn + 1` at the other level in a loop: `sn` is fetched at the asked
+ *   rung, as a gap of one (stored over the held copy of `sn` only), and the front goes back to its own rung and
+ *   past the held run when hls.js asks for the held `sn + 1`. Before that fetch, a boundary copy of `sn` at the
+ *   asked rung (`bank.getBoundary`, fetched by the front after the first segment of a new rung) answers it with
+ *   no request. While turning off, a boundary request releases like any other, unless it is the fragment the
+ *   front has in flight.
  * - not held and `sn === pos`: waits on the front's fetch of it (`front.subscribe` and `front.fetchNow`: exactly
  *   one server request). What the front does after it (carry on, or not at F or the limit) is the front's.
  * - not held and `sn < pos` with held film above `sn` (a gap behind the front): the front is moved to `sn` and
@@ -51,6 +60,7 @@ const STATUS_TEXT = { 503: 'Service Unavailable', 404: 'Not Found', 410: 'Gone' 
  * (a stop, a start or a move) the wait ends with `timeout` and hls.js asks again.
  *
  * B5b must call: `setMode`, `update({ filmAhead, need })` in place of `front.update` (the decider forwards it),
+ * `setRung(rung)` in place of `front.setRung` (a rung chosen during a boundary fetch is kept for the return),
  * `endGap()` on a seek or clear, and pass `front`'s own `onStopped` and `onSessionLost`. `fragmentLoaded` also
  * tells the front a successful server answer happened (`front.serverAnswered()`), which resumes a paused front.
  */
@@ -69,6 +79,8 @@ export function createBankRequests({
   let mode = 'off';
   let gap = false;
   let gapHighest = -1;
+  // The front's own rung while a rung-boundary fetch (below) has it at the asked rung; null otherwise.
+  let ownRung = null;
   let lastUpdate = null;
   // The frag of each request passed to the inner loader, for `fragmentLoaded` (which is not given its film times).
   const passed = new Map();
@@ -92,13 +104,16 @@ export function createBankRequests({
   function clearGap() {
     gap = false;
     gapHighest = -1;
+    if (ownRung !== null) front.setRung(ownRung);
+    ownRung = null;
   }
 
   function endGap(nextSeq = null) {
     if (!gap) return;
+    const rung = ownRung ?? front.chosenRung();
     clearGap();
     // Move the front first, while its need is still 0, so only the onward fetch starts, never one at the old spot.
-    if (nextSeq !== null) front.start({ seq: nextSeq, rung: front.position().rung });
+    if (nextSeq !== null) front.start({ seq: nextSeq, rung });
     frontUpdate(lastUpdate);
   }
 
@@ -110,6 +125,14 @@ export function createBankRequests({
     }
     wrongRung(heldLevel);
     return null;
+  }
+
+  // The first request for film not held while turning off: the manual level is released and hls.js loads it itself.
+  function release() {
+    onRelease();
+    mode = 'off';
+    passed.clear();
+    return { action: 'pass' };
   }
 
   const rungError = () => ({ code: 503, text: BANK_RUNG_TEXT });
@@ -172,6 +195,14 @@ export function createBankRequests({
     };
   }
 
+  // One server request for `sn` at the asked rung through the front's one fetcher, held as a gap of one: the front
+  // goes back to its own rung and to the end of the held run when hls.js asks for the held `sn + 1`.
+  function fetchAtAskedRung(request, reply, askedRung) {
+    ownRung ??= front.chosenRung();
+    beginGap(request.sn, askedRung);
+    return wait(request, reply);
+  }
+
   return {
     setMode(next) {
       if (next === mode) return;
@@ -182,9 +213,18 @@ export function createBankRequests({
     armed: isArmed,
     update(input) {
       lastUpdate = input;
+      if (mode === 'turningOff') return; // the front is stopped: it is sent nothing
       front.update(gap ? { ...input, need: 0 } : input);
     },
     endGap: () => endGap(),
+    /**
+     * The front's rung (the bank's choice): call this, not `front.setRung`. While a rung-boundary fetch holds the
+     * front on the asked rung it is kept for when the front goes back to its own; otherwise it is `front.setRung`.
+     */
+    setRung(rung) {
+      if (ownRung !== null) ownRung = rung;
+      else front.setRung(rung);
+    },
 
     fragmentRequest(request, reply) {
       const { sn, frag } = request;
@@ -194,26 +234,39 @@ export function createBankRequests({
       }
       const held = bank.getSegment(sn);
       if (held !== null) {
-        const decided = fromHeld(request, held);
         if (gap && sn > gapHighest) endGap(bank.nextAfterRun(held.start));
+        // The rung boundary: hls.js re-asks `sn` at the level of the held `sn + 1` after a level change, and its
+        // fragment finder takes `sn` again when the buffered end falls short of the cut. Failing it would send
+        // hls.js back to `sn + 1` at the other level in a loop: the boundary copy answers it, or, with none,
+        // `sn` is fetched at the asked rung, once.
+        const askedRung = rungOfLevel(request.level);
+        if (askedRung !== null && held.rung !== askedRung) {
+          const copy = bank.getBoundary(sn, askedRung);
+          if (copy !== null) return { action: 'answer', bytes: copy.bytes, timings: copy.timings };
+          if (bank.rungOf(sn + 1) === askedRung) {
+            if (mode === 'turningOff') {
+              // The front fetches nothing new: only the fetch it has in flight can serve it.
+              return front.fetching() === sn ? wait(request, reply) : release();
+            }
+            return fetchAtAskedRung(request, reply, askedRung);
+          }
+        }
+        const decided = fromHeld(request, held);
         if (decided !== null) return decided;
         reply.error(rungError());
         return { action: 'wait' };
       }
-      if (mode === 'turningOff') {
-        onRelease();
-        mode = 'off';
-        passed.clear();
-        return { action: 'pass' };
-      }
+      if (mode === 'turningOff') return front.fetching() === sn ? wait(request, reply) : release();
       const pos = front.position();
+      // The front's own rung: while a boundary fetch has it on the asked rung, the one it will return to.
+      const rung = ownRung ?? pos.rung;
       const heldAbove = bank.hasSegmentAbove(sn);
       // A gap holds only while held film lies above what hls.js asks for: hls.js skips film it already has, and
       // held film may have been dropped behind the playhead. Otherwise the gap ends, and the need is restored.
       const endsGap = gap && !heldAbove;
       if (endsGap) clearGap();
-      if (sn < pos.seq && heldAbove) beginGap(sn, pos.rung);
-      else if (sn !== pos.seq) front.start({ seq: sn, rung: pos.rung }); // the one fetcher goes there
+      if (sn < pos.seq && heldAbove) beginGap(sn, rung);
+      else if (sn !== pos.seq) front.start({ seq: sn, rung }); // the one fetcher goes there
       if (endsGap) frontUpdate(lastUpdate);
       if (gap) gapHighest = Math.max(gapHighest, sn);
       return wait(request, reply);
