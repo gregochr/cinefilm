@@ -598,17 +598,45 @@ describe('a health report', () => {
 
   test('keeps every number field of the server HealthReport record, so the list cannot drift behind it', async () => {
     const source = readFileSync(new URL('../../../backend/src/main/java/gregochr/cinefilm/health/HealthDtos.java', import.meta.url), 'utf8');
-    const head = source.slice(source.indexOf('public record HealthReport('));
-    const components = head.slice(head.indexOf('(') + 1, head.indexOf(') {'))
-      .replace(/@\w+\([^)]*\)/g, '')
-      .split(',')
-      .map((c) => c.trim().split(/\s+/))
-      .filter((parts) => parts.length === 2);
-    const numbers = components.filter(([type]) => type === 'Long').map(([, name]) => name);
+    // Comments and annotations out first, so neither hides a component.
+    const text = source
+      .slice(source.indexOf('public record HealthReport('))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/@\w+(\.\w+)*(\s*\([^)]*\))?/g, '');
+    const open = text.indexOf('(');
+    let depth = 0;
+    let end = open;
+    for (; end < text.length; end += 1) {
+      if (text[end] === '(') depth += 1;
+      if (text[end] === ')' && (depth -= 1) === 0) break;
+    }
+    // Split at the commas outside any generic's brackets.
+    const pieces = [];
+    let angle = 0;
+    let from = open + 1;
+    let commas = 0;
+    for (let i = open + 1; i < end; i += 1) {
+      if (text[i] === '<') angle += 1;
+      if (text[i] === '>') angle -= 1;
+      if (text[i] === ',' && angle === 0) {
+        commas += 1;
+        pieces.push(text.slice(from, i));
+        from = i + 1;
+      }
+    }
+    pieces.push(text.slice(from, end));
+    const components = pieces.map((piece) => piece.trim().split(/\s+/)).map((words) => ({ type: words.at(-2), name: words.at(-1) }));
+    assert.ok(components.every(({ type, name }) => type && name), 'a component of HealthReport could not be read');
+    assert.equal(components.length, commas + 1, 'a component was lost reading HealthReport');
+    const NUMERIC = new Set(['Long', 'long', 'Integer', 'int', 'Short', 'short', 'Double', 'double', 'Float', 'float', 'BigDecimal']);
+    const numbers = components.filter(({ type }) => NUMERIC.has(type)).map(({ name }) => name);
     assert.ok(numbers.length >= 30, `read ${numbers.length} number fields from HealthReport`);
     assert.ok(numbers.includes('marksForgotten') && numbers.includes('seq'));
     const standIn = await start();
     const { entry } = await report(standIn, Object.fromEntries(numbers.map((name) => [name, 1])));
+    const lost = numbers.filter((name) => !(name in entry.report));
+    assert.deepEqual(lost, [], `REPORT_NUMBERS in standin.mjs lacks: ${lost.join(', ')}`);
     assert.deepEqual(Object.keys(entry.report).sort(), [...numbers].sort());
   });
 
