@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { bareSegmentBytes, buildSegment, loadTemplate } from '../../replay/ts.mjs';
-import { SILENCE, makeTemplate } from './support.mjs';
+import { SILENCE, makeNoise, makeTemplate } from './support.mjs';
 
 const PACKET = 188;
 const VIDEO = 0x100;
@@ -265,6 +265,65 @@ describe('silence', () => {
   });
 });
 
+describe('sound at an audio rate', () => {
+  const noisy = makeTemplate({ noise: makeNoise() });
+  // The sound's payload bytes, PES headers (eight bytes after the length field) taken off.
+  const soundBytes = (segment) => pesOf(segment, AUDIO).reduce((sum, pes) => sum + pes.readUInt16BE(4) - 8, 0);
+  // Frame k of the film is noise frame k modulo the list's length; a segment holds the frames that start inside it.
+  const expected = (kbps, first, count) => {
+    let sum = 0;
+    for (let k = first; k < first + count; k += 1) sum += kbps + (k % 3) * 10;
+    return sum;
+  };
+
+  test('is the template\'s noise at that rate, frame after frame in the order of the film\'s own frames', () => {
+    assert.equal(soundBytes(buildSegment(noisy, 0, 50000, 'null', 96)), expected(96, 0, 188));
+    assert.equal(soundBytes(buildSegment(noisy, 1, 50000, 'null', 96)), expected(96, 188, 187));
+    assert.equal(soundBytes(buildSegment(noisy, 0, 50000, 'null', 64)), expected(64, 0, 188));
+    assert.equal(soundBytes(buildSegment(noisy, 0, 50000, 'null', 128)), expected(128, 0, 188));
+  });
+
+  test('keeps the same frame count and time stamps as silence, whatever the rate', () => {
+    const quiet = buildSegment(noisy, 1, 50000, 'null');
+    const loud = buildSegment(noisy, 1, 50000, 'null', 128);
+    assert.deepEqual(audioPts(loud), audioPts(quiet));
+    assert.deepEqual(pesOf(loud, AUDIO).map((pes) => pes[0]), pesOf(quiet, AUDIO).map((pes) => pes[0]));
+  });
+
+  test('is silence when no rate is asked for, when the template has no noise at the rate, or has none at all', () => {
+    const quiet = buildSegment(noisy, 0, 50000, 'null');
+    assert.equal(silenceFrames(quiet), 188);
+    assert.ok(buildSegment(noisy, 0, 50000, 'null', 72).equals(quiet));
+    assert.ok(buildSegment(template, 0, 50000, 'null', 96).equals(buildSegment(template, 0, 50000, 'null')));
+    assert.ok(buildSegment(makeTemplate({ noise: { 96: [] } }), 0, 50000, 'null', 96).equals(quiet));
+  });
+
+  test('a template with no sound has none at any rate', () => {
+    const mutedNoise = makeTemplate({ silence: null, noise: makeNoise() });
+    assert.equal(ofPid(buildSegment(mutedNoise, 0, 50000, 'media', 96), AUDIO).length, 0);
+    assert.equal(bareSegmentBytes(mutedNoise, 96), 3760);
+  });
+
+  test('the bare size is kept for each rate, and weighs the noise', () => {
+    const fresh = makeTemplate({ noise: makeNoise() });
+    const bare = (kbps) => bareSegmentBytes(fresh, kbps);
+    assert.equal(bare(undefined), 8272);
+    assert.ok(bare(64) > 8272 && bare(96) > bare(64) && bare(128) > bare(96));
+    assert.equal(bare(96), buildSegment(fresh, 0, 0, 'null', 96).length);
+    // asked again, or for another rate first, nothing is mixed up
+    assert.equal(bare(64), buildSegment(fresh, 0, 0, 'null', 64).length);
+    assert.equal(bare(96), buildSegment(fresh, 0, 0, 'null', 96).length);
+    assert.equal(bare(undefined), 8272);
+  });
+
+  test('the target is still met to the packet, the picture giving up what the sound weighs', () => {
+    for (const kbps of [64, 96, 128]) assert.equal(buildSegment(noisy, 2, 100000, 'media', kbps).length, 99828);
+    const picture = (kbps) => pesOf(buildSegment(noisy, 2, 100000, 'media', kbps), VIDEO).reduce((sum, pes) => sum + pes.length, 0);
+    assert.ok(picture(128) < picture(64));
+    assert.ok(picture(64) < pesOf(buildSegment(noisy, 2, 100000, 'media'), VIDEO).reduce((sum, pes) => sum + pes.length, 0));
+  });
+});
+
 describe('loadTemplate', () => {
   const frames = [Buffer.from('first frame'), Buffer.from('second'), Buffer.from('third one here')];
   const write = (name, body) => {
@@ -292,6 +351,15 @@ describe('loadTemplate', () => {
   test('has no silence when the file has none', () => {
     assert.equal(loadTemplate(write('no-silence.json', body({}))).silence, null);
     assert.equal(loadTemplate(write('null-silence.json', body({ silence: null }))).silence, null);
+  });
+
+  test('reads the noise at each rate as buffers, or null when the file has none', () => {
+    const noise = { 64: [Buffer.from('ab').toString('base64'), Buffer.from('cde').toString('base64')], 96: [] };
+    const loaded = loadTemplate(write('with-noise.json', body({ silence: SILENCE.toString('base64'), noise })));
+    assert.deepEqual(Object.keys(loaded.noise), ['64', '96']);
+    assert.deepEqual(loaded.noise[64], [Buffer.from('ab'), Buffer.from('cde')]);
+    assert.deepEqual(loaded.noise[96], []);
+    assert.equal(loadTemplate(write('no-noise.json', body({ silence: SILENCE.toString('base64') }))).noise, null);
   });
 
   test('a loaded template builds a segment', () => {

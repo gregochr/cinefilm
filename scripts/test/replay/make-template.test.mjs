@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
-import { TEMPLATE_PATH, nalTypes, silentFrame } from '../../replay/make-template.mjs';
+import { TEMPLATE_PATH, nalTypes, noiseFrames, silentFrame } from '../../replay/make-template.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -108,5 +108,50 @@ describe('nalTypes', () => {
 describe('TEMPLATE_PATH', () => {
   test('is scripts/replay/out/template.json in this checkout, a folder git ignores', () => {
     assert.equal(TEMPLATE_PATH, join(HERE, '..', '..', 'replay', 'out', 'template.json'));
+  });
+});
+
+// One ADTS frame (AAC-LC, 48 kHz, stereo, one block) of `length` bytes in all, its header giving that length.
+function adts(length) {
+  const frame = Buffer.alloc(length, 0x5a);
+  Buffer.from([0xff, 0xf1, 0x4c, 0x80 | (length >> 11), (length >> 3) & 0xff, ((length & 7) << 5) | 0x1f, 0xfc]).copy(frame);
+  return frame;
+}
+
+// What the encoder hands back for `kbps`: `count` frames of the length that rate averages (1024 samples at 48 kHz).
+function noiseAt(kbps, count = 420, length = Math.round((kbps * 1000 / 8) * (1024 / 48000))) {
+  return { frames: Array.from({ length: count }, () => adts(length).toString('base64')) };
+}
+
+describe('noiseFrames', () => {
+  test('frames at the rate asked for are returned, byte for byte', () => {
+    const frames = noiseFrames(96, noiseAt(96));
+    assert.equal(frames.length, 420);
+    assert.deepEqual(frames[0], adts(256));
+  });
+
+  test('the rate may be 15% off, and no more', () => {
+    assert.equal(noiseFrames(96, noiseAt(96, 420, 256 * 1.14)).length, 420);
+    assert.equal(noiseFrames(96, noiseAt(96, 420, 256 * 0.86)).length, 420);
+    assert.throws(() => noiseFrames(96, noiseAt(96, 420, 256 * 1.2)), { message: /the encoder made 115 kbit\/s/ });
+    assert.throws(() => noiseFrames(96, noiseAt(96, 420, 256 * 0.8)), { message: /the encoder made 77 kbit\/s/ });
+  });
+
+  test('each frame is checked: one that is not an ADTS frame of AAC-LC at 48 kHz in stereo is refused, named by place', () => {
+    const entry = noiseAt(96);
+    const bad = adts(256);
+    bad[2] = 0x40 | (4 << 2); // 44.1 kHz
+    entry.frames[7] = bad.toString('base64');
+    assert.throws(() => noiseFrames(96, entry), { message: 'noise at 96 kbit/s: frame 7 is not one ADTS frame of AAC-LC at 48 kHz in stereo' });
+    const short = noiseAt(96);
+    short.frames[3] = adts(255).subarray(0, 250).toString('base64'); // the header says 255
+    assert.throws(() => noiseFrames(96, short), { message: /frame 3 is not one ADTS frame/ });
+  });
+
+  test('a count other than 420, an error, or nothing at all is refused, with the encoder\'s words', () => {
+    assert.throws(() => noiseFrames(96, noiseAt(96, 419)), { message: 'noise at 96 kbit/s: 419 frames, not 420' });
+    assert.throws(() => noiseFrames(64, { error: 'AAC is not supported' }), { message: 'noise at 64 kbit/s: AAC is not supported' });
+    assert.throws(() => noiseFrames(64, undefined), { message: 'noise at 64 kbit/s: no frames' });
+    assert.throws(() => noiseFrames(64, { frames: 'abc' }), { message: 'noise at 64 kbit/s: no frames' });
   });
 });

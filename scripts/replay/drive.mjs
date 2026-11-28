@@ -14,6 +14,11 @@
 //               would) or null (padding the player's demuxer drops)                 default media
 //   --wire      how heavy a segment is, as a multiple of its rung's average bitrate (1 to 1.5); the default,
 //               1.08, is the MPEG-TS wrapping that the trace's stalled minutes are worked out with
+//   --encoder   off, or how many times faster than real time the server's encoder runs (1 to 200; about 19 at 480p
+//               on the real one): then the server's one encoder playhead per session is modelled, and a request
+//               far from the playhead restarts the encoder there (playhead.mjs)         default off
+//   --encoder-start-ms  with --encoder: the time from an encoder run's start (a restart or a new session) to its first
+//               segment, in ms (0 to 60000); not measured on the real server                default 0
 //   --rebuild   build the app again first (do this after the checkout changes)
 //
 // Ctrl-C (or SIGTERM) ends the replay early. Its results are written once the driver has looked at the film for the
@@ -63,7 +68,7 @@ const RUNG_IDS = ['original', '1080p', '720p', '480p', '360p', '240p'];
 
 // ---- options -----------------------------------------------------------------------------------------------------
 
-const VALUE_OPTIONS = new Set(['start', 'minutes', 'trace', 'name', 'fill', 'wire', 'tmp']);
+const VALUE_OPTIONS = new Set(['start', 'minutes', 'trace', 'name', 'fill', 'wire', 'tmp', 'encoder', 'encoder-start-ms']);
 const WHOLE = /^\d{1,9}$/;
 const DECIMAL = /^\d{1,3}(?:\.\d{1,6})?$/;
 const FLAT = /^flat:\d{1,7}$/;
@@ -124,6 +129,22 @@ function wireOption(given) {
   return Number(text);
 }
 
+// null (off) or a speed in multiples of real time.
+function encoderOption(given) {
+  const text = given.get('encoder') ?? 'off';
+  if (text === 'off') return null;
+  if (!DECIMAL.test(text) || Number(text) < 1 || Number(text) > 200) {
+    throw new Error('--encoder must be off or a number from 1 to 200');
+  }
+  return Number(text);
+}
+
+function encoderStartOption(given) {
+  const text = given.get('encoder-start-ms') ?? '0';
+  if (!WHOLE.test(text) || Number(text) > 60000) throw new Error('--encoder-start-ms must be a whole number from 0 to 60000');
+  return Number(text);
+}
+
 function nameOption(given, fallback) {
   const text = given.get('name') ?? fallback;
   if (!isRunName(text)) {
@@ -152,6 +173,8 @@ export function options(argv) {
     tmp: tmpOption(given),
     fill: oneOf(given, 'fill', 'media', ['media', 'null']),
     wire: wireOption(given),
+    encoder: encoderOption(given),
+    encoderStartMs: encoderStartOption(given),
     rebuild: given.has('rebuild'),
   };
 }
@@ -273,6 +296,20 @@ function requestLines(requests) {
   return lines;
 }
 
+// What the modelled encoder did (playhead.mjs), only when it was on. Segments lost and asked again (a request for a
+// segment made and then deleted, which the server only waits for, then answers 503; a restart after a stop with such a
+// segment asked for) come from a fight between fetchers or from a reload that threw the player's buffer away.
+function encoderLines(opt, requests) {
+  if (!opt.encoder) return [];
+  const segments = requests.filter((r) => r.kind === 'segment');
+  const why = (reason) => segments.filter((r) => r.restart === reason).length;
+  const restarts = segments.filter((r) => r.restart).length;
+  return [`the encoder at ${opt.encoder} times real time: ${restarts} restarts (${why('ahead')} ahead, ${why('behind')} behind, `
+    + `${why('stopped')} after it stopped, ${why('lost-stop')} after a stop with a lost segment), `
+    + `${segments.filter((r) => r.waitMs).length} segments waited for, ${segments.filter((r) => r.status === 503).length} answered 503; `
+    + `segments lost and asked again: deleted ${segments.filter((r) => r.deleted).length}, lost-stop ${why('lost-stop')}`];
+}
+
 function endLines(samples, pageErrors) {
   const lines = [];
   const last = samples[samples.length - 1];
@@ -306,6 +343,7 @@ export function summarise({
     ...minuteLines({ opt, record, trace, report, requests }),
     ...reportLines(report),
     ...requestLines(requests),
+    ...encoderLines(opt, requests),
     ...endLines(samples, pageErrors),
   ];
   return lines.map((line) => printable(line, LINE_LIMIT)).join('\n');
@@ -493,16 +531,20 @@ function ensureBuild(rebuild) {
 }
 
 /**
- * The film's picture: loaded from `path`; made by `make` only when loading fails because the file is not there.
- * Any other failure (a file that is not a template) is the caller's.
+ * The film's picture: loaded from `path`; made by `make` when loading fails because the file is not there, and
+ * again when it is one made before templates held noise at each audio rate (its audio would then weigh nothing, and
+ * a run on it would read as lighter than the real server's). Any other failure (a file that is not a template) is
+ * the caller's.
  */
 export async function templateFor({ path, make, load = loadTemplate, log = say }) {
   try {
-    return load(path);
+    const found = load(path);
+    if (!found.silence || found.noise) return found;
+    log('the stand-in film\'s picture is from before its sound was made as heavy as a rung\'s: making it again ...');
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
+    log('making the stand-in film\'s picture ...');
   }
-  log('making the stand-in film\'s picture ...');
   await make();
   return load(path);
 }
@@ -676,6 +718,8 @@ async function main(argv, stop, held) {
   await new Promise((resolve) => claim.close(resolve));
   const standIn = await startOnPort({
     port: PORT, distDir: DIST, filmPath: FILM, template, trace, startMinute: opt.start, fill: opt.fill, wire: opt.wire,
+    encoderSpeed: opt.encoder,
+    encoderStartMs: opt.encoderStartMs,
   });
   let failed = false;
   // A failure is excused by a stop asked for before it, or within the short wait that follows it (see `stopAsked`);

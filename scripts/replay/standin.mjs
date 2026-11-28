@@ -4,7 +4,11 @@
 //
 // The film is a 1080p source as CineFilm would ladder it (Ladder.java, Rung.java): the original copied at
 // 10 Mbit/s, then 720p, 480p, 360p and the 240p floor. Playlists are written as PlaylistWriter.java writes them.
-// Segments are four seconds of MPEG-TS built by ts.mjs.
+// Segments are four seconds of MPEG-TS built by ts.mjs, each with sound as heavy as its rung's audio.
+//
+// With `encoderSpeed` set, the server's one encoder playhead per session is modelled (playhead.mjs, which says which
+// Java it mirrors): a segment is answered when the encoder has made it, a request far from the playhead restarts the
+// encoder there, and a segment not made within six seconds gets 503. Left out, every segment is there at once.
 //
 // The link (link.mjs): every API answer, playlist, segment and the speed probe passes through one shared allowance
 // that is refilled at the trace's rate for the current replay minute (nothing at all when it is 0). Not even an
@@ -24,6 +28,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
 import { createByteCounter, createLink, minuteAt, rateAt } from './link.mjs';
 import { WIRE } from './trace.mjs';
+import { createPlayhead, WAIT_MAX_MS } from './playhead.mjs';
+
+/** How often a held request looks again: PollingSegmentWaiter.POLL (a test reads the Java). */
+export const POLL_MS = 100;
 import { buildSegment } from './ts.mjs';
 
 const HEADROOM = 1.25; // StartRung.java
@@ -127,7 +135,7 @@ const rateBps = (env) => (env.t0 === null ? OPEN_BPS : rateAt(env.trace, minuteN
 // One answer: `size` bytes of body (`chunk(offset, n)` gives them) that the link releases after the round trip.
 // It is the link's job: `left()` and `send(n)`.
 class Answer {
-  constructor(env, res, spec, record) {
+  constructor(env, res, spec, record, began = performance.now()) {
     this.env = env;
     this.res = res;
     this.spec = spec;
@@ -136,7 +144,7 @@ class Answer {
     this.offset = 0;
     this.headed = false;
     this.closed = false;
-    this.began = performance.now();
+    this.began = began;
     this.cancelAlive = null;
   }
 
@@ -203,18 +211,23 @@ function methodOf(req) {
   return METHODS.find((m) => m === req.method) ?? 'other';
 }
 
-function startAnswer({ env, req, res }, spec) {
+// `ctx.arrival` is set for a request that was held before it was answered: its times and its readings run from the
+// moment it arrived, not from the moment the wait ended.
+function startAnswer({ env, req, res, arrival }, spec) {
   const record = {
-    at: Date.now(), ms: clockMs(env), minute: minuteNow(env), method: methodOf(req), kind: spec.kind,
+    at: arrival?.at ?? Date.now(), ms: arrival ? arrival.ms : clockMs(env), minute: arrival ? arrival.minute : minuteNow(env),
+    method: methodOf(req), kind: spec.kind,
     status: spec.status, bytes: spec.size, sent: 0, firstByteMs: null, doneMs: null, aborted: false, ...spec.detail,
   };
   env.requests.push(record);
   if (res.destroyed) {
-    // The player went while the request was still being read: there is nobody to answer.
+    // The player went while the request was still being read, or while it was held: there is nobody to answer. A held
+    // request was cut that long after it arrived, which is what analyse reads to know how long it was outstanding.
     record.aborted = true;
+    if (arrival) record.cutMs = Math.round(performance.now() - arrival.began);
     return;
   }
-  const answer = new Answer(env, res, spec, record);
+  const answer = new Answer(env, res, spec, record, arrival?.began);
   res.on('close', () => answer.close());
   if (env.open && !MEDIA_KINDS.has(spec.kind)) {
     answer.releaseAtOnce();
@@ -231,7 +244,9 @@ function sendBuffer(ctx, buffer, spec = {}) {
 }
 
 function sendJson(ctx, value, spec = {}) {
-  sendBuffer(ctx, Buffer.from(JSON.stringify(value)), { ...spec, headers: { 'Content-Type': 'application/json' } });
+  sendBuffer(ctx, Buffer.from(JSON.stringify(value)), {
+    ...spec, headers: { ...spec.headers, 'Content-Type': 'application/json' },
+  });
 }
 
 function noContent(ctx, kind) {
@@ -296,7 +311,7 @@ function replayState({ env, res }) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     clockMs: clockMs(env), minute: minuteNow(env), kbps: rateBps(env) / 1000, open: env.open,
-    active: env.link.size(), requests: env.requests.length, reports: env.healthReports.length,
+    active: env.link.size(), waiting: env.waiting, requests: env.requests.length, reports: env.healthReports.length,
   }));
 }
 
@@ -337,6 +352,23 @@ function probeRefusal(probe) {
   return probe < 0 ? 'Invalid probe' : null;
 }
 
+// SessionService.create, :125-128: "startMs is outside the film" for a start before 0 or at or past the film's end.
+// CreateRequest.startMs is a Long: a JSON integer, a decimal cut toward zero, or absent (0). The real server also
+// coerces some strings (Jackson's default mapper); the app never sends one, so the stand-in does not model it and
+// refuses any string. A number beyond Long's range is unreadable, as it is there. NaN means unreadable.
+function startMsOf(value) {
+  if (value === undefined || value === null) return 0;
+  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) >= 2 ** 63) return Number.NaN;
+  return Math.trunc(value) + 0; // + 0: no negative zero
+}
+
+// SessionService.create, :125-128: "startMs is outside the film" for a start before 0 or at or past the film's end.
+function startRefusal(value, env) {
+  const startMs = startMsOf(value);
+  if (Number.isNaN(startMs)) return INVALID_REQUEST.error;
+  return startMs < 0 || startMs >= env.segmentCount * env.segmentMs ? 'startMs is outside the film' : null;
+}
+
 function sessionRefusal(body, rungs) {
   return qualityRefusal(body.quality, rungs) ?? probeRefusal(body.probeKbps);
 }
@@ -349,7 +381,7 @@ async function createSession(ctx) {
     refuse(ctx);
     return;
   }
-  const refusal = sessionRefusal(body.value, env.rungs);
+  const refusal = sessionRefusal(body.value, env.rungs) ?? startRefusal(body.value.startMs, env);
   if (refusal) {
     sendJson(ctx, { error: refusal }, { status: 400, kind: 'session' });
     return;
@@ -358,7 +390,11 @@ async function createSession(ctx) {
   const probe = body.value.probeKbps ?? null;
   const start = pinned ?? startRung(env.rungs, probe);
   const id = randomUUID();
-  env.sessions.set(id, { start, pinned: pinned ? pinned.id : null });
+  const encoder = env.encoderSpeed === null ? null : createPlayhead({
+    segmentCount: env.segmentCount, segmentMs: env.segmentMs, speed: env.encoderSpeed, now: () => Date.now(),
+    startSegment: Math.floor(startMsOf(body.value.startMs) / env.segmentMs), startupMs: env.encoderStartMs,
+  });
+  env.sessions.set(id, { start, pinned: pinned ? pinned.id : null, encoder });
   sendJson(ctx, {
     sessionId: id, masterUrl: `/api/sessions/${id}/master.m3u8`, startRung: start.id,
     renditions: env.rungs.map((r) => ({ id: r.id, height: r.height, bitrate: r.video, copy: r.copy })),
@@ -388,14 +424,83 @@ function sessionPlaylist(ctx, { match }) {
   return true;
 }
 
-function sessionSegment(ctx, { match }) {
+function sendSegment(ctx, rung, n, detail) {
+  const { env } = ctx;
+  const bytes = Math.round((rung.average * env.wire * env.segmentMs) / 8000);
+  sendBuffer(ctx, buildSegment(env.template, n, bytes, env.fill, rung.audio / 1000), {
+    headers: { 'Content-Type': 'video/mp2t' }, kind: 'segment', detail: { rung: rung.id, segment: n, ...detail },
+  });
+}
+
+// ControllerAdvice for SegmentNotReadyException (HlsSessionController.java:75-78): 503 with Retry-After: 1.
+function sendNotReady(ctx, rung, n, detail) {
+  sendJson(ctx, { error: 'Segment not ready' }, {
+    status: 503, headers: { 'Retry-After': '1' }, kind: 'segment', detail: { rung: rung.id, segment: n, ...detail },
+  });
+}
+
+// Waits for the encoder to make the segment, as SessionManager.segmentLive does: until it is made, or six seconds
+// from the request's arrival, or when no run is going, or when the session has gone (SessionManager.settled,
+// :437-441), whichever a poll finds first: the server's waiter looks every 100 ms (PollingSegmentWaiter.java:14,33-35),
+// so a stop that a later request causes ends every held wait within one poll. A session that was DELETEd is a 404
+// "No such session" (:439-441). The answer says how long it waited and, on the request that restarted the encoder, why.
+function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted, live }) {
+  let timer = null;
+  let answered = false;
+  ctx.env.waiting += 1;
+  const answer = (made, gone = false) => {
+    if (answered) return;
+    answered = true;
+    ctx.env.waiting -= 1;
+    clearTimeout(timer);
+    const waited = Date.now() - arrived;
+    const detail = {
+      ...(restart ? { restart } : {}), ...(deleted ? { deleted: true } : {}), ...(waited > 0 ? { waitMs: waited } : {}),
+    };
+    try {
+      if (gone) sendJson(ctx, { error: 'No such session' }, { status: 404, kind: 'segment', detail: { rung: rung.id, segment: n, ...detail } });
+      else if (made) sendSegment(ctx, rung, n, detail);
+      else sendNotReady(ctx, rung, n, detail);
+    } catch {
+      fail(ctx.res); // from a timer, nothing above catches it
+    }
+  };
+  const check = () => {
+    if (answered) return;
+    if (!live()) {
+      answer(false, true);
+      return;
+    }
+    if (encoder.complete(n)) {
+      answer(true);
+      return;
+    }
+    const left = ctx.env.waitMaxMs - (Date.now() - arrived);
+    if (left <= 0 || !encoder.running()) {
+      answer(false);
+      return;
+    }
+    timer = setTimeout(check, Math.min(POLL_MS, left));
+  };
+  // The player went before the answer: the request is logged as it would be, cut short.
+  ctx.res.on('close', () => answer(false));
+  check();
+}
+
+function sessionSegment(ctx, { session, match, id }) {
   const { env } = ctx;
   const rung = env.rungs.find((r) => r.id === match[1]);
   const n = Number(match[2]);
   if (!rung || n >= env.segmentCount) return false;
-  const bytes = Math.round((rung.average * env.wire * env.segmentMs) / 8000);
-  sendBuffer(ctx, buildSegment(env.template, n, bytes, env.fill), {
-    headers: { 'Content-Type': 'video/mp2t' }, kind: 'segment', detail: { rung: rung.id, segment: n },
+  if (!session.encoder) {
+    sendSegment(ctx, rung, n, {});
+    return true;
+  }
+  const arrived = Date.now();
+  ctx.arrival = { at: arrived, ms: clockMs(env), minute: minuteNow(env), began: performance.now() };
+  const { restart, deleted } = session.encoder.request(n);
+  waitForSegment(ctx, {
+    encoder: session.encoder, rung, n, arrived, restart, deleted, live: () => env.sessions.get(id) === session,
   });
   return true;
 }
@@ -421,7 +526,7 @@ function sessionRoute(ctx, match) {
   for (const route of SESSION_ROUTES) {
     const found = route.pattern.exec(rest);
     // A route returns false when the address named something it does not have (a rung, a segment).
-    if (found && route.handle(ctx, { session, match: found })) return;
+    if (found && route.handle(ctx, { session, match: found, id: match[1] })) return;
   }
   sendJson(ctx, { error: 'Not found' }, { status: 404 });
 }
@@ -614,13 +719,20 @@ function listen(server, port) {
  * `startClock()` is called (the driver calls it as it opens the player) and runs in real time. `wire` scales every
  * segment's size: 1 is the rung's average bitrate alone; the default, WIRE, adds the MPEG-TS wrapping that trace.mjs
  * assumes when it turns a stalled minute's film into kbit/s, so film and trace then weigh the same. `port: 0` takes
- * any free port; the answer says which.
+ * any free port; the answer says which. `encoderSpeed` (how many times faster than real time the server's encoder
+ * runs; null leaves it out) models the server's one playhead per session (playhead.mjs); `encoderStartMs` is the time from an encoder run's start to its first segment (default 0); `waitMaxMs` is how long a
+ * request waits for a segment before 503, the server's six seconds unless a test shortens it.
  */
 export async function startStandIn({
   port, distDir, filmPath, template, trace, startMinute = 0, rttMs = 115, sourceBitrate = 10_000_000, fill = 'media',
-  wire = WIRE,
+  wire = WIRE, encoderSpeed = null, encoderStartMs = 0, waitMaxMs = WAIT_MAX_MS,
 }) {
   if (!validWire(wire)) throw new Error('wire is a number from 1 to 1.5');
+  if (encoderSpeed !== null && !(Number.isFinite(encoderSpeed) && encoderSpeed > 0)) {
+    throw new Error('encoderSpeed is null or a number above 0');
+  }
+  if (!(Number.isFinite(encoderStartMs) && encoderStartMs >= 0)) throw new Error('encoderStartMs is a number from 0');
+  if (!(Number.isFinite(waitMaxMs) && waitMaxMs > 0)) throw new Error('waitMaxMs is a number above 0');
   const files = readBuild(distDir);
   const index = files.get('/index.html')?.body;
   if (!index) throw new Error('the build holds no index.html');
@@ -629,7 +741,7 @@ export async function startStandIn({
   const segmentMs = Math.round(template.seconds * 1000);
   const env = {
     rungs, segmentMs, segmentCount: Math.floor(film.editions[0].runtimeMs / segmentMs), film, template, trace,
-    startMinute, rttMs, fill, wire, files, index, t0: null, open: false, link: null,
+    startMinute, rttMs, fill, wire, encoderSpeed, encoderStartMs, waitMaxMs, files, index, t0: null, open: false, link: null, waiting: 0,
     sessions: new Map(), viewings: new Map(), requests: [], healthReports: [], counter: createByteCounter(),
   };
   env.link = createLink(() => rateBps(env));

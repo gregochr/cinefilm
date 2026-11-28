@@ -8,11 +8,11 @@ import { join } from 'node:path';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { after, describe, test } from 'node:test';
 import {
-  ladder, masterPlaylist, mediaPlaylist, startRung, startStandIn,
+  POLL_MS, ladder, masterPlaylist, mediaPlaylist, startRung, startStandIn,
 } from '../../replay/standin.mjs';
 import { WIRE } from '../../replay/trace.mjs';
-import { buildSegment } from '../../replay/ts.mjs';
-import { FILM_PATH, makeTemplate } from './support.mjs';
+import { AUDIO_KBPS, buildSegment } from '../../replay/ts.mjs';
+import { FILM_PATH, makeNoise, makeTemplate } from './support.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'replay-'));
 const template = makeTemplate();
@@ -512,6 +512,352 @@ describe('a segment', () => {
     assert.equal(answer.headers['content-type'], 'text/plain');
     assert.equal(answer.body.toString(), 'Internal error');
     assert.equal(standIn.requests.filter((r) => r.kind === 'segment').length, 0);
+  });
+});
+
+describe('a segment\'s sound', () => {
+  const noisy = makeTemplate({ noise: makeNoise() });
+
+  test('weighs what its rung\'s audio does: 128 kbit/s for the original, 720p and 480p, 96 for 360p, 64 for 240p', async () => {
+    const standIn = await start({ template: noisy });
+    const { sessionId } = await newSession(standIn);
+    const prefix = `/api/sessions/${sessionId}`;
+    const expected = { original: 128, '720p': 128, '480p': 128, '360p': 96, '240p': 64 };
+    for (const rung of standIn.rungs) {
+      const answer = await request(standIn.port, { path: `${prefix}/${rung.id}/seg-3.ts` });
+      const bytes = Math.round((rung.average * WIRE * standIn.segmentMs) / 8000);
+      assert.equal(rung.audio, expected[rung.id] * 1000, rung.id);
+      assert.ok(answer.body.equals(buildSegment(noisy, 3, bytes, 'media', expected[rung.id])), rung.id);
+    }
+  });
+
+  test('is silence on a template made before noise was kept', async () => {
+    const standIn = await start();
+    const { sessionId } = await newSession(standIn);
+    const answer = await request(standIn.port, { path: `/api/sessions/${sessionId}/360p/seg-3.ts` });
+    assert.ok(answer.body.equals(buildSegment(template, 3, 375_840, 'media')));
+  });
+
+  test('leaves each segment the size of its rung\'s average bitrate, the picture giving way to the sound', async () => {
+    const standIn = await start({ template: noisy });
+    const { sessionId } = await newSession(standIn);
+    const prefix = `/api/sessions/${sessionId}`;
+    assert.equal((await request(standIn.port, { path: `${prefix}/360p/seg-3.ts` })).body.length, 375_812);
+    assert.equal((await request(standIn.port, { path: `${prefix}/240p/seg-0.ts` })).body.length, 169_388);
+  });
+});
+
+describe('the audio rates, read from the server\'s source', () => {
+  const javaDir = '../../../backend/src/main/java/gregochr/cinefilm/transcode/';
+  const rungSource = readFileSync(new URL(`${javaDir}Rung.java`, import.meta.url), 'utf8');
+  const builderSource = readFileSync(new URL(`${javaDir}FfmpegCommandBuilder.java`, import.meta.url), 'utf8');
+  const constant = (name) => {
+    const found = new RegExp(`public static final long ${name} = ([0-9_]+);`).exec(rungSource);
+    assert.ok(found, `Rung.java no longer declares ${name} in the form this test reads`);
+    return Number(found[1].replaceAll('_', ''));
+  };
+
+  test('the stand-in\'s ladder gives each rung the audio rate Rung.audioBitrate() gives it', () => {
+    // The body is read too, so that a change of the rule fails here: the floor rate for a transcoded rung at or below
+    // the floor video bitrate, else the low rate for 360p and 240p, else the full rate.
+    const body = /public long audioBitrate\(\) \{([\s\S]*?)\n    \}/.exec(rungSource)?.[1].replace(/\s+/g, ' ').trim();
+    assert.equal(
+      body,
+      'if (!copy && videoBitrate <= FLOOR_VIDEO_BITRATE) { return FLOOR_AUDIO_BITRATE; } '
+      + 'return Ladder.Q_360.equals(id) || Ladder.Q_240.equals(id) ? LOW_AUDIO_BITRATE : AUDIO_BITRATE;',
+    );
+    const floorVideo = constant('FLOOR_VIDEO_BITRATE');
+    const javaAudio = ({ id, copy, video }) => {
+      if (!copy && video <= floorVideo) return constant('FLOOR_AUDIO_BITRATE');
+      return id === '360p' || id === '240p' ? constant('LOW_AUDIO_BITRATE') : constant('AUDIO_BITRATE');
+    };
+    const rungs = ladder(10_000_000);
+    assert.equal(rungs.length, 5);
+    for (const rung of rungs) assert.equal(rung.audio, javaAudio(rung), rung.id);
+  });
+
+  test('the rates the template makes noise at are exactly the rates the server\'s three constants give', () => {
+    const fromJava = [constant('FLOOR_AUDIO_BITRATE'), constant('LOW_AUDIO_BITRATE'), constant('AUDIO_BITRATE')].map((bps) => bps / 1000);
+    const ascending = (a, b) => a - b;
+    assert.deepEqual([...AUDIO_KBPS].sort(ascending), fromJava.sort(ascending));
+    assert.deepEqual([...new Set(ladder(10_000_000).map((r) => r.audio / 1000))].sort(ascending), [...AUDIO_KBPS].sort(ascending));
+  });
+
+  test('the encoder is told the rung\'s audio rate, in two channels, and no sample rate (the source\'s, 48 kHz as measured)', () => {
+    assert.ok(builderSource.includes('"-c:a", "aac", "-b:a", Long.toString(rung.audioBitrate()), "-ac", "2"'));
+    assert.ok(!/"-ar"/.test(builderSource));
+  });
+});
+
+describe('the poll of a held request, read from the server\'s source', () => {
+  test('is the interval of PollingSegmentWaiter, 100 ms', () => {
+    const source = readFileSync(new URL('../../../backend/src/main/java/gregochr/cinefilm/transcode/PollingSegmentWaiter.java', import.meta.url), 'utf8');
+    const found = /static final Duration POLL = Duration\.ofMillis\((\d+)\);/.exec(source);
+    assert.ok(found, 'PollingSegmentWaiter.java no longer declares POLL in the form this test reads');
+    assert.equal(POLL_MS, Number(found[1]));
+    assert.ok(/Thread\.sleep\(pollMillis\)/.test(source));
+  });
+});
+
+describe('the server\'s one playhead per session', () => {
+  // A slow encoder and a short wait: a request is answered 503 (what the real server answers a segment not made in
+  // its six seconds), and the restarts are logged.
+  const SLOW = { encoderSpeed: 0.0001, waitMaxMs: 40 };
+  const segmentOf = (sessionId, rung, n) => `/api/sessions/${sessionId}/${rung}/seg-${n}.ts`;
+  const segments = (standIn) => standIn.requests.filter((r) => r.kind === 'segment');
+
+  test('with no encoder speed every segment is there at once, and the log has no restart or wait', async () => {
+    const standIn = await start();
+    const { sessionId } = await newSession(standIn);
+    assert.equal((await request(standIn.port, { path: segmentOf(sessionId, '480p', 1500) })).status, 200);
+    assert.equal((await request(standIn.port, { path: segmentOf(sessionId, '480p', 2) })).status, 200);
+    assert.equal(segments(standIn).length, 2);
+    for (const entry of segments(standIn)) {
+      assert.equal('restart' in entry, false);
+      assert.equal('waitMs' in entry, false);
+    }
+  });
+
+  test('a segment the encoder has made is answered as before, with no restart', async () => {
+    const standIn = await start({ encoderSpeed: 200_000 }); // a segment in a few hundredths of a millisecond
+    const { sessionId } = await newSession(standIn);
+    const answer = await request(standIn.port, { path: segmentOf(sessionId, '360p', 3) });
+    assert.equal(answer.status, 200);
+    assert.ok(answer.body.equals(buildSegment(template, 3, 375_840, 'media')));
+    assert.equal(segments(standIn)[0].restart, undefined);
+  });
+
+  test('a segment not made in the time is 503 with Retry-After: 1 and says how long it waited', async () => {
+    const standIn = await start(SLOW);
+    const { sessionId } = await newSession(standIn);
+    const answer = await request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    assert.equal(answer.status, 503);
+    assert.equal(answer.headers['retry-after'], '1');
+    assert.equal(answer.headers['content-type'], 'application/json');
+    assert.deepEqual(json(answer), { error: 'Segment not ready' });
+    const [entry] = segments(standIn);
+    assert.equal(entry.status, 503);
+    assert.equal(entry.rung, '480p');
+    assert.equal(entry.segment, 0);
+    assert.ok(entry.waitMs >= 39, `waited ${entry.waitMs} ms`);
+    assert.equal(entry.restart, undefined);
+  });
+
+  test('a request far from the playhead restarts the encoder and the log says why, on whichever rung asks', async () => {
+    const standIn = await start(SLOW);
+    const { sessionId } = await newSession(standIn);
+    await request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    await request(standIn.port, { path: segmentOf(sessionId, '480p', 500) }); // far past the run's newest: ahead
+    await request(standIn.port, { path: segmentOf(sessionId, '240p', 1) }); // another rung, before the new run's start
+    await request(standIn.port, { path: segmentOf(sessionId, '240p', 2) }); // inside the run that began at 1: waited for
+    assert.deepEqual(segments(standIn).map((r) => r.restart), [undefined, 'ahead', 'behind', undefined]);
+    assert.deepEqual(segments(standIn).map((r) => r.status), [503, 503, 503, 503]);
+  });
+
+  test('each session has its own playhead', async () => {
+    const standIn = await start(SLOW);
+    const first = await newSession(standIn);
+    const second = await newSession(standIn);
+    await request(standIn.port, { path: segmentOf(first.sessionId, '480p', 500) });
+    await request(standIn.port, { path: segmentOf(second.sessionId, '480p', 0) });
+    assert.deepEqual(segments(standIn).map((r) => r.restart), ['ahead', undefined]);
+  });
+
+  test('a request waits for the encoder, and is answered when it has made the segment', async () => {
+    const standIn = await start({ encoderSpeed: 50 }); // 80 ms a segment
+    const { sessionId } = await newSession(standIn);
+    const answer = await request(standIn.port, { path: segmentOf(sessionId, '240p', 2) }); // made 240 ms in
+    assert.equal(answer.status, 200);
+    const [entry] = segments(standIn);
+    assert.ok(entry.waitMs >= 200, `waited ${entry.waitMs} ms`);
+    assert.equal(entry.restart, undefined);
+  });
+
+  test('a far request waits one period after the restart, not for the old run', async () => {
+    const standIn = await start({ encoderSpeed: 50 });
+    const { sessionId } = await newSession(standIn);
+    const answer = await request(standIn.port, { path: segmentOf(sessionId, '240p', 900) });
+    assert.equal(answer.status, 200);
+    const [entry] = segments(standIn);
+    assert.equal(entry.restart, 'ahead');
+    assert.ok(entry.waitMs >= 70 && entry.waitMs < 3000, `waited ${entry.waitMs} ms`);
+  });
+
+  test('a player that goes while its segment is being waited for is logged as cut short, and the wait ends', async () => {
+    const standIn = await start({ encoderSpeed: 0.0001, waitMaxMs: 60_000 });
+    const { sessionId } = await newSession(standIn);
+    const seen = open(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be waiting');
+    await new Promise((resolve) => setTimeout(resolve, 150)); // held for a while before the player goes
+    seen.req.destroy();
+    await waitFor(() => segments(standIn).some((r) => r.aborted), 'the cut to be logged');
+    assert.equal(segments(standIn).length, 1);
+    assert.ok(segments(standIn)[0].cutMs >= 140, `cut at ${segments(standIn)[0].cutMs} ms: the hold is part of it`);
+    assert.equal((await stateOf(standIn)).waiting, 0);
+  });
+
+  test('refuses a speed that is not above 0 and a wait that is not', async () => {
+    for (const bad of [0, -1, Number.NaN, Infinity]) {
+      await assert.rejects(start({ encoderSpeed: bad }), { message: 'encoderSpeed is null or a number above 0' });
+      await assert.rejects(start({ waitMaxMs: bad }), { message: 'waitMaxMs is a number above 0' });
+    }
+    for (const bad of [-1, Number.NaN, Infinity]) {
+      await assert.rejects(start({ encoderStartMs: bad }), { message: 'encoderStartMs is a number from 0' });
+    }
+  });
+
+  test('a session made at a start time runs from its segment: no restart on its first request, behind before it', async () => {
+    const standIn = await start(SLOW);
+    const { sessionId } = await newSession(standIn, { quality: 'auto', probeKbps: 5000, startMs: 600_000 }); // segment 150
+    await request(standIn.port, { path: segmentOf(sessionId, '480p', 150) });
+    await request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    assert.deepEqual(segments(standIn).map((r) => r.restart), [undefined, 'behind']);
+  });
+
+  test('a held request whose session was ended is answered 404 at the next poll, as the server answers it', async () => {
+    const standIn = await start({ encoderSpeed: 0.0001, waitMaxMs: 60_000 });
+    const { sessionId } = await newSession(standIn);
+    const held = request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be held');
+    const began = performance.now();
+    assert.equal((await request(standIn.port, { method: 'DELETE', path: `/api/sessions/${sessionId}` })).status, 204);
+    const answer = await held;
+    assert.equal(answer.status, 404);
+    assert.deepEqual(json(answer), { error: 'No such session' });
+    assert.ok(performance.now() - began < 500, `held ${performance.now() - began} ms`);
+    assert.equal(segments(standIn)[0].status, 404);
+    assert.equal((await stateOf(standIn)).waiting, 0);
+  });
+
+  test('a session that is gone is a 404 even when the encoder has made the segment by the next poll', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const start0 = Date.now();
+    const standIn = await start({ encoderSpeed: 19 }); // the first segment is made 210 ms in
+    const { sessionId } = await newSession(standIn);
+    const held = request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be held');
+    assert.equal((await request(standIn.port, { method: 'DELETE', path: `/api/sessions/${sessionId}` })).status, 204);
+    t.mock.timers.setTime(start0 + 500); // the segment is made now; the next poll finds both it and the gone session
+    const answer = await held;
+    assert.equal(answer.status, 404);
+    assert.deepEqual(json(answer), { error: 'No such session' });
+  });
+
+  test('a held request that crosses a minute of the replay clock is logged in the minute it arrived', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const start0 = Date.now();
+    const standIn = await start({ startMinute: 5, trace: [400_000], encoderSpeed: 19 }); // the first segment, 210 ms in
+    standIn.startClock();
+    t.mock.timers.setTime(start0 + 59_700);
+    const { sessionId } = await newSession(standIn);
+    const held = request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be held');
+    t.mock.timers.setTime(start0 + 60_100); // the segment is made, in the next minute
+    assert.equal((await held).status, 200);
+    const [entry] = segments(standIn);
+    assert.equal(entry.minute, 5);
+    assert.equal(entry.ms, 59_700);
+    assert.equal(standIn.minute(), 6); // the answer went in the next minute
+  });
+
+  test('a held request is logged and timed from its arrival, not from the end of its wait', async () => {
+    const standIn = await start({ trace: [400_000], encoderSpeed: 50, encoderStartMs: 600 }); // made 680 ms in
+    const { sessionId } = await newSession(standIn);
+    standIn.startClock();
+    const before = Date.now();
+    const answer = await request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    assert.equal(answer.status, 200);
+    const [entry] = segments(standIn);
+    assert.ok(entry.waitMs >= 600, `waited ${entry.waitMs} ms`);
+    assert.ok(entry.firstByteMs >= 600, `first byte after ${entry.firstByteMs} ms`); // from the arrival, wait included
+    assert.ok(entry.doneMs >= entry.firstByteMs);
+    assert.ok(entry.at - before < 300, `logged ${entry.at - before} ms after the request left`); // the arrival's time
+    assert.ok(entry.ms < 300, `logged at ${entry.ms} ms of the replay clock`);
+    assert.equal(entry.minute, 0);
+  });
+
+  test('a start time outside the film is refused as the server refuses it, and a number is read as a Long', async () => {
+    const standIn = await start();
+    const film = standIn.segmentCount * standIn.segmentMs;
+    const create = (startMs) => post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs });
+    for (const startMs of [-1, film, film + 0.5]) {
+      const answer = await create(startMs);
+      assert.equal(answer.status, 400, String(startMs));
+      assert.deepEqual(json(answer), { error: 'startMs is outside the film' });
+    }
+    // a decimal is cut toward zero (so -0.5 is 0 and film - 0.5 is the last millisecond); missing or null is 0
+    for (const startMs of [0, -0.5, 600.9, film - 1, film - 0.5, null]) assert.equal((await create(startMs)).status, 200, String(startMs));
+    assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto' })).status, 200);
+    // a number beyond a Long is unreadable
+    const huge = await post(standIn.port, '/api/editions/11/sessions', '{"quality":"auto","startMs":1e19}');
+    assert.equal(huge.status, 400);
+    assert.deepEqual(json(huge), { error: 'Invalid request' });
+  });
+
+  test('a start time that is not a number is refused: the stand-in\'s own choice, the real server coerces some strings', async () => {
+    const standIn = await start();
+    for (const startMs of ['600', 'abc', true, {}, []]) {
+      const answer = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs });
+      assert.equal(answer.status, 400, JSON.stringify(startMs));
+      assert.deepEqual(json(answer), { error: 'Invalid request' });
+    }
+  });
+
+  test('a held request is answered when a later request stops the run, within a poll, not at its six seconds', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const start0 = Date.now();
+    const standIn = await start({ encoderSpeed: 3 }); // 1,333 ms a segment
+    const { sessionId } = await newSession(standIn);
+    const at = (ms) => t.mock.timers.setTime(start0 + ms);
+    const ask = (n) => request(standIn.port, { path: segmentOf(sessionId, '480p', n) });
+    // The playhead is walked to 95 by asking for the newest segment made, so the run is never stopped for being ahead.
+    for (const [ms, n] of [[20, 14], [40, 29], [60, 44], [80, 59], [100, 74], [120, 89], [130, 95]]) {
+      at(ms * 1000);
+      assert.equal((await ask(n)).status, 200, `segment ${n}`);
+    }
+    const bank = ask(100); // reached by the run, made at 134.7 s: held
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the bank to be held');
+    at(130_200);
+    const began = performance.now();
+    const player = ask(5); // lost (below 65 is deleted): the playhead goes back, so the run is 3 minutes ahead and stops
+    const answers = await Promise.all([bank, player]);
+    assert.deepEqual(answers.map((a) => a.status), [503, 503]);
+    assert.ok(performance.now() - began < 500, // one poll (100 ms) and the round trips; POLL_MS is pinned to the Java below
+       `held ${performance.now() - began} ms`);
+    const [lostRequest, bankRequest] = [segments(standIn).find((r) => r.segment === 5), segments(standIn).find((r) => r.segment === 100)];
+    assert.equal(lostRequest.deleted, true);
+    assert.equal(bankRequest.waitMs, 200); // 130,000 to 130,200 on the clock the test set
+  });
+
+  test('a request for a segment made and then deleted is logged as `deleted`, with no restart, then 503', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() }); // the encoder's clock is the one the test sets
+    const start0 = Date.now();
+    const standIn = await start({ encoderSpeed: 19, waitMaxMs: 40 });
+    const { sessionId } = await newSession(standIn);
+    // Ask, and let the clock run past the wait while the request is held.
+    const ask = async (n, at) => {
+      t.mock.timers.setTime(start0 + at);
+      const before = segments(standIn).length;
+      const answered = request(standIn.port, { path: segmentOf(sessionId, '480p', n) });
+      await waitFor(async () => (await stateOf(standIn)).waiting === 1 || segments(standIn).length > before, 'the request');
+      t.mock.timers.setTime(start0 + at + 100);
+      return answered;
+    };
+    assert.equal((await ask(10, 9000)).status, 200); // 42 segments are made by 9 s
+    assert.equal((await ask(45, 9000)).status, 503); // the bank: reached by the run, not made yet: the playhead goes to 45
+    assert.equal((await ask(12, 9200)).status, 503); // below 15 is deleted now, and it is inside the run's span
+    const log = segments(standIn);
+    assert.deepEqual(log.map((r) => r.segment), [10, 45, 12]);
+    assert.deepEqual(log.map((r) => r.restart), [undefined, undefined, undefined]);
+    assert.deepEqual(log.map((r) => r.deleted), [undefined, undefined, true]);
+  });
+
+  test('an error while making a segment the encoder has made is the fixed 500, from a timer too', async () => {
+    const standIn = await start({ encoderSpeed: 200_000, template: makeTemplate({ silence: 'not bytes' }) });
+    const { sessionId } = await newSession(standIn);
+    const answer = await request(standIn.port, { path: segmentOf(sessionId, '240p', 0) });
+    assert.equal(answer.status, 500);
+    assert.equal(answer.body.toString(), 'Internal error');
   });
 });
 
@@ -1371,7 +1717,7 @@ describe('the replay clock', () => {
     assert.equal(standIn.kbps(), 400_000);
     assert.deepEqual(
       { ...(await stateOf(standIn)) },
-      { clockMs: null, minute: null, kbps: 400_000, open: false, active: 0, requests: 0, reports: 0 },
+      { clockMs: null, minute: null, kbps: 400_000, open: false, active: 0, waiting: 0, requests: 0, reports: 0 },
     );
   });
 
