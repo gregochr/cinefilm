@@ -373,16 +373,18 @@ export function createBankFront({
       return;
     }
     const plain503 = res.outcome === 'status' && res.status === 503 && !(res.retryAfter > 0);
+    const wasForced = forced; // `failed()` drops it with the pause; a request waiting on the next position keeps it
     if (plain503) failed(res, seq);
+    forced = wasForced;
     abortBoundary();
     boundaryDue = null;
-    if (!plain503) afterBoundary();
+    afterBoundary(); // a plain 503 has paused the front: a request waiting on the next position goes anyway
   }
 
   // The front goes on after a boundary fetch: a request waiting on the next position was held up by it and goes
   // first, whatever the wants say.
   function afterBoundary() {
-    if (forced && !finishing && listeners.get(next)?.size > 0) fetchSegment();
+    if (forced && !busy && !finishing && listeners.get(next)?.size > 0) fetchSegment();
     else pump();
   }
 

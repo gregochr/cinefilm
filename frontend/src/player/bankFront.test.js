@@ -2221,6 +2221,18 @@ describe('the bank front: boundary copies, round two', () => {
     expect(lastUrl(t.server)).toBe(segUrl('r360', 2));
   });
 
+  it('fetches the next position for a waiting request even when the copy gets a plain 503 and pauses the front', async () => {
+    const t = await waitingOnCopy();
+    t.front.subscribe(2, {});
+    t.front.fetchNow(); // the copy hls.js waits on is not cut
+    await flush();
+    t.server.calls.at(-1).status(503);
+    await flush();
+    expect(t.front.isPaused()).toBe(true);
+    expect(t.events).toEqual(['abort']);
+    expect(lastUrl(t.server)).toBe(segUrl('r360', 2));
+  });
+
   it('cuts loose a waiter on a copy in flight at a start or a move', async () => {
     const started = await waitingOnCopy();
     started.front.start({ seq: 10, rung: 'r360' });
