@@ -224,12 +224,13 @@ class PlaybackHealthApiTest extends ApiTestBase {
 
     @ParameterizedTest
     @CsvSource({"lookaheadMinutes,-1", "bankRungChanges,2000000001", "bankBypassRequests,-1"})
-    void aLookaheadCounterBelowZeroOrAboveTheLimitIsA400(String field, long value) throws Exception {
+    void aLookaheadCounterBelowZeroOrAboveTheLimitIsA400AndStoresNothing(String field, long value) throws Exception {
         ObjectNode body = report(finalCut, 4);
         body.put(field, value);
 
         mvc.perform(put("/api/playback-health/{id}", ID).content(text(body)))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid health report"));
 
         assertThat(health.count()).isZero();
     }
