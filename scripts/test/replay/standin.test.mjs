@@ -598,12 +598,14 @@ describe('a health report', () => {
 
   test('keeps every number field of the server HealthReport record, so the list cannot drift behind it', async () => {
     const source = readFileSync(new URL('../../../backend/src/main/java/gregochr/cinefilm/health/HealthDtos.java', import.meta.url), 'utf8');
-    // Strings, then comments and annotations, out first, so none can hide or cut a component.
+    // Strings, chars and comments out in one left-to-right pass (so a quote in a comment or a char cannot pair with
+    // another), then annotations: none can hide or cut a component.
     const text = source
       .slice(source.indexOf('public record HealthReport('))
-      .replace(/"(?:\\.|[^"\\])*"/g, '""')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\/\/[^\n]*/g, '')
+      .replace(
+        /"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])+'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+        (match) => (match.startsWith('"') ? '""' : ' '),
+      )
       .replace(/@\w+(\.\w+)*(\s*\([^)]*\))?/g, '');
     const open = text.indexOf('(');
     let depth = 0;
@@ -635,10 +637,12 @@ describe('a health report', () => {
       'Long', 'long', 'Integer', 'int', 'Short', 'short', 'Byte', 'byte', 'Double', 'double', 'Float', 'float',
       'BigDecimal', 'BigInteger', 'OptionalLong', 'OptionalInt', 'OptionalDouble',
     ]);
-    const KNOWN = /^(Boolean|boolean|String|Map<.*>|List<.*>|ClientInfo)$/;
+    // Known non-numeric: by type for the plain ones; lists and maps by name, since readReport keeps only these two.
+    const KNOWN = /^(Boolean|boolean|String|ClientInfo)$/;
+    const KNOWN_BY_NAME = { rungMs: 'Map<String, Long>', minutes: 'List<List<Long>>' };
     for (const { type, name } of components) {
       assert.ok(type && name, 'could not read the HealthReport record');
-      assert.ok(NUMERIC.has(type) || KNOWN.test(type), `unknown component type ${type} ${name}: add it to the numeric or the known list`);
+      assert.ok(NUMERIC.has(type) || KNOWN.test(type) || KNOWN_BY_NAME[name] === type,`unknown component type ${type} ${name}: add it to the numeric or the known list`);
     }
     const numbers = components.filter(({ type }) => NUMERIC.has(type)).map(({ name }) => name);
     assert.ok(numbers.length >= 30, `read ${numbers.length} number fields from HealthReport`);
