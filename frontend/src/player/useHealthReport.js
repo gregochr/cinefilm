@@ -34,7 +34,6 @@ const INPUTS = [
   'rebank',
   'marksForgotten',
   'lookaheadHeld',
-  'stretchReached',
   'bankRungChanged',
   'bankBypassed',
   'throughput',

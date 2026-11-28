@@ -828,13 +828,16 @@ describe('the bank decider: the rung boundary', () => {
     put(bank, 4, 'r480');
     ask(requests, 3, L480);
     await flush();
+    expect(requests.chosenRung()).toBe('r360'); // the bank's own rung, not the asked one the front is on
     requests.setRung('r240'); // the bank's choice while the front is on the asked rung
     expect(front.chosenRung()).toBe('r480');
+    expect(requests.chosenRung()).toBe('r240');
     await complete(server.calls.at(-1));
     expect(ask(requests, 4, L480).decision.action).toBe('answer');
     expect(front.position()).toEqual({ seq: 5, rung: 'r240' });
     requests.setRung('r360'); // no boundary fetch: straight to the front
     expect(front.chosenRung()).toBe('r360');
+    expect(requests.chosenRung()).toBe('r360');
   });
 
   it('hands a failed boundary fetch to hls.js and stays consistent for its retry', async () => {

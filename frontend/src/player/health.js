@@ -89,6 +89,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
   // The train look-ahead's record (train-lookahead-plan.md, 5b). Nothing here says where: SECURITY.md rule 7.
   const lookaheadMinuteSet = new Set(); // the minutes (minuteOf, as `minutes`) in which the look-ahead held an input
   let lookaheadStretches = []; // { needS, aheadS, rung } of each stretch reached, at most MAX_STRETCHES
+  let stretchBegun = false; // the last input said its stretch had begun
   let bankRungChanges = 0;
   let bankBypassRequests = 0;
   let samples = [];
@@ -446,19 +447,26 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       changed();
     },
     // The look-ahead held an input (not null, so fresh and unlapsed) just now: the minute counts, once, as the
-    // minutes of the record do (whole minutes from the start of the playback). Capped like `minutes`.
-    lookaheadHeld() {
+    // minutes of the record do (whole minutes from the start of the playback). Capped like `minutes`. `begun` says
+    // its stretch has begun; a stretch is reached when that turns true after an input where it was not, across the
+    // whole playback (an engine rebuilt inside a stretch is handed the same input and adds nothing), and
+    // `describe()` then gives { needS, aheadS, rung } for the list, at most MAX_STRETCHES (the first ones).
+    lookaheadHeld(begun = false, describe) {
       const n = minuteOf(advance());
-      if (lookaheadMinuteSet.has(n) || lookaheadMinuteSet.size >= MAX_MINUTES) return;
-      lookaheadMinuteSet.add(n);
-      changed();
-    },
-    // A stretch was reached: the need F and the film ahead the bank held, in seconds, and the bank's rung id.
-    stretchReached({ needS, aheadS, rung } = {}) {
-      advance();
-      if (lookaheadStretches.length >= MAX_STRETCHES) return;
-      lookaheadStretches = [...lookaheadStretches, { needS, aheadS, rung }];
-      changed();
+      let moved = false;
+      if (!lookaheadMinuteSet.has(n) && lookaheadMinuteSet.size < MAX_MINUTES) {
+        lookaheadMinuteSet.add(n);
+        moved = true;
+      }
+      if (!begun) stretchBegun = false;
+      else if (!stretchBegun) {
+        stretchBegun = true;
+        if (lookaheadStretches.length < MAX_STRETCHES && typeof describe === 'function') {
+          lookaheadStretches = [...lookaheadStretches, describe() ?? {}];
+          moved = true;
+        }
+      }
+      if (moved) changed();
     },
     // The bank's rung changed while the bank was on.
     bankRungChanged() {

@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
+import { createHealth } from './health.js';
 import { AUTO, ORIGINAL } from './ladder.js';
 import { measureThroughput } from './probe.js';
 import { startStream } from './streamSource.js';
@@ -31,7 +32,6 @@ const makeHealth = () => ({
   rebank: vi.fn(),
   marksForgotten: vi.fn(),
   lookaheadHeld: vi.fn(),
-  stretchReached: vi.fn(),
   bankRungChanged: vi.fn(),
   bankBypassed: vi.fn(),
   end: vi.fn(),
@@ -459,13 +459,12 @@ describe('what the running engine reports', () => {
     const { hook } = await running();
     const stretch = { needS: 600, aheadS: 35, rung: '480p' };
 
-    handlersOf().onLookaheadHeld();
-    handlersOf().onStretchReached(stretch);
+    const describe = () => stretch;
+    handlersOf().onLookaheadHeld(true, describe);
     handlersOf().onBankRungChange();
     handlersOf().onBankBypass();
 
-    expect(hook.health.lookaheadHeld).toHaveBeenCalledTimes(1);
-    expect(hook.health.stretchReached).toHaveBeenCalledWith(stretch);
+    expect(hook.health.lookaheadHeld).toHaveBeenCalledWith(true, describe);
     expect(hook.health.bankRungChanged).toHaveBeenCalledTimes(1);
     expect(hook.health.bankBypassed).toHaveBeenCalledTimes(1);
   });
@@ -537,6 +536,24 @@ describe('what the running engine reports', () => {
     expect(hook.health.recovered).toHaveBeenCalledTimes(MAX_RECOVERIES);
     expect(hook.health.fellBack).toHaveBeenCalledTimes(1);
     expect(calls.posted).toHaveLength(MAX_RECOVERIES + 1);
+  });
+
+  it('records one stretch, not two, when the engine is rebuilt inside it and handed the same input', async () => {
+    const counter = createHealth({ now: () => 0, openedAt: 0, editionId: 11 });
+    const { hook } = await running();
+    hook.health.lookaheadHeld.mockImplementation(counter.lookaheadHeld);
+    const describe = () => ({ needS: 600, aheadS: 35, rung: '480p' });
+
+    handlersOf(0).onLookaheadHeld(false, describe);
+    handlersOf(0).onLookaheadHeld(true, describe);
+    act(() => handlersOf(0).onSessionLost());
+    await vi.waitFor(() => expect(startStream).toHaveBeenCalledTimes(2));
+    handlersOf(1).onLookaheadHeld(true, describe); // the new engine, the same stretch
+
+    expect(hook.result.current.mode).toBe('hls');
+    expect(counter.snapshot().report.lookaheadStretches).toEqual([
+      { needS: 600, aheadS: 35, rung: '480p' },
+    ]);
   });
 
   it('gives up on HLS for the film on a fatal error: engine destroyed, session removed, file played', async () => {

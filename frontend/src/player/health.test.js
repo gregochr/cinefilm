@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BEAT_GRACE_MS,
   MAX_MINUTES,
@@ -1757,12 +1757,50 @@ describe('the look-ahead and the bank’s record', () => {
     expect(m.report().lookaheadMinutes).toBe(MAX_MINUTES);
   });
 
-  it('lists each stretch reached, in whole seconds, with a rung name or null', () => {
+  const stretch =
+    (needS, rung = '480p') =>
+    () => ({ needS, aheadS: 5, rung });
+
+  it('lists each stretch reached once, when an input says it has begun after one that did not', () => {
     const m = make();
-    m.h.stretchReached({ needS: 600.4, aheadS: 35.6, rung: '480p' });
-    m.h.stretchReached({ needS: -5, aheadS: 'x', rung: 'bogus' });
-    m.h.stretchReached({ needS: 3_000_000_000, aheadS: 0, rung: null });
-    m.h.stretchReached();
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, stretch(600));
+    m.h.lookaheadHeld(true, stretch(601)); // the same stretch, input after input
+    m.h.lookaheadHeld(true, stretch(602));
+    expect(m.report().lookaheadStretches).toEqual([{ needS: 600, aheadS: 5, rung: '480p' }]);
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, stretch(900, '240p'));
+    expect(m.report().lookaheadStretches.map((s) => s.needS)).toEqual([600, 900]);
+  });
+
+  it('counts the first input as a stretch when it has begun, and calls describe only when one is reached', () => {
+    const m = make();
+    const describe = vi.fn(stretch(300));
+    m.h.lookaheadHeld(true, describe);
+    m.h.lookaheadHeld(true, describe);
+    m.h.lookaheadHeld(false, describe);
+    expect(describe).toHaveBeenCalledTimes(1);
+    expect(m.report().lookaheadStretches).toHaveLength(1);
+  });
+
+  it('keeps the begun state for the whole playback, so an input handed again inside a stretch adds nothing', () => {
+    const m = make();
+    m.h.lookaheadHeld(true, stretch(600)); // one engine
+    m.h.lookaheadHeld(true, stretch(600)); // the engine that replaced it, handed the same input
+    expect(m.report().lookaheadStretches).toHaveLength(1);
+  });
+
+  it('writes whole seconds and a rung name or null, whatever describe gives', () => {
+    const m = make();
+    m.h.lookaheadHeld(true, () => ({ needS: 600.4, aheadS: 35.6, rung: '480p' }));
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, () => ({ needS: -5, aheadS: 'x', rung: 'bogus' }));
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, () => ({ needS: 3_000_000_000, aheadS: 0, rung: null }));
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true, () => undefined);
+    m.h.lookaheadHeld(false);
+    m.h.lookaheadHeld(true); // no describe: nothing listed
     expect(m.report().lookaheadStretches).toEqual([
       { needS: 600, aheadS: 36, rung: '480p' },
       { needS: 0, aheadS: 0, rung: null },
@@ -1774,10 +1812,12 @@ describe('the look-ahead and the bank’s record', () => {
   it('keeps no more than MAX_STRETCHES, the first ones, and a stretch past it is no change', () => {
     const m = make();
     for (let n = 0; n < MAX_STRETCHES; n += 1) {
-      m.h.stretchReached({ needS: n, aheadS: 0, rung: '240p' });
+      m.h.lookaheadHeld(false);
+      m.h.lookaheadHeld(true, stretch(n, '240p'));
     }
+    m.h.lookaheadHeld(false);
     const before = m.h.version();
-    m.h.stretchReached({ needS: 999, aheadS: 0, rung: '240p' });
+    m.h.lookaheadHeld(true, stretch(999, '240p'));
     const list = m.report().lookaheadStretches;
     expect(list).toHaveLength(MAX_STRETCHES);
     expect(list.at(-1).needS).toBe(MAX_STRETCHES - 1);
@@ -1804,7 +1844,7 @@ describe('the look-ahead and the bank’s record', () => {
     };
     expect(moved(() => m.h.lookaheadHeld())).toBe(true);
     expect(moved(() => m.h.lookaheadHeld())).toBe(false);
-    expect(moved(() => m.h.stretchReached({ needS: 1, aheadS: 1, rung: '480p' }))).toBe(true);
+    expect(moved(() => m.h.lookaheadHeld(true, stretch(1)))).toBe(true);
     expect(moved(() => m.h.bankRungChanged())).toBe(true);
     expect(moved(() => m.h.bankBypassed())).toBe(true);
   });
@@ -1812,7 +1852,15 @@ describe('the look-ahead and the bank’s record', () => {
   it('puts no position in the report: the report’s keys and each stretch’s are exactly the allowed sets', () => {
     const m = make();
     m.h.lookaheadHeld();
-    m.h.stretchReached({ needS: 600, aheadS: 35, rung: '480p', lat: 1, lng: 2, from: 3, to: 4 });
+    m.h.lookaheadHeld(true, () => ({
+      needS: 600,
+      aheadS: 35,
+      rung: '480p',
+      lat: 1,
+      lng: 2,
+      from: 3,
+      to: 4,
+    }));
     const report = m.report();
     expect(Object.keys(report).sort()).toEqual([...REPORT_KEYS].sort());
     expect(Object.keys(report.lookaheadStretches[0]).sort()).toEqual(STRETCH_KEYS);

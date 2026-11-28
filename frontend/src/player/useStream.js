@@ -30,7 +30,6 @@ const NO_HEALTH = {
   rebank: noop,
   marksForgotten: noop,
   lookaheadHeld: noop,
-  stretchReached: noop,
   bankRungChanged: noop,
   bankBypassed: noop,
   end: noop,
@@ -353,8 +352,8 @@ export function useStream({
           onNetworkError: (error) => latest.current.health.networkError(error),
           onRebank: (kind) => latest.current.health.rebank(kind),
           onMarksForgotten: (n) => latest.current.health.marksForgotten(n),
-          onLookaheadHeld: () => latest.current.health.lookaheadHeld(),
-          onStretchReached: (stretch) => latest.current.health.stretchReached(stretch),
+          onLookaheadHeld: (begun, describe) =>
+            latest.current.health.lookaheadHeld(begun, describe),
           onBankRungChange: () => latest.current.health.bankRungChanged(),
           onBankBypass: () => latest.current.health.bankBypassed(),
         },

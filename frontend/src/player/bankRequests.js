@@ -232,6 +232,8 @@ export function createBankRequests({
       if (ownRung !== null) ownRung = rung;
       else front.setRung(rung);
     },
+    /** The rung `setRung` last chose: the kept one during a boundary fetch, else the front's own. */
+    chosenRung: () => ownRung ?? front.chosenRung(),
 
     fragmentRequest(request, reply) {
       const { sn, frag } = request;

@@ -609,8 +609,7 @@ describe('the object it returns', () => {
       api.networkError({ timeout: true });
       api.rebank('started');
       api.marksForgotten(1);
-      api.lookaheadHeld();
-      api.stretchReached({ needS: 1, aheadS: 1, rung: '480p' });
+      api.lookaheadHeld(true, () => ({ needS: 1, aheadS: 1, rung: '480p' }));
       api.bankRungChanged();
       api.bankBypassed();
       api.throughput(100);
@@ -652,7 +651,6 @@ describe('the object it returns', () => {
       'seeked',
       'seeking',
       'sourceChanged',
-      'stretchReached',
       'throughput',
       'waiting',
     ]);
