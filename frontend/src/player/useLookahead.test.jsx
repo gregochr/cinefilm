@@ -136,6 +136,49 @@ describe('the hook with the real modules', () => {
   });
 });
 
+describe('an abort reaches the request, through the real loaders', () => {
+  // The map's request never answers; the test reads the signal the real client gave `fetch`.
+  const hangingMap = () => {
+    const fetchMock = vi.fn(() => new Promise(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    return () => fetchMock.mock.calls.filter(([url]) => url === '/api/journeys/link-map');
+  };
+
+  it.each([
+    ['unmount', (hook) => hook.unmount()],
+    ['a detach of the engine', (hook, engine) => hook.result.current.detach(engine)],
+    ['the player stopping being away', (hook) => hook.rerender({ active: false })],
+  ])('aborts the map request in flight on %s', async (_name, leave) => {
+    const mapCalls = hangingMap();
+    const ask = vi.fn(() => Promise.resolve(feedText()));
+    const engine = engineOf();
+    const hook = mount({ active: true, ask });
+    hook.result.current.attach(engine);
+    await flush();
+    await flush();
+    expect(mapCalls()).toHaveLength(1);
+    const { signal } = mapCalls()[0][1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(false);
+    act(() => leave(hook, engine));
+    expect(signal.aborted).toBe(true);
+  });
+
+  it.each([
+    ['unmount', (hook) => hook.unmount()],
+    ['a detach of the engine', (hook, engine) => hook.result.current.detach(engine)],
+  ])('removes the real feed frame, aborting its ask, on %s', async (_name, leave) => {
+    serveMap();
+    const engine = engineOf();
+    const hook = mount({ active: true });
+    hook.result.current.attach(engine);
+    await flush();
+    expect(screen.queryByTestId(FRAME_TEST_ID)).not.toBeNull();
+    act(() => leave(hook, engine));
+    expect(screen.queryByTestId(FRAME_TEST_ID)).toBeNull(); // only an abort takes it out before its 8 s timeout
+  });
+});
+
 describe('the default ask: the real frame', () => {
   it('puts the sandboxed frame in the page at the start and takes it out when stopped', async () => {
     serveMap();
