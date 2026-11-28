@@ -2,7 +2,7 @@
 // (`operator.js`): the request carries no origin of ours, no referrer and no cookie. The answer is returned as raw
 // text and is untrusted; nothing here parses it (`trainFeed.js` does). Asking can never break playback: nothing
 // here rejects or throws. The page accepts a message only from that frame's own window AND from an opaque origin.
-// The feed's address is the caller's: it is never written into the repository.
+// The feed's address is a parameter: the caller supplies it.
 
 export const FEED_TIMEOUT_MS = 8000;
 /** The most characters of an answer the frame posts and the page accepts: a bigger one is no answer. */
@@ -48,16 +48,21 @@ export function askTrainFeed(
     let frame = null;
     let timer = null;
     const end = (value) => {
-      clearTimeout(timer);
-      win?.removeEventListener('message', onMessage);
-      signal?.removeEventListener('abort', onAbort);
-      try {
-        frame.remove(); // no frame yet throws here, and there is nothing to remove
-      } catch {
-        // Nothing to remove.
-      }
-      inFlight = false;
+      inFlight = false; // first: nothing below may leave the slot taken
       resolve(value);
+      clearTimeout(timer);
+      // Each undo on its own: one that throws must not stop the others (a frame left in the page, say).
+      for (const undo of [
+        () => win.removeEventListener('message', onMessage),
+        () => signal.removeEventListener('abort', onAbort),
+        () => frame.remove(), // no frame yet throws here, and there is nothing to remove
+      ]) {
+        try {
+          undo();
+        } catch {
+          // Nothing more to undo.
+        }
+      }
     };
     const onMessage = (event) => {
       // From the frame itself, and sandboxed: a frame that kept our origin has lost its sandbox, so fail closed.

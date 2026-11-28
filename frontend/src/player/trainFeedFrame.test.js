@@ -102,10 +102,16 @@ describe('the frame', () => {
     );
   });
 
-  it('cannot be broken out of by an address with markup in it', () => {
-    const html = frameHtml('https://feed.example.test/</script><script>alert(1)</script>');
-    expect(html.match(/<\/script>/g)).toHaveLength(1);
-    expect(html).toContain('\\u003c/script>');
+  it.each([
+    ['a closing tag', 'https://feed.example.test/</script><script>alert(1)</script>'],
+    ['an upper-case closing tag', 'https://feed.example.test/</SCRIPT x><b>'],
+    ['a comment and a script opener', 'https://feed.example.test/<!--<script>'],
+  ])('keeps an address with %s inside its string literal', (_name, url) => {
+    const html = frameHtml(url);
+    const literal = /fetch\(("(?:[^"\\]|\\.)*"),/.exec(html)[1];
+    expect(literal).not.toContain('<');
+    expect(JSON.parse(literal)).toBe(url);
+    expect(html.match(/<\/script>/gi)).toHaveLength(1);
   });
 });
 
@@ -249,16 +255,28 @@ describe('the end of an ask', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('stops at once when the caller aborts, cleans up, and ignores a late message', async () => {
+  it('stops at once when the caller aborts and cleans up', async () => {
     const controller = new AbortController();
     const promise = askTrainFeed(URL_A, { signal: controller.signal });
-    const source = frameNow().contentWindow;
     controller.abort();
     expect(await promise).toBeNull();
     expect(screen.queryByTestId(FRAME_TEST_ID)).not.toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(0);
-    post({ cinefilmFeed: 'late' }, { source });
-    expect(await promise).toBeNull();
+  });
+
+  it('lets a stale frame, once its ask has ended, answer nothing of a newer ask', async () => {
+    const controller = new AbortController();
+    const first = askTrainFeed(URL_A, { signal: controller.signal });
+    const stale = frameNow().contentWindow;
+    controller.abort();
+    expect(await first).toBeNull();
+    const second = askTrainFeed(URL_A);
+    const state = settled(second);
+    post({ cinefilmFeed: 'late' }, { source: stale });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.done).toBe(false);
+    answer('own');
+    expect(await second).toBe('own');
   });
 });
 
@@ -287,5 +305,21 @@ describe('where it cannot start', () => {
     expect(await askTrainFeed(URL_A, { win: null })).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
     expect(screen.queryByTestId(FRAME_TEST_ID)).not.toBeInTheDocument();
+  });
+
+  it('frees the slot and resolves null when the listeners cannot be removed', async () => {
+    const win = {
+      addEventListener: () => {},
+      removeEventListener: () => {
+        throw new Error('gone');
+      },
+    };
+    const signal = { aborted: false, addEventListener: () => {}, removeEventListener: undefined };
+    const promise = askTrainFeed(URL_A, { win, signal });
+    await vi.advanceTimersByTimeAsync(FEED_TIMEOUT_MS);
+    expect(await promise).toBeNull();
+    const next = askTrainFeed(URL_A);
+    answer('still works');
+    expect(await next).toBe('still works');
   });
 });
