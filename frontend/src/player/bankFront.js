@@ -432,13 +432,28 @@ export function createBankFront({
     if (kbps !== null) onThroughput(kbps);
   }
 
+  // Tells the subscribers of `seq` it is held: one at a time, each leaving the set before it is called, so a stop,
+  // start or move inside one aborts only those not yet called; one that subscribes from inside onDone stays.
+  function answer(seq) {
+    const set = listeners.get(seq);
+    for (const l of [...(set ?? [])]) {
+      if (listeners.get(seq) !== set || !set.delete(l)) continue;
+      l.onDone?.(bank.getSegment(seq));
+    }
+    if (set?.size === 0 && listeners.get(seq) === set) listeners.delete(seq);
+  }
+
   function fetchSegment() {
     const rung = lockedRung ?? wantedRung;
     const segments = segmentsOf(rung);
     if (segments === undefined) return;
     // The in-order path never fetches film the store holds, at any rung (a gap filled behind held film, armed
     // copies beyond a gap): it goes on after the held run. An out-of-order fetch is asked for at a rung.
-    if (!outOfOrder) while (bank.hasSegment(next)) next += 1;
+    // Those waiting on a held seq it passes are answered from the store.
+    while (!outOfOrder && bank.hasSegment(next)) {
+      answer(next);
+      next += 1;
+    }
     const segment = segments.get(next);
     if (segment === undefined) return; // the end of the film: nothing more to fetch
     lockedRung = rung;
@@ -462,14 +477,7 @@ export function createBankFront({
         boundaryDue = { seq: seq - 1, rung };
       }
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
-      // One listener at a time, each leaving the set before it is called, so a stop, start or move inside one
-      // aborts only those not yet called; one that subscribes from inside onDone stays for the next fetch.
-      const set = listeners.get(seq);
-      for (const l of [...(set ?? [])]) {
-        if (listeners.get(seq) !== set || !set.delete(l)) continue;
-        l.onDone?.(bank.getSegment(seq));
-      }
-      if (set?.size === 0 && listeners.get(seq) === set) listeners.delete(seq);
+      answer(seq);
       resetWatch();
     });
   }

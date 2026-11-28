@@ -139,7 +139,6 @@ describe('hls.js settings', () => {
   it('plays segments through the no-progress loader built on the default loader', () => {
     const { hls } = start();
     expect(hls.config.fLoader).toBeTypeOf('function');
-    // Auto: the film bank's loader (which passes everything through until a stretch is near) wraps it.
     const loader = new hls.config.fLoader({});
     expect(loader.inner.inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
     expect(new hls.config.pLoader({}).inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);

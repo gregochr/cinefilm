@@ -1605,7 +1605,7 @@ describe('the bank front: unsubscribing, starting and callbacks that change the 
     });
     await complete(server.calls.at(-1));
     expect(log).toEqual([]);
-    front.start({ seq: 0, rung: 'r480', outOfOrder: true }); // 0 is held now: only an out-of-order fetch repeats it
+    front.start({ seq: 0, rung: 'r480' });
     await flush();
     await complete(server.calls.at(-1));
     expect(log).toEqual(['again']);
@@ -2081,15 +2081,9 @@ describe('the bank front: boundary copies, round two', () => {
 
   it('never fetches film the store holds on the in-order path, but an out-of-order fetch of it still happens', async () => {
     const { server, front, bank } = await running({ seq: 4 });
+    const timings = { start: 0, first: 1, end: 2 };
     for (const seq of [5, 6, 7]) {
-      bank.putSegment({
-        seq,
-        rung: 'r360',
-        start: seq * 4,
-        end: seq * 4 + 4,
-        bytes: new ArrayBuffer(10),
-        timings: { start: 0, first: 1, end: 2 },
-      });
+      bank.putSegment({ seq, rung: 'r360', start: 0, end: 4, bytes: new ArrayBuffer(10), timings });
     }
     await complete(server.calls.at(-1)); // 4
     expect(lastUrl(server)).toBe(segUrl('r480', 8)); // 5 to 7 are held: gone past them

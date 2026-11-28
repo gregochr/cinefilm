@@ -846,9 +846,8 @@ export function startHlsJs({
     return bankLevelOfRung(front.window().rung ?? front.position().rung);
   };
 
-  // Ends the episode: the front finishes (the fetch in flight runs to its end for whoever waits on it, nothing new
-  // starts), hls.js is released from the manual level (a no-op while it was never on), and what is held is
-  // dropped. Held playlists stay.
+  // Ends the episode: the front finishes (its fetch in flight answers whoever waits on it, nothing new starts),
+  // hls.js is released from the manual level (a no-op if never on) and what is held is dropped; playlists stay.
   const closeEpisode = () => {
     const done = episode;
     const level = fetchedBankLevel();
