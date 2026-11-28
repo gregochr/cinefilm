@@ -2262,6 +2262,20 @@ describe('the bank front: boundary copies, round two', () => {
     expect((w + d) * measuredS).toBeLessThan(1);
   });
 
+  it('hands a waiter the downloaded copy even when its segment was evicted meanwhile', async () => {
+    const t = await waitingOnCopy();
+    t.off();
+    const done = vi.fn();
+    t.front.subscribeBoundary(0, { onDone: done });
+    t.bank.dropBehind(40); // segment 0 is gone before its copy lands
+    expect(t.bank.hasSegment(0)).toBe(false);
+    await complete(t.server.calls.at(-1), { size: 31 });
+    expect(done).toHaveBeenCalledTimes(1);
+    expect(done.mock.calls[0][0]).toMatchObject({ seq: 0, rung: 'r360', start: 0, end: 4 });
+    expect(done.mock.calls[0][0].bytes.byteLength).toBe(31);
+    expect(t.bank.getBoundary(0, 'r360')).toBeNull(); // the store kept nothing
+  });
+
   it('cuts loose a waiter on a copy in flight at a start or a move', async () => {
     const started = await waitingOnCopy();
     started.front.start({ seq: 10, rung: 'r360' });

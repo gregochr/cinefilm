@@ -947,6 +947,39 @@ describe('the bank decider: the rung boundary', () => {
     expect(segmentCalls(server)).toHaveLength(2);
   });
 
+  it('answers hls.js with the copy even when its segment was evicted while it downloaded', async () => {
+    const { requests, bank, server } = await setup({ seq: 4, rung: 'r480' });
+    put(bank, 3, 'r240');
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    await complete(server.calls.at(-1)); // 4 at 480p: the copy of 3 goes next
+    const again = ask(requests, 3, L480);
+    await flush();
+    bank.dropBehind(60);
+    expect(bank.hasSegment(3)).toBe(false);
+    await complete(server.calls.at(-1), { size: 66 });
+    expect(again.told.map((t) => t[0])).toEqual(['success']);
+    expect(again.told[0][1].byteLength).toBe(66);
+  });
+
+  it('fails the wait with an ordinary error, never a throw, when handed no segment', () => {
+    const bank = createSegmentBank();
+    const front = {
+      position: () => ({ seq: 0, rung: 'r480' }),
+      fetching: () => null,
+      boundaryFetching: () => null,
+      fetchNow: () => {},
+      subscribe: (_seq, listener) => {
+        listener.onDone(null);
+        return () => {};
+      },
+    };
+    const requests = createBankRequests({ bank, front, levelOfRung, rungOfLevel });
+    requests.setMode('on');
+    const { told } = ask(requests, 0);
+    expect(told).toEqual([['error', { code: 503, text: 'Service Unavailable' }]]);
+  });
+
   it('waits on the boundary copy being fetched, with exactly one server request for the segment at that rung', async () => {
     const { requests, bank, server } = await setup({ seq: 4, rung: 'r480' });
     put(bank, 3, 'r240');

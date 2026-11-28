@@ -507,7 +507,15 @@ export function createBankFront({
         const set = boundaryListeners.get(seq);
         for (const l of [...(set ?? [])]) {
           if (boundaryListeners.get(seq) !== set || !set.delete(l)) continue;
-          l.onDone?.(bank.getBoundary(seq, rung));
+          // The copy as downloaded, whether or not the store kept it (its segment may have been evicted meanwhile).
+          l.onDone?.({
+            seq,
+            rung,
+            start: segment.start,
+            end: segment.end,
+            bytes: res.bytes.slice(0),
+            timings: { ...timings },
+          });
         }
         if (set?.size === 0 && boundaryListeners.get(seq) === set) boundaryListeners.delete(seq);
         resetWatch();

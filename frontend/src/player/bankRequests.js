@@ -172,6 +172,11 @@ export function createBankRequests({
       onProgress: stopFirstByte,
       onDone: (segment) =>
         finish(() => {
+          // No segment to read (a copy the store did not keep and was not handed): an ordinary failure.
+          if (!segment?.bytes) {
+            reply.error({ code: 503, text: STATUS_TEXT[503] });
+            return;
+          }
           const decided = fromHeld(request, segment);
           if (decided === null) reply.error(rungError());
           else reply.success(decided.bytes, decided.timings);
