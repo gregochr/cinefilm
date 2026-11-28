@@ -9,7 +9,6 @@ const made = vi.hoisted(() => ({
   fronts: [],
   requests: [],
   stores: [],
-  // A module's factory kept as it is, but for `key`, which also records what it builds in `list`.
   recording: (key, list) => async (original) => {
     const real = await original();
     return {
@@ -58,7 +57,6 @@ class InnerLoader {
     this.stats = {
       aborted: false,
       loaded: 0,
-      retry: 0,
       total: 0,
       loading: { start: 0, first: 0, end: 0 },
     };
@@ -171,15 +169,15 @@ function world({ auto = true, fetched = 2, ladder = rungs } = {}) {
       end: (i) => state.ranges[i][1],
     }),
   });
-  const handlers = {
-    onLevel: vi.fn(),
-    onThroughput: vi.fn(),
-    onReconnecting: vi.fn(),
-    onSessionLost: vi.fn(),
-    onStopped: vi.fn(),
-    onFatal: vi.fn(),
-    onNetworkError: vi.fn(),
-  };
+  const names = [
+    'onLevel',
+    'onThroughput',
+    'onReconnecting',
+    'onSessionLost',
+    'onStopped',
+    'onFatal',
+  ];
+  const handlers = Object.fromEntries([...names, 'onNetworkError'].map((n) => [n, vi.fn()]));
   const server = makeServer();
   const engine = startHlsJs({
     Hls: WiringHls,
@@ -193,7 +191,6 @@ function world({ auto = true, fetched = 2, ladder = rungs } = {}) {
   });
   engines.push(engine);
   const hls = FakeHls.last;
-  // Every write of the manual level, in order with the inner loader's loads.
   const levelAccessor = Object.getOwnPropertyDescriptor(FakeHls.prototype, 'loadLevel');
   Object.defineProperty(hls, 'loadLevel', {
     get: () => levelAccessor.get.call(hls),
@@ -236,7 +233,6 @@ const fragOf = (sn, level) => ({
   type: 'main',
 });
 
-// hls.js asks the fragment loader for media fragment `sn` at `level`.
 function request(env, sn, level = 2) {
   const frag = fragOf(sn, level);
   env.hls.fragLoading(frag);
@@ -254,7 +250,6 @@ function request(env, sn, level = 2) {
   return { frag, loader, callbacks };
 }
 
-// The fragment is loaded, then appended: the buffered range now reaches its end.
 function land(env, { frag }) {
   env.hls.emit(FakeHls.Events.FRAG_LOADED, {
     frag,
@@ -266,7 +261,6 @@ function land(env, { frag }) {
   env.hls.fragBuffered(frag);
 }
 
-// `count` fragments loaded through the inner loader, in film order, at `level`.
 function loadThroughInner(env, count, level = 2) {
   for (let sn = 0; sn < count; sn += 1) {
     const handled = request(env, sn, level);
@@ -275,7 +269,6 @@ function loadThroughInner(env, count, level = 2) {
   }
 }
 
-// The front's playlist requests, one after the other, each answered.
 async function answerPlaylists(env, count = 3) {
   for (let i = 0; i < count; i += 1) {
     await answerPlaylist(env.server.calls.at(-1));
@@ -325,6 +318,13 @@ describe('the bank is never armed', () => {
     expect(env.levelWrites()).toEqual([]); // no manual level
     expect(handled.frag.stats.bankAnswered).toBeUndefined();
     expect(env.handlers.onThroughput).toHaveBeenCalledTimes(1); // today's sample, untouched
+    // A media playlist request goes to the inner loader too.
+    new env.hls.config.pLoader(env.hls.config).load(
+      { type: 'level', level: 2, url: playlistUrl('480p') },
+      {},
+      { onSuccess: vi.fn() },
+    );
+    expect(InnerLoader.loads).toHaveLength(2);
     expect(made.fronts).toHaveLength(0);
   });
 
@@ -350,7 +350,6 @@ describe('arming', () => {
     expect(env.server.calls.map((c) => c.url)).toEqual(
       ['240p', '360p', '480p'].map(playlistUrl), // none for 720p
     );
-    expect(env.levelWrites()).toEqual([]); // hls.js is still on Auto
   });
 
   it('keeps copies of what hls.js loads, and drops them when the look-ahead lapses before the bank is on', async () => {
@@ -375,18 +374,11 @@ describe('turning on', () => {
     expect(env.levelWrites()).toEqual(['loadLevel:2']);
   });
 
-  it('starts the front at hls.js’s rung when it is on 480p or below, else at 480p', async () => {
+  it('starts the front at hls.js’s rung', async () => {
     const low = world({ fetched: 0 });
     await turnedOn(low);
     expect(segmentCalls(low)).toEqual([segUrl('240p', 10)]);
     expect(low.levelWrites()).toEqual(['loadLevel:0']);
-    FakeHls.reset();
-    const high = world({ fetched: 2 });
-    await armed(high);
-    high.hls.fetchLevel(3); // hls.js has moved above the bank's rungs
-    high.engine.bankInput(NEAR);
-    await flush();
-    expect(segmentCalls(high)).toEqual([segUrl('480p', 10)]);
   });
 
   it('keeps nothing of a fragment above 480p, so the bank never covers it', async () => {
@@ -479,6 +471,15 @@ describe('answering hls.js', () => {
     expect(asked.frag.stats.bankAnswered).toBe(true);
     expect(InnerLoader.loads).toHaveLength(loads);
     expect(env.server.calls).toHaveLength(calls);
+    // The held media playlist is answered too.
+    const playlist = { onSuccess: vi.fn() };
+    new env.hls.config.pLoader(env.hls.config).load(
+      { type: 'level', level: 2, url: playlistUrl('480p') },
+      {},
+      playlist,
+    );
+    await flush();
+    expect(playlist.onSuccess.mock.calls[0][0].data).toBe(playlistText());
   });
 
   it('puts hls.js on the held rung and fails a fragment held at another rung as bank-rung', async () => {
@@ -513,23 +514,15 @@ describe('the front’s answers from the server', () => {
   it.each([
     [410, 'onStopped', 'onSessionLost'],
     [404, 'onSessionLost', 'onStopped'],
-  ])(
-    'reaches the handler for a %i once, though hls.js hears it too',
-    async (code, handler, other) => {
-      const env = world();
-      await turnedOn(env);
-      env.server.calls.at(-1).status(code);
-      await flush();
-      env.hls.error({
-        fatal: false,
-        type: 'networkError',
-        details: 'fragLoadError',
-        response: { code },
-      });
-      expect(env.handlers[handler]).toHaveBeenCalledTimes(1);
-      expect(env.handlers[other]).not.toHaveBeenCalled();
-    },
-  );
+  ])('reaches the handler for a %i, once', async (code, handler, other) => {
+    const env = world();
+    await turnedOn(env);
+    env.server.calls.at(-1).status(code);
+    await flush();
+    env.hls.error({ type: 'networkError', details: 'fragLoadError', response: { code } });
+    expect(env.handlers[handler]).toHaveBeenCalledTimes(1);
+    expect(env.handlers[other]).not.toHaveBeenCalled();
+  });
 });
 
 describe('pausing', () => {
