@@ -37,6 +37,7 @@ export function createLookaheadInput() {
   let baseMs = 0; // elapsed time counts from here ...
   let offsetS = 0; // ... plus this
   let frozen = false;
+  let stoppedSeenMs = -Infinity; // the time of the latest in-date slow fix: the train was still stopped then
 
   const elapsedS = (nowMs) => (frozen ? offsetS : offsetS + (nowMs - baseMs) / 1000);
 
@@ -48,6 +49,7 @@ export function createLookaheadInput() {
         tracks = tracksUsed;
         answeredMs = nowMs;
         baseMs = nowMs;
+        stoppedSeenMs = -Infinity;
         offsetS = 0;
         frozen = false;
         return;
@@ -62,9 +64,11 @@ export function createLookaheadInput() {
           frozen = true;
         }
         answeredMs = nowMs;
+        stoppedSeenMs = nowMs - fix.ageS * 1000;
       } else if (frozen) {
-        // Moving again but off the map: advance again from the frozen value (nothing refreshed).
-        baseMs = nowMs;
+        // Moving again but off the map: advance again from the frozen value (nothing refreshed), counting from
+        // when the fix says the train moved, but never from before the last time it was seen stopped.
+        baseMs = Math.max(stoppedSeenMs, nowMs - fix.ageS * 1000);
         frozen = false;
       }
     },

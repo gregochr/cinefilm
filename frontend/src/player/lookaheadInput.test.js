@@ -157,6 +157,32 @@ describe('a train stopped on the line', () => {
     expect(li.input(sec(320) + 1)).toBeNull(); // the move did not refresh the lapse (last answer at 20 s)
   });
 
+  it('resumes from when a moving fix says the train moved', () => {
+    const li = matched(tracks, 500);
+    feed(li, tracks, slowFix(500), sec(20));
+    feed(li, tracks, { ...fixAt(500, 0), ageS: 50 }, sec(200)); // moving since 150 s
+    expect(li.input(sec(210))).toEqual(ahead(600, 420));
+  });
+
+  it('never resumes from before the last time the train was seen stopped', () => {
+    const li = matched(tracks, 500);
+    feed(li, tracks, slowFix(500), sec(100));
+    feed(li, tracks, { ...fixAt(500, 0), ageS: 50 }, sec(120)); // 70 s: before the stop seen at 100 s
+    expect(li.input(sec(130))).toEqual(ahead(600, 370));
+  });
+
+  it('survives a slow fix at exactly 300 s, frozen', () => {
+    const li = matched(tracks, 500);
+    feed(li, tracks, slowFix(500), sec(300));
+    expect(li.input(sec(400))).toEqual(ahead(600, 200));
+  });
+
+  it('does not survive a slow fix just past 300 s', () => {
+    const li = matched(tracks, 500);
+    feed(li, tracks, slowFix(500), sec(300) + 1);
+    expect(li.input(sec(400))).toBeNull();
+  });
+
   it('resets on the next fresh match', () => {
     const li = matched(tracks, 500);
     feed(li, tracks, slowFix(500), sec(20));
