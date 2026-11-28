@@ -103,8 +103,19 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    message only from that frame's own window and only when the message's origin is the string `null`, which is
    what a sandboxed frame reports: a frame that had lost its sandbox would report the app's own origin and be
    ignored, so the lookup fails closed. It keeps only `org`, as text of 1 to 100 characters, and stores an answer
-   against it in `localStorage` only. The browser never asks for a location. Any other outside request from
-   the browser needs a note in the PR.
+   against it in `localStorage` only.
+   **The train feed** is the browser's other outside request. On a train, the player reads the train's own Wi-Fi
+   system for its position, from a sandboxed frame like the operator lookup's; the position is used in the page only
+   and never sent or stored. The player also receives a map of past journeys' link quality, kept in memory only. The
+   browser never asks the device for a location. The frame is the same hidden `sandbox="allow-scripts"` frame built
+   from `srcdoc`, with a CORS `fetch` (never `no-cors`: the browser enforces the feed's own
+   `Access-Control-Allow-Origin`, and an answer without it is no answer), `credentials: 'omit'` and
+   `referrerPolicy: 'no-referrer'`, so the request carries `Origin: null`, no referrer and no cookie. Never give it
+   `allow-same-origin`, and never make the request from the page itself. The page takes a message only from that
+   frame's own window and only when its origin is the string `null`, so a frame that had lost its sandbox is ignored
+   and the ask fails closed. The answer is text of at most 64 KiB, untrusted and parsed elsewhere; there is one ask
+   at a time, with a timeout, and the frame is removed afterwards. The feed's address is never committed: the caller
+   supplies it. Any other outside request from the browser needs a note in the PR.
    **Journey data.** The server stores a journey's positions, and which train it was, only when the owner imports a
    train feed logger file in Admin (`POST /api/admin/journeys`). They are then in the database, in its dumps (rule 9)
    and in Admin's answers, and nowhere else. The device's addresses never leave the laptop, and the server refuses
