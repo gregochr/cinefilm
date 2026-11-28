@@ -117,8 +117,10 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    at a time, with a timeout, and the frame is removed afterwards. The module takes the feed's address as a
    parameter. Any other outside request from the browser needs a note in the PR.
    **Journey data.** The server stores a journey's positions, and which train it was, only when the owner imports a
-   train feed logger file in Admin (`POST /api/admin/journeys`). They are then in the database, in its dumps (rule 9)
-   and in Admin's answers, and nowhere else. The device's addresses never leave the laptop, and the server refuses
+   train feed logger file in Admin (`POST /api/admin/journeys`). They are then in the database, in its dumps (rule 9),
+   in Admin's answers and, as the link map (`GET /api/journeys/link-map`: points and stretches only, naming no
+   journey, day, time or train), in the player's, which keeps it in memory only, and nowhere else. The device's
+   addresses never leave the laptop, and the server refuses
    (400) a file that carries a name it does not know, a value of the wrong kind or one out of range, so nothing it
    was not told to keep is stored. The raw logger files are never committed. The train's service (its timetable id,
    headcode and its times at each timing point) is stored only when the owner gives a journey a train's file
