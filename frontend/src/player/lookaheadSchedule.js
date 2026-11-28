@@ -30,6 +30,10 @@ const globalTimers = {
   clearInterval: (...args) => globalThis.clearInterval(...args),
 };
 
+// Calls `fn(signal)` at once; a synchronous throw becomes a rejection, which the chain's own catch handles like any
+// other failure (so the controller it set is released).
+const started = (fn, signal) => new Promise((resolve) => resolve(fn(signal)));
+
 /**
  * @param {Object} deps
  * @param {(signal: AbortSignal) => Promise<string|null>} deps.ask the feed's answer as text, or null; never rejects
@@ -95,7 +99,7 @@ export function createLookaheadSchedule({
     const mine = epoch;
     const own = new AbortController();
     mapController = own;
-    void loadMap(own.signal)
+    void started(loadMap, own.signal)
       .catch(() => [])
       .then((loaded) => {
         if (mine !== epoch) return;
@@ -104,7 +108,7 @@ export function createLookaheadSchedule({
         tracks = loaded;
         place(lastFix.fix, lastFix.atMs); // a map is asked for only after a fix
       })
-      .catch(() => {}); // the state was cleaned up first; a throw below it must not become an unhandled rejection
+      .catch(() => {}); // the controller was released before anything here can throw; a throw must not become an unhandled rejection
   };
 
   const onAnswer = (text) => {
@@ -144,7 +148,7 @@ export function createLookaheadSchedule({
     const mine = epoch;
     const own = new AbortController();
     controller = own;
-    void ask(own.signal)
+    void started(ask, own.signal)
       .catch(() => null)
       .then((text) => {
         if (mine !== epoch) return; // stopped meanwhile: `stop` has cleaned up
@@ -156,7 +160,7 @@ export function createLookaheadSchedule({
         }
         onAnswer(text);
       })
-      .catch(() => {}); // the state was cleaned up first; a throw below it must not become an unhandled rejection
+      .catch(() => {}); // the controller was released before anything here can throw; a throw must not become an unhandled rejection
   }
 
   return {

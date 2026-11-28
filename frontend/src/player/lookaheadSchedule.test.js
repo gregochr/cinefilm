@@ -556,19 +556,67 @@ describe('a handler that throws', () => {
     expect(unhandled).not.toHaveBeenCalled();
   });
 
-  it('leaves no unhandled rejection when the next ask cannot be started after an answer', async () => {
-    const asks = [];
+  it('leaves no unhandled rejection, and asks again on the next trigger, when an ask throws as it starts', async () => {
+    let calls = 0;
     const ask = vi.fn(() => {
-      if (asks.length === 1) throw new Error('no frame');
-      asks.push(1);
+      calls += 1;
+      if (calls === 2) throw new Error('no frame');
       return Promise.resolve(null);
     });
     const schedule = createLookaheadSchedule({ ask, loadMap: () => Promise.resolve([]) });
     schedule.attach(engineOf());
     schedule.begin();
-    schedule.trigger(); // aborted: the settled ask starts another, which throws inside the handler
+    schedule.trigger(); // aborted: the settled ask starts another, which throws as it starts
     await settle();
     await settle();
+    expect(ask).toHaveBeenCalledTimes(2);
+    schedule.trigger(); // nothing is held: this asks at once
+    expect(ask).toHaveBeenCalledTimes(3);
+    await settle();
+    expect(unhandled).not.toHaveBeenCalled();
+  });
+
+  it('loads the map again on a later trigger when the load throws as it starts', async () => {
+    let calls = 0;
+    const loadMap = vi.fn(() => {
+      calls += 1;
+      if (calls === 1) throw new Error('no fetch');
+      return Promise.resolve([northTrack()]);
+    });
+    const ask = vi.fn(() => Promise.resolve(feedText()));
+    const schedule = createLookaheadSchedule({ ask, loadMap });
+    const engine = engineOf();
+    schedule.attach(engine);
+    schedule.begin();
+    await settle();
+    await settle();
+    expect(loadMap).toHaveBeenCalledTimes(1);
+    schedule.trigger();
+    await settle();
+    await settle();
+    expect(loadMap).toHaveBeenCalledTimes(2);
+    expect(engine.bankInput).toHaveBeenLastCalledWith(expect.objectContaining({ need: 300 }));
+    expect(unhandled).not.toHaveBeenCalled();
+  });
+
+  it('carries on 30 s later when the 30 s timer’s ask throws as it starts', async () => {
+    let calls = 0;
+    const ask = vi.fn(() => {
+      calls += 1;
+      if (calls === 2) throw new Error('no frame');
+      return Promise.resolve(feedText());
+    });
+    const schedule = createLookaheadSchedule({
+      ask,
+      loadMap: () => Promise.resolve([northTrack()]),
+    });
+    schedule.attach(engineOf());
+    schedule.begin();
+    await settle();
+    await vi.advanceTimersByTimeAsync(ASK_EVERY_MS); // the second ask throws
+    expect(ask).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(ASK_EVERY_MS);
+    expect(ask).toHaveBeenCalledTimes(3);
     expect(unhandled).not.toHaveBeenCalled();
   });
 });
