@@ -16,7 +16,7 @@ change to the player's rules can then meet a known bad journey before it meets a
 |---|---|
 | **Real** | The app itself: the Player screen, the hls.js engine and its rules, the speed probe and the playback-health recorder, built for production from this checkout (`drive.mjs` runs Vite's build into `scripts/replay/dist/`) and run in the installed Chrome, headless, with a throwaway profile (`cdp.mjs`). The driver only looks at the page every five seconds; it clicks once, to wave away the "Where are you watching?" card. |
 | **Stand-in: the server** | `standin.mjs` answers the few API calls the Player makes (the film, the session, progress, the health report) and serves the film. No CineFilm server, no sign-in, no watch history. It listens on `127.0.0.1` only. |
-| **Stand-in: the film** | A 1080p source as `Ladder.java` and `Rung.java` ladder it: the original copied at 10 Mbit/s, then 720p, 480p, 360p and the 240p floor, with playlists written as `PlaylistWriter.java` writes them and four-second MPEG-TS segments of H.264 and AAC (`ts.mjs`). Every segment is the same four seconds of a drawn picture and of silence with its own time stamps, padded to the size its rung's average bitrate implies, times 1.08 for the wrapping. The padding sits inside the picture's stream, so the browser's media buffer weighs what a real rung would. |
+| **Stand-in: the film** | A 1080p source as `Ladder.java` and `Rung.java` ladder it: the original copied at 10 Mbit/s, then 720p, 480p, 360p and the 240p floor, with playlists written as `PlaylistWriter.java` writes them and four-second MPEG-TS segments of H.264 and AAC (`ts.mjs`). Every segment is the same four seconds of a drawn picture and of AAC noise with its own time stamps, padded to the size its rung's average bitrate implies, times 1.08 for the wrapping. The noise is made at the rung's own audio rate (64 kbit/s on the 240p floor, 96 on 360p, 128 on the others, 48 kHz stereo), so the sound weighs what the rung's does and Chrome's audio buffer, which binds before the video's, fills as it really does (`train-lookahead-plan.md`, step 0.2); the picture's padding makes up the rest of the size. |
 | **Stand-in: the link** | One shared allowance for everything the player asks for (`link.mjs`): API answers, playlists, segments and the speed probe. It is refilled at the trace's rate for the current replay minute, saves no more than a twentieth of a second of it for later, and gives nothing at all in a dead minute. Each answer first waits 115 ms, the round trip the record measured. The app's own files are served at once: loading the app is not under test. |
 
 ## The link, one figure a minute
@@ -53,6 +53,7 @@ be 22 or newer; nothing else is installed.
 | `--wire` | How heavy a segment is, as a multiple of its quality's average bitrate. Default 1.08, the weight the trace assumes; `--wire 1` is the bare average. |
 | `--fill` | `media` (the default: padding inside the picture's stream, which the browser keeps) or `null` (padding the player's demuxer throws away, so the browser's buffer stays tiny however heavy the quality). |
 | `--tmp` | Where the browser's throwaway profile is made and removed. Default: the system's temporary folder. |
+| `--encoder` | `off` (the default), or how many times faster than real time the server's encoder runs, 1 to 200 (about 19 at 480p on the real one). Off, every segment is there at once. On, the server's one encoder playhead per session is modelled (below). |
 | `--rebuild` | Build the app again first. Use it after the checkout changes. |
 
 The stand-in uses port 5301 on `127.0.0.1`, so one replay runs at a time; a second one stops with an error
@@ -80,10 +81,39 @@ an earlier one of the same name.
 
 While a replay runs it keeps the Mac from idling to sleep; a closed lid still sleeps it, and the summary then
 carries a warning, because the link's clock is the wall clock. The first run makes the film's picture and
-silence with Chrome's own encoders (`make-template.mjs`) and keeps them in `scripts/replay/out/template.json`.
+sound with Chrome's own encoders (`make-template.mjs`) and keeps them in `scripts/replay/out/template.json`: a drawn
+picture, one frame of silence, and 420 frames of white noise for each of the three audio rates. A template made before
+the noise was kept is made again on the next run (it says so).
 
 **After any change to the rig or to the player**, run `--minutes 1 --trace flat:3000 --rebuild` and read the
-summary: about 55 s watched, no stall, every request answered. Nothing else tests what needs Chrome.
+summary: about 55 s watched, no stall, every request answered. Nothing else tests what needs Chrome. After a change to `make-template.mjs`, delete `scripts/replay/out/template.json` and run it once (`node scripts/replay/make-template.mjs <a folder>`): it checks each rate's noise (ADTS frames, 48 kHz stereo, within 15% of the rate) and says which failed.
+
+## The server's one playhead (`--encoder`)
+
+The real server has one encoder run per session for all rungs, moved only by segment requests (`playhead.mjs`
+says which lines of `SessionManager.java` each rule mirrors). With `--encoder` set the stand-in does the same for
+each session:
+
+- **The encoder** makes a segment every four seconds over its speed, from the run's start, all rungs together.
+- **A request** moves the playhead (forward always, back only for one more than two minutes behind). A segment
+  already made is answered at once. A segment the live run will reach (at or after the run's first, no more than ten
+  past the one it is writing) is waited for; a segment not made within six seconds is answered 503 with
+  `Retry-After: 1`, and so is one whose run has stopped.
+- **Any other request restarts the encoder at that segment** and deletes what the old run had made from there to the
+  end, so it is made again. Each restart is logged on the request that caused it, in `requests.json` (`restart`) and
+  counted in `summary.txt`, by reason: `ahead` (more than ten past the run's newest: a seek forward, or one fetcher
+  ahead of another), `behind` (before the run's first: a seek back or a fetcher behind) and `stopped` (the run had
+  stopped).
+- **The encoder stops** when its newest segment is more than three minutes past the playhead, so a player that
+  watches on restarts it every few minutes with a `stopped` restart: that is the real server's way, and what counts
+  as a fight between fetchers is `ahead` and `behind`.
+- **Segments more than two minutes behind the playhead are deleted.** A request for one inside the live run's span only
+  waits and is answered 503; nothing makes it again until a request before the run's start restarts the encoder.
+
+A request's `waitMs` is how long it waited. The model is brought up to date when a request arrives, so the two-second
+sweep is not modelled (the encoder stops on the first segment past the limit); nor are the lag between rungs, a
+half-written segment, a film in several parts, the two-minute idle stop and a session rebuilt after ten minutes of
+quiet. Without `--encoder` none of this is modelled and the log has no `restart` or `waitMs`.
 
 ## What comes out
 
@@ -198,11 +228,12 @@ in what it keeps; the ids themselves go nowhere.
 
 - **The link is one rate a minute.** A real link moves within a minute.
 - **Every segment of a quality is the same size.** Real segments vary, up to the declared peak.
-- **The server always has the segment ready.** The real one encodes as it goes and can answer 503 for a moment.
-- **The picture is the same four seconds throughout and the sound is silence:** only the bytes and the timing
+- **The server always has the segment ready, unless `--encoder` is set.** The real one encodes as it goes and can answer 503 for a moment.
+- **The picture is the same four seconds throughout and the sound is the same 420 frames of noise, cycled:** only the bytes and the timing
   matter. Every quality carries the same small picture, whatever height its playlist declares.
 - **The ladder and the playlists are copies.** They were taken from `Ladder.java`, `Rung.java`, `StartRung.java`
-  and `PlaylistWriter.java` on 2026-11-15, and nothing compares them: change them here when those change.
+  and `PlaylistWriter.java` on 2026-11-15; only the audio rates are compared with the source (a test reads `Rung.java`
+  and `FfmpegCommandBuilder.java`): change the rest here when those change.
 - **The player's minutes are not quite the replay's.** The player's clock starts when its screen opens, about a
   fifth of a second after the replay's, so a minute of its health report and the same minute of the trace are
   not exactly the same sixty seconds.
@@ -220,6 +251,7 @@ one and wait for an event (a byte arriving, an entry in the log), never for a fi
 40 ms to show that an answer waits for the round trip. Two tests set the clock the server reads (`Date`)
 forward, leaving the link's own timer alone: one between two answers, and one in the middle of an answer, which
 shows that each byte is counted in the minute it was let through and not the minute its answer was asked for.
+The encoder's model (`playhead.mjs`) is tested on a clock the test sets; over HTTP, the tests of the one playhead use a slow encoder with a 40 ms wait (the answer is 503 once the wait is over) or a fast one with 80 ms a segment, and check lower bounds on the wait, never an upper one except where a restart must not wait for the old run (under three seconds).
 No test cuts an answer on a link that has gone dead, which would need a fixed wait: that such a cut is timed at
 the cut and not at the last byte sent was checked by hand on record minutes 33 to 36, where six answers the
 player gave up on after 10 s without a byte were each logged as cut at 10 s. CI runs them on Node 24. When a

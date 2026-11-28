@@ -22,6 +22,14 @@ const AUDIO_FRAMES_PER_PES = 8;
 const BASE_PTS = 10 * CLOCK;
 const AUD = Buffer.from([0, 0, 0, 1, 0x09, 0xf0]);
 
+/**
+ * The audio rates, in kbit/s, of the rungs CineFilm encodes (Rung.java: FLOOR_AUDIO_BITRATE, LOW_AUDIO_BITRATE,
+ * AUDIO_BITRATE; a test reads them from the source). The template holds a stretch of AAC at each, so that a
+ * segment's sound weighs what the real rung's does: Chrome's audio buffer counts about 93 bytes a frame on top of the
+ * frame's own bytes (train-lookahead-plan.md, step 0.2), and with silence it never fills as it really does.
+ */
+export const AUDIO_KBPS = [64, 96, 128];
+
 export function loadTemplate(path) {
   const raw = JSON.parse(readFileSync(path, 'utf8'));
   return {
@@ -31,6 +39,8 @@ export function loadTemplate(path) {
     silence: raw.silence ? Buffer.from(raw.silence, 'base64') : null,
     /** Seconds of film in one segment: the template's frames at its frame rate. */
     seconds: raw.frames.length / raw.fps,
+    /** ADTS frames of noise at each audio rate (kbit/s), or null for a template made before they were kept. */
+    noise: raw.noise ? Object.fromEntries(Object.entries(raw.noise).map(([kbps, frames]) => [kbps, frames.map((b) => Buffer.from(b, 'base64'))])) : null,
   };
 }
 
@@ -126,13 +136,17 @@ function framePackets(frame, pts, counterFrom, filler) {
   return pesPackets(VIDEO_PID, pes, counterFrom);
 }
 
-// `count` frames of silence as one PES packet, stamped with the time of the first.
-function silencePackets(silence, count, pts, counterFrom) {
-  const length = 3 + 5 + silence.length * count; // what follows the length field
+// `count` frames of sound as one PES packet, stamped with the time of the first. `sound` is one frame (repeated) or a
+// list of frames, of which frame k of the film takes number k modulo the list's length.
+function silencePackets(sound, count, pts, counterFrom, k) {
+  const frames = Array.isArray(sound)
+    ? Array.from({ length: count }, (_, i) => sound[(k + i) % sound.length])
+    : new Array(count).fill(sound);
+  const length = 3 + 5 + frames.reduce((sum, frame) => sum + frame.length, 0); // what follows the length field
   const pes = Buffer.concat([
     Buffer.from([0x00, 0x00, 0x01, 0xc0, length >> 8, length & 0xff, 0x80, 0x80, 0x05]),
     stamp(2, pts),
-    ...new Array(count).fill(silence),
+    ...frames,
   ]);
   return pesPackets(AUDIO_PID, pes, counterFrom);
 }
@@ -168,8 +182,8 @@ function pesPackets(pid, pes, counterFrom) {
 // shared among the frames, less the TS packet headers it will be carried in, the half packet of stuffing each
 // frame ends with on average, and the filler's own size bytes (one in 255). It falls a little short on purpose;
 // null packets make up the difference.
-function fillerSize(template, targetBytes) {
-  const spare = (targetBytes - bareSegmentBytes(template)) * ((PACKET - 4) / PACKET);
+function fillerSize(template, targetBytes, audioKbps) {
+  const spare = (targetBytes - bareSegmentBytes(template, audioKbps)) * ((PACKET - 4) / PACKET);
   const each = (spare / template.frames.length - PACKET / 2) / (1 + 1 / 255);
   return Math.max(0, Math.floor(each) - 64);
 }
@@ -190,41 +204,53 @@ function videoPackets(template, index, segmentTicks, filler) {
 
 // The sound runs on its own unbroken clock across segments: frame k starts at k x 1920 ticks, and a segment
 // carries the frames that start inside it (187 or 188 of them).
-function audioPackets(silence, index, segmentTicks) {
+function audioPackets(sound, index, segmentTicks) {
   const firstFrame = Math.ceil((index * segmentTicks) / AUDIO_FRAME_TICKS);
   const endFrame = Math.ceil(((index + 1) * segmentTicks) / AUDIO_FRAME_TICKS);
   const packets = [];
   let counter = 0;
   for (let k = firstFrame; k < endFrame; k += AUDIO_FRAMES_PER_PES) {
     const count = Math.min(AUDIO_FRAMES_PER_PES, endFrame - k);
-    const made = silencePackets(silence, count, BASE_PTS + Math.round(k * AUDIO_FRAME_TICKS), counter);
+    const made = silencePackets(sound, count, BASE_PTS + Math.round(k * AUDIO_FRAME_TICKS), counter, k);
     packets.push(...made.packets);
     counter = made.counter;
   }
   return packets;
 }
 
+// The sound of a segment at an audio rate: the template's noise at that rate, else (no rate given, or a template with
+// none at it) its one frame of silence, or null when the film has no sound at all.
+function soundFor(template, audioKbps) {
+  if (!template.silence) return null;
+  const noise = audioKbps === undefined ? null : template.noise?.[audioKbps];
+  return noise?.length ? noise : template.silence;
+}
+
 /**
- * Segment `index` of the film as bytes: the tables, the template's frames and silence stamped for that segment,
+ * Segment `index` of the film as bytes: the tables, the template's frames and sound stamped for that segment,
  * padded to `targetBytes` (rounded down to whole packets; never fewer bytes than the frames need). `fill` is
  * 'media' (filler inside every frame, topped up with a few null packets) or 'null' (null packets only).
+ * `audioKbps` is the rung's audio rate: its sound is the template's noise at that rate, which weighs what that
+ * rung's audio does; left out, the sound is silence.
  */
-export function buildSegment(template, index, targetBytes, fill = 'media') {
-  const filler = fill === 'media' ? fillerSize(template, targetBytes) : 0;
+export function buildSegment(template, index, targetBytes, fill = 'media', audioKbps = undefined) {
+  const filler = fill === 'media' ? fillerSize(template, targetBytes, audioKbps) : 0;
+  const sound = soundFor(template, audioKbps);
   const segmentTicks = template.frames.length * (CLOCK / template.fps);
   const packets = [
     PAT,
-    template.silence ? PMT_WITH_SOUND : PMT_VIDEO_ONLY,
+    sound ? PMT_WITH_SOUND : PMT_VIDEO_ONLY,
     ...videoPackets(template, index, segmentTicks, filler),
-    ...(template.silence ? audioPackets(template.silence, index, segmentTicks) : []),
+    ...(sound ? audioPackets(sound, index, segmentTicks) : []),
   ];
   const wanted = Math.floor(targetBytes / PACKET);
   const nulls = new Array(Math.max(0, wanted - packets.length)).fill(NULL_PACKET);
   return Buffer.concat([...packets, ...nulls]);
 }
 
-/** The bytes the frames, the silence and the tables need, with no padding. */
-export function bareSegmentBytes(template) {
-  template.bareBytes ??= buildSegment(template, 0, 0, 'null').length;
-  return template.bareBytes;
+/** The bytes the frames, the sound at `audioKbps` and the tables need, with no padding; kept per audio rate. */
+export function bareSegmentBytes(template, audioKbps = undefined) {
+  template.bareBytes ??= new Map();
+  if (!template.bareBytes.has(audioKbps)) template.bareBytes.set(audioKbps, buildSegment(template, 0, 0, 'null', audioKbps).length);
+  return template.bareBytes.get(audioKbps);
 }

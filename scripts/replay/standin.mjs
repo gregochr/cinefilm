@@ -4,7 +4,11 @@
 //
 // The film is a 1080p source as CineFilm would ladder it (Ladder.java, Rung.java): the original copied at
 // 10 Mbit/s, then 720p, 480p, 360p and the 240p floor. Playlists are written as PlaylistWriter.java writes them.
-// Segments are four seconds of MPEG-TS built by ts.mjs.
+// Segments are four seconds of MPEG-TS built by ts.mjs, each with sound as heavy as its rung's audio.
+//
+// With `encoderSpeed` set, the server's one encoder playhead per session is modelled (playhead.mjs, which says which
+// Java it mirrors): a segment is answered when the encoder has made it, a request far from the playhead restarts the
+// encoder there, and a segment not made within six seconds gets 503. Left out, every segment is there at once.
 //
 // The link (link.mjs): every API answer, playlist, segment and the speed probe passes through one shared allowance
 // that is refilled at the trace's rate for the current replay minute (nothing at all when it is 0). Not even an
@@ -24,6 +28,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
 import { createByteCounter, createLink, minuteAt, rateAt } from './link.mjs';
 import { WIRE } from './trace.mjs';
+import { createPlayhead, WAIT_MAX_MS } from './playhead.mjs';
 import { buildSegment } from './ts.mjs';
 
 const HEADROOM = 1.25; // StartRung.java
@@ -231,7 +236,9 @@ function sendBuffer(ctx, buffer, spec = {}) {
 }
 
 function sendJson(ctx, value, spec = {}) {
-  sendBuffer(ctx, Buffer.from(JSON.stringify(value)), { ...spec, headers: { 'Content-Type': 'application/json' } });
+  sendBuffer(ctx, Buffer.from(JSON.stringify(value)), {
+    ...spec, headers: { ...spec.headers, 'Content-Type': 'application/json' },
+  });
 }
 
 function noContent(ctx, kind) {
@@ -296,7 +303,7 @@ function replayState({ env, res }) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     clockMs: clockMs(env), minute: minuteNow(env), kbps: rateBps(env) / 1000, open: env.open,
-    active: env.link.size(), requests: env.requests.length, reports: env.healthReports.length,
+    active: env.link.size(), waiting: env.waiting, requests: env.requests.length, reports: env.healthReports.length,
   }));
 }
 
@@ -358,7 +365,10 @@ async function createSession(ctx) {
   const probe = body.value.probeKbps ?? null;
   const start = pinned ?? startRung(env.rungs, probe);
   const id = randomUUID();
-  env.sessions.set(id, { start, pinned: pinned ? pinned.id : null });
+  const encoder = env.encoderSpeed === null ? null : createPlayhead({
+    segmentCount: env.segmentCount, segmentMs: env.segmentMs, speed: env.encoderSpeed, now: Date.now,
+  });
+  env.sessions.set(id, { start, pinned: pinned ? pinned.id : null, encoder });
   sendJson(ctx, {
     sessionId: id, masterUrl: `/api/sessions/${id}/master.m3u8`, startRung: start.id,
     renditions: env.rungs.map((r) => ({ id: r.id, height: r.height, bitrate: r.video, copy: r.copy })),
@@ -388,15 +398,73 @@ function sessionPlaylist(ctx, { match }) {
   return true;
 }
 
-function sessionSegment(ctx, { match }) {
+function sendSegment(ctx, rung, n, detail) {
+  const { env } = ctx;
+  const bytes = Math.round((rung.average * env.wire * env.segmentMs) / 8000);
+  sendBuffer(ctx, buildSegment(env.template, n, bytes, env.fill, rung.audio / 1000), {
+    headers: { 'Content-Type': 'video/mp2t' }, kind: 'segment', detail: { rung: rung.id, segment: n, ...detail },
+  });
+}
+
+// ControllerAdvice for SegmentNotReadyException (HlsSessionController.java:75-78): 503 with Retry-After: 1.
+function sendNotReady(ctx, rung, n, detail) {
+  sendJson(ctx, { error: 'Segment not ready' }, {
+    status: 503, headers: { 'Retry-After': '1' }, kind: 'segment', detail: { rung: rung.id, segment: n, ...detail },
+  });
+}
+
+// Waits for the encoder to make the segment, as SessionManager.segmentLive does: until it is made, or six seconds
+// from the request's arrival, or at once when no run is going (SessionManager.settled). The answer says how long it
+// waited and, on the request that restarted the encoder, why.
+function waitForSegment(ctx, { encoder, rung, n, arrived, restart }) {
+  let timer = null;
+  let answered = false;
+  ctx.env.waiting += 1;
+  const answer = (made) => {
+    if (answered) return;
+    answered = true;
+    ctx.env.waiting -= 1;
+    clearTimeout(timer);
+    const waited = Date.now() - arrived;
+    const detail = { ...(restart ? { restart } : {}), ...(waited > 0 ? { waitMs: waited } : {}) };
+    try {
+      if (made) sendSegment(ctx, rung, n, detail);
+      else sendNotReady(ctx, rung, n, detail);
+    } catch {
+      fail(ctx.res); // from a timer, nothing above catches it
+    }
+  };
+  const check = () => {
+    if (answered) return;
+    if (encoder.complete(n)) {
+      answer(true);
+      return;
+    }
+    const left = ctx.env.waitMaxMs - (Date.now() - arrived);
+    if (left <= 0 || !encoder.running()) {
+      answer(false);
+      return;
+    }
+    const ready = encoder.readyInMs(n);
+    timer = setTimeout(check, Math.max(1, Math.min(left, ready ?? left)));
+  };
+  // The player went before the answer: the request is logged as it would be, cut short.
+  ctx.res.on('close', () => answer(false));
+  check();
+}
+
+function sessionSegment(ctx, { session, match }) {
   const { env } = ctx;
   const rung = env.rungs.find((r) => r.id === match[1]);
   const n = Number(match[2]);
   if (!rung || n >= env.segmentCount) return false;
-  const bytes = Math.round((rung.average * env.wire * env.segmentMs) / 8000);
-  sendBuffer(ctx, buildSegment(env.template, n, bytes, env.fill), {
-    headers: { 'Content-Type': 'video/mp2t' }, kind: 'segment', detail: { rung: rung.id, segment: n },
-  });
+  if (!session.encoder) {
+    sendSegment(ctx, rung, n, {});
+    return true;
+  }
+  const arrived = Date.now();
+  const { restart } = session.encoder.request(n);
+  waitForSegment(ctx, { encoder: session.encoder, rung, n, arrived, restart });
   return true;
 }
 
@@ -614,13 +682,19 @@ function listen(server, port) {
  * `startClock()` is called (the driver calls it as it opens the player) and runs in real time. `wire` scales every
  * segment's size: 1 is the rung's average bitrate alone; the default, WIRE, adds the MPEG-TS wrapping that trace.mjs
  * assumes when it turns a stalled minute's film into kbit/s, so film and trace then weigh the same. `port: 0` takes
- * any free port; the answer says which.
+ * any free port; the answer says which. `encoderSpeed` (how many times faster than real time the server's encoder
+ * runs; null leaves it out) models the server's one playhead per session (playhead.mjs); `waitMaxMs` is how long a
+ * request waits for a segment before 503, the server's six seconds unless a test shortens it.
  */
 export async function startStandIn({
   port, distDir, filmPath, template, trace, startMinute = 0, rttMs = 115, sourceBitrate = 10_000_000, fill = 'media',
-  wire = WIRE,
+  wire = WIRE, encoderSpeed = null, waitMaxMs = WAIT_MAX_MS,
 }) {
   if (!validWire(wire)) throw new Error('wire is a number from 1 to 1.5');
+  if (encoderSpeed !== null && !(Number.isFinite(encoderSpeed) && encoderSpeed > 0)) {
+    throw new Error('encoderSpeed is null or a number above 0');
+  }
+  if (!(Number.isFinite(waitMaxMs) && waitMaxMs > 0)) throw new Error('waitMaxMs is a number above 0');
   const files = readBuild(distDir);
   const index = files.get('/index.html')?.body;
   if (!index) throw new Error('the build holds no index.html');
@@ -629,7 +703,7 @@ export async function startStandIn({
   const segmentMs = Math.round(template.seconds * 1000);
   const env = {
     rungs, segmentMs, segmentCount: Math.floor(film.editions[0].runtimeMs / segmentMs), film, template, trace,
-    startMinute, rttMs, fill, wire, files, index, t0: null, open: false, link: null,
+    startMinute, rttMs, fill, wire, encoderSpeed, waitMaxMs, files, index, t0: null, open: false, link: null, waiting: 0,
     sessions: new Map(), viewings: new Map(), requests: [], healthReports: [], counter: createByteCounter(),
   };
   env.link = createLink(() => rateBps(env));

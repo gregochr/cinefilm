@@ -23,7 +23,7 @@ describe('options: what is given', () => {
   test('with nothing given: from minute 0 for 15 minutes on the sampled trace, media padding, the trace\'s own weight', () => {
     assert.deepEqual(options([]), {
       start: 0, minutes: 15, trace: 'sampled', name: 'run-0-15-sampled', tmp: tmpdir(), fill: 'media', wire: WIRE,
-      rebuild: false,
+      encoder: null, rebuild: false,
     });
     assert.equal(WIRE, 1.08);
   });
@@ -31,11 +31,11 @@ describe('options: what is given', () => {
   test('every option given', () => {
     const given = options([
       '--start', '24', '--minutes', '15', '--trace', 'cautious', '--fill', 'null', '--wire', '1.5',
-      '--name', 'my.run_2-b', '--tmp', '/some/folder', '--rebuild',
+      '--name', 'my.run_2-b', '--tmp', '/some/folder', '--encoder', '19.5', '--rebuild',
     ]);
     assert.deepEqual(given, {
       start: 24, minutes: 15, trace: 'cautious', name: 'my.run_2-b', tmp: '/some/folder', fill: 'null', wire: 1.5,
-      rebuild: true,
+      encoder: 19.5, rebuild: true,
     });
   });
 
@@ -85,6 +85,16 @@ describe('options: each refusal, with its exact message', () => {
   test('--fill is media or null', () => {
     assert.throws(() => options(['--fill', 'zero']), { message: '--fill must be media or null' });
     assert.throws(() => options(['--fill', 'Media']), { message: '--fill must be media or null' });
+  });
+
+  test('--encoder is off or a number of times real time from 1 to 200', () => {
+    assert.equal(options(['--encoder', 'off']).encoder, null);
+    assert.equal(options(['--encoder', '1']).encoder, 1);
+    assert.equal(options(['--encoder', '200']).encoder, 200);
+    const message = '--encoder must be off or a number from 1 to 200';
+    for (const bad of ['0', '0.9', '201', '-5', 'fast', '', '19x', '1e2']) {
+      assert.throws(() => options(['--encoder', bad]), { message }, bad);
+    }
   });
 
   test('--wire is a number from 1 to 1.5', () => {
@@ -242,6 +252,30 @@ describe('summarise: a minute past the end of the trace', () => {
     const lines = run({ trace: [0, 0, 0, 0, 0, 640] });
     assert.equal(lines[3], '   5   18:01:53   640   |            3s    360     480   20s  2 (1 cut) 480p |          12s    360');
     assert.equal(lines[4], '   6   18:02:53   640   |            0s    240     240  140s          1 240p |           0s    480');
+  });
+});
+
+describe('summarise: the modelled encoder', () => {
+  const ENCODER = [
+    { kind: 'segment', ms: 1000, rung: '480p', aborted: false, status: 200 },
+    { kind: 'segment', ms: 2000, rung: '480p', aborted: false, status: 200, restart: 'ahead', waitMs: 900 },
+    { kind: 'segment', ms: 3000, rung: '360p', aborted: false, status: 200, restart: 'behind' },
+    { kind: 'segment', ms: 4000, rung: '360p', aborted: false, status: 200, restart: 'stopped', waitMs: 40 },
+    { kind: 'segment', ms: 5000, rung: '360p', aborted: true, status: 503, waitMs: 6000 },
+    { kind: 'api', ms: 6000, restart: 'ahead' },
+  ];
+  const line = (opt, requests) => run({ opt, requests }).filter((l) => l.startsWith('the encoder'));
+
+  test('says what it did when it was on: restarts by reason, segments waited for, answers of 503', () => {
+    assert.deepEqual(line({ ...OPT, encoder: 19 }, ENCODER), [
+      'the encoder at 19 times real time: 3 restarts (1 ahead, 1 behind, 1 after it stopped), '
+      + '3 segments waited for, 1 answered 503',
+    ]);
+  });
+
+  test('says nothing when it was off', () => {
+    assert.deepEqual(line({ ...OPT, encoder: null }, ENCODER), []);
+    assert.deepEqual(line(OPT, ENCODER), []);
   });
 });
 
@@ -455,6 +489,7 @@ describe('templateFor', () => {
     codec: 'avc1.64001e', width: 640, height: 360, fps: 2,
     frames: [{ key: true, b64: Buffer.from([1, 2, 3]).toString('base64') }, { key: false, b64: 'BAUG' }],
     silence: Buffer.from([9, 9]).toString('base64'),
+    noise: { 96: [Buffer.from([7, 7, 7]).toString('base64')] },
   });
 
   test('a template that is there is loaded, and nothing is made', async () => {
@@ -483,6 +518,34 @@ describe('templateFor', () => {
     });
     assert.deepEqual(calls, ['making the stand-in film\'s picture ...', 'made']);
     assert.equal(template.seconds, 1);
+  });
+
+  test('a template from before noise was kept is made again, once, and the new file is loaded', async () => {
+    const dir = mkdtempSync(join(tmp, 'stale-'));
+    const path = join(dir, 'template.json');
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(TEMPLATE_FILE), noise: undefined }));
+    const calls = [];
+    const template = await templateFor({
+      path,
+      make: () => {
+        calls.push('made');
+        writeFileSync(path, TEMPLATE_FILE);
+      },
+      log: (text) => calls.push(text),
+    });
+    assert.deepEqual(calls, [
+      'the stand-in film\'s picture is from before its sound was made as heavy as a rung\'s: making it again ...',
+      'made',
+    ]);
+    assert.deepEqual(template.noise[96], [Buffer.from([7, 7, 7])]);
+  });
+
+  test('a template with no sound at all has no noise to wait for and is not made again', async () => {
+    const dir = mkdtempSync(join(tmp, 'mute-'));
+    const path = join(dir, 'template.json');
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(TEMPLATE_FILE), silence: null, noise: undefined }));
+    const template = await templateFor({ path, make: () => assert.fail('made'), log: () => assert.fail('logged') });
+    assert.equal(template.silence, null);
   });
 
   test('a file that is there but is not a template is not made over: the failure is passed on', async () => {
