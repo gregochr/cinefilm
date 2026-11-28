@@ -1212,6 +1212,23 @@ describe('the record of what the look-ahead and the bank did', () => {
       expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
     });
 
+    it('is counted while the closed episode’s front still fetches a boundary copy', async () => {
+      const env = world();
+      await turnedOn(env);
+      env.requests().setRung('360p'); // the front's next fetch is at 360p
+      await answerSegment(env.server.calls.at(-1)); // 10 at 480p
+      await answerSegment(env.server.calls.at(-1)); // 11 at 360p: the boundary copy of 10 is due
+      expect(env.front().boundaryFetching()).toEqual({ seq: 10, rung: '360p' });
+      const calls = env.server.calls.length;
+      const closed = env.front();
+      env.seekTo(400); // beyond held film: the episode closes, the copy goes on
+      expect(closed.fetching()).toBeNull();
+      expect(closed.boundaryFetching()).not.toBeNull();
+      request(env, 100);
+      expect(env.server.calls).toHaveLength(calls);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
     it('is not counted after that front has finished', async () => {
       const env = world();
       await turnedOn(env);
