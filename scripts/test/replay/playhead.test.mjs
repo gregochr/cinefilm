@@ -28,7 +28,7 @@ describe('the constants', () => {
 describe('createPlayhead', () => {
   test('refuses a speed, a segment length or a count that is not above 0', () => {
     const base = { segmentCount: 10, segmentMs: 4000, speed: 20, now: () => 0 };
-    for (const bad of [{ speed: 0 }, { speed: -1 }, { speed: NaN }, { segmentMs: 0 }, { segmentCount: 0 }]) {
+    for (const bad of [{ speed: 0 }, { speed: -1 }, { speed: Number.NaN }, { segmentMs: 0 }, { segmentCount: 0 }]) {
       assert.throws(() => createPlayhead({ ...base, ...bad }), /needs a speed/);
     }
   });
@@ -329,7 +329,7 @@ describe('a session that starts part-way', () => {
 
   test('refuses a start outside the film and a negative start-up', () => {
     const base = { segmentCount: 10, segmentMs: 4000, speed: 20, now: () => 0 };
-    for (const bad of [{ startSegment: 10 }, { startSegment: -1 }, { startSegment: 1.5 }, { startupMs: -1 }, { startupMs: NaN }]) {
+    for (const bad of [{ startSegment: 10 }, { startSegment: -1 }, { startSegment: 1.5 }, { startupMs: -1 }, { startupMs: Number.NaN }]) {
       assert.throws(() => createPlayhead({ ...base, ...bad }), /start segment/);
     }
   });

@@ -135,7 +135,7 @@ const rateBps = (env) => (env.t0 === null ? OPEN_BPS : rateAt(env.trace, minuteN
 // One answer: `size` bytes of body (`chunk(offset, n)` gives them) that the link releases after the round trip.
 // It is the link's job: `left()` and `send(n)`.
 class Answer {
-  constructor(env, res, spec, record) {
+  constructor(env, res, spec, record, began = performance.now()) {
     this.env = env;
     this.res = res;
     this.spec = spec;
@@ -144,7 +144,7 @@ class Answer {
     this.offset = 0;
     this.headed = false;
     this.closed = false;
-    this.began = performance.now();
+    this.began = began;
     this.cancelAlive = null;
   }
 
@@ -211,9 +211,12 @@ function methodOf(req) {
   return METHODS.find((m) => m === req.method) ?? 'other';
 }
 
-function startAnswer({ env, req, res }, spec) {
+// `ctx.arrival` is set for a request that was held before it was answered: its times and its readings run from the
+// moment it arrived, not from the moment the wait ended.
+function startAnswer({ env, req, res, arrival }, spec) {
   const record = {
-    at: Date.now(), ms: clockMs(env), minute: minuteNow(env), method: methodOf(req), kind: spec.kind,
+    at: arrival?.at ?? Date.now(), ms: arrival ? arrival.ms : clockMs(env), minute: arrival ? arrival.minute : minuteNow(env),
+    method: methodOf(req), kind: spec.kind,
     status: spec.status, bytes: spec.size, sent: 0, firstByteMs: null, doneMs: null, aborted: false, ...spec.detail,
   };
   env.requests.push(record);
@@ -222,7 +225,7 @@ function startAnswer({ env, req, res }, spec) {
     record.aborted = true;
     return;
   }
-  const answer = new Answer(env, res, spec, record);
+  const answer = new Answer(env, res, spec, record, arrival?.began);
   res.on('close', () => answer.close());
   if (env.open && !MEDIA_KINDS.has(spec.kind)) {
     answer.releaseAtOnce();
@@ -353,7 +356,7 @@ function probeRefusal(probe) {
 // refuses any string. A number beyond Long's range is unreadable, as it is there. NaN means unreadable.
 function startMsOf(value) {
   if (value === undefined || value === null) return 0;
-  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) >= 2 ** 63) return NaN;
+  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) >= 2 ** 63) return Number.NaN;
   return Math.trunc(value) + 0; // + 0: no negative zero
 }
 
@@ -492,6 +495,7 @@ function sessionSegment(ctx, { session, match, id }) {
     return true;
   }
   const arrived = Date.now();
+  ctx.arrival = { at: arrived, ms: clockMs(env), minute: minuteNow(env), began: performance.now() };
   const { restart, deleted } = session.encoder.request(n);
   waitForSegment(ctx, {
     encoder: session.encoder, rung, n, arrived, restart, deleted, live: () => env.sessions.get(id) === session,

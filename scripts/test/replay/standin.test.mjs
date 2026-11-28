@@ -695,11 +695,11 @@ describe('the server\'s one playhead per session', () => {
   });
 
   test('refuses a speed that is not above 0 and a wait that is not', async () => {
-    for (const bad of [0, -1, NaN, Infinity]) {
+    for (const bad of [0, -1, Number.NaN, Infinity]) {
       await assert.rejects(start({ encoderSpeed: bad }), { message: 'encoderSpeed is null or a number above 0' });
       await assert.rejects(start({ waitMaxMs: bad }), { message: 'waitMaxMs is a number above 0' });
     }
-    for (const bad of [-1, NaN, Infinity]) {
+    for (const bad of [-1, Number.NaN, Infinity]) {
       await assert.rejects(start({ encoderStartMs: bad }), { message: 'encoderStartMs is a number from 0' });
     }
   });
@@ -739,6 +739,22 @@ describe('the server\'s one playhead per session', () => {
     const answer = await held;
     assert.equal(answer.status, 404);
     assert.deepEqual(json(answer), { error: 'No such session' });
+  });
+
+  test('a held request is logged and timed from its arrival, not from the end of its wait', async () => {
+    const standIn = await start({ trace: [400_000], encoderSpeed: 50, encoderStartMs: 600 }); // made 680 ms in
+    const { sessionId } = await newSession(standIn);
+    standIn.startClock();
+    const before = Date.now();
+    const answer = await request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    assert.equal(answer.status, 200);
+    const [entry] = segments(standIn);
+    assert.ok(entry.waitMs >= 600, `waited ${entry.waitMs} ms`);
+    assert.ok(entry.firstByteMs >= 600, `first byte after ${entry.firstByteMs} ms`); // from the arrival, wait included
+    assert.ok(entry.doneMs >= entry.firstByteMs);
+    assert.ok(entry.at - before < 300, `logged ${entry.at - before} ms after the request left`); // the arrival's time
+    assert.ok(entry.ms < 300, `logged at ${entry.ms} ms of the replay clock`);
+    assert.equal(entry.minute, 0);
   });
 
   test('a start time outside the film is refused as the server refuses it, and a number is read as a Long', async () => {

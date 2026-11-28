@@ -124,7 +124,7 @@ each session:
   So a 4b reading compares runs with and without the bank; it does not take these counts as a fight on their own.
   `stopped` alone is the run stopping for being three minutes ahead of a playhead that moved on in the ordinary way.
 
-A request's `waitMs` is how long it waited. The model is brought up to date when a request arrives, so the two-second
+A request's `waitMs` is how long it waited; its `at`, `ms` and `minute` are those of its arrival and its `firstByteMs`, `doneMs` and `cutMs` run from it, so a wait is part of them. The model is brought up to date when a request arrives, so the two-second
 sweep is not modelled (the encoder stops on the first segment past the limit); nor are the lag between rungs, a
 film in several parts, the two-minute idle stop and a session rebuilt after ten minutes of
 quiet. Without `--encoder` none of this is modelled and the log has no `restart`, `deleted` or `waitMs`.

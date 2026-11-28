@@ -14,7 +14,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
 . "${HERE}/helpers.sh"
 
-EXPECTED_TESTS=995
+EXPECTED_TESTS=996
 MIN_NODE_MAJOR=22
 TEST_TIMEOUT_MS=30000
 FILE_BUDGET_S=120
