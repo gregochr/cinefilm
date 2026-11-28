@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_FIX_MODE, parseAnswer, parseFix } from './trainFeed.js';
+import { parseAnswer, parseFix } from './trainFeed.js';
 
 // Made-up values; nothing here is a real place.
 const GOOD = {
@@ -167,13 +167,18 @@ describe('parseFix', () => {
       expect(accepts('time', '4102444801')).toBe(false);
     });
 
-    it('mode 0 to 9, and a position only from mode 2', () => {
-      expect(MIN_FIX_MODE).toBe(2);
-      expect(accepts('mode', '1')).toBe(false);
-      expect(accepts('mode', '0')).toBe(false);
-      expect(accepts('mode', '2')).toBe(true);
+    it('mode 0 to 9', () => {
+      expect(accepts('mode', '0')).toBe(true);
       expect(accepts('mode', '9')).toBe(true);
+      expect(accepts('mode', '-1')).toBe(false);
       expect(accepts('mode', '10')).toBe(false);
+    });
+  });
+
+  it('accepts a mode 0 fix with a fresh age: real moving positions arrive so', () => {
+    expect(parseFix(jsonp({ ...GOOD, mode: '0', age: '0' }))).toMatchObject({
+      latitude: 0.5,
+      ageS: 0,
     });
   });
 

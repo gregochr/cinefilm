@@ -6,8 +6,6 @@ const MAX_TEXT = 100_000;
 // Seconds since 1970: 2020-01-01 to 2100-01-01, the range the journey file's own `feedAt` uses.
 const TIME_LOW = 1_577_836_800;
 const TIME_HIGH = 4_102_444_800;
-/** Fix modes below this one carry no position (0 not seen, 1 no fix). */
-export const MIN_FIX_MODE = 2;
 
 const WRAPPED = /^[\w$.]*\s*\(([\s\S]*)\)\s*;?$/;
 const WHOLE = /^-?\d{1,15}$/;
@@ -67,9 +65,10 @@ function read(raw, { whole = false, lo, hi }) {
 /**
  * The position answer as a fix `{ latitude, longitude, courseDeg, speedMps, ageS, feedAtS }` (degrees, degrees
  * clockwise from north in [0, 360), metres per second, seconds, seconds since 1970), or null when any of
- * latitude, longitude, cmg (course), speed, age, time or mode is missing, of the wrong kind, out of range, or
- * the mode says there is no fix (below 2). `ageS` is the fix's own age as the feed states it; whether it is
- * too old is the matcher's decision.
+ * latitude, longitude, cmg (course), speed, age, time or mode is missing, of the wrong kind, or out of range.
+ * The mode is checked but not used: about a fifth of real rounds say mode 0 with fresh, moving positions
+ * (`journey-data-plan.md`), so what a mode is worth is not decided here. `ageS` is the fix's own age as the feed
+ * states it; whether it is too old is the matcher's decision.
  */
 export function parseFix(text) {
   const data = parseAnswer(text);
@@ -82,6 +81,6 @@ export function parseFix(text) {
   const feedAtS = read(data.time, { whole: true, lo: TIME_LOW, hi: TIME_HIGH });
   const mode = read(data.mode, { whole: true, lo: 0, hi: 9 });
   const values = [latitude, longitude, course, speedMps, ageS, feedAtS, mode];
-  if (values.includes(undefined) || mode < MIN_FIX_MODE) return null;
+  if (values.includes(undefined)) return null;
   return { latitude, longitude, courseDeg: course % 360, speedMps, ageS, feedAtS };
 }

@@ -84,10 +84,10 @@ function nearestOnTrack(points, at, courseDeg) {
     if (length2 < MIN_SEGMENT_M * MIN_SEGMENT_M) continue;
     const f = Math.min(1, Math.max(0, -(ax * dx + ay * dy) / length2));
     const distanceM = Math.hypot(ax + f * dx, ay + f * dy);
-    if (distanceM > MAX_DISTANCE_M || (best !== null && distanceM >= best.distanceM)) continue;
+    if (!(distanceM <= MAX_DISTANCE_M) || (best !== null && distanceM >= best.distanceM)) continue;
     const bearing = (Math.atan2(dx, dy) / RAD + 360) % 360;
     const forward = headingDiff(courseDeg, bearing) <= MAX_HEADING_DIFF_DEG;
-    if (!forward && headingDiff(courseDeg, bearing + 180) > MAX_HEADING_DIFF_DEG) continue;
+    if (!forward && !(headingDiff(courseDeg, bearing + 180) <= MAX_HEADING_DIFF_DEG)) continue;
     best = { distanceM, along: points[i].t + f * dt, reversed: !forward };
   }
   return best;
