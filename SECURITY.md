@@ -104,10 +104,10 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    what a sandboxed frame reports: a frame that had lost its sandbox would report the app's own origin and be
    ignored, so the lookup fails closed. It keeps only `org`, as text of 1 to 100 characters, and stores an answer
    against it in `localStorage` only.
-   **The train feed** is the browser's other outside request. On a train, the player reads the train's own Wi-Fi
-   system for its position, from a sandboxed frame like the operator lookup's; the position is used in the page only
-   and never sent or stored. The
-   browser never asks the device for a location. The frame is the same hidden `sandbox="allow-scripts"` frame built
+   **The train feed** is the browser's other outside request. On a train, the player may read the train's own Wi-Fi
+   system for its position only from the frame described here; the position must be used in the page only and never
+   sent or stored. The browser never asks the device for a location. The frame is the same hidden
+   `sandbox="allow-scripts"` frame built
    from `srcdoc`, with a CORS `fetch` (never `no-cors`: the browser enforces the feed's own
    `Access-Control-Allow-Origin`, and an answer without it is no answer), `credentials: 'omit'` and
    `referrerPolicy: 'no-referrer'`, so the request carries `Origin: null`, no referrer and no cookie. Never give it

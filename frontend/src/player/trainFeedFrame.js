@@ -47,7 +47,10 @@ export function askTrainFeed(
     inFlight = true;
     let frame = null;
     let timer = null;
+    let ended = false;
     const end = (value) => {
+      if (ended) return; // a late message or timer must not free a newer ask's slot
+      ended = true;
       inFlight = false; // first: nothing below may leave the slot taken
       resolve(value);
       clearTimeout(timer);

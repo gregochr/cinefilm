@@ -322,4 +322,25 @@ describe('where it cannot start', () => {
     answer('still works');
     expect(await next).toBe('still works');
   });
+
+  it("lets a stale ask end only once: a late message cannot free the next ask's slot", async () => {
+    const win = {
+      addEventListener: (_type, listener) => window.addEventListener('message', listener),
+      removeEventListener: () => {
+        throw new Error('gone');
+      },
+    };
+    const first = askTrainFeed(URL_A, { win });
+    const stale = frameNow().contentWindow;
+    answer('one');
+    expect(await first).toBe('one');
+    const second = askTrainFeed(URL_A);
+    const state = settled(second);
+    // The first ask's listener is still attached (its removal threw): its frame posts again.
+    post({ cinefilmFeed: 'late' }, { source: stale });
+    expect(await askTrainFeed(URL_A)).toBeNull();
+    expect(state.done).toBe(false);
+    answer('two');
+    expect(await second).toBe('two');
+  });
 });
