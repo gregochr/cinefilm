@@ -183,6 +183,29 @@ describe('a train stopped on the line', () => {
     expect(li.input(sec(400))).toBeNull();
   });
 
+  it('never counts a moment twice when the freeze was clamped to the match', () => {
+    const li = matched(tracks, 500);
+    feed(li, tracks, slowFix(500, 50), sec(30)); // stopped before the match: frozen at the match, 0 s
+    feed(li, tracks, { ...fixAt(500, 0), ageS: 40 }, sec(35)); // moving since -5 s: before the freeze point
+    expect(li.input(sec(35))).toEqual(ahead(600, 465)); // 35 s of wall time since the match, no more
+  });
+
+  it('keeps the latest stop seen across several slow fixes', () => {
+    const li = matched(tracks, 500);
+    feed(li, tracks, slowFix(500), sec(20));
+    feed(li, tracks, slowFix(500), sec(100));
+    feed(li, tracks, { ...fixAt(500, 0), ageS: 60 }, sec(110)); // moving since 50 s, but stopped at 100 s
+    expect(li.input(sec(110))).toEqual(ahead(600, 470));
+  });
+
+  it('does not lower the latest stop seen with an older slow fix', () => {
+    const li = matched(tracks, 500);
+    feed(li, tracks, slowFix(500), sec(100));
+    feed(li, tracks, slowFix(500, 60), sec(110)); // dates to 50 s: older than the stop seen at 100 s
+    feed(li, tracks, { ...fixAt(500, 0), ageS: 60 }, sec(120)); // moving since 60 s, but stopped at 100 s
+    expect(li.input(sec(120))).toEqual(ahead(600, 380));
+  });
+
   it('resets on the next fresh match', () => {
     const li = matched(tracks, 500);
     feed(li, tracks, slowFix(500), sec(20));
@@ -354,5 +377,62 @@ describe('several tracks and a reversed track', () => {
     const li = matched(tracks, 1000, 270);
     expect(li.input(T0)).toEqual(ahead(450, 600));
     expect(li.input(sec(100))).toEqual(ahead(450, 500));
+  });
+});
+
+describe('the advance, over random fixes', () => {
+  // Seeded, so every run is the same.
+  const rng = (seed) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const far = [track([{ from: 4000, to: 4200, need: 600 }])];
+
+  /** Runs 200 random fixes; returns the worst advance beyond wall time, and the worst drop in the advance. */
+  function run(seed, maxAgeS) {
+    const next = rng(seed);
+    const li = createLookaheadInput();
+    let nowMs = T0;
+    let fresh = null; // when the last fresh match was made, and its time to the stretch
+    let prev = null;
+    let over = -Infinity;
+    let drop = -Infinity;
+    for (let i = 0; i < 200; i += 1) {
+      nowMs += Math.round(next() * 40_000) + 1000;
+      const kind = next();
+      const base =
+        kind < 0.4 ? fixAt(2000 + next() * 1000) : kind < 0.7 ? slowFix(2500) : fixAt(2500, 0);
+      const fix = { ...base, ageS: Math.floor(next() * (maxAgeS + 1)) };
+      const result = matchFix(far, fix);
+      li.noteMatch(result, fix, far, nowMs);
+      if (result.fresh) {
+        fresh = { atMs: nowMs, to: 4000 - result.match.places[0].along };
+        prev = null;
+      }
+      const out = fresh === null ? null : li.input(nowMs);
+      if (out === null) {
+        prev = null;
+        continue;
+      }
+      const advance = fresh.to - out.timeToStretch;
+      over = Math.max(over, advance - (nowMs - fresh.atMs) / 1000);
+      if (prev !== null) drop = Math.max(drop, prev - advance);
+      prev = advance;
+    }
+    return { over, drop };
+  }
+
+  it('never exceeds the wall time since the match, whatever the ages', () => {
+    for (let seed = 1; seed <= 20; seed += 1) {
+      expect(run(seed, 60).over).toBeLessThanOrEqual(1e-9);
+    }
+  });
+
+  it('never decreases when no fix is dated before the previous read', () => {
+    for (let seed = 1; seed <= 20; seed += 1) {
+      expect(run(seed, 0).drop).toBeLessThanOrEqual(1e-9);
+    }
   });
 });

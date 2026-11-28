@@ -34,10 +34,13 @@ export function createLookaheadInput() {
   let match = null;
   let tracks = null;
   let answeredMs = null; // last time the feed answered for this match (a fresh match or a stop)
-  let baseMs = 0; // elapsed time counts from here ...
-  let offsetS = 0; // ... plus this
+  // The advance along the track is `offsetS` plus the wall time since `baseMs`, until the train is seen stopped:
+  // then it stands at `offsetS`, for the moment `stoppedAtMs`. Invariants: baseMs <= stoppedAtMs <= now, and no
+  // moment is counted twice (a resume restarts from stoppedAtMs or later).
+  let baseMs = 0;
+  let offsetS = 0;
+  let stoppedAtMs = 0; // the latest moment an in-date slow fix says the train was stopped (never before baseMs)
   let frozen = false;
-  let stoppedSeenMs = -Infinity; // the time of the latest in-date slow fix: the train was still stopped then
 
   const elapsedS = (nowMs) => (frozen ? offsetS : offsetS + (nowMs - baseMs) / 1000);
 
@@ -49,26 +52,28 @@ export function createLookaheadInput() {
         tracks = tracksUsed;
         answeredMs = nowMs;
         baseMs = nowMs;
-        stoppedSeenMs = -Infinity;
+        stoppedAtMs = nowMs;
         offsetS = 0;
         frozen = false;
         return;
       }
       if (match !== null && nowMs - answeredMs > LAPSE_MS) match = null; // lapsed: only a fresh match revives it
       if (match === null || !(fix.ageS <= MAX_FIX_AGE_S)) return;
+      const fixMs = nowMs - fix.ageS * 1000;
       if (!(fix.speedMps >= MIN_SPEED_MPS)) {
-        // Stopped on the line: answer the lapse, and stop the clock where the train stopped (the fix is `ageS`
-        // old), never earlier than the advance already made.
+        // Stopped on the line: answer the lapse. The fix is `ageS` old, so the train stopped then; the clock
+        // stands there, never earlier than what has already been counted.
+        answeredMs = nowMs;
+        stoppedAtMs = Math.max(stoppedAtMs, fixMs);
         if (!frozen) {
-          offsetS = Math.max(offsetS, elapsedS(nowMs) - fix.ageS);
+          offsetS += (stoppedAtMs - baseMs) / 1000;
           frozen = true;
         }
-        answeredMs = nowMs;
-        stoppedSeenMs = nowMs - fix.ageS * 1000;
       } else if (frozen) {
-        // Moving again but off the map: advance again from the frozen value (nothing refreshed), counting from
-        // when the fix says the train moved, but never from before the last time it was seen stopped.
-        baseMs = Math.max(stoppedSeenMs, nowMs - fix.ageS * 1000);
+        // Moving again but off the map: advance again from when the fix says the train moved, but never from
+        // before the last moment it was seen stopped (nothing refreshed).
+        baseMs = Math.max(stoppedAtMs, fixMs);
+        stoppedAtMs = baseMs;
         frozen = false;
       }
     },
