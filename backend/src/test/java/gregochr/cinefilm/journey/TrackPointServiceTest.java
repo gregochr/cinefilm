@@ -3,6 +3,7 @@ package gregochr.cinefilm.journey;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFile;
@@ -25,7 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 class TrackPointServiceTest {
 
     private static final long JOURNEY = 1L;
-    private static final Instant T0 = Instant.parse("2030-01-15T10:00:00Z");
+    private static final Instant T0 = TestData.NOW;
     private static final long RUNTIME = 6_000_000L;
     private static final List<Long> GOOD_MINUTE = row(0, 900, 60_000, 0, 30);
     /** A playing minute with no fragment; with nothing else said it is bad. */

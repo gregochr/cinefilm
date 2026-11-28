@@ -2,6 +2,7 @@ package gregochr.cinefilm.journey;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import gregochr.cinefilm.TestData;
 import java.time.Instant;
 import java.util.List;
 import java.util.TreeMap;
@@ -9,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class PartMinutesTest {
 
-    private static final Instant START = Instant.parse("2030-01-15T10:00:00Z");
+    private static final Instant START = TestData.NOW;
     private static final long RUNTIME = 6_000_000L;
 
     private static List<Long> row(long minute, long median, long moved, long stalled, long ahead) {
