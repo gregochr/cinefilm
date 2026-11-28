@@ -138,7 +138,13 @@ export function hlsConfig(startSeconds) {
  * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played),
  * onRebank('started' | 'done' | 'undone') (once for each, at the one place it happens; 'undone' only for a re-bank
  * that was under way and only while the record is still open: one under way when the playback ends is neither
- * done nor undone, so started may exceed done + undone by one) and onMarksForgotten(n) (n hls.js fragment-error marks forgotten in one sweep). In Auto, on a ladder
+ * done nor undone, so started may exceed done + undone by one), onMarksForgotten(n) (n hls.js fragment-error marks forgotten in one sweep),
+ * and the look-ahead's record (train-lookahead-plan.md, 5b; no position is ever in it): onLookaheadHeld() (each
+ * `bankInput` that is not null), onStretchReached({ needS, aheadS, rung }) (once per stretch: the first input
+ * saying `stretchBegun` after one that did not, whole seconds, `rung` the bank's rung id or null),
+ * onBankRungChange() (the bank chose another rung while on) and onBankBypass() (a media request went to the
+ * server through hls.js's own loader while the bank was on or turning off; the bank's own fetcher is never
+ * counted). In Auto, on a ladder
  * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above while it is fetching there
  * and has had no fragment trouble; the cap never climbs above the level being fetched by more than one.
  * `fetch` is the film bank's (default: the browser's). Returns { destroy, bankInput } and the bank's own
@@ -207,6 +213,9 @@ export function startHlsJs({
         InnerP: Hls.DefaultConfig.loader,
         bank: decider,
         now: clock,
+        onPass: () => {
+          if (phase === 'on' || phase === 'turningOff') handlers.onBankBypass?.();
+        },
       })
     : null;
   const hls = new Hls({
@@ -264,6 +273,7 @@ export function startHlsJs({
   const store = auto ? createSegmentBank() : null; // the film bank's segments and playlists
   let phase = 'idle'; // the bank's: idle, armed, on, turningOff
   let lookahead = null; // the last bankInput
+  let stretchSeen = false; // the stretch the input says has begun has been recorded; false once one has not begun
   let lastChoiceAt = null; // when the front's rung was last chosen (clock ms), null: not yet for this stretch
   // Where loading resumes: the playhead as last seen with media loaded (-1: from the start), else the start asked
   // for. hls.js reloads from `config.startPosition` when it reattaches the media on its own (after a reset), and the
@@ -850,6 +860,32 @@ export function startHlsJs({
   const needOf = (input) => (input.need > 0 ? input.need : 0);
   const within = (input, seconds) => input !== null && input.timeToStretch <= seconds;
 
+  // The bank's rung id: the front's while an episode runs, else the rung hls.js is fetching; null when unknown.
+  const bankRungNow = () => {
+    if (episode !== null)
+      return episode.front.window().rung ?? episode.front.position().rung ?? null;
+    return fetched === null ? null : (rungOfLevelIndex(fetched) ?? null);
+  };
+
+  // The look-ahead's record of one input. A stretch is reached when the input says it has begun after one that
+  // said it had not (or none yet): an input that lapses and returns inside the same stretch is not a new one, and
+  // two stretches that run into each other, with no input between that has not begun, are one.
+  const recordInput = (input) => {
+    if (input === null) return;
+    handlers.onLookaheadHeld?.();
+    if (!input.stretchBegun) {
+      stretchSeen = false;
+      return;
+    }
+    if (stretchSeen) return;
+    stretchSeen = true;
+    handlers.onStretchReached?.({
+      needS: Math.round(needOf(input)),
+      aheadS: Math.round(filmAheadNow()),
+      rung: bankRungNow(),
+    });
+  };
+
   // The rung the bank last fetched at, as the level hls.js falls back to on a release.
   const fetchedBankLevel = () => {
     const { front } = episode;
@@ -986,7 +1022,9 @@ export function startHlsJs({
       rate: measured.rate,
       candidates,
     });
-    if (choice !== null) requests.setRung(choice.id);
+    if (choice === null) return;
+    if (choice.id !== front.chosenRung()) handlers.onBankRungChange?.();
+    requests.setRung(choice.id);
   };
 
   // A seek inside held film moves the front past the run holding the target, so a gap it was filling is left. The
@@ -1070,6 +1108,7 @@ export function startHlsJs({
      */
     bankInput(input) {
       lookahead = input;
+      if (!destroyed && store !== null) recordInput(input);
       bankStep();
     },
     /**

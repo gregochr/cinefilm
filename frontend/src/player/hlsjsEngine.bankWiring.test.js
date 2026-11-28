@@ -174,7 +174,16 @@ function world({ auto = true, fetched = 2, ladder = rungs } = {}) {
     'onStopped',
     'onFatal',
   ];
-  const handlers = Object.fromEntries([...names, 'onNetworkError'].map((n) => [n, vi.fn()]));
+  const handlers = Object.fromEntries(
+    [
+      ...names,
+      'onNetworkError',
+      'onLookaheadHeld',
+      'onStretchReached',
+      'onBankRungChange',
+      'onBankBypass',
+    ].map((n) => [n, vi.fn()]),
+  );
   const server = makeServer();
   const engine = startHlsJs({
     Hls: WiringHls,
@@ -1022,5 +1031,150 @@ describe('destroy', () => {
     expect(on.server.calls.at(-1).aborted).toBe(true);
     expect(on.store().heldBytes()).toBe(0);
     on.engine.bankInput(NEAR); // after destroy: nothing happens
+  });
+});
+
+describe('the record of what the look-ahead and the bank did', () => {
+  const BEGUN = { need: 600, timeToStretch: 0, stretchBegun: true };
+  const measured = (over = {}) => ({
+    rung: '480p',
+    rate: 1328,
+    w: 0,
+    d: 1.25,
+    measuredS: 40,
+    measuredWallS: 40,
+    ...over,
+  });
+
+  it('reports each input that is not null, and nothing for null or with the rung pinned', async () => {
+    const env = world();
+    env.engine.bankInput(null);
+    expect(env.handlers.onLookaheadHeld).not.toHaveBeenCalled();
+    env.engine.bankInput(ARM);
+    env.engine.bankInput(NEAR);
+    env.engine.bankInput(BEGUN);
+    expect(env.handlers.onLookaheadHeld).toHaveBeenCalledTimes(3);
+    const pinned = world({ auto: false });
+    pinned.engine.bankInput(BEGUN);
+    expect(pinned.handlers.onLookaheadHeld).not.toHaveBeenCalled();
+    expect(pinned.handlers.onStretchReached).not.toHaveBeenCalled();
+  });
+
+  it('reports a stretch once when it is reached, with the need, the film ahead and the bank’s rung', async () => {
+    const env = world();
+    await turnedOn(env);
+    env.engine.bankInput(NEAR);
+    expect(env.handlers.onStretchReached).not.toHaveBeenCalled();
+    env.engine.bankInput({ ...BEGUN, timeToStretch: -0.4, need: 600.4 });
+    env.engine.bankInput(BEGUN);
+    env.engine.bankInput({ ...BEGUN, timeToStretch: -30 });
+    expect(env.handlers.onStretchReached.mock.calls).toEqual([
+      [{ needS: 600, aheadS: 35, rung: '480p' }],
+    ]);
+    expect(Object.keys(env.handlers.onStretchReached.mock.calls[0][0]).sort()).toEqual([
+      'aheadS',
+      'needS',
+      'rung',
+    ]);
+  });
+
+  it('reports a second stretch when an input that has not begun comes between, and not for a lapse inside one', async () => {
+    const env = world();
+    await turnedOn(env);
+    env.engine.bankInput(BEGUN);
+    env.engine.bankInput(null); // lapsed, or passed with none ahead
+    env.engine.bankInput(BEGUN); // back inside the same stretch
+    expect(env.handlers.onStretchReached).toHaveBeenCalledTimes(1);
+    env.engine.bankInput({ ...NEAR, timeToStretch: 700 }); // the next stretch is ahead
+    env.engine.bankInput({ ...BEGUN, need: 900 });
+    expect(env.handlers.onStretchReached).toHaveBeenCalledTimes(2);
+    expect(env.handlers.onStretchReached.mock.calls[1][0].needS).toBe(900);
+  });
+
+  it('names the rung hls.js fetches when no bank episode runs, and null when it is not known', async () => {
+    const env = world();
+    env.engine.bankInput(BEGUN);
+    expect(env.handlers.onStretchReached).toHaveBeenCalledWith({
+      needS: 600,
+      aheadS: 0,
+      rung: '480p',
+    });
+    const unknown = world();
+    unknown.hls.levels[2] = { height: 999, bitrate: 1 }; // a level that is no rung of the ladder
+    unknown.engine.bankInput(BEGUN);
+    expect(unknown.handlers.onStretchReached.mock.calls[0][0].rung).toBeNull();
+  });
+
+  it('counts a rung change when the bank chooses another rung, not the same one again', async () => {
+    const env = world();
+    await turnedOn(env);
+    vi.spyOn(env.front(), 'window').mockReturnValue(measured());
+    env.engine.bankInput(NEAR); // 480p to 240p: only 240p's projection reaches F
+    expect(env.handlers.onBankRungChange).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    env.engine.bankInput(NEAR); // chosen again, already 240p
+    expect(chooseBankRung).toHaveBeenCalledTimes(2);
+    expect(env.handlers.onBankRungChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts no rung change while the bank is only armed', async () => {
+    const env = world();
+    await armed(env);
+    vi.spyOn(env.front(), 'window').mockReturnValue(measured());
+    env.engine.bankInput(ARM);
+    expect(chooseBankRung).not.toHaveBeenCalled();
+    expect(env.handlers.onBankRungChange).not.toHaveBeenCalled();
+  });
+
+  describe('a media request that reaches the server outside the bank', () => {
+    const initRequest = (env) => {
+      const frag = { ...fragOf(0, 2), sn: 'initSegment' };
+      const loader = new env.hls.config.fLoader(env.hls.config);
+      frag.stats = loader.stats;
+      const context = { url: segUrl('480p', 0), type: 'media-fragment', frag };
+      loader.load(context, {}, { onSuccess: vi.fn(), onError: vi.fn(), onTimeout: vi.fn() });
+    };
+
+    it('is counted while the bank is on', async () => {
+      const env = world();
+      await turnedOn(env);
+      initRequest(env);
+      expect(InnerLoader.loads).toHaveLength(11);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
+    it('is counted while the bank is turning off, but not the release', async () => {
+      const env = world();
+      await turnedOn(env);
+      env.engine.bankInput(AFTER);
+      initRequest(env);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+      request(env, 30); // film not held: the bank releases, and the request is today's again
+      expect(InnerLoader.loads).toHaveLength(12);
+      expect(env.handlers.onBankBypass).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not counted for what the bank answers, what its own fetcher fetches, or loads while it is off or armed', async () => {
+      const env = world();
+      loadThroughInner(env, 2); // no bank yet
+      await armed(env); // copies through the inner loader while armed
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+      env.engine.bankInput(NEAR);
+      await flush();
+      const calls = env.server.calls.length;
+      const held = request(env, 3); // answered from the bank
+      request(env, 40); // not held: waits on the front's one fetch
+      await flush();
+      expect(held.callbacks.onSuccess).toHaveBeenCalledTimes(1);
+      expect(env.server.calls.length).toBeGreaterThan(calls);
+      expect(env.handlers.onBankBypass).not.toHaveBeenCalled();
+    });
+
+    it('is not counted when the engine has no handler for it', async () => {
+      const env = world();
+      await turnedOn(env);
+      delete env.handlers.onBankBypass;
+      expect(() => initRequest(env)).not.toThrow();
+    });
   });
 });

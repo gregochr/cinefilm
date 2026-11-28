@@ -609,6 +609,10 @@ describe('the object it returns', () => {
       api.networkError({ timeout: true });
       api.rebank('started');
       api.marksForgotten(1);
+      api.lookaheadHeld();
+      api.stretchReached({ needS: 1, aheadS: 1, rung: '480p' });
+      api.bankRungChanged();
+      api.bankBypassed();
       api.throughput(100);
     }).not.toThrow();
     await advance(START_GRACE_MS + REPORT_INTERVAL_MS);
@@ -620,6 +624,8 @@ describe('the object it returns', () => {
     stubFetch();
     const { result } = mount();
     expect(Object.keys(result.current).sort()).toEqual([
+      'bankBypassed',
+      'bankRungChanged',
       'beat',
       'canPlay',
       'end',
@@ -629,6 +635,7 @@ describe('the object it returns', () => {
       'fellBack',
       'fetching',
       'id',
+      'lookaheadHeld',
       'marksForgotten',
       'networkError',
       'newViewing',
@@ -645,6 +652,7 @@ describe('the object it returns', () => {
       'seeked',
       'seeking',
       'sourceChanged',
+      'stretchReached',
       'throughput',
       'waiting',
     ]);

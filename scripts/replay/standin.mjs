@@ -48,7 +48,11 @@ const REPORT_NUMBERS = [
   'seekCount', 'seekWaitMs', 'reloadCount', 'reloadMs', 'reconnectCount', 'reconnectMs', 'recoveries', 'stepsDown',
   'stepsUp', 'netErrors', 'timeouts', 'kbpsLow', 'kbpsMedian', 'kbpsHigh', 'kbpsSamples',
   'startPositionMs', 'endPositionMs', 'rebanksStarted', 'rebanksDone', 'rebanksUndone', 'marksForgotten',
+  'lookaheadMinutes', 'bankRungChanges', 'bankBypassRequests',
 ];
+// A look-ahead stretch (HealthDtos.LookaheadStretch): two figures and a rung name or null, no more than 50 of them.
+const STRETCH_RUNGS = ['original', '1080p', '720p', '480p', '360p', '240p'];
+const MAX_STRETCHES = 50;
 const REPORT_FLAGS = ['autoplayRefused', 'fellBack'];
 const REPORT_WORDS = [
   ['engine', ['hlsjs', 'native', 'direct']],
@@ -438,6 +442,15 @@ function readRungMs(source, rungs) {
   return kept;
 }
 
+// Entries with two figures and a rung name or null; the real server refuses a report holding any other.
+function readStretches(source) {
+  if (!Array.isArray(source)) return null;
+  return source
+    .filter((e) => isObject(e) && isNumber(e.needS) && isNumber(e.aheadS) && (e.rung === null || STRETCH_RUNGS.includes(e.rung)))
+    .slice(0, MAX_STRETCHES)
+    .map((e) => ({ needS: e.needS, aheadS: e.aheadS, rung: e.rung }));
+}
+
 const isMinuteRow = (row) => Array.isArray(row) && (row.length === 5 || row.length === 7) && row.every(isNumber);
 
 // A fresh object, field by field from the lists above: nothing else the player sent is kept.
@@ -454,6 +467,8 @@ function readReport(value, rungs) {
   }
   const rungMs = readRungMs(value.rungMs, rungs);
   if (rungMs) report.rungMs = rungMs;
+  const stretches = readStretches(value.lookaheadStretches);
+  if (stretches) report.lookaheadStretches = stretches;
   if (Array.isArray(value.minutes)) {
     report.minutes = value.minutes.filter(isMinuteRow).slice(0, MAX_MINUTES).map((row) => [...row]);
   }

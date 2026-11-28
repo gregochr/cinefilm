@@ -186,6 +186,54 @@ class PlaybackHealthApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.report.marksForgotten").doesNotExist());
     }
 
+    @Test
+    void theLookaheadRecordIsStoredAndReturnedWithNoFieldButItsOwnAndAReportWithoutItHasNone() throws Exception {
+        ObjectNode withRecord = report(finalCut, 4);
+        withRecord.put("lookaheadMinutes", 12);
+        withRecord.put("bankRungChanges", 3);
+        withRecord.put("bankBypassRequests", 0);
+        withRecord.putArray("lookaheadStretches").addObject().put("needS", 900).put("aheadS", 300)
+            .put("rung", "480p").put("lat", 1.5);
+        send(ID, withRecord);
+        send(idOf(2), report(finalCut, 4));
+
+        mvc.perform(get("/api/admin/playback-health/{id}", ID))
+            .andExpect(jsonPath("$.report.lookaheadMinutes").value(12))
+            .andExpect(jsonPath("$.report.bankRungChanges").value(3))
+            .andExpect(jsonPath("$.report.bankBypassRequests").value(0))
+            .andExpect(jsonPath("$.report.lookaheadStretches[0].needS").value(900))
+            .andExpect(jsonPath("$.report.lookaheadStretches[0].aheadS").value(300))
+            .andExpect(jsonPath("$.report.lookaheadStretches[0].rung").value("480p"))
+            .andExpect(jsonPath("$.report.lookaheadStretches[0].lat").doesNotExist());
+        mvc.perform(get("/api/admin/playback-health/{id}", idOf(2)))
+            .andExpect(jsonPath("$.report.lookaheadMinutes").doesNotExist())
+            .andExpect(jsonPath("$.report.lookaheadStretches").doesNotExist());
+    }
+
+    @Test
+    void aStretchWithABadRungIsA400AndStoresNothing() throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        body.putArray("lookaheadStretches").addObject().put("needS", 900).put("aheadS", 300).put("rung", "8k");
+
+        mvc.perform(put("/api/playback-health/{id}", ID).content(text(body)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid health report"));
+
+        assertThat(health.count()).isZero();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"lookaheadMinutes,-1", "bankRungChanges,2000000001", "bankBypassRequests,-1"})
+    void aLookaheadCounterBelowZeroOrAboveTheLimitIsA400(String field, long value) throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        body.put(field, value);
+
+        mvc.perform(put("/api/playback-health/{id}", ID).content(text(body)))
+            .andExpect(status().isBadRequest());
+
+        assertThat(health.count()).isZero();
+    }
+
     @ParameterizedTest
     @CsvSource({"rebanksStarted,-1", "rebanksDone,-1", "rebanksUndone,2000000001", "marksForgotten,2000000001"})
     void aRungCounterBelowZeroOrAboveTheLimitIsA400AndStoresNothing(String field, long value) throws Exception {

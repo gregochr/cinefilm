@@ -30,6 +30,10 @@ const makeHealth = () => ({
   networkError: vi.fn(),
   rebank: vi.fn(),
   marksForgotten: vi.fn(),
+  lookaheadHeld: vi.fn(),
+  stretchReached: vi.fn(),
+  bankRungChanged: vi.fn(),
+  bankBypassed: vi.fn(),
   end: vi.fn(),
 });
 
@@ -449,6 +453,21 @@ describe('what the running engine reports', () => {
 
     expect(hook.health.rebank).toHaveBeenCalledWith('started');
     expect(hook.health.marksForgotten).toHaveBeenCalledWith(2);
+  });
+
+  it('passes on what the look-ahead and the bank did', async () => {
+    const { hook } = await running();
+    const stretch = { needS: 600, aheadS: 35, rung: '480p' };
+
+    handlersOf().onLookaheadHeld();
+    handlersOf().onStretchReached(stretch);
+    handlersOf().onBankRungChange();
+    handlersOf().onBankBypass();
+
+    expect(hook.health.lookaheadHeld).toHaveBeenCalledTimes(1);
+    expect(hook.health.stretchReached).toHaveBeenCalledWith(stretch);
+    expect(hook.health.bankRungChanged).toHaveBeenCalledTimes(1);
+    expect(hook.health.bankBypassed).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the throughput it is told of, and forgets it when the network changes', async () => {

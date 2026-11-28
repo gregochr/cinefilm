@@ -62,7 +62,7 @@ function fragContext(sn, { level = 2, type = 'media-fragment' } = {}) {
 
 const bytesOf = (...values) => new Uint8Array(values).buffer;
 
-function setup({ decision = { action: 'pass' }, armed = false, playlist = null } = {}) {
+function setup({ decision = { action: 'pass' }, armed = false, playlist = null, onPass } = {}) {
   const bank = {
     armed: vi.fn(() => armed),
     fragmentRequest: vi.fn(() => decision),
@@ -74,6 +74,7 @@ function setup({ decision = { action: 'pass' }, armed = false, playlist = null }
     InnerP: FakeInner,
     bank,
     now: () => 10_000,
+    onPass,
   });
   const callbacks = () => ({
     onSuccess: vi.fn(),
@@ -355,6 +356,32 @@ describe('bank fLoader passes through', () => {
     loader.load(fragContext('initSegment'), {}, cb);
     expect(s.bank.fragmentRequest).not.toHaveBeenCalled();
     expect(loader.inner.callbacks).toBe(cb);
+  });
+
+  it('reports each media request it hands to the inner loader, once, and none the bank serves', async () => {
+    const onPass = vi.fn();
+    const passing = setup({ decision: { action: 'pass' }, onPass });
+    const ctx = fragContext(3);
+    new passing.F({}).load(ctx, {}, passing.callbacks());
+    const init = fragContext('initSegment');
+    new passing.F({}).load(init, {}, passing.callbacks());
+    expect(onPass.mock.calls).toEqual([[ctx], [init]]);
+
+    const answering = setup({ decision: ANSWER(), onPass });
+    new answering.F({}).load(fragContext(4), {}, answering.callbacks());
+    await flush();
+    const waiting = setup({ decision: { action: 'wait' }, onPass });
+    new waiting.F({}).load(fragContext(5), {}, waiting.callbacks());
+    expect(onPass).toHaveBeenCalledTimes(2);
+  });
+
+  it('never reports a playlist, and works with no onPass given', () => {
+    const onPass = vi.fn();
+    const s = setup({ onPass });
+    new s.P({}).load({ url: 'p', type: 'level', level: 2 }, {}, s.callbacks());
+    expect(onPass).not.toHaveBeenCalled();
+    const bare = setup();
+    expect(() => new bare.F({}).load(fragContext(1), {}, bare.callbacks())).not.toThrow();
   });
 
   it('never asks the decider about a master or non-fragment load', () => {

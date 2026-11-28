@@ -216,6 +216,44 @@ class PlaybackHealthServiceTest {
     }
 
     @Test
+    void theLookaheadRecordIsKeptInTheStoredSummaryAndNothingElseOfAStretch() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+        ObjectNode body = example();
+        body.put("lookaheadMinutes", 14);
+        body.put("bankRungChanges", 2);
+        body.put("bankBypassRequests", 1);
+        body.putArray("lookaheadStretches").addObject().put("needS", 900).put("aheadS", 300).put("rung", "480p")
+            .put("lat", 1.5);
+
+        service.report(ID, text(body));
+
+        var summary = JSON.readTree(saved().getSummary());
+        assertThat(summary.get("lookaheadMinutes").asLong()).isEqualTo(14);
+        assertThat(summary.get("bankRungChanges").asLong()).isEqualTo(2);
+        assertThat(summary.get("bankBypassRequests").asLong()).isEqualTo(1);
+        var entry = summary.get("lookaheadStretches").get(0);
+        assertThat(entry.get("needS").asLong()).isEqualTo(900);
+        assertThat(entry.get("aheadS").asLong()).isEqualTo(300);
+        assertThat(entry.get("rung").asString()).isEqualTo("480p");
+        assertThat(entry.propertyNames()).containsExactlyInAnyOrder("needS", "aheadS", "rung");
+    }
+
+    @Test
+    void aReportWithoutTheLookaheadRecordIsStoredAsBefore() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+
+        service.report(ID, compactExample());
+
+        var summary = JSON.readTree(saved().getSummary());
+        assertThat(summary.has("lookaheadMinutes")).isFalse();
+        assertThat(summary.has("lookaheadStretches")).isFalse();
+        assertThat(summary.has("bankRungChanges")).isFalse();
+        assertThat(summary.has("bankBypassRequests")).isFalse();
+    }
+
+    @Test
     void aReportWithoutTheRungCountersIsStoredAsBeforeAndIsStillValid() {
         knownEdition();
         when(repository.count()).thenReturn(1L);

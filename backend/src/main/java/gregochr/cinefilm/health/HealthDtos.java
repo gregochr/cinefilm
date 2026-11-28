@@ -26,6 +26,11 @@ public final class HealthDtos {
      * the playback's re-banks started, finished and undone and of the hls.js fragment-error marks the player forgot
      * (stuck-rung and step-up-bank plans). They follow the same rule: optional, a missing one meaning 0, and from 0 to
      * 2,000,000,000 when present.
+     * {@code lookaheadMinutes}, {@code lookaheadStretches}, {@code bankRungChanges} and {@code bankBypassRequests}
+     * say what the train look-ahead and the film bank did (train-lookahead-plan.md, 5b). All four are optional. The
+     * figures follow the rule above; {@code lookaheadStretches} holds at most 50 entries. No position is ever in a
+     * report (SECURITY.md rule 7): an entry holds only {@link LookaheadStretch}'s three fields, and any other field
+     * of it is dropped, as it is on the report itself.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record HealthReport(Long seq, Long editionId, Long elapsedMs, String environment, String operator,
@@ -41,7 +46,20 @@ public final class HealthDtos {
                                @JsonInclude(JsonInclude.Include.NON_NULL) Long rebanksStarted,
                                @JsonInclude(JsonInclude.Include.NON_NULL) Long rebanksDone,
                                @JsonInclude(JsonInclude.Include.NON_NULL) Long rebanksUndone,
-                               @JsonInclude(JsonInclude.Include.NON_NULL) Long marksForgotten) {
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long marksForgotten,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long lookaheadMinutes,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) List<LookaheadStretch> lookaheadStretches,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long bankRungChanges,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long bankBypassRequests) {
+    }
+
+    /**
+     * One stretch the look-ahead reached during a playback: the need F and the film the bank held ahead of the
+     * playhead, in whole seconds, and the rung the bank was on (null when none was known), at that moment. Nothing
+     * here says where.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record LookaheadStretch(Long needS, Long aheadS, String rung) {
     }
 
     /**

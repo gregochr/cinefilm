@@ -569,7 +569,7 @@ const FULL_REPORT = {
   engine: 'hlsjs', quality: 'auto', autoplayRefused: false, startupMs: 900, watchedMs: 590_000, stallCount: 2,
   stallMs: 4000, longestStallMs: 3000, seekCount: 1, seekWaitMs: 500, reloadCount: 0, reloadMs: 0, reconnectCount: 0,
   reconnectMs: 0, recoveries: 0, fellBack: false, stepsDown: 3, stepsUp: 2, netErrors: 1, timeouts: 1, kbpsLow: 100,
-  kbpsMedian: 900, kbpsHigh: 5000, kbpsSamples: 40, startPositionMs: 12_000, endPositionMs: 600_000, rebanksStarted: 2, rebanksDone: 1, rebanksUndone: 1, marksForgotten: 3, rungMs: { '720p': 1000, '360p': 2000 },
+  kbpsMedian: 900, kbpsHigh: 5000, kbpsSamples: 40, startPositionMs: 12_000, endPositionMs: 600_000, rebanksStarted: 2, rebanksDone: 1, rebanksUndone: 1, marksForgotten: 3, lookaheadMinutes: 9, bankRungChanges: 2, bankBypassRequests: 0, lookaheadStretches: [{ needS: 900, aheadS: 120, rung: '480p' }, { needS: 600, aheadS: 0, rung: null }], rungMs: { '720p': 1000, '360p': 2000 },
   minutes: [[0, 900, 4, 50_000, 1000], [1, 800, 3, 40_000, 0, 12, 3]],
   client: { userAgent: 'Mozilla/5.0 (A Test Browser)', screen: '1920x1080', cores: 8, touch: false },
 };
@@ -648,7 +648,7 @@ describe('a health report', () => {
     ]);
     // Known non-numeric: by type for the plain ones; lists and maps by name, since readReport keeps only these two.
     const KNOWN = /^(Boolean|boolean|String|ClientInfo)$/;
-    const KNOWN_BY_NAME = { rungMs: 'Map<String, Long>', minutes: 'List<List<Long>>' };
+    const KNOWN_BY_NAME = { rungMs: 'Map<String, Long>', minutes: 'List<List<Long>>', lookaheadStretches: 'List<LookaheadStretch>' };
     for (const { type, name } of components) {
       assert.ok(type && name, 'could not read the HealthReport record');
       assert.ok(NUMERIC.has(type) || KNOWN.test(type) || KNOWN_BY_NAME[name] === type,`unknown component type ${type} ${name}: add it to the numeric or the known list`);
@@ -709,6 +709,21 @@ describe('a health report', () => {
     assert.deepEqual(kept, [[0, 1, 2, 3, 4], [1, 2, 3, 4, 5, 6, 7], [-1, 0, 0, 0, 0]]);
     assert.notEqual(kept[0], minutes[0]); // a copy, not the parsed row
     assert.equal('minutes' in (await report(standIn, { minutes: 'x' })).entry.report, false);
+  });
+
+  test('keeps only well-formed look-ahead stretches, field by field, at most 50, and nothing positional', async () => {
+    const standIn = await start();
+    const stretches = [
+      { needS: 900, aheadS: 120, rung: '480p', lat: 1, lng: 2, from: 3 },
+      { needS: 1, aheadS: 2, rung: null },
+      { needS: 1, aheadS: 2, rung: 'huge' }, { needS: '1', aheadS: 2, rung: '480p' }, { needS: 1, rung: '480p' },
+      'row', null, [1, 2],
+    ];
+    const kept = (await report(standIn, { lookaheadStretches: stretches })).entry.report.lookaheadStretches;
+    assert.deepEqual(kept, [{ needS: 900, aheadS: 120, rung: '480p' }, { needS: 1, aheadS: 2, rung: null }]);
+    assert.equal('lookaheadStretches' in (await report(standIn, { lookaheadStretches: 'x' })).entry.report, false);
+    const many = Array.from({ length: 80 }, (_, i) => ({ needS: i, aheadS: 0, rung: '240p' }));
+    assert.equal((await report(standIn, { lookaheadStretches: many })).entry.report.lookaheadStretches.length, 50);
   });
 
   test('keeps at most 1,000 minute rows', async () => {

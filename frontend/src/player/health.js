@@ -6,6 +6,8 @@ export const BEAT_GRACE_MS = 1500;
 /** A single step longer than this is taken to be a sleep and counts for nothing. */
 export const MAX_STEP_MS = 150000;
 export const MAX_MINUTES = 360;
+/** Most stretches the look-ahead's record lists; the server refuses more (HealthRules.MAX_STRETCHES). */
+export const MAX_STRETCHES = 50;
 export const MAX_SAMPLES = 4000;
 export const MAX_NUMBER = 2000000000;
 
@@ -84,6 +86,11 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
   let rebanksDone = 0;
   let rebanksUndone = 0;
   let marksForgotten = 0;
+  // The train look-ahead's record (train-lookahead-plan.md, 5b). Nothing here says where: SECURITY.md rule 7.
+  const lookaheadMinuteSet = new Set(); // the minutes (minuteOf, as `minutes`) in which the look-ahead held an input
+  let lookaheadStretches = []; // { needS, aheadS, rung } of each stretch reached, at most MAX_STRETCHES
+  let bankRungChanges = 0;
+  let bankBypassRequests = 0;
   let samples = [];
   const rungMs = new Map();
   const minutes = new Map(); // minute -> { moved, stalled, samples, rung, ahead, fetched }
@@ -226,6 +233,14 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       rebanksDone: whole(rebanksDone),
       rebanksUndone: whole(rebanksUndone),
       marksForgotten: whole(marksForgotten),
+      lookaheadMinutes: whole(lookaheadMinuteSet.size),
+      lookaheadStretches: lookaheadStretches.map((s) => ({
+        needS: whole(s.needS),
+        aheadS: whole(s.aheadS),
+        rung: Object.hasOwn(RUNG_CODES, s.rung) ? s.rung : null,
+      })),
+      bankRungChanges: whole(bankRungChanges),
+      bankBypassRequests: whole(bankBypassRequests),
       kbpsLow: wholeOrNull(percentile(sorted, 10)),
       kbpsMedian: wholeOrNull(percentile(sorted, 50)),
       kbpsHigh: wholeOrNull(percentile(sorted, 90)),
@@ -428,6 +443,33 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       advance();
       if (!(n > 0)) return;
       marksForgotten += n;
+      changed();
+    },
+    // The look-ahead held an input (not null, so fresh and unlapsed) just now: the minute counts, once, as the
+    // minutes of the record do (whole minutes from the start of the playback). Capped like `minutes`.
+    lookaheadHeld() {
+      const n = minuteOf(advance());
+      if (lookaheadMinuteSet.has(n) || lookaheadMinuteSet.size >= MAX_MINUTES) return;
+      lookaheadMinuteSet.add(n);
+      changed();
+    },
+    // A stretch was reached: the need F and the film ahead the bank held, in seconds, and the bank's rung id.
+    stretchReached({ needS, aheadS, rung } = {}) {
+      advance();
+      if (lookaheadStretches.length >= MAX_STRETCHES) return;
+      lookaheadStretches = [...lookaheadStretches, { needS, aheadS, rung }];
+      changed();
+    },
+    // The bank's rung changed while the bank was on.
+    bankRungChanged() {
+      advance();
+      bankRungChanges += 1;
+      changed();
+    },
+    // A media request reached the server through hls.js's own loader while the bank was on (it should be 0).
+    bankBypassed() {
+      advance();
+      bankBypassRequests += 1;
       changed();
     },
     throughput(kbps) {
