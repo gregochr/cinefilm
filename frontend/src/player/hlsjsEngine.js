@@ -54,9 +54,8 @@ const RESET_MEDIA_SOURCE = 16;
 export const BANK_ARM_WITHIN_S = 1800;
 export const BANK_ON_WITHIN_S = 1200;
 export const BANK_CHOICE_EVERY_MS = 60000;
-// While an episode runs the engine steps the bank this often, in ms, on the last `bankInput`: the front takes
-// nothing from a timer of its own, so this tick is what hands it the film ahead and the need (`update`) as the
-// film plays, whatever hls.js is or is not doing.
+// While an episode runs the engine steps the bank this often, in ms, on the last `bankInput`: the front has no
+// timer of its own, so this tick hands it the film ahead and the need (`update`) as the film plays.
 export const BANK_TICK_MS = 1000;
 
 // kbit/s of one loaded fragment, timed from `loading.start` so the wait for the first byte counts; null when
@@ -158,6 +157,7 @@ export function startHlsJs({
   // The film bank's loaders wrap today's, and ask `decider` about every request: with no bank episode it passes them
   // all, so nothing changes until a stretch is near. A pinned rung never has a bank: today's loader alone.
   const waiting = new Set(); // the requests hls.js waits on the bank for
+  const finishing = new Set(); // fronts of closed episodes still finishing a fetch; a destroy stops them
   let episode = null; // while the bank is armed, on or turning off: { front, requests, rungIds, candidates }
   const decider = {
     armed: () => episode?.requests.armed() ?? false,
@@ -857,7 +857,9 @@ export function startHlsJs({
     pendingSeek = false;
     waiting.clear();
     clearInterval(done.tick);
+    done.seal(); // what its fetch in flight lands is for its waiters only, never the store
     done.front.finish();
+    if (!done.front.isFinished()) finishing.add(done.front);
     done.requests.setMode('off');
     engine.bankRelease(level);
     store.clear();
@@ -867,9 +869,28 @@ export function startHlsJs({
     const rungs = bankRungs();
     if (rungs.length === 0) return;
     const policy = config.fragLoadPolicy.default;
+    // The episode's own view of the store: once sealed (the episode closed and the store cleared) a finishing
+    // front's puts are kept for its subscribers (`getSegment`) and dropped from the store.
+    let sealed = false;
+    const shadow = new Map();
+    const view = {
+      ...store,
+      putSegment(segment) {
+        if (sealed) shadow.set(segment.seq, segment);
+        else store.putSegment(segment);
+      },
+      putBoundary(...args) {
+        if (!sealed) store.putBoundary(...args);
+      },
+      getSegment(seq) {
+        const own = shadow.get(seq);
+        if (own === undefined) return store.getSegment(seq);
+        return { ...own, bytes: own.bytes.slice(0), timings: { ...own.timings } };
+      },
+    };
     const front = createBankFront({
       rungs,
-      bank: store,
+      bank: view,
       fetch: fetchFn,
       now: clock,
       reconnectMs,
@@ -878,7 +899,7 @@ export function startHlsJs({
       onSessionLost: endLost,
     });
     const requests = createBankRequests({
-      bank: store,
+      bank: view,
       front,
       levelOfRung: bankLevelOfRung,
       rungOfLevel: bankRungOfLevel,
@@ -891,6 +912,9 @@ export function startHlsJs({
       front,
       requests,
       tick: setInterval(bankStep, BANK_TICK_MS),
+      seal: () => {
+        sealed = true;
+      },
       rungIds: rungs.map((r) => r.id),
       candidates: rungs.map((r) => ({ id: r.id, rate: r.kbps })),
     };
@@ -974,6 +998,7 @@ export function startHlsJs({
   const bankStep = () => {
     if (destroyed || store === null) return;
     const input = lookahead;
+    for (const front of finishing) if (front.isFinished()) finishing.delete(front);
     if (phase === 'idle') {
       if (within(input, BANK_ARM_WITHIN_S)) startEpisode();
       return;
@@ -1103,6 +1128,8 @@ export function startHlsJs({
         episode.requests.setMode('off');
         episode = null;
       }
+      for (const front of finishing) front.stop();
+      finishing.clear();
       store?.clear();
     },
   };

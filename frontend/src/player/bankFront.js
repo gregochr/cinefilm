@@ -436,6 +436,9 @@ export function createBankFront({
     const rung = lockedRung ?? wantedRung;
     const segments = segmentsOf(rung);
     if (segments === undefined) return;
+    // The in-order path never fetches film the store holds, at any rung (a gap filled behind held film, armed
+    // copies beyond a gap): it goes on after the held run. An out-of-order fetch is asked for at a rung.
+    if (!outOfOrder) while (bank.hasSegment(next)) next += 1;
     const segment = segments.get(next);
     if (segment === undefined) return; // the end of the film: nothing more to fetch
     lockedRung = rung;

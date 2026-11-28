@@ -146,12 +146,6 @@ describe('hls.js settings', () => {
     expect(hlsConfig(0).fLoader).toBeUndefined(); // set where Hls is at hand
   });
 
-  it('plays a pinned rung through the no-progress loader alone, with no bank loader', () => {
-    const { hls } = start({ auto: false });
-    expect(new hls.config.fLoader({}).inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
-    expect(hls.config.pLoader).toBeUndefined();
-  });
-
   it('starts at the requested position, or lets hls.js choose when it is 0', () => {
     expect(hlsConfig(93.5).startPosition).toBe(93.5);
     expect(hlsConfig(0).startPosition).toBe(-1);

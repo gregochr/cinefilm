@@ -1605,7 +1605,7 @@ describe('the bank front: unsubscribing, starting and callbacks that change the 
     });
     await complete(server.calls.at(-1));
     expect(log).toEqual([]);
-    front.start({ seq: 0, rung: 'r480' });
+    front.start({ seq: 0, rung: 'r480', outOfOrder: true }); // 0 is held now: only an out-of-order fetch repeats it
     await flush();
     await complete(server.calls.at(-1));
     expect(log).toEqual(['again']);
@@ -2077,6 +2077,29 @@ describe('the bank front: boundary copies, round two', () => {
     front.update({ filmAhead: 0, need: 1000 });
     await flush();
     expect(lastUrl(server)).toBe(segUrl('r480', 11)); // no copy of 9 (not held) or anything behind
+  });
+
+  it('never fetches film the store holds on the in-order path, but an out-of-order fetch of it still happens', async () => {
+    const { server, front, bank } = await running({ seq: 4 });
+    for (const seq of [5, 6, 7]) {
+      bank.putSegment({
+        seq,
+        rung: 'r360',
+        start: seq * 4,
+        end: seq * 4 + 4,
+        bytes: new ArrayBuffer(10),
+        timings: { start: 0, first: 1, end: 2 },
+      });
+    }
+    await complete(server.calls.at(-1)); // 4
+    expect(lastUrl(server)).toBe(segUrl('r480', 8)); // 5 to 7 are held: gone past them
+    expect(server.calls.filter((c) => /seg-[567]\.ts/.test(c.url))).toHaveLength(0);
+    front.update({ filmAhead: 0, need: 0 });
+    front.start({ seq: 6, rung: 'r480', outOfOrder: true }); // on demand, at the asked rung
+    front.subscribe(6, {});
+    front.fetchNow();
+    await flush();
+    expect(lastUrl(server)).toBe(segUrl('r480', 6));
   });
 
   it('keeps a boundary copy out of the window', async () => {
