@@ -365,23 +365,37 @@ export function createBankFront({
     }
   }
 
-  // A boundary copy that failed: a stop or a pause as any fetch's 404, 410 and plain 503; anything else is tried
-  // again on a timer of its own, which holds up nothing and leaves the next position's backoff alone.
+  // A boundary copy that failed: a stop as any fetch's 404 and 410; a plain 503 pauses and cuts the copy's
+  // subscribers loose (`onAbort`: hls.js asks again). Anything else is tried again on a timer of its own, which
+  // holds up nothing and leaves the next position's backoff alone. While hls.js waits on the copy the retry goes
+  // ahead whatever the wants and `finish()` say, as a segment's does; with nobody waiting and the front finishing
+  // it is dropped.
   function failedBoundary(res, seq) {
     if (res.outcome === 'status' && [404, 410].includes(res.status)) {
       boundaryListeners.delete(seq);
       failed(res, seq);
     } else if (res.outcome === 'status' && res.status === 503 && !(res.retryAfter > 0)) {
       failed(res, seq);
+      abortBoundary();
     } else {
+      const waiting = () => boundaryListeners.get(seq)?.size > 0;
+      if (finishing && !waiting()) return;
       const ms =
         res.outcome === 'status' && res.retryAfter > 0
           ? Math.min(res.retryAfter * 1000, RETRY_AFTER_CAP_MS)
           : NETWORK_RETRY_MS;
-      boundaryRetry = setTimer(() => {
+      const retry = () => {
         boundaryRetry = null;
-        pump();
-      }, ms);
+        if (stopped) return;
+        if (waiting() && boundaryDue?.seq === seq) {
+          if (busy)
+            boundaryRetry = setTimer(retry, ms); // a fetch of the next position is under way: after it
+          else fetchBoundary();
+        } else if (!finishing) {
+          pump();
+        }
+      };
+      boundaryRetry = setTimer(retry, ms);
     }
   }
 
@@ -479,7 +493,9 @@ export function createBankFront({
   }
 
   // The segment before one just fetched at a new rung, at that rung, through the same one fetcher: hls.js asks for
-  // it again after a change of level. Its failure is handled as any fetch's, and it stays due until it lands.
+  // it again after a change of level. A copy that has not landed by the time the front is three segments past it
+  // (`boundaryNeeded`) is dropped: fetching it then would send the server's playhead backwards, and the decider's
+  // on-demand fetch covers a later re-ask. Its failure is `failedBoundary`'s.
   function fetchBoundary() {
     const { seq, rung } = boundaryDue;
     const segment = segmentsOf(rung)?.get(seq);
@@ -602,8 +618,10 @@ export function createBankFront({
     finish() {
       if (stopped || finishing) return;
       finishing = true;
-      if (boundaryRetry !== null) clearTimer(boundaryRetry);
-      boundaryRetry = null;
+      if (boundaryRetry !== null && !(boundaryListeners.size > 0)) {
+        clearTimer(boundaryRetry); // nobody waits on the copy: its retry is dropped
+        boundaryRetry = null;
+      }
       if (retryTimer !== null && !(listeners.get(next)?.size > 0)) {
         clearTimer(retryTimer);
         retryTimer = null;

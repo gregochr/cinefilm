@@ -2173,10 +2173,80 @@ describe('the bank front: boundary copies, round two', () => {
     server.calls.at(-1).fail(); // the copy fails: a retry is pending
     await flush();
     const calls = server.calls.length;
+    const timers = vi.getTimerCount();
+    expect(timers).toBeGreaterThan(0);
     front.finish();
+    expect(vi.getTimerCount()).toBe(timers - 1); // the copy's retry timer is gone
     await vi.advanceTimersByTimeAsync(60_000);
     expect(server.calls).toHaveLength(calls);
     expect(front.isFinished()).toBe(true);
+  });
+
+  // The copy of 0 at 360p in flight, a subscriber waiting on it.
+  async function waitingOnCopy() {
+    const t = await running({ rung: 'r240' });
+    t.front.setRung('r360');
+    await complete(t.server.calls.at(-1));
+    await complete(t.server.calls.at(-1)); // 1 at 360p
+    expect(t.server.calls.at(-1).url).toBe(segUrl('r360', 0));
+    t.events = [];
+    t.off = t.front.subscribeBoundary(0, {
+      onDone: () => t.events.push('done'),
+      onAbort: () => t.events.push('abort'),
+    });
+    return t;
+  }
+
+  it('retries a failed copy once, after finish, while a subscriber waits, and answers it', async () => {
+    const t = await waitingOnCopy();
+    t.front.finish();
+    const r = t.server.calls.at(-1).respond();
+    r.send(new Uint8Array(10));
+    await flush();
+    await vi.advanceTimersByTimeAsync(12_000); // the network drops after the first byte: no progress
+    const calls = t.server.calls.length;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(t.server.calls).toHaveLength(calls + 1);
+    expect(t.server.calls.at(-1).url).toBe(segUrl('r360', 0));
+    await complete(t.server.calls.at(-1), { size: 12 });
+    expect(t.events).toEqual(['done']);
+    expect(t.bank.getBoundary(0, 'r360').bytes.byteLength).toBe(12);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(t.server.calls).toHaveLength(calls + 1);
+  });
+
+  it('retries a failed copy while a subscriber waits even when no film is wanted', async () => {
+    const t = await waitingOnCopy();
+    t.front.update({ filmAhead: 0, need: 0 });
+    t.server.calls.at(-1).fail();
+    await flush();
+    const calls = t.server.calls.length;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(t.server.calls).toHaveLength(calls + 1);
+    await complete(t.server.calls.at(-1));
+    expect(t.events).toEqual(['done']);
+  });
+
+  it('drops the retry of a failed copy with no subscriber left once finishing', async () => {
+    const t = await waitingOnCopy();
+    t.front.finish();
+    t.off();
+    t.server.calls.at(-1).fail();
+    await flush();
+    expect(vi.getTimerCount()).toBe(0); // no retry is even scheduled
+    const calls = t.server.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(t.server.calls).toHaveLength(calls);
+  });
+
+  it('cuts the subscribers of a copy loose on a plain 503', async () => {
+    const t = await waitingOnCopy();
+    t.front.finish();
+    t.server.calls.at(-1).status(503);
+    await flush();
+    expect(t.events).toEqual(['abort']);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(t.events).toEqual(['abort']);
   });
 
   it('reports a fetch in flight or a retry pending as fetching, and nothing once it ended', async () => {
