@@ -16,8 +16,10 @@
 //   - deleteBehind, :538-548: segments more than BEHIND behind the playhead are deleted. A request for one of them
 //     (the playhead then goes back to it) finds a live run that began at or before it and so only waits: nothing
 //     encodes it again, and the request ends 503 after 6 s, until a request before the run's start restarts it.
-//     A fetcher ahead of the player makes this a fight with no restart in it: the playhead is pulled back, the run
-//     is stopped for being ahead, and the player starves. Such a request is reported as `deleted`.
+//     So a segment lost and asked for again shows no restart: the playhead is pulled back, the run is stopped for
+//     being ahead of it, and the request starves. Such a request is reported as `deleted`. The model cannot tell who
+//     caused the loss: a second fetcher far ahead of the player (the bank), or the player's own reload throwing its
+//     buffer away and asking again for segments 2 minutes behind its fetch front.
 //   - stop -> cleanPartial, :514-536, and complete, :424-435: stopping a run deletes the segment file it was writing,
 //     and a segment is complete only when the next one's file exists, so the last segment a stopped run made is not
 //     complete, and a request for it restarts the encoder there.
@@ -61,8 +63,8 @@ export function createPlayhead({ segmentCount, segmentMs, speed, now, startSegme
   let playhead = startSegment; // TranscodeSession.java:90-91: the playhead and the behind-deletion mark start at the run's
   let deletedBelow = startSegment;
   let restarts = 0;
-  // `fight` is set when a request for a lost segment moved the playhead back: the run then gets stopped for being ahead.
-  let run = { start: startSegment, startedAt: now(), done: 0, status: 'running', fight: false };
+  // `lostAsked` is set when a request for a lost segment moved the playhead back: the run then gets stopped for being ahead.
+  let run = { start: startSegment, startedAt: now(), done: 0, status: 'running', lostAsked: false };
 
   // The most segments the run may make before the sweep stops it: the first whose newest-segment mark is past the limit.
   const cap = () => Math.floor(LOOK_AHEAD_MS / segmentMs) + playhead - run.start + 1;
@@ -119,7 +121,7 @@ export function createPlayhead({ segmentCount, segmentMs, speed, now, startSegme
       lost.delete(i);
     }
     deletedBelow = Math.min(deletedBelow, n);
-    run = { start: n, startedAt: now(), done: 0, status: 'running', fight: false };
+    run = { start: n, startedAt: now(), done: 0, status: 'running', lostAsked: false };
     restarts += 1;
   }
 
@@ -129,12 +131,13 @@ export function createPlayhead({ segmentCount, segmentMs, speed, now, startSegme
      * segment. Returns `restart`: null when it was not, else why: 'stopped' (the encoder was not running: it had
      * finished, or been stopped for running 3 minutes past the playhead, which a player that watches on does every
      * few minutes), 'behind' (the segment is before the run's first: a seek back, or a fetcher behind the other) or
-     * 'ahead' (more than 10 past its newest: a seek forward, or a fetcher ahead of the other), or 'fight-stop' (the
-     * run had stopped after a request for a lost segment moved the playhead back: see `deleted`).
+     * 'ahead' (more than 10 past its newest: a seek forward, or a fetcher ahead of the other), or 'lost-stop' (the
+     * run had stopped, after a request for a lost segment moved the playhead back or with a lost segment asked for:
+     * see `deleted`).
      * Returns `deleted: true` for a request for a segment that was made and then deleted for being behind the
-     * playhead, inside the live run's span: no restart (that is the server's own rule), only a wait and then 503, the
-     * player starving while the playhead is pulled back and the run is stopped for being ahead of it. A fight
-     * between fetchers that shows in no restart until then.
+     * playhead, inside the live run's span: no restart (that is the server's own rule), only a wait and then 503. It
+     * comes from a fight between fetchers or from a reload that threw the player's buffer away; which, the model
+     * cannot say.
      */
     request(n) {
       advance();
@@ -142,12 +145,12 @@ export function createPlayhead({ segmentCount, segmentMs, speed, now, startSegme
       if (present.has(n)) return { restart: null };
       if (reaching(n)) {
         if (!lost.has(n)) return { restart: null };
-        run.fight = true;
+        run.lostAsked = true;
         return { restart: null, deleted: true };
       }
       let why = 'ahead';
-      // A stop with a lost segment asked for is the fetchers' doing even if the run stopped before the player came back.
-      if (run.status !== 'running') why = run.fight || lost.has(n) ? 'fight-stop' : 'stopped';
+      // A stop with a lost segment asked for is named for it even if the run stopped before the request came.
+      if (run.status !== 'running') why = run.lostAsked || lost.has(n) ? 'lost-stop' : 'stopped';
       else if (n < run.start) why = 'behind';
       restart(n);
       return { restart: why };
@@ -173,16 +176,6 @@ export function createPlayhead({ segmentCount, segmentMs, speed, now, startSegme
       const needed = n - run.start + 1;
       if (needed > cap()) return null;
       return Math.max(0, Math.ceil(startupMs + (needed * segmentMs) / speed - (now() - run.startedAt)));
-    },
-    /**
-     * The milliseconds until the run stops (it makes the segment that puts it past the limit, or its last), 0 when it
-     * has, null when it is not going to (it is already stopped). SessionManager.settled, :437-441, ends a wait then.
-     */
-    stopsInMs() {
-      advance();
-      if (run.status !== 'running') return null;
-      const target = Math.min(cap(), last + 1 - run.start);
-      return Math.max(0, Math.ceil(startupMs + (target * segmentMs) / speed - (now() - run.startedAt)));
     },
     /** The playhead's segment and how many times the encoder has been restarted. */
     state() {

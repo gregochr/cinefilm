@@ -702,60 +702,56 @@ describe('the server\'s one playhead per session', () => {
     assert.deepEqual(segments(standIn).map((r) => r.restart), [undefined, 'behind']);
   });
 
-  test('a start time is read as Jackson reads a Long: a string of digits is a number, any other string is unreadable', async () => {
+  test('a start time outside the film is refused as the server refuses it, and a number is read as a Long', async () => {
     const standIn = await start();
     const film = standIn.segmentCount * standIn.segmentMs;
-    for (const startMs of [-1, film]) {
-      const answer = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs });
-      assert.equal(answer.status, 400);
+    const create = (startMs) => post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs });
+    for (const startMs of [-1, film, film + 0.5]) {
+      const answer = await create(startMs);
+      assert.equal(answer.status, 400, String(startMs));
       assert.deepEqual(json(answer), { error: 'startMs is outside the film' });
     }
-    for (const startMs of ['abc', '', '6e2', true, {}, []]) {
-      const odd = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs });
-      assert.equal(odd.status, 400, JSON.stringify(startMs));
-      assert.deepEqual(json(odd), { error: 'Invalid request' });
+    // a decimal is cut toward zero (so -0.5 is 0 and film - 0.5 is the last millisecond); missing or null is 0
+    for (const startMs of [0, -0.5, 600.9, film - 1, film - 0.5, null]) assert.equal((await create(startMs)).status, 200, String(startMs));
+    assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto' })).status, 200);
+    // a number beyond a Long is unreadable
+    const huge = await post(standIn.port, '/api/editions/11/sessions', '{"quality":"auto","startMs":1e19}');
+    assert.equal(huge.status, 400);
+    assert.deepEqual(json(huge), { error: 'Invalid request' });
+  });
+
+  test('a start time that is not a number is refused: the stand-in\'s own choice, the real server coerces some strings', async () => {
+    const standIn = await start();
+    for (const startMs of ['600', 'abc', true, {}, []]) {
+      const answer = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs });
+      assert.equal(answer.status, 400, JSON.stringify(startMs));
+      assert.deepEqual(json(answer), { error: 'Invalid request' });
     }
-    assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: '600' })).status, 200);
-    const outside = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: String(film) });
-    assert.deepEqual(json(outside), { error: 'startMs is outside the film' });
-    assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: film - 1 })).status, 200);
-    assert.equal((await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', startMs: null })).status, 200);
   });
 
-  test('a start time given as a string of digits starts the run there, as the number does', async () => {
-    const standIn = await start(SLOW);
-    const { sessionId } = await newSession(standIn, { quality: 'auto', probeKbps: 5000, startMs: '600000' });
-    await request(standIn.port, { path: segmentOf(sessionId, '480p', 150) });
-    assert.equal(segments(standIn)[0].restart, undefined);
-  });
-
-  test('a request for a lost segment is answered 503 when the run stops, not when its six seconds are up', async (t) => {
+  test('a held request is answered when a later request stops the run, within a poll, not at its six seconds', async (t) => {
     t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
     const start0 = Date.now();
-    const standIn = await start({ encoderSpeed: 100 }); // 40 ms a segment
+    const standIn = await start({ encoderSpeed: 3 }); // 1,333 ms a segment
     const { sessionId } = await newSession(standIn);
     const at = (ms) => t.mock.timers.setTime(start0 + ms);
-    // The request, once the stand-in is holding it: the answer is in `answered`.
-    const held = async (n) => {
-      const answered = request(standIn.port, { path: segmentOf(sessionId, '480p', n) });
-      await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be held');
-      return { answered };
-    };
-    at(1500); // 37 segments made
-    assert.equal((await request(standIn.port, { path: segmentOf(sessionId, '480p', 10) })).status, 200);
-    const bank = await held(45); // reached by the run, made 1,840 ms in
-    at(1900);
-    assert.equal((await bank.answered).status, 200); // the bank's playhead is now at 45: below 15 is deleted
+    const ask = (n) => request(standIn.port, { path: segmentOf(sessionId, '480p', n) });
+    // The playhead is walked to 95 by asking for the newest segment made, so the run is never stopped for being ahead.
+    for (const [ms, n] of [[20, 14], [40, 29], [60, 44], [80, 59], [100, 74], [120, 89], [130, 95]]) {
+      at(ms * 1000);
+      assert.equal((await ask(n)).status, 200, `segment ${n}`);
+    }
+    const bank = ask(100); // reached by the run, made at 134.7 s: held
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the bank to be held');
+    at(130_200);
     const began = performance.now();
-    const player = await held(12); // lost; the playhead goes back to 12, so the run is to stop at its 58th segment: 2,320 ms
-    at(2500);
-    const answer = await player.answered;
-    // Held until the stop, about 420 ms of real time on the timer the model gave, not the six seconds of the wait.
-    assert.ok(performance.now() - began < 3000, `held ${performance.now() - began} ms`);
-    assert.equal(answer.status, 503);
-    const [, , entry] = segments(standIn);
-    assert.equal(entry.deleted, true);
-    assert.equal(entry.waitMs, 600); // 1,900 to 2,500 on the clock the test set
+    const player = ask(5); // lost (below 65 is deleted): the playhead goes back, so the run is 3 minutes ahead and stops
+    const answers = await Promise.all([bank, player]);
+    assert.deepEqual(answers.map((a) => a.status), [503, 503]);
+    assert.ok(performance.now() - began < 1500, `held ${performance.now() - began} ms`);
+    const [lostRequest, bankRequest] = [segments(standIn).find((r) => r.segment === 5), segments(standIn).find((r) => r.segment === 100)];
+    assert.equal(lostRequest.deleted, true);
+    assert.equal(bankRequest.waitMs, 200); // 130,000 to 130,200 on the clock the test set
   });
 
   test('a request for a segment made and then deleted is logged as `deleted`, with no restart, then 503', async (t) => {

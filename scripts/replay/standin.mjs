@@ -29,6 +29,8 @@ import { extname, join, relative, sep } from 'node:path';
 import { createByteCounter, createLink, minuteAt, rateAt } from './link.mjs';
 import { WIRE } from './trace.mjs';
 import { createPlayhead, WAIT_MAX_MS } from './playhead.mjs';
+
+const POLL_MS = 100;
 import { buildSegment } from './ts.mjs';
 
 const HEADROOM = 1.25; // StartRung.java
@@ -345,15 +347,16 @@ function probeRefusal(probe) {
 }
 
 // SessionService.create, :125-128: "startMs is outside the film" for a start before 0 or at or past the film's end.
-// CreateRequest.startMs is a Long, which Jackson's default mapper also reads from a string of digits ("600" is 600 ms,
-// as CreditsAdminDtos and SettingsDtos rely on); any other string is HttpMessageNotReadableException, which the
-// server answers "Invalid request" (ApiExceptionHandler.java:52-55). null: the field is absent.
+// CreateRequest.startMs is a Long: a JSON integer, a decimal cut toward zero, or absent (0). The real server also
+// coerces some strings (Jackson's default mapper); the app never sends one, so the stand-in does not model it and
+// refuses any string. A number beyond Long's range is unreadable, as it is there. NaN means unreadable.
 function startMsOf(value) {
   if (value === undefined || value === null) return 0;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
-  return typeof value === 'string' && /^-?\d{1,15}$/.test(value) ? Number(value) : NaN;
+  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) >= 2 ** 63) return NaN;
+  return Math.trunc(value) + 0; // + 0: no negative zero
 }
 
+// SessionService.create, :125-128: "startMs is outside the film" for a start before 0 or at or past the film's end.
 function startRefusal(value, env) {
   const startMs = startMsOf(value);
   if (Number.isNaN(startMs)) return INVALID_REQUEST.error;
@@ -431,7 +434,9 @@ function sendNotReady(ctx, rung, n, detail) {
 }
 
 // Waits for the encoder to make the segment, as SessionManager.segmentLive does: until it is made, or six seconds
-// from the request's arrival, or at once when no run is going (SessionManager.settled). The answer says how long it
+// from the request's arrival, or when no run is going (SessionManager.settled), whichever a poll finds first: the
+// server's waiter looks every 100 ms (PollingSegmentWaiter.java:14,33-35), so a stop that a later request causes ends
+// every held wait within one poll. The answer says how long it
 // waited and, on the request that restarted the encoder, why.
 function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted }) {
   let timer = null;
@@ -464,10 +469,7 @@ function waitForSegment(ctx, { encoder, rung, n, arrived, restart, deleted }) {
       answer(false);
       return;
     }
-    // Until the segment is made, the wait ends, or the run stops (the server's waiter polls `settled`, which is true then).
-    const ready = encoder.readyInMs(n);
-    const stops = encoder.stopsInMs();
-    timer = setTimeout(check, Math.max(1, Math.min(left, ready ?? left, stops ?? left)));
+    timer = setTimeout(check, Math.min(POLL_MS, left));
   };
   // The player went before the answer: the request is logged as it would be, cut short.
   ctx.res.on('close', () => answer(false));

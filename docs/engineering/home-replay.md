@@ -95,7 +95,7 @@ The real server has one encoder run per session for all rungs, moved only by seg
 says which lines of `SessionManager.java` each rule mirrors). With `--encoder` set the stand-in does the same for
 each session:
 
-- **The encoder** makes a segment every four seconds over its speed, from the run's start (plus `--encoder-start-ms`), all rungs together. A session made with a `startMs` starts there, at that time's segment, with the playhead; until a segment is made the newest mark stays at the run's first, so a second fetcher asking more than ten past it restarts the encoder again.
+- **The encoder** makes a segment every four seconds over its speed, from the run's start (plus `--encoder-start-ms`), all rungs together. A session made with a `startMs` starts there, at that time's segment, with the playhead (a JSON number, a decimal cut toward zero, or none; the real server coerces some strings, Jackson's way, but the app never sends one, so the stand-in does not model it and refuses any string); until a segment is made the newest mark stays at the run's first, so a second fetcher asking more than ten past it restarts the encoder again.
 - **A request** moves the playhead (forward always, back only for one more than two minutes behind). A segment
   already made is answered at once. A segment the live run will reach (at or after the run's first, no more than ten
   past the one it is writing) is waited for; a segment not made within six seconds is answered 503 with
@@ -104,22 +104,24 @@ each session:
   end, so it is made again. Each restart is logged on the request that caused it, in `requests.json` (`restart`) and
   counted in `summary.txt`, by reason: `ahead` (more than ten past the run's newest: a seek forward, or one fetcher
   ahead of another), `behind` (before the run's first: a seek back or a fetcher behind), `stopped` (the run had
-  stopped) and `fight-stop` (the run had stopped and either a request for a deleted segment had moved the playhead back
-  before it did, or the segment now asked for is one that was made and then deleted: the fetchers' doing, even when
-  the run stopped by itself before the player came back; see below).
+  stopped) and `lost-stop` (the run had stopped, and either a request for a deleted segment had moved the playhead back
+  before it did, or the segment now asked for is one that was made and then deleted; see below).
 - **The encoder stops** when its newest segment is more than three minutes past the playhead, so a player that
   watches on restarts it every few minutes with a `stopped` restart: that is the real server's way. A stop deletes the
   segment the encoder was writing, and a segment is complete only when the next one's file exists, so the last segment
   a stopped run made is not complete and a request for it restarts the encoder there.
 - **Segments more than two minutes behind the playhead are deleted.** A request for one inside the live run's span only
-  waits and is answered 503, marked `deleted` in `requests.json`, as soon as the run stops (the server's waiter ends
-  a wait then) or after six seconds; nothing makes it again until a request before the
-  run's start restarts the encoder. This is how a fight shows with no restart in it: a fetcher far ahead of the
-  player drags the playhead forward, the player's own segments fall behind and are deleted, and each of the player's
-  requests for one pulls the playhead back, starves the player and gets the run stopped for being ahead.
-- **A fight between fetchers** is therefore `ahead` + `behind` + `fight-stop` restarts + requests marked `deleted`;
-  `summary.txt` says the figure. `stopped` alone is not one: it is the run stopping for being three minutes ahead of a
-  playhead that moved on in the ordinary way.
+  waits and is answered 503, marked `deleted` in `requests.json`, when a poll finds the run stopped (the server's waiter
+  looks every 100 ms, and so does the stand-in, on its own clock, for every held request) or after six seconds;
+  nothing makes it again until a request before the run's start restarts the encoder. Such a request pulls the
+  playhead back, so the run is stopped for being ahead of it.
+- **Segments lost and asked again** are the `deleted` requests and the `lost-stop` restarts; `summary.txt` gives both
+  counts, and keeps `ahead` and `behind` apart. The stand-in cannot say who caused a loss. With the bank on, it is
+  a fight between fetchers: a fetcher far ahead drags the playhead forward and the player's own segments fall behind
+  and are deleted. With one fetcher it can be the player's own reload throwing its buffer away (`recoverMediaError`, a
+  new Hls) and asking again for segments that fell two minutes behind its fetch front while still ahead of playback.
+  So a 4b reading compares runs with and without the bank; it does not take these counts as a fight on their own.
+  `stopped` alone is the run stopping for being three minutes ahead of a playhead that moved on in the ordinary way.
 
 A request's `waitMs` is how long it waited. The model is brought up to date when a request arrives, so the two-second
 sweep is not modelled (the encoder stops on the first segment past the limit); nor are the lag between rungs, a

@@ -296,21 +296,18 @@ function requestLines(requests) {
   return lines;
 }
 
-// What the modelled encoder did (playhead.mjs), only when it was on. A fight between fetchers is a restart for being
-// ahead or behind the run, a restart after a stop that a request for a deleted segment caused, and a request for a
-// segment made and then deleted (the server only waits for it, then answers 503); a restart after an ordinary stop
-// is the server's usual way.
+// What the modelled encoder did (playhead.mjs), only when it was on. Segments lost and asked again (a request for a
+// segment made and then deleted, which the server only waits for, then answers 503; a restart after a stop with such a
+// segment asked for) come from a fight between fetchers or from a reload that threw the player's buffer away.
 function encoderLines(opt, requests) {
   if (!opt.encoder) return [];
   const segments = requests.filter((r) => r.kind === 'segment');
   const why = (reason) => segments.filter((r) => r.restart === reason).length;
   const restarts = segments.filter((r) => r.restart).length;
-  const deleted = segments.filter((r) => r.deleted).length;
-  const fight = why('ahead') + why('behind') + why('fight-stop') + deleted;
   return [`the encoder at ${opt.encoder} times real time: ${restarts} restarts (${why('ahead')} ahead, ${why('behind')} behind, `
-    + `${why('stopped')} after it stopped, ${why('fight-stop')} after a stop a deleted segment's request caused), `
-    + `${deleted} requests for a segment made and then deleted, ${segments.filter((r) => r.waitMs).length} segments waited for, `
-    + `${segments.filter((r) => r.status === 503).length} answered 503; fetchers fighting: ${fight}`];
+    + `${why('stopped')} after it stopped, ${why('lost-stop')} after a stop with a lost segment), `
+    + `${segments.filter((r) => r.waitMs).length} segments waited for, ${segments.filter((r) => r.status === 503).length} answered 503; `
+    + `segments lost and asked again: deleted ${segments.filter((r) => r.deleted).length}, lost-stop ${why('lost-stop')}`];
 }
 
 function endLines(samples, pageErrors) {

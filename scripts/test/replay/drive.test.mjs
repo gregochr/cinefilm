@@ -270,18 +270,17 @@ describe('summarise: the modelled encoder', () => {
     { kind: 'segment', ms: 2000, rung: '480p', aborted: false, status: 200, restart: 'ahead', waitMs: 900 },
     { kind: 'segment', ms: 3000, rung: '360p', aborted: false, status: 200, restart: 'behind' },
     { kind: 'segment', ms: 4000, rung: '360p', aborted: false, status: 200, restart: 'stopped', waitMs: 40 },
-    { kind: 'segment', ms: 4500, rung: '360p', aborted: false, status: 200, restart: 'fight-stop' },
+    { kind: 'segment', ms: 4500, rung: '360p', aborted: false, status: 200, restart: 'lost-stop' },
     { kind: 'segment', ms: 5000, rung: '360p', aborted: true, status: 503, waitMs: 6000, deleted: true },
     { kind: 'segment', ms: 5500, rung: '360p', aborted: false, status: 503, waitMs: 6000, deleted: true },
     { kind: 'api', ms: 6000, restart: 'ahead' },
   ];
   const line = (opt, requests) => run({ opt, requests }).filter((l) => l.startsWith('the encoder'));
 
-  test('says what it did when it was on: restarts by reason, requests for deleted segments, waits, 503s, and the fights', () => {
+  test('says what it did when it was on: restarts by reason, waits, 503s, and the segments lost and asked again', () => {
     assert.deepEqual(line({ ...OPT, encoder: 19 }, ENCODER), [
-      'the encoder at 19 times real time: 4 restarts (1 ahead, 1 behind, 1 after it stopped, '
-      + '1 after a stop a deleted segment\'s request caused), 2 requests for a segment made and then deleted, '
-      + '4 segments waited for, 2 answered 503; fetchers fighting: 5',
+      'the encoder at 19 times real time: 4 restarts (1 ahead, 1 behind, 1 after it stopped, 1 after a stop with a lost segment), '
+      + '4 segments waited for, 2 answered 503; segments lost and asked again: deleted 2, lost-stop 1',
     ]);
   });
 
