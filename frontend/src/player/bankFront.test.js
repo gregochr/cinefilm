@@ -2276,6 +2276,24 @@ describe('the bank front: boundary copies, round two', () => {
     expect(t.bank.getBoundary(0, 'r360')).toBeNull(); // the store kept nothing
   });
 
+  it('hands each boundary waiter its own bytes and timings', async () => {
+    const t = await waitingOnCopy();
+    const first = vi.fn();
+    const second = vi.fn();
+    t.front.subscribeBoundary(0, { onDone: first });
+    t.front.subscribeBoundary(0, { onDone: second });
+    await complete(t.server.calls.at(-1), { size: 31 });
+    const [a, b] = [first.mock.calls[0][0], second.mock.calls[0][0]];
+    expect(a.bytes).not.toBe(b.bytes);
+    expect(a.timings).not.toBe(b.timings);
+    structuredClone(a.bytes, { transfer: [a.bytes] }); // hls.js's worker takes one away
+    expect(a.bytes.byteLength).toBe(0);
+    expect(b.bytes.byteLength).toBe(31);
+    expect(new Uint8Array(b.bytes)[0]).toBe(7);
+    a.timings.end = -1;
+    expect(b.timings.end).not.toBe(-1);
+  });
+
   it('cuts loose a waiter on a copy in flight at a start or a move', async () => {
     const started = await waitingOnCopy();
     started.front.start({ seq: 10, rung: 'r360' });

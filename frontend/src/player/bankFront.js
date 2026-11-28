@@ -639,8 +639,8 @@ export function createBankFront({
         : null,
     /**
      * Like `subscribe`, for the boundary copy being fetched (`boundaryFetching`): `onFirstByte`, `onProgress`,
-     * `onServerAnswer`, `onError`, `onDone(copy)` (a fresh `bank.getBoundary`) and `onAbort` (the fetch cut by a
-     * start, a move or a stop). Returns the function that unsubscribes.
+     * `onServerAnswer`, `onError`, `onDone(copy)` (the copy as downloaded, its own bytes and timings for each listener, handed over
+     * whether or not the store kept it) and `onAbort` (the fetch cut by a start, a move or a stop). Returns the function that unsubscribes.
      */
     subscribeBoundary(seq, listener) {
       const set = boundaryListeners.get(seq) ?? new Set();
