@@ -688,9 +688,11 @@ describe('the server\'s one playhead per session', () => {
     const { sessionId } = await newSession(standIn);
     const seen = open(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
     await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be waiting');
+    await new Promise((resolve) => setTimeout(resolve, 150)); // held for a while before the player goes
     seen.req.destroy();
     await waitFor(() => segments(standIn).some((r) => r.aborted), 'the cut to be logged');
     assert.equal(segments(standIn).length, 1);
+    assert.ok(segments(standIn)[0].cutMs >= 140, `cut at ${segments(standIn)[0].cutMs} ms: the hold is part of it`);
     assert.equal((await stateOf(standIn)).waiting, 0);
   });
 
@@ -739,6 +741,23 @@ describe('the server\'s one playhead per session', () => {
     const answer = await held;
     assert.equal(answer.status, 404);
     assert.deepEqual(json(answer), { error: 'No such session' });
+  });
+
+  test('a held request that crosses a minute of the replay clock is logged in the minute it arrived', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const start0 = Date.now();
+    const standIn = await start({ startMinute: 5, trace: [400_000], encoderSpeed: 19 }); // the first segment, 210 ms in
+    standIn.startClock();
+    t.mock.timers.setTime(start0 + 59_700);
+    const { sessionId } = await newSession(standIn);
+    const held = request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be held');
+    t.mock.timers.setTime(start0 + 60_100); // the segment is made, in the next minute
+    assert.equal((await held).status, 200);
+    const [entry] = segments(standIn);
+    assert.equal(entry.minute, 5);
+    assert.equal(entry.ms, 59_700);
+    assert.equal(standIn.minute(), 6); // the answer went in the next minute
   });
 
   test('a held request is logged and timed from its arrival, not from the end of its wait', async () => {

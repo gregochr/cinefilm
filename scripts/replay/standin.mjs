@@ -221,8 +221,10 @@ function startAnswer({ env, req, res, arrival }, spec) {
   };
   env.requests.push(record);
   if (res.destroyed) {
-    // The player went while the request was still being read: there is nobody to answer.
+    // The player went while the request was still being read, or while it was held: there is nobody to answer. A held
+    // request was cut that long after it arrived, which is what analyse reads to know how long it was outstanding.
     record.aborted = true;
+    if (arrival) record.cutMs = Math.round(performance.now() - arrival.began);
     return;
   }
   const answer = new Answer(env, res, spec, record, arrival?.began);
