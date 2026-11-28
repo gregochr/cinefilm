@@ -154,6 +154,8 @@ export function createSegmentBank({ limitBytes = BANK_LIMIT_BYTES } = {}) {
       const run = runHolding(Math.max(0, playhead - KEEP_BEHIND_S));
       return run.length > 0 && run[run.length - 1].end >= bufferedEnd - EDGE_EPSILON_S;
     },
+    /** The rung of the held segment holding film second `t`; null when none does. */
+    rungAt: (t) => runHolding(t)[0]?.rung ?? null,
     /** The sequence number after the contiguous held run holding film second `t`; null when `t` is not held. */
     nextAfterRun(t) {
       const run = runHolding(t);

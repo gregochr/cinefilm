@@ -139,9 +139,17 @@ describe('hls.js settings', () => {
   it('plays segments through the no-progress loader built on the default loader', () => {
     const { hls } = start();
     expect(hls.config.fLoader).toBeTypeOf('function');
+    // Auto: the film bank's loader (which passes everything through until a stretch is near) wraps it.
     const loader = new hls.config.fLoader({});
-    expect(loader.inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
+    expect(loader.inner.inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
+    expect(new hls.config.pLoader({}).inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
     expect(hlsConfig(0).fLoader).toBeUndefined(); // set where Hls is at hand
+  });
+
+  it('plays a pinned rung through the no-progress loader alone, with no bank loader', () => {
+    const { hls } = start({ auto: false });
+    expect(new hls.config.fLoader({}).inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
+    expect(hls.config.pLoader).toBeUndefined();
   });
 
   it('starts at the requested position, or lets hls.js choose when it is 0', () => {

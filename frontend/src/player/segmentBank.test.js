@@ -233,6 +233,16 @@ describe('the bank store (decisions 1 and 9)', () => {
       expect(bank.nextAfterRun(16)).toBeNull();
     });
 
+    it('gives the rung of the segment holding a position, and null when none does', () => {
+      const bank = createSegmentBank();
+      bank.putSegment(seg(2, { rung: 'r240' }));
+      bank.putSegment(seg(3, { rung: 'r360' }));
+      expect(bank.rungAt(8)).toBe('r240');
+      expect(bank.rungAt(12)).toBe('r360'); // the end of one is the start of the next
+      expect(bank.rungAt(16)).toBeNull();
+      expect(bank.rungAt(7.9)).toBeNull();
+    });
+
     it('counts film ahead held up to the end of the run, and 0 when not held', () => {
       const bank = bankWith([2, 3, 4, 7]);
       expect(bank.filmAheadHeld(10)).toBe(10);
