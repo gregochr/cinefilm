@@ -915,13 +915,18 @@ describe('the bank decider: the rung boundary', () => {
     await flush();
     await complete(server.calls.at(-1));
     expect(again.told.map((t) => t[0])).toEqual(['success']);
+    expect(ask(requests, 4, L480).decision.action).toBe('answer'); // the gap ends: film is wanted again
+    requests.update({ filmAhead: 0, need: 1000 });
+    await flush();
+    // 4, the failed copy of 3, the front on to 5 at once, the on-demand 3, then onward from 5: the copy is never
+    // requested again.
     expect(segmentCalls(server)).toEqual([
       ...urls('r480', 4),
       ...urls('r480', 3),
+      ...urls('r480', 5),
       ...urls('r480', 3),
+      ...urls('r480', 5),
     ]);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(segmentCalls(server)).toHaveLength(3);
   });
 
   it('cuts a waiter on a failed copy loose, then releases its retry while turning off', async () => {

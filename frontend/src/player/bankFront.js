@@ -323,8 +323,6 @@ export function createBankFront({
     retryTimer = setTimer(() => {
       retryTimer = null;
       lastAnswer = null;
-      /* v8 ignore next -- no sequence reaches it: a retry is pending only while nothing else is in flight */
-      if (busy) return; // two requests never overlap
       // A forced retry goes ahead only while someone is waiting on the position; so does a retry while finishing.
       if ((forced || finishing) && listeners.get(next)?.size > 0) {
         fetchSegment();
@@ -364,20 +362,28 @@ export function createBankFront({
     }
   }
 
-  // A boundary copy that failed has no retry of its own. A 404 or 410 stops the front and a plain 503 pauses it, as
-  // any fetch's. Whoever waits on the copy is cut loose at once (`onAbort`: hls.js asks again, and the decider
-  // fetches the segment on demand, or releases while turning off). The copy itself stays due for `pump` to take
-  // again, which the drop rule of `boundaryNeeded` bounds; a finishing front starts nothing.
+  // A boundary copy that fails is dropped, never retried: a 404 or 410 stops the front and a plain 503 pauses it, as
+  // any fetch's; whoever waits on the copy is cut loose at once (`onAbort`: hls.js asks again, and the decider
+  // fetches the segment on demand, or releases while turning off). The front then goes on, a request waiting on the
+  // next position first, so a copy that keeps failing can never hold it up.
   function failedBoundary(res, seq) {
     if (res.outcome === 'status' && [404, 410].includes(res.status)) {
       boundaryListeners.delete(seq);
       failed(res, seq);
-    } else if (res.outcome === 'status' && res.status === 503 && !(res.retryAfter > 0)) {
-      failed(res, seq);
-      abortBoundary();
-    } else {
-      abortBoundary();
+      return;
     }
+    const plain503 = res.outcome === 'status' && res.status === 503 && !(res.retryAfter > 0);
+    if (plain503) failed(res, seq);
+    abortBoundary();
+    boundaryDue = null;
+    if (!plain503) afterBoundary();
+  }
+
+  // The front goes on after a boundary fetch: a request waiting on the next position was held up by it and goes
+  // first, whatever the wants say.
+  function afterBoundary() {
+    if (forced && !finishing && listeners.get(next)?.size > 0) fetchSegment();
+    else pump();
   }
 
   async function run(url, seq, done, boundary = false) {
@@ -447,7 +453,6 @@ export function createBankFront({
       next = seq + 1;
       const before = bank.rungOf(seq - 1);
       if (!outOfTurn && before !== null && before !== rung) {
-        if (boundaryDue !== null && boundaryDue.seq !== seq - 1) dropDue();
         boundaryDue = { seq: seq - 1, rung };
       }
       filmAhead += segment.end - segment.start; // until the next update(): no overshoot of F
@@ -463,16 +468,6 @@ export function createBankFront({
     });
   }
 
-  // The copy due is no longer wanted: whoever waits on it is cut loose.
-  function dropDue() {
-    const { seq } = boundaryDue;
-    boundaryDue = null;
-    const set = boundaryListeners.get(seq);
-    if (set === undefined) return;
-    boundaryListeners.delete(seq);
-    abortSubscribers([set]);
-  }
-
   // True while a boundary copy is still due: its segment is held at another rung and has no copy at this one.
   function boundaryNeeded() {
     if (boundaryDue === null) return false;
@@ -480,7 +475,8 @@ export function createBankFront({
     const held = bank.rungOf(seq);
     // Still right behind the front: hls.js asks for it again only just after a change of level.
     const behind = next - seq <= 3;
-    if (!behind || held === null || held === rung || bank.boundaryRungOf(seq) === rung) dropDue();
+    if (!behind || held === null || held === rung || bank.boundaryRungOf(seq) === rung)
+      boundaryDue = null;
     return boundaryDue !== null;
   }
 
@@ -492,7 +488,7 @@ export function createBankFront({
     const { seq, rung } = boundaryDue;
     const segment = segmentsOf(rung)?.get(seq);
     if (segment === undefined) {
-      dropDue();
+      boundaryDue = null;
       return;
     }
     void run(
@@ -512,8 +508,7 @@ export function createBankFront({
         }
         if (set?.size === 0 && boundaryListeners.get(seq) === set) boundaryListeners.delete(seq);
         resetWatch();
-        // A request waiting on the position was held up by this fetch: it goes next whatever the wants say.
-        if (forced && !finishing && listeners.get(next)?.size > 0) fetchSegment();
+        afterBoundary();
       },
       true,
     );
