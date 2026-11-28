@@ -447,12 +447,14 @@ export function createBankFront({
     const rung = lockedRung ?? wantedRung;
     const segments = segmentsOf(rung);
     if (segments === undefined) return;
-    // The in-order path never fetches film the store holds, at any rung (a gap filled behind held film, armed
-    // copies beyond a gap): it goes on after the held run. An out-of-order fetch is asked for at a rung.
-    // Those waiting on a held seq it passes are answered from the store.
+    // The in-order path never fetches film the store holds, at any rung: it goes on after the held run, answering
+    // those who wait on a seq it passes. An out-of-order fetch is asked for at a rung.
     while (!outOfOrder && bank.hasSegment(next)) {
-      answer(next);
+      const at = next;
       next += 1;
+      answer(at);
+      // A listener may have stopped, finished, started or moved the front, or begun a fetch: that is the new state.
+      if (stopped || finishing || busy || next !== at + 1) return;
     }
     const segment = segments.get(next);
     if (segment === undefined) return; // the end of the film: nothing more to fetch

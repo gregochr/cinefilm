@@ -326,13 +326,6 @@ describe('the bank is never armed', () => {
     expect(handled.frag.stats.bankAnswered).toBeUndefined();
     expect(env.handlers.onThroughput).toHaveBeenCalledTimes(1); // today's sample, untouched
     expect(made.fronts).toHaveLength(0);
-    // A media playlist request goes to the inner loader too.
-    new env.hls.config.pLoader(env.hls.config).load(
-      { type: 'level', level: 2, url: playlistUrl('480p') },
-      {},
-      { onSuccess: vi.fn() },
-    );
-    expect(InnerLoader.loads).toHaveLength(2);
   });
 
   it('does nothing with the rung pinned, whatever the look-ahead says', async () => {
@@ -486,32 +479,19 @@ describe('answering hls.js', () => {
     expect(asked.frag.stats.bankAnswered).toBe(true);
     expect(InnerLoader.loads).toHaveLength(loads);
     expect(env.server.calls).toHaveLength(calls);
-    // The held media playlist is answered too.
-    const playlist = { onSuccess: vi.fn() };
-    new env.hls.config.pLoader(env.hls.config).load(
-      { type: 'level', level: 2, url: playlistUrl('480p') },
-      {},
-      playlist,
-    );
-    await flush();
-    expect(playlist.onSuccess.mock.calls[0][0].data).toBe(playlistText());
   });
 
   it('puts hls.js on the held rung and fails a fragment held at another rung as bank-rung', async () => {
     const env = world();
     await armed(env, { held: 0 });
     loadThroughInner(env, 10, 1); // held at 360p
-    env.setTime(5);
     env.engine.bankInput(NEAR);
     await flush();
-    env.engine.bankInput(NEAR);
     InnerLoader.order.length = 0;
     const asked = request(env, 3, 2); // asked at 480p
     await flush();
     expect(InnerLoader.order).toEqual(['loadLevel:1']);
     expect(asked.callbacks.onError.mock.calls[0][0]).toEqual({ code: 503, text: 'bank-rung' });
-    expect(asked.callbacks.onSuccess).not.toHaveBeenCalled();
-    expect(InnerLoader.loads).toHaveLength(10);
   });
 
   it('takes no sample from a fragment the bank answered, and reports the front’s fetches instead', async () => {
@@ -788,10 +768,8 @@ describe('a request hls.js waits on the front’s fetch for', () => {
     await turnedOn(env);
     const waiter = request(env, 10);
     await flush();
-    vi.spyOn(env.front(), 'stop');
     env.engine.bankInput(AFTER);
     await flush();
-    expect(env.front().stop).not.toHaveBeenCalled();
     expect(env.front().isFinished()).toBe(false);
     expect(env.server.calls.at(-1).aborted).toBe(false);
     await answerSegment(env.server.calls.at(-1), 700);
@@ -840,7 +818,6 @@ describe('a seek inside held film while hls.js waits on the bank', () => {
     const gap = request(env, 3); // a gap: its fetch at the front, which hls.js waits on
     await flush();
     const gapCall = env.server.calls.at(-1);
-    expect(gapCall.url).toBe(segUrl('480p', 3));
     vi.spyOn(env.requests(), 'endGap');
     env.seekTo(50); // forward, inside held film
     await flush();

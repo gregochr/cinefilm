@@ -2096,6 +2096,25 @@ describe('the bank front: boundary copies, round two', () => {
     expect(lastUrl(server)).toBe(segUrl('r480', 6));
   });
 
+  it.each([
+    ['stop', (front) => front.stop(), []],
+    ['start', (front) => front.start({ seq: 20, rung: 'r480' }), [20]],
+    ['fetchNow', (front) => front.fetchNow(), [3]], // 1 and 2 are held
+  ])('stays in step when a listener of a skipped seq calls %s', async (_name, act, fetched) => {
+    const { server, front, bank } = await running();
+    const timings = { start: 0, first: 1, end: 2 };
+    for (const seq of [1, 2]) {
+      bank.putSegment({ seq, rung: 'r480', start: 0, end: 4, bytes: new ArrayBuffer(10), timings });
+    }
+    front.subscribe(1, { onDone: () => act(front) });
+    const before = server.calls.length;
+    await complete(server.calls.at(-1)); // 0 lands, the front skips 1 and 2: the listener acts
+    expect(server.calls.slice(before).map((c) => c.url)).toEqual(
+      fetched.map((n) => segUrl('r480', n)),
+    );
+    expect(server.maxOpen).toBe(1);
+  });
+
   it('keeps a boundary copy out of the window', async () => {
     const { server, front } = await running({ rung: 'r240' });
     front.setRung('r360');
