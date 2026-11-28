@@ -600,13 +600,19 @@ describe('a health report', () => {
     const source = readFileSync(new URL('../../../backend/src/main/java/gregochr/cinefilm/health/HealthDtos.java', import.meta.url), 'utf8');
     // Strings, chars and comments out in one left-to-right pass (so a quote in a comment or a char cannot pair with
     // another), then annotations: none can hide or cut a component.
-    const text = source
-      .slice(source.indexOf('public record HealthReport('))
+    const declaration = source.indexOf('public record HealthReport(');
+    // Back from the record to the previous blank line, Javadoc end or closing brace: its own annotations are above.
+    const before = source.slice(0, declaration);
+    const cut = Math.max(before.lastIndexOf('\n\n'), before.lastIndexOf('*/'), before.lastIndexOf('}'));
+    const clean = source
+      .slice(cut + 1)
       .replace(
         /"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])+'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
         (match) => (match.startsWith('"') ? '""' : ' '),
-      )
-      .replace(/@\w+(\.\w+)*(\s*\([^)]*\))?/g, '');
+      );
+    const recordAt = clean.indexOf('public record HealthReport(');
+    const withAnnotations = clean.slice(recordAt);
+    const text = withAnnotations.replace(/@\w+(\.\w+)*(\s*\([^)]*\))?/g, '');
     const open = text.indexOf('(');
     let depth = 0;
     let end = open;
@@ -615,6 +621,9 @@ describe('a health report', () => {
       if (text[end] === ')' && (depth -= 1) === 0) break;
     }
     assert.ok(open > 0 && /^\s*\{/.test(text.slice(end + 1)), 'could not read the HealthReport record');
+    // A renamed JSON key would make the Java names below the wrong ones, and the stand-in would drop the field.
+    const own = clean.slice(0, recordAt) + withAnnotations.slice(0, withAnnotations.search(/\)\s*\{/));
+    assert.ok(!/@Json(Property|Naming)\b/.test(own), 'HealthReport renames a JSON key: the drift test reads Java names; teach it the rename');
     // Split at the commas outside any generic's brackets.
     const pieces = [];
     let angle = 0;
