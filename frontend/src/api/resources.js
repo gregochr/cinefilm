@@ -91,6 +91,11 @@ export const sessionApi = {
   signOut: () => del('/api/session'),
 };
 
+/** The train look-ahead's map (`GET /api/journeys/link-map`): read through `linkMap.js`, which checks the shape. */
+export const journeysApi = {
+  linkMap: (options) => get('/api/journeys/link-map', options),
+};
+
 export const adminApi = {
   scan: (options) => get('/api/admin/scan', options),
   startScan: () => post('/api/admin/scan'),
