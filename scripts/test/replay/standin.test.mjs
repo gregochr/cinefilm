@@ -569,7 +569,7 @@ const FULL_REPORT = {
   engine: 'hlsjs', quality: 'auto', autoplayRefused: false, startupMs: 900, watchedMs: 590_000, stallCount: 2,
   stallMs: 4000, longestStallMs: 3000, seekCount: 1, seekWaitMs: 500, reloadCount: 0, reloadMs: 0, reconnectCount: 0,
   reconnectMs: 0, recoveries: 0, fellBack: false, stepsDown: 3, stepsUp: 2, netErrors: 1, timeouts: 1, kbpsLow: 100,
-  kbpsMedian: 900, kbpsHigh: 5000, kbpsSamples: 40, startPositionMs: 12_000, endPositionMs: 600_000, rungMs: { '720p': 1000, '360p': 2000 },
+  kbpsMedian: 900, kbpsHigh: 5000, kbpsSamples: 40, startPositionMs: 12_000, endPositionMs: 600_000, rebanksStarted: 2, rebanksDone: 1, rebanksUndone: 1, marksForgotten: 3, rungMs: { '720p': 1000, '360p': 2000 },
   minutes: [[0, 900, 4, 50_000, 1000], [1, 800, 3, 40_000, 0, 12, 3]],
   client: { userAgent: 'Mozilla/5.0 (A Test Browser)', screen: '1920x1080', cores: 8, touch: false },
 };
@@ -594,6 +594,73 @@ describe('a health report', () => {
     assert.equal(operator, 'A Network Operator Ltd');
     assert.equal(client.cores, 8);
     assert.deepEqual(entry.report, kept);
+  });
+
+  test('keeps every number field of the server HealthReport record, so the list cannot drift behind it', async () => {
+    const source = readFileSync(new URL('../../../backend/src/main/java/gregochr/cinefilm/health/HealthDtos.java', import.meta.url), 'utf8');
+    // Strings, chars and comments out in one left-to-right pass (so a quote in a comment or a char cannot pair with
+    // another), then annotations: none can hide or cut a component.
+    const declaration = source.indexOf('public record HealthReport(');
+    // Back from the record to the previous blank line, Javadoc end or closing brace: its own annotations are above.
+    const before = source.slice(0, declaration);
+    const cut = Math.max(before.lastIndexOf('\n\n'), before.lastIndexOf('*/'), before.lastIndexOf('}'));
+    const clean = source
+      .slice(cut + 1)
+      .replace(
+        /"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])+'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+        (match) => (match.startsWith('"') ? '""' : ' '),
+      );
+    const recordAt = clean.indexOf('public record HealthReport(');
+    const withAnnotations = clean.slice(recordAt);
+    const text = withAnnotations.replace(/@\w+(\.\w+)*(\s*\([^)]*\))?/g, '');
+    const open = text.indexOf('(');
+    let depth = 0;
+    let end = open;
+    for (; end < text.length; end += 1) {
+      if (text[end] === '(') depth += 1;
+      if (text[end] === ')' && (depth -= 1) === 0) break;
+    }
+    assert.ok(open > 0 && /^\s*\{/.test(text.slice(end + 1)), 'could not read the HealthReport record');
+    // A renamed JSON key would make the Java names below the wrong ones, and the stand-in would drop the field.
+    const own = clean.slice(0, recordAt) + withAnnotations.slice(0, withAnnotations.search(/\)\s*\{/));
+    assert.ok(!/@Json(Property|Naming)\b/.test(own), 'HealthReport renames a JSON key: the drift test reads Java names; teach it the rename');
+    // Split at the commas outside any generic's brackets.
+    const pieces = [];
+    let angle = 0;
+    let from = open + 1;
+    for (let i = open + 1; i < end; i += 1) {
+      if (text[i] === '<') angle += 1;
+      if (text[i] === '>') angle -= 1;
+      if (text[i] === ',' && angle === 0) {
+        pieces.push(text.slice(from, i));
+        from = i + 1;
+      }
+    }
+    pieces.push(text.slice(from, end));
+    // The type is the simple name (no package), generics kept; the name is the last word.
+    const components = pieces.map((piece) => {
+      const [, type, name] = /^(\S[\s\S]*?)\s+(\w+)$/.exec(piece.trim()) ?? [];
+      return { type: type?.replace(/(?:\w+\.)+/g, '').replace(/\s+/g, ' '), name };
+    });
+    const NUMERIC = new Set([
+      'Long', 'long', 'Integer', 'int', 'Short', 'short', 'Byte', 'byte', 'Double', 'double', 'Float', 'float',
+      'BigDecimal', 'BigInteger', 'OptionalLong', 'OptionalInt', 'OptionalDouble',
+    ]);
+    // Known non-numeric: by type for the plain ones; lists and maps by name, since readReport keeps only these two.
+    const KNOWN = /^(Boolean|boolean|String|ClientInfo)$/;
+    const KNOWN_BY_NAME = { rungMs: 'Map<String, Long>', minutes: 'List<List<Long>>' };
+    for (const { type, name } of components) {
+      assert.ok(type && name, 'could not read the HealthReport record');
+      assert.ok(NUMERIC.has(type) || KNOWN.test(type) || KNOWN_BY_NAME[name] === type,`unknown component type ${type} ${name}: add it to the numeric or the known list`);
+    }
+    const numbers = components.filter(({ type }) => NUMERIC.has(type)).map(({ name }) => name);
+    assert.ok(numbers.length >= 30, `read ${numbers.length} number fields from HealthReport`);
+    assert.ok(numbers.includes('marksForgotten') && numbers.includes('seq'));
+    const standIn = await start();
+    const { entry } = await report(standIn, Object.fromEntries(numbers.map((name) => [name, 1])));
+    const lost = numbers.filter((name) => !(name in entry.report));
+    assert.deepEqual(lost, [], `REPORT_NUMBERS in standin.mjs lacks: ${lost.join(', ')}`);
+    assert.deepEqual(Object.keys(entry.report).sort(), [...numbers].sort());
   });
 
   test('drops the operator, the client block and any other key, whatever it is called', async () => {

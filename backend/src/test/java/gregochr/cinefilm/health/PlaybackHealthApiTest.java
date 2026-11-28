@@ -167,6 +167,39 @@ class PlaybackHealthApiTest extends ApiTestBase {
     }
 
     @Test
+    void theRungCountersAreStoredAndReturnedAndAReportWithoutThemHasNoSuchFields() throws Exception {
+        ObjectNode withCounters = report(finalCut, 4);
+        withCounters.put("rebanksStarted", 2);
+        withCounters.put("rebanksDone", 1);
+        withCounters.put("rebanksUndone", 0);
+        withCounters.put("marksForgotten", 5);
+        send(ID, withCounters);
+        send(idOf(2), report(finalCut, 4));
+
+        mvc.perform(get("/api/admin/playback-health/{id}", ID))
+            .andExpect(jsonPath("$.report.rebanksStarted").value(2))
+            .andExpect(jsonPath("$.report.rebanksDone").value(1))
+            .andExpect(jsonPath("$.report.rebanksUndone").value(0))
+            .andExpect(jsonPath("$.report.marksForgotten").value(5));
+        mvc.perform(get("/api/admin/playback-health/{id}", idOf(2)))
+            .andExpect(jsonPath("$.report.rebanksStarted").doesNotExist())
+            .andExpect(jsonPath("$.report.marksForgotten").doesNotExist());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"rebanksStarted,-1", "rebanksDone,-1", "rebanksUndone,2000000001", "marksForgotten,2000000001"})
+    void aRungCounterBelowZeroOrAboveTheLimitIsA400AndStoresNothing(String field, long value) throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        body.put(field, value);
+
+        mvc.perform(put("/api/playback-health/{id}", ID).content(text(body)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid health report"));
+
+        assertThat(health.count()).isZero();
+    }
+
+    @Test
     void aTouchHintSentAsTheNumberOneIsStoredAsTrue() throws Exception {
         ObjectNode body = report(finalCut, 4);
         ((ObjectNode) body.get("client")).put("touch", 1);

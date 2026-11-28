@@ -1514,6 +1514,75 @@ describe('a rung hls.js marked after a failed fragment is forgotten after a heal
     expect(hls.levels[2].fragmentError).toBe(1);
   });
 
+  describe('counting the marks forgotten (onMarksForgotten)', () => {
+    const counted = () => {
+      const onMarksForgotten = vi.fn();
+      const env = start({ handlers: { ...baseHandlers(), onMarksForgotten } });
+      env.hls.manifest(levels, 1);
+      env.hls.fetchLevel(1);
+      return { ...env, onMarksForgotten };
+    };
+
+    it('counts a mark forgotten once, not again while it is gone', () => {
+      const { hls, advance, onMarksForgotten } = counted();
+      hls.levels[2].fragmentError = 1;
+      hls.fragLoaded(stats);
+      advance(HEALTHY_MS - 1);
+      hls.fragLoaded(stats);
+      expect(onMarksForgotten).not.toHaveBeenCalled();
+      advance(1);
+      hls.fragLoaded(stats);
+      advance(HEALTHY_MS * 3);
+      hls.fragLoaded(stats);
+      hls.fragLoaded(stats);
+      expect(onMarksForgotten.mock.calls).toEqual([[1]]);
+    });
+
+    it('counts every level cleared in one sweep together, and a mark set again as another', () => {
+      const { hls, advance, onMarksForgotten } = counted();
+      hls.levels[2].fragmentError = 1;
+      hls.levels[0].fragmentError = 2;
+      hls.fragLoaded(stats);
+      advance(HEALTHY_MS);
+      hls.fragLoaded(stats);
+      hls.levels[2].fragmentError = 1;
+      hls.fragLoaded(stats);
+      advance(HEALTHY_MS);
+      hls.fragLoaded(stats);
+      expect(onMarksForgotten.mock.calls).toEqual([[2], [1]]);
+    });
+
+    it('counts nothing for the level being fetched or in a pinned quality', () => {
+      const a = counted();
+      a.hls.fetchLevel(2);
+      a.hls.levels[2].fragmentError = 1;
+      a.hls.fragLoaded(stats);
+      a.advance(HEALTHY_MS * 2);
+      a.hls.fragLoaded(stats);
+      const onMarksForgotten = vi.fn();
+      const b = start({ auto: false, handlers: { ...baseHandlers(), onMarksForgotten } });
+      b.hls.manifest(levels, 1);
+      b.hls.fetchLevel(1);
+      b.hls.levels[2].fragmentError = 1;
+      b.hls.fragLoaded(stats);
+      b.advance(HEALTHY_MS);
+      b.hls.fragLoaded(stats);
+      expect(a.onMarksForgotten).not.toHaveBeenCalled();
+      expect(onMarksForgotten).not.toHaveBeenCalled();
+    });
+
+    it('forgets the mark with no onMarksForgotten handler', () => {
+      const { hls, advance } = start();
+      hls.manifest(levels, 1);
+      hls.fetchLevel(1);
+      hls.levels[2].fragmentError = 1;
+      hls.fragLoaded(stats);
+      advance(HEALTHY_MS);
+      hls.fragLoaded(stats);
+      expect(hls.levels[2].fragmentError).toBe(0);
+    });
+  });
+
   it('leaves a pinned quality alone', () => {
     const { hls, advance } = start({ auto: false });
     hls.manifest(levels, 1);

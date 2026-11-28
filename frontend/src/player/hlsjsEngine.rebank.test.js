@@ -51,19 +51,21 @@ function makeVideo() {
 function world(rungs, { auto = true } = {}) {
   const { video, state } = makeVideo();
   let t = 0;
+  const handlers = {
+    onLevel: vi.fn(),
+    onThroughput: vi.fn(),
+    onReconnecting: vi.fn(),
+    onSessionLost: vi.fn(),
+    onFatal: vi.fn(),
+    onRebank: vi.fn(),
+  };
   const engine = startHlsJs({
     Hls: FakeHls,
     video,
     session: { masterUrl: '/m.m3u8', renditions: rungs },
     auto,
     startSeconds: 0,
-    handlers: {
-      onLevel: vi.fn(),
-      onThroughput: vi.fn(),
-      onReconnecting: vi.fn(),
-      onSessionLost: vi.fn(),
-      onFatal: vi.fn(),
-    },
+    handlers,
     now: () => t,
   });
   const hls = FakeHls.last;
@@ -71,6 +73,7 @@ function world(rungs, { auto = true } = {}) {
   const tick = () => video.dispatchEvent(new Event('timeupdate'));
   const env = {
     engine,
+    handlers,
     video,
     hls,
     tick,
@@ -703,5 +706,88 @@ describe('the floor hold and the re-bank share one floor', () => {
     ready(env, 0);
     env.tick();
     expect(env.hls.config.minAutoBitrate).toBe(1_000_000);
+  });
+});
+
+describe('counting what the re-bank did (onRebank)', () => {
+  const kinds = (env) => env.handlers.onRebank.mock.calls.map(([kind]) => kind);
+
+  it('counts a re-bank started once, however many ticks follow', () => {
+    const env = world(plain);
+    ready(env, 0);
+    env.tick();
+    env.tick();
+    env.tick();
+    expect(kinds(env)).toEqual(['started']);
+  });
+
+  it('counts nothing when no re-bank starts', () => {
+    const env = world(plain);
+    ready(env, 0, { stepped: false });
+    env.tick();
+    expect(kinds(env)).toEqual([]);
+  });
+
+  it('counts done once, when the bank is back to 460 s, and never undone after it', () => {
+    const env = world(plain);
+    ready(env, 0);
+    env.tick();
+    env.setAhead(300);
+    env.hls.bufferFlushed(OWN_FLUSH);
+    env.setAhead(459);
+    env.tick();
+    expect(kinds(env)).toEqual(['started']);
+    env.setAhead(460);
+    env.tick();
+    env.tick();
+    expect(kinds(env)).toEqual(['started', 'done']);
+    env.video.dispatchEvent(new Event('seeking')); // no re-bank is under way: nothing to undo
+    expect(kinds(env)).toEqual(['started', 'done']);
+  });
+
+  it.each([
+    ['a bank under 270 s', (env) => (env.setAhead(269), env.tick())],
+    ['fragment trouble', (env) => trouble(env.hls)],
+    ['a seek', (env) => env.video.dispatchEvent(new Event('seeking'))],
+    ['a stall', (env) => env.video.dispatchEvent(new Event('waiting'))],
+    ['destroy', (env) => env.engine.destroy()],
+  ])('counts a re-bank undone once on %s, and not again by the events after it', (_name, undo) => {
+    const env = world(plain);
+    ready(env, 0);
+    env.tick();
+    undo(env);
+    env.video.dispatchEvent(new Event('seeking'));
+    env.video.dispatchEvent(new Event('waiting'));
+    trouble(env.hls);
+    expect(kinds(env)).toEqual(['started', 'undone']);
+  });
+
+  it('counts an undo with no re-bank under way as nothing, though it starts the cool-down', () => {
+    const env = world(plain);
+    ready(env, 0);
+    env.setAhead(100);
+    env.tick();
+    env.video.dispatchEvent(new Event('seeking'));
+    expect(kinds(env)).toEqual([]);
+  });
+
+  it('counts a re-bank undone and then started again as two started and one undone', () => {
+    const env = world(plain);
+    ready(env, 0);
+    env.tick();
+    env.setAhead(269);
+    env.tick();
+    const undoneAt = env.now();
+    recover(env);
+    env.advance(undoneAt + 600_000 - env.now());
+    env.tick();
+    expect(kinds(env)).toEqual(['started', 'undone', 'started']);
+  });
+
+  it('works with no onRebank handler (the native player has none)', () => {
+    const env = world(plain);
+    delete env.handlers.onRebank;
+    ready(env, 0);
+    expect(() => env.tick()).not.toThrow();
   });
 });

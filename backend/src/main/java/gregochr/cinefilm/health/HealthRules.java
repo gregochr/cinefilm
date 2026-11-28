@@ -56,7 +56,8 @@ public final class HealthRules {
             r.seekCount(), r.seekWaitMs(), r.reloadCount(), r.reloadMs(), r.reconnectCount(), r.reconnectMs(),
             r.recoveries(), r.stepsDown(), r.stepsUp(), r.netErrors(), r.timeouts(), r.kbpsSamples()));
         refuseUnless(optionalFigures(r.latencyMs(), r.startupMs(), r.kbpsLow(), r.kbpsMedian(), r.kbpsHigh(),
-            r.startPositionMs(), r.endPositionMs()));
+            r.startPositionMs(), r.endPositionMs(), r.rebanksStarted(), r.rebanksDone(), r.rebanksUndone(),
+            r.marksForgotten()));
         refuseUnless(rungMs(r.rungMs()));
         refuseUnless(minutes(r.minutes()));
         refuseUnless(client(r.client()));

@@ -607,6 +607,8 @@ describe('the object it returns', () => {
       api.recovered();
       api.fellBack();
       api.networkError({ timeout: true });
+      api.rebank('started');
+      api.marksForgotten(1);
       api.throughput(100);
     }).not.toThrow();
     await advance(START_GRACE_MS + REPORT_INTERVAL_MS);
@@ -627,6 +629,7 @@ describe('the object it returns', () => {
       'fellBack',
       'fetching',
       'id',
+      'marksForgotten',
       'networkError',
       'newViewing',
       'paused',
@@ -634,6 +637,7 @@ describe('the object it returns', () => {
       'playRefused',
       'playing',
       'quality',
+      'rebank',
       'reconnecting',
       'recovered',
       'rung',

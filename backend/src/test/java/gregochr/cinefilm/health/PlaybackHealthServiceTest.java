@@ -197,6 +197,39 @@ class PlaybackHealthServiceTest {
     }
 
     @Test
+    void theRungCountersOfTheReportAreKeptInTheStoredSummary() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+        ObjectNode body = example();
+        body.put("rebanksStarted", 3);
+        body.put("rebanksDone", 2);
+        body.put("rebanksUndone", 1);
+        body.put("marksForgotten", 4);
+
+        service.report(ID, text(body));
+
+        var summary = JSON.readTree(saved().getSummary());
+        assertThat(summary.get("rebanksStarted").asLong()).isEqualTo(3);
+        assertThat(summary.get("rebanksDone").asLong()).isEqualTo(2);
+        assertThat(summary.get("rebanksUndone").asLong()).isEqualTo(1);
+        assertThat(summary.get("marksForgotten").asLong()).isEqualTo(4);
+    }
+
+    @Test
+    void aReportWithoutTheRungCountersIsStoredAsBeforeAndIsStillValid() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+
+        service.report(ID, compactExample());
+
+        var summary = JSON.readTree(saved().getSummary());
+        assertThat(summary.has("rebanksStarted")).isFalse();
+        assertThat(summary.has("rebanksDone")).isFalse();
+        assertThat(summary.has("rebanksUndone")).isFalse();
+        assertThat(summary.has("marksForgotten")).isFalse();
+    }
+
+    @Test
     void theStoredSummaryIsTheServersOwnSerialisationNotTheClientsText() {
         knownEdition();
         when(repository.count()).thenReturn(1L);

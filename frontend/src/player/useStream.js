@@ -27,6 +27,8 @@ const NO_HEALTH = {
   engine: noop,
   fellBack: noop,
   networkError: noop,
+  rebank: noop,
+  marksForgotten: noop,
   end: noop,
 };
 
@@ -345,6 +347,8 @@ export function useStream({
           onStopped: stopped,
           onFatal: abandon,
           onNetworkError: (error) => latest.current.health.networkError(error),
+          onRebank: (kind) => latest.current.health.rebank(kind),
+          onMarksForgotten: (n) => latest.current.health.marksForgotten(n),
         },
       });
       if (cancelled) {

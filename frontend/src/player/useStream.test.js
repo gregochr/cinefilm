@@ -28,6 +28,8 @@ const makeHealth = () => ({
   engine: vi.fn(),
   fellBack: vi.fn(),
   networkError: vi.fn(),
+  rebank: vi.fn(),
+  marksForgotten: vi.fn(),
   end: vi.fn(),
 });
 
@@ -437,6 +439,16 @@ describe('what the running engine reports', () => {
 
     expect(hook.health.fetching).toHaveBeenCalledWith('720p');
     expect(hook.health.networkError).toHaveBeenCalledWith(error);
+  });
+
+  it('passes on what the re-bank and the stuck-rung rule did', async () => {
+    const { hook } = await running();
+
+    handlersOf().onRebank('started');
+    handlersOf().onMarksForgotten(2);
+
+    expect(hook.health.rebank).toHaveBeenCalledWith('started');
+    expect(hook.health.marksForgotten).toHaveBeenCalledWith(2);
   });
 
   it('keeps the throughput it is told of, and forgets it when the network changes', async () => {

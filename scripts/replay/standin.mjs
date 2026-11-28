@@ -47,7 +47,7 @@ const REPORT_NUMBERS = [
   'seq', 'editionId', 'elapsedMs', 'latencyMs', 'startupMs', 'watchedMs', 'stallCount', 'stallMs', 'longestStallMs',
   'seekCount', 'seekWaitMs', 'reloadCount', 'reloadMs', 'reconnectCount', 'reconnectMs', 'recoveries', 'stepsDown',
   'stepsUp', 'netErrors', 'timeouts', 'kbpsLow', 'kbpsMedian', 'kbpsHigh', 'kbpsSamples',
-  'startPositionMs', 'endPositionMs',
+  'startPositionMs', 'endPositionMs', 'rebanksStarted', 'rebanksDone', 'rebanksUndone', 'marksForgotten',
 ];
 const REPORT_FLAGS = ['autoplayRefused', 'fellBack'];
 const REPORT_WORDS = [
