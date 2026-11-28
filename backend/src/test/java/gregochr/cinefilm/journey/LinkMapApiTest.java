@@ -2,6 +2,7 @@ package gregochr.cinefilm.journey;
 
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.ApiTestBase;
@@ -76,7 +77,28 @@ class LinkMapApiTest extends ApiTestBase {
 
     @Test
     void signedOutIsA401() throws Exception {
-        mvc.perform(MockMvcRequestBuilders.get(URL)).andExpect(status().isUnauthorized());
+        mvc.perform(MockMvcRequestBuilders.get(URL))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
+
+    @Test
+    void excludeJourneyLeavesOutTheWholeRunNotJustThatSegment() throws Exception {
+        // A second segment of the first run (the train unit changed), at its own place.
+        Long sibling = journeys.saveAndFlush(JourneyTestData.journey(1_000L, 1, null)).getId();
+        for (int round = 0; round < 3; round++) {
+            JourneySample sample = JourneyTestData.sample(sibling, round);
+            sample.setLatitude(0.7 + round * 0.005);
+            sample.setLongitude(-20.0);
+            sample.setProbeMs(100);
+            samples.saveAndFlush(sample);
+        }
+
+        mvc.perform(get(URL)).andExpect(jsonPath("$.tracks.length()").value(3));
+        mvc.perform(get(URL + "?excludeJourney=" + sibling))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tracks.length()").value(1))
+            .andExpect(jsonPath("$.tracks[0].points[0].latitude").value(0.6));
     }
 
     @Test

@@ -28,9 +28,10 @@ class LinkMapServiceTest {
         service = new LinkMapService(journeys, trackPoints);
     }
 
-    private static Journey journey(long id) {
+    private static Journey journey(long id, long runStartedMs) {
         Journey journey = new Journey();
         journey.setId(id);
+        journey.setRunStartedMs(runStartedMs);
         return journey;
     }
 
@@ -41,7 +42,7 @@ class LinkMapServiceTest {
 
     @Test
     void everyJourneyBecomesATrackInTheRepositorysOrder() {
-        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(3), journey(1)));
+        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(3, 2), journey(1, 1)));
         when(trackPoints.pointsOf(3L)).thenReturn(track(0.5));
         when(trackPoints.pointsOf(1L)).thenReturn(track(0.6));
 
@@ -54,7 +55,7 @@ class LinkMapServiceTest {
 
     @Test
     void aBadPointBecomesAStretchOnItsTrackAndOnlyThere() {
-        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(3), journey(1)));
+        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(3, 2), journey(1, 1)));
         when(trackPoints.pointsOf(3L)).thenReturn(List.of(
             new TrackPoint(0.5, -20.0, 90.0, 30.0, 0, PointState.GOOD),
             new TrackPoint(0.505, -20.0, 90.0, 30.0, 10, PointState.BAD),
@@ -72,7 +73,7 @@ class LinkMapServiceTest {
 
     @Test
     void theExcludedJourneyIsNeverReadAndLeavesNoTrack() {
-        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(3), journey(1)));
+        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(3, 2), journey(1, 1)));
         when(trackPoints.pointsOf(1L)).thenReturn(track(0.6));
 
         LinkMap map = service.linkMap(3L);
@@ -84,8 +85,23 @@ class LinkMapServiceTest {
     }
 
     @Test
+    void excludingOneSegmentOfARunLeavesOutEverySegmentOfThatRunAndOnlyThose() {
+        // Journeys 3 and 2 are two segments of one logger run (a train unit changed); 1 is another run.
+        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc())
+            .thenReturn(List.of(journey(3, 2), journey(2, 2), journey(1, 1)));
+        when(trackPoints.pointsOf(1L)).thenReturn(track(0.6));
+
+        LinkMap map = service.linkMap(2L);
+
+        assertThat(map.tracks()).hasSize(1);
+        assertThat(map.tracks().get(0).points().get(0).latitude()).isEqualTo(0.6);
+        verify(trackPoints).pointsOf(1L);
+        verifyNoMoreInteractions(trackPoints);
+    }
+
+    @Test
     void anExcludedIdThatIsNotStoredLeavesEveryTrackIn() {
-        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(1)));
+        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(1, 1)));
         when(trackPoints.pointsOf(1L)).thenReturn(track(0.6));
 
         assertThat(service.linkMap(99L).tracks()).hasSize(1);
@@ -93,7 +109,7 @@ class LinkMapServiceTest {
 
     @Test
     void noJourneysIsAnEmptyMapAndAJourneyWithNoPositionIsLeftOut() {
-        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(1)));
+        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(1, 1)));
         when(trackPoints.pointsOf(1L)).thenReturn(List.of());
 
         assertThat(service.linkMap(null).tracks()).isEmpty();
