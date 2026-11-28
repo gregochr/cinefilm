@@ -142,7 +142,7 @@ at 240p's (`outside-bank-plan.md`).
      film ahead now + room)` with the shrunk holds, which then stand for the rest of the playback.
    - Inside a stretch the rule already holds for the next one if it is within 20 minutes.
    - Auto only: a rung pinned by hand keeps today's depth.
-   - **The rule lapses** when there has been no fresh matched fix for 5 minutes (the feed stopped, a diversion, off
+   - **The rule lapses** when there has been no fresh matched fix, or in-date fix of the train stopped, for 5 minutes (the feed stopped, a diversion, off
      the train) or the stretch's expected end has passed: its cap and depth are lifted as above.
 8. **hls.js's cut-back shrinks the holds** (only in a playback where the rule has been in force: elsewhere
    hls.js's own handling is untouched). On a `BUFFER_FULL_ERROR` (its `sourceBufferName` names the buffer)

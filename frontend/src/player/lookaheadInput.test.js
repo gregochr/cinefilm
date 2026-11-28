@@ -182,7 +182,55 @@ describe('a train stopped on the line', () => {
   it('counts a fix of exactly 60 s old as in date', () => {
     const li = matched(tracks, 500);
     feed(li, tracks, slowFix(500, 60), sec(20));
-    expect(li.input(sec(100))).toEqual(ahead(600, 480));
+    // The train stopped 60 s before the fix, i.e. before any advance: frozen at the match itself.
+    expect(li.input(sec(100))).toEqual(ahead(600, 500));
+    expect(li.input(sec(320))).toEqual(ahead(600, 500));
+  });
+
+  it('freezes at the time the train stopped, not when the fix arrived', () => {
+    const near = [track([{ from: 1000, to: 1500, need: 600 }])];
+    const li = matched(near, 1480); // the stretch ends in 20 s
+    feed(li, near, slowFix(1480, 50), sec(30));
+    expect(li.input(sec(30))).toEqual(begun(600, 0));
+    expect(li.input(sec(200))).toEqual(begun(600, 0));
+  });
+
+  it('never freezes earlier than the advance already made', () => {
+    const li = matched(tracks, 500);
+    feed(li, tracks, fixAt(500, 0), sec(10)); // moving, off the map: nothing changes
+    feed(li, tracks, slowFix(500, 0), sec(40));
+    feed(li, tracks, fixAt(500, 0), sec(60)); // resumes from 40 s
+    feed(li, tracks, slowFix(500, 50), sec(70)); // stopped at 70 - 50 = 20 s: before the 40 s already reached
+    expect(li.input(sec(70))).toEqual(ahead(600, 460));
+  });
+
+  it('is not brought back by a slow fix once lapsed', () => {
+    const li = matched(tracks, 500);
+    expect(li.input(sec(300) + 1)).toBeNull();
+    feed(li, tracks, slowFix(500), sec(400));
+    expect(li.input(sec(400))).toBeNull();
+    expect(li.input(sec(500))).toBeNull();
+    feed(li, tracks, fixAt(520), sec(500)); // a fresh match does
+    expect(li.input(sec(500))).toEqual(ahead(600, 480));
+  });
+
+  describe('the speed threshold, with an off-map fix in date', () => {
+    const offMap = (speedMps) => ({ ...fixAt(500, 0), speedMps });
+
+    it('freezes and answers just under 5 m/s', () => {
+      const li = matched(tracks, 500);
+      feed(li, tracks, offMap(4.99), sec(100));
+      expect(li.input(sec(200))).toEqual(ahead(600, 400));
+      expect(li.input(sec(400))).toEqual(ahead(600, 400));
+      expect(li.input(sec(400) + 1)).toBeNull();
+    });
+
+    it.each([5, 5.01])('neither freezes nor answers at %s m/s', (speed) => {
+      const li = matched(tracks, 500);
+      feed(li, tracks, offMap(speed), sec(100));
+      expect(li.input(sec(200))).toEqual(ahead(600, 300));
+      expect(li.input(sec(300) + 1)).toBeNull();
+    });
   });
 });
 

@@ -52,11 +52,13 @@ export function createLookaheadInput() {
         frozen = false;
         return;
       }
+      if (match !== null && nowMs - answeredMs > LAPSE_MS) match = null; // lapsed: only a fresh match revives it
       if (match === null || !(fix.ageS <= MAX_FIX_AGE_S)) return;
       if (!(fix.speedMps >= MIN_SPEED_MPS)) {
-        // Stopped on the line: answer the lapse, and stop the clock where it stands.
+        // Stopped on the line: answer the lapse, and stop the clock where the train stopped (the fix is `ageS`
+        // old), never earlier than the advance already made.
         if (!frozen) {
-          offsetS = elapsedS(nowMs);
+          offsetS = Math.max(offsetS, elapsedS(nowMs) - fix.ageS);
           frozen = true;
         }
         answeredMs = nowMs;
