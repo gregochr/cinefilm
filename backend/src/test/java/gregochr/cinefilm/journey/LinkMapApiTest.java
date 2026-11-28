@@ -57,7 +57,7 @@ class LinkMapApiTest extends ApiTestBase {
                   {"points":[{"latitude":0.5,"longitude":-20.0,"courseDeg":null,"t":0},
                              {"latitude":0.505,"longitude":-20.0,"courseDeg":null,"t":30},
                              {"latitude":0.51,"longitude":-20.0,"courseDeg":null,"t":60}],
-                   "stretches":[{"from":30,"to":30,"need":60.0}]}]}
+                   "stretches":[{"from":30,"to":30,"need":135.0}]}]}
                 """, true));
     }
 

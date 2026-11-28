@@ -58,10 +58,10 @@ class LinkStretchesTest {
         List<LinkMap.Track> two = build(line(GOOD, BAD, GOOD, GOOD, BAD, GOOD));
 
         assertThat(one.get(0).stretches()).hasSize(1);
-        assertStretch(one.get(0).stretches().get(0), 10, 30, 20 * 1.25 + 60);
+        assertStretch(one.get(0).stretches().get(0), 10, 30, 40 * 1.25 + 60);
         assertThat(two.get(0).stretches()).hasSize(2);
-        assertStretch(two.get(0).stretches().get(0), 10, 10, 60);
-        assertStretch(two.get(0).stretches().get(1), 40, 40, 60);
+        assertStretch(two.get(0).stretches().get(0), 10, 10, 85);
+        assertStretch(two.get(0).stretches().get(1), 40, 40, 85);
     }
 
     @Test
@@ -137,13 +137,13 @@ class LinkStretchesTest {
         assertStretch(merged.get(0).stretches().get(0), 10, 30, 110);
         assertThat(merged.get(1).stretches()).hasSize(1);
         assertStretch(merged.get(1).stretches().get(0), 0, 10, 110);
-        // Apart: a's own 10 s through its own run, and the other run's extent on each track in its own seconds.
+        // Apart: a took 30 s from its point before its run to its point after; each track carries the other run too.
         assertThat(apart.get(0).stretches()).hasSize(2);
-        assertStretch(apart.get(0).stretches().get(0), 10, 20, 72.5);
-        assertStretch(apart.get(0).stretches().get(1), 30, 30, 60);
+        assertStretch(apart.get(0).stretches().get(0), 10, 20, 97.5);
+        assertStretch(apart.get(0).stretches().get(1), 30, 30, 85);
         assertThat(apart.get(1).stretches()).hasSize(2);
-        assertStretch(apart.get(1).stretches().get(0), 0, 0, 72.5);
-        assertStretch(apart.get(1).stretches().get(1), 10, 10, 60);
+        assertStretch(apart.get(1).stretches().get(0), 0, 0, 97.5);
+        assertStretch(apart.get(1).stretches().get(1), 10, 10, 85);
     }
 
     @Test
@@ -153,8 +153,8 @@ class LinkStretchesTest {
 
         List<LinkMap.Track> map = build(longRun, inTheMiddle);
 
-        assertStretch(map.get(0).stretches().get(0), 10, 20, 72.5);
-        assertStretch(map.get(1).stretches().get(0), 0, 20, 72.5);
+        assertStretch(map.get(0).stretches().get(0), 10, 20, 97.5);
+        assertStretch(map.get(1).stretches().get(0), 0, 20, 97.5);
     }
 
     @Test
@@ -165,8 +165,8 @@ class LinkStretchesTest {
         List<LinkMap.Stretch> stretches = build(doubledBack).get(0).stretches();
 
         assertThat(stretches).hasSize(2);
-        assertStretch(stretches.get(0), 10, 10, 60);
-        assertStretch(stretches.get(1), 50, 50, 60);
+        assertStretch(stretches.get(0), 10, 10, 85);
+        assertStretch(stretches.get(1), 50, 50, 85);
     }
 
     @Test
@@ -179,11 +179,11 @@ class LinkStretchesTest {
 
         List<LinkMap.Track> map = build(a, b, c, d);
 
-        // The slow good track D went through all of 0 m to 500 m in 100 s: 100 x 1.25 + 60 on every track.
-        assertStretch(map.get(0).stretches().get(0), 10, 10, 185);
-        assertStretch(map.get(1).stretches().get(0), 10, 10, 185);
-        assertStretch(map.get(2).stretches().get(0), 10, 10, 185);
-        assertStretch(map.get(3).stretches().get(0), 50, 150, 185);
+        // The slow good track D went through all of 0 m to 500 m, from its point before to its point after: 200 s.
+        assertStretch(map.get(0).stretches().get(0), 10, 10, 310);
+        assertStretch(map.get(1).stretches().get(0), 10, 10, 310);
+        assertStretch(map.get(2).stretches().get(0), 10, 10, 310);
+        assertStretch(map.get(3).stretches().get(0), 50, 150, 310);
     }
 
     @Test
@@ -193,8 +193,8 @@ class LinkStretchesTest {
 
         List<LinkMap.Track> map = build(through, slowStart);
 
-        assertStretch(map.get(0).stretches().get(0), 10, 30, 85);
-        assertStretch(map.get(1).stretches().get(0), 0, 100, 85);
+        assertStretch(map.get(0).stretches().get(0), 10, 30, 110);
+        assertStretch(map.get(1).stretches().get(0), 0, 100, 110);
     }
 
     @Test
@@ -205,8 +205,8 @@ class LinkStretchesTest {
 
         List<LinkMap.Track> map = build(through, slowEnd);
 
-        assertStretch(map.get(0).stretches().get(0), 10, 30, 85);
-        assertStretch(map.get(1).stretches().get(0), 50, 150, 85);
+        assertStretch(map.get(0).stretches().get(0), 10, 30, 110);
+        assertStretch(map.get(1).stretches().get(0), 50, 150, 110);
     }
 
     @Test
@@ -235,17 +235,17 @@ class LinkStretchesTest {
 
         List<LinkMap.Track> map = build(forward, backwards, goodThroughout);
 
-        // The backwards track took 30 s through it, the longest of the three: 30 x 1.25 + 60.
-        assertStretch(map.get(0).stretches().get(0), 10, 30, 97.5);
-        assertStretch(map.get(1).stretches().get(0), 15, 45, 97.5);
-        assertStretch(map.get(2).stretches().get(0), 25, 55, 97.5);
+        // The good track took 80 s from its point before the extent to its point after, the longest of the three.
+        assertStretch(map.get(0).stretches().get(0), 10, 30, 160);
+        assertStretch(map.get(1).stretches().get(0), 15, 45, 160);
+        assertStretch(map.get(2).stretches().get(0), 25, 55, 160);
     }
 
     @Test
     void theNeedIsTheLongestThroughTimeTimes125PlusSixtyAtExactValues() {
-        assertStretch(build(line(0, 10, GOOD, BAD, BAD, GOOD)).get(0).stretches().get(0), 10, 20, 72.5);
-        assertStretch(build(line(0, 40, GOOD, BAD, BAD, BAD, GOOD)).get(0).stretches().get(0), 40, 120, 160);
-        assertStretch(build(line(0, 30, GOOD, BAD, GOOD)).get(0).stretches().get(0), 30, 30, 60);
+        assertStretch(build(line(0, 10, GOOD, BAD, BAD, GOOD)).get(0).stretches().get(0), 10, 20, 97.5);
+        assertStretch(build(line(0, 40, GOOD, BAD, BAD, BAD, GOOD)).get(0).stretches().get(0), 40, 120, 260);
+        assertStretch(build(line(0, 30, GOOD, BAD, GOOD)).get(0).stretches().get(0), 30, 30, 135);
     }
 
     @Test
@@ -293,5 +293,138 @@ class LinkStretchesTest {
         // A path of no length at 40 m/s takes no time: the need is the sixty seconds alone.
         assertStretch(build(starts).get(0).stretches().get(0), 0, 0, 60);
         assertStretch(build(identical).get(0).stretches().get(0), 0, 20, 60);
+    }
+
+    private static TrackPoint at(double northM, double eastM, long t, PointState state) {
+        double latitude = 0.5 + northM / METRES_PER_DEGREE;
+        double longitude = -20.0 + eastM / (METRES_PER_DEGREE * Math.cos(Math.toRadians(latitude)));
+        return new TrackPoint(latitude, longitude, 0.0, SPEED, t, state);
+    }
+
+    @Test
+    void theDurationRunsFromThePointBeforeTheRunToThePointAfterIt() {
+        List<TrackPoint> track = List.of(pt(0, 0, GOOD), pt(500, 5, BAD), pt(1000, 50, GOOD));
+
+        // 50 s between its neighbours, not the 0 s of the one bad point: 50 x 1.25 + 60.
+        assertStretch(build(track).get(0).stretches().get(0), 5, 5, 122.5);
+    }
+
+    @Test
+    void aSegmentThatPassesThroughAStretchWithNoPointNearCarriesItAtInterpolatedSeconds() {
+        List<TrackPoint> a = List.of(pt(0, 0, GOOD), pt(1500, 30, BAD), pt(3000, 60, GOOD));
+        List<TrackPoint> b = List.of(pt(750, 0, GOOD), pt(2250, 30, GOOD));
+
+        List<LinkMap.Track> map = build(a, b);
+
+        // A took 60 s from the point before its bad point to the point after: 60 x 1.25 + 60. B's segment is within
+        // 300 m of it from 1,200 m to 1,800 m, 30 percent to 70 percent of its 30 s.
+        assertStretch(map.get(0).stretches().get(0), 30, 30, 135);
+        assertThat(map.get(1).stretches()).hasSize(1);
+        assertStretch(map.get(1).stretches().get(0), 9, 21, 135);
+    }
+
+    @Test
+    void aTrackThatCrossesTheStretchBetweenTwoPointsCountsAsThroughWithTheTimeBetweenThem() {
+        List<TrackPoint> a = List.of(pt(0, 0, GOOD), pt(1500, 10, BAD), pt(3000, 20, GOOD));
+        List<TrackPoint> b = List.of(pt(750, 0, GOOD), pt(2250, 60, GOOD));
+
+        List<LinkMap.Track> map = build(a, b);
+
+        // The 60 s between B's two points is longer than A's 20 s: 60 x 1.25 + 60 on both.
+        assertStretch(map.get(0).stretches().get(0), 10, 10, 135);
+        assertStretch(map.get(1).stretches().get(0), 18, 42, 135);
+    }
+
+    @Test
+    void twoSegmentsInARowThatPassNearAreOneCrossing() {
+        List<TrackPoint> a = List.of(pt(500, 0, GOOD), pt(1500, 10, BAD), pt(2500, 20, GOOD));
+        // A bend 320 m to the side of the stretch, 350 m before it and 350 m after: both segments pass within 300 m.
+        List<TrackPoint> b = List.of(at(1150, 0, 0, GOOD), at(1500, 320, 10, GOOD), at(1850, 0, 20, GOOD));
+
+        List<LinkMap.Track> map = build(a, b);
+
+        // The first segment is within 300 m from 15.5 percent of it (entry 1.55 s, rounded down), the second until
+        // 84.5 percent of it (exit 18.45 s, rounded up).
+        assertStretch(map.get(0).stretches().get(0), 10, 10, 85);
+        assertThat(map.get(1).stretches()).hasSize(1);
+        assertStretch(map.get(1).stretches().get(0), 1, 19, 85);
+    }
+
+    @Test
+    void aTrackThatCrossesTheStretchTwiceCarriesItTwice() {
+        List<TrackPoint> a = List.of(pt(0, 0, GOOD), pt(1500, 30, BAD), pt(3000, 60, GOOD));
+        List<TrackPoint> b = List.of(pt(750, 0, GOOD), pt(2250, 30, GOOD), pt(2250, 40, GOOD), pt(750, 70, GOOD));
+
+        List<LinkMap.Stretch> stretches = build(a, b).get(1).stretches();
+
+        assertThat(stretches).hasSize(2);
+        assertStretch(stretches.get(0), 9, 21, 135);
+        assertStretch(stretches.get(1), 49, 61, 135);
+    }
+
+    @Test
+    void aTrackThatCrossesAnExtentItDidNotCoverFallsBackToTheLengthAtTheSlowestSpeed() {
+        // The extent runs 2,000 m east to west along 1,500 m north; B crosses it going north between two points.
+        List<TrackPoint> a = List.of(at(1500, -1000, 0, BAD), at(1500, 1000, 20, BAD), at(1500, 1500, 30, GOOD));
+        List<TrackPoint> b = List.of(at(750, 0, 0, GOOD), at(2250, 0, 30, GOOD));
+
+        List<LinkMap.Track> map = build(a, b);
+
+        // A started inside it and B did not cover it all: 2,000 m at 50 m/s is 40 s: 40 x 1.25 + 60.
+        assertStretch(map.get(0).stretches().get(0), 0, 20, 110);
+        assertStretch(map.get(1).stretches().get(0), 9, 21, 110);
+    }
+
+    @Test
+    void manyPointsCloseTogetherAreOneRun() {
+        List<TrackPoint> track = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            track.add(pt(i * 50.0, i * 5L, BAD));
+        }
+        track.add(pt(1000, 40, GOOD));
+
+        // 350 m at 50 m/s is 7 s.
+        assertStretch(build(track).get(0).stretches().get(0), 0, 35, 7 * 1.25 + 60);
+    }
+
+    @Test
+    void aSegmentThatPassesJustOver300MetresOfTheStretchCarriesNothing() {
+        List<TrackPoint> a = List.of(pt(0, 0, GOOD), pt(1500, 30, BAD), pt(3000, 60, GOOD));
+        List<TrackPoint> b = List.of(at(750, 300.5, 0, GOOD), at(2250, 300.5, 30, GOOD));
+
+        assertThat(build(a, b).get(1).stretches()).isEmpty();
+    }
+
+    @Test
+    void aSegmentOfAnotherStretchDoesNotCarryThisOne() {
+        List<TrackPoint> a = List.of(pt(0, 0, GOOD), pt(500, 10, BAD), pt(1000, 20, GOOD));
+        List<TrackPoint> b = List.of(pt(5000, 0, GOOD), pt(6500, 30, BAD), pt(8000, 60, GOOD));
+        List<TrackPoint> c = List.of(pt(5750, 0, GOOD), pt(7250, 30, GOOD));
+
+        List<LinkMap.Track> map = build(a, b, c);
+
+        assertThat(map.get(0).stretches()).hasSize(1);
+        assertThat(map.get(2).stretches()).hasSize(1);
+        assertStretch(map.get(2).stretches().get(0), 9, 21, 135);
+    }
+
+    /** A bad run from 500 m to 1,000 m with a good point 500 m before and another 500 m after, the gaps as given. */
+    private static List<TrackPoint> withGaps(long before, long after) {
+        return List.of(pt(0, 0, GOOD), pt(500, before, BAD), pt(1000, before + 10, BAD),
+            pt(1500, before + 10 + after, GOOD));
+    }
+
+    @Test
+    void sixtySecondsBeforeTheExtentStillGoesThroughAndSixtyOneDoesNot() {
+        // Through: 60 + 10 + 10 = 80 s between its neighbours: 80 x 1.25 + 60. Not through: the 500 m of the extent
+        // at 50 m/s, 10 s: 10 x 1.25 + 60.
+        assertStretch(build(withGaps(60, 10)).get(0).stretches().get(0), 60, 70, 160);
+        assertStretch(build(withGaps(61, 10)).get(0).stretches().get(0), 61, 71, 72.5);
+    }
+
+    @Test
+    void sixtySecondsAfterTheExtentStillGoesThroughAndSixtyOneDoesNot() {
+        assertStretch(build(withGaps(10, 60)).get(0).stretches().get(0), 10, 20, 160);
+        assertStretch(build(withGaps(10, 61)).get(0).stretches().get(0), 10, 20, 72.5);
     }
 }

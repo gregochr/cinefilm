@@ -53,6 +53,24 @@ class LinkMapServiceTest {
     }
 
     @Test
+    void aBadPointBecomesAStretchOnItsTrackAndOnlyThere() {
+        when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(3), journey(1)));
+        when(trackPoints.pointsOf(3L)).thenReturn(List.of(
+            new TrackPoint(0.5, -20.0, 90.0, 30.0, 0, PointState.GOOD),
+            new TrackPoint(0.505, -20.0, 90.0, 30.0, 10, PointState.BAD),
+            new TrackPoint(0.51, -20.0, 90.0, 30.0, 20, PointState.GOOD)));
+        when(trackPoints.pointsOf(1L)).thenReturn(track(0.6));
+
+        LinkMap map = service.linkMap(null);
+
+        // 20 s between the bad point's neighbours: 20 x 1.25 + 60.
+        assertThat(map.tracks().get(0).stretches()).containsExactly(new LinkMap.Stretch(10, 10, 85));
+        assertThat(map.tracks().get(0).points()).containsExactly(new LinkMap.Point(0.5, -20.0, 90.0, 0),
+            new LinkMap.Point(0.505, -20.0, 90.0, 10), new LinkMap.Point(0.51, -20.0, 90.0, 20));
+        assertThat(map.tracks().get(1).stretches()).isEmpty();
+    }
+
+    @Test
     void theExcludedJourneyIsNeverReadAndLeavesNoTrack() {
         when(journeys.findAllByOrderByRunStartedMsDescSegmentAsc()).thenReturn(List.of(journey(3), journey(1)));
         when(trackPoints.pointsOf(1L)).thenReturn(track(0.6));
