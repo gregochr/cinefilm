@@ -727,6 +727,20 @@ describe('the server\'s one playhead per session', () => {
     assert.equal((await stateOf(standIn)).waiting, 0);
   });
 
+  test('a session that is gone is a 404 even when the encoder has made the segment by the next poll', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const start0 = Date.now();
+    const standIn = await start({ encoderSpeed: 19 }); // the first segment is made 210 ms in
+    const { sessionId } = await newSession(standIn);
+    const held = request(standIn.port, { path: segmentOf(sessionId, '480p', 0) });
+    await waitFor(async () => (await stateOf(standIn)).waiting === 1, 'the request to be held');
+    assert.equal((await request(standIn.port, { method: 'DELETE', path: `/api/sessions/${sessionId}` })).status, 204);
+    t.mock.timers.setTime(start0 + 500); // the segment is made now; the next poll finds both it and the gone session
+    const answer = await held;
+    assert.equal(answer.status, 404);
+    assert.deepEqual(json(answer), { error: 'No such session' });
+  });
+
   test('a start time outside the film is refused as the server refuses it, and a number is read as a Long', async () => {
     const standIn = await start();
     const film = standIn.segmentCount * standIn.segmentMs;
