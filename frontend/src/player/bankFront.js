@@ -526,6 +526,7 @@ export function createBankFront({
       current.cancel();
       current = null;
       busy = false;
+      resetWatch(); // the copy's time in flight is not the next segment's waiting
     }
     if (!busy && retryTimer === null) fetchSegment();
   }
